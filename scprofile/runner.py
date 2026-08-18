@@ -103,6 +103,64 @@ def env_state(kernel, prefix=None):
     return ("installed", str(p), "")
 
 
+def lock_spec(kernel):
+    """Read `lock.yml` into {python, channels, conda, pip}. Stdlib only, like everything here.
+
+    The file is a conda environment YAML because that is the format people recognise, but it is
+    NOT handed to `conda env create`. Two reasons, both measured:
+
+    - `conda env create --yes` does not exist before conda 23.10, and clusters run what they run.
+      One site here has conda 4.10.3. An installer that only works on a recent conda is an
+      installer that fails on exactly the machines a pipeline tool is used on.
+    - Handing conda a file makes the pip section conda's problem, and conda runs it as a second,
+      separate resolve whose failures it reports as a warning. Pins that were silently not applied
+      are the specific outcome this lock exists to prevent.
+
+    So the two steps are taken explicitly: conda builds the interpreter, pip applies the pins in
+    ONE resolve. Anything the parser does not understand raises, rather than being skipped.
+    """
+    f = kernel.path / "lock.yml"
+    if not f.exists():
+        raise FileNotFoundError(f"{kernel.name} has no lock.yml; it cannot be installed")
+    spec = {"python": None, "channels": [], "conda": [], "pip": []}
+    section, in_pip, pip_indent = None, False, None
+    for raw in f.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+        body = line.strip()
+        if indent == 0:
+            section, in_pip = body.split(":", 1)[0].strip(), False
+            continue
+        if not body.startswith("- "):
+            raise ValueError(f"{f}: cannot read {raw!r}")
+        item = body[2:].strip()
+        if section == "channels":
+            spec["channels"].append(item)
+        elif section == "dependencies":
+            if in_pip and pip_indent is not None and indent > pip_indent:
+                spec["pip"].append(item)
+                continue
+            in_pip = False
+            if item in ("pip:", "pip :"):
+                in_pip, pip_indent = True, indent
+            elif item.startswith("python="):
+                spec["python"] = item.split("=", 1)[1]
+            elif item != "pip":
+                spec["conda"].append(item)
+    if not spec["python"]:
+        raise ValueError(f"{f}: no `python=<version>` in dependencies. A lock that does not pin "
+                         f"the interpreter is not a lock - wheels are built per minor version.")
+    return spec
+
+
+def _venv_python(want):
+    """A `pythonX.Y` on PATH matching the lock, for the route that needs no conda at all."""
+    exe = shutil.which(f"python{want}")
+    return exe if exe else None
+
+
 def install(kernel, prefix, *, force=False, log=print):
     """Build a kernel's environment from its lock, then prove it with its own selftest.
 
@@ -111,21 +169,43 @@ def install(kernel, prefix, *, force=False, log=print):
     importing successfully means for it.
     """
     p = env_prefix(kernel.name, prefix)
-    lock = kernel.path / "lock.yml"
-    if not lock.exists():
-        raise FileNotFoundError(f"{kernel.name} has no lock.yml; it cannot be installed")
+    spec = lock_spec(kernel)
     if p.exists() and not force:
         log(f"  {p} exists. Pass --force to rebuild.")
     else:
-        mamba = (shutil.which("micromamba") or shutil.which("mamba") or shutil.which("conda"))
-        if not mamba:
+        mgr = (shutil.which("micromamba") or shutil.which("mamba") or shutil.which("conda"))
+        venv_py = _venv_python(spec["python"]) if not spec["conda"] else None
+        if mgr:
+            # `create`, never `env create`: it takes -y on every conda anyone still runs.
+            cmd = [mgr, "create", "-y", "-p", str(p)]
+            for c in (spec["channels"] or ["conda-forge"]):
+                cmd += ["-c", c]
+            cmd += [f"python={spec['python']}", "pip"] + spec["conda"]
+            log(f"  interpreter: {mgr} -> python {spec['python']}"
+                + (f" + {len(spec['conda'])} conda package(s)" if spec["conda"] else ""))
+            subprocess.run(cmd, check=True)
+        elif venv_py:
+            log(f"  interpreter: {venv_py} (venv; this lock needs no conda packages)")
+            subprocess.run([venv_py, "-m", "venv", str(p)], check=True)
+        else:
+            want = f"python{spec['python']}"
             raise RuntimeError(
-                "no micromamba, mamba or conda on PATH. scProfile does not bundle one.\n"
-                f"  Either install micromamba, or build the environment yourself and set\n"
-                f"  SCPROFILE_{kernel.name.upper()}_PYTHON=/path/to/python")
-        log(f"  building with {mamba}")
-        subprocess.run([mamba, "env", "create", "--yes", "--prefix", str(p), "--file", str(lock)],
-                       check=True)
+                f"cannot build {kernel.name}: no micromamba, mamba or conda on PATH"
+                + (f", and no {want} either" if not spec["conda"] else
+                   f" (and this lock needs conda packages {spec['conda']}, so a venv will not do)")
+                + ".\n"
+                f"  Either: put one on PATH - on a cluster that is usually `module load anaconda3`\n"
+                f"  Or:     build the environment yourself from {kernel.path / 'lock.yml'} and set\n"
+                f"          SCPROFILE_{kernel.name.upper()}_PYTHON=/path/to/that/env/bin/python\n"
+                f"          `doctor` will report that route, so nothing is ambiguous.")
+
+        pip = p / "bin" / "pip"
+        if spec["pip"]:
+            # ONE resolve, all pins together. Installing them in sequence lets a later package
+            # quietly downgrade an earlier pin, and the environment then does not match the lock
+            # that the fingerprint says it was built from.
+            log(f"  applying {len(spec['pip'])} pinned package(s) in one resolve")
+            subprocess.run([str(pip), "install", "--no-input"] + spec["pip"], check=True)
         (p / ".scprofile_lock").write_text(lock_fingerprint(kernel), encoding="utf-8")
 
     st = kernel.path / "selftest.py"

@@ -120,6 +120,36 @@ def test_velocity_declaration():
           str(undeclared(k, bad)))
 
 
+def test_lock_is_read_not_delegated():
+    """The lock is parsed here, not handed to conda. Sites run conda 4.10; `env create --yes`
+    does not exist there, and a pip section conda runs as a second resolve reports its failures
+    as a warning."""
+    print("\nthe lock, as the installer reads it")
+    from scprofile.runner import lock_spec
+    k = Kernel(Path(__file__).resolve().parents[1] / "kernels" / "velocity")
+    s = lock_spec(k)
+    check("pins the interpreter", s["python"] == "3.11", str(s["python"]))
+    check("reads every pip pin", len(s["pip"]) >= 15, f"{len(s['pip'])}")
+    check("every pip entry is pinned", all("==" in x for x in s["pip"]),
+          str([x for x in s["pip"] if "==" not in x]))
+    check("no stray conda deps", s["conda"] == [], str(s["conda"]))
+    check("channel declared", s["channels"] == ["conda-forge"], str(s["channels"]))
+    check("`pip` itself is not a pin", "pip" not in s["conda"])
+
+    # A lock with no interpreter pin is not a lock: wheels are built per minor version.
+    import tempfile as _tf
+    with _tf.TemporaryDirectory() as td:
+        d = Path(td) / "bad"
+        d.mkdir()
+        (d / "kernel.yml").write_text("name: bad\nentry: run.py\n")
+        (d / "lock.yml").write_text("dependencies:\n  - pip\n")
+        try:
+            lock_spec(Kernel(d))
+            check("refuses a lock with no python pin", False)
+        except ValueError as e:
+            check("refuses a lock with no python pin", "python" in str(e).lower())
+
+
 def test_unmet_names_the_fix():
     print("\nunmet prerequisites name their fix")
     ks = discover()
@@ -153,6 +183,7 @@ def main():
         test_objects_slot(tmp)
         test_declared_but_absent_is_refused(tmp)
     test_velocity_declaration()
+    test_lock_is_read_not_delegated()
     test_unmet_names_the_fix()
     test_ordering()
     print()

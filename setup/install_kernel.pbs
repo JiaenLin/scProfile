@@ -1,0 +1,56 @@
+#!/bin/bash
+#PBS -N scprofile_install
+#PBS -q workq
+#PBS -l select=1:ncpus=4:mem=16gb
+#PBS -l walltime=03:00:00
+#PBS -j oe
+
+# Build one scProfile kernel environment as a batch job, and prove it with the kernel's selftest.
+#
+#   qsub -v KERNEL=velocity,PREFIX=$HOME/envs,TOOL=$HOME/tools/scProfile \
+#        -o $HOME/envs/install_velocity.log  setup/install_kernel.pbs
+#
+# WHY A JOB AND NOT A PROMPT
+#
+# Building an environment downloads and unpacks a few GB and compiles what has no wheel. On a
+# shared cluster that is compute, and login nodes are for editing, submitting and inspecting.
+# Sites differ on how strictly that is enforced; none of them mind you submitting.
+#
+# Adjust the three -l lines for your site. 4 cores and 16 GB is generous for this and the walltime
+# is dominated by download speed, not by CPU.
+
+set -euo pipefail
+
+: "${KERNEL:?pass -v KERNEL=<name>}"
+: "${PREFIX:?pass -v PREFIX=<dir where the env is built>}"
+: "${TOOL:?pass -v TOOL=<path to the scProfile checkout>}"
+
+# An environment manager has to be on PATH. On most clusters that is a module; adjust or preload.
+# If your site has none, build the env yourself from kernels/<KERNEL>/lock.yml and set
+# SCPROFILE_<KERNEL>_PYTHON instead - `scprofile doctor` reports that route explicitly.
+if ! command -v micromamba >/dev/null 2>&1 \
+   && ! command -v mamba      >/dev/null 2>&1 \
+   && ! command -v conda      >/dev/null 2>&1; then
+  module load "${CONDA_MODULE:-anaconda3}" 2>/dev/null || true
+fi
+
+echo "host      $(hostname)"
+echo "kernel    ${KERNEL}"
+echo "prefix    ${PREFIX}"
+echo "tool      ${TOOL}"
+echo "manager   $(command -v micromamba || command -v mamba || command -v conda || echo NONE)"
+echo "started   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo
+
+mkdir -p "${PREFIX}"
+
+# The host itself is stdlib-only for exactly this: `install` needs no numpy, no pandas and no yaml,
+# so it can run under whatever python the node happens to have.
+"${HOST_PYTHON:-python3}" -c 'import sys; assert sys.version_info>=(3,8), sys.version'
+cd "${TOOL}"
+PYTHONPATH="${TOOL}" "${HOST_PYTHON:-python3}" -m scprofile.cli install "${KERNEL}" \
+    --prefix "${PREFIX}" ${FORCE:+--force}
+
+echo
+echo "finished  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo "use it with:  scprofile run --h5ad ... --kernel ${KERNEL} --prefix ${PREFIX}"
