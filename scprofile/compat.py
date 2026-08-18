@@ -91,14 +91,67 @@ def can_read(python_exe, h5ad, timeout=300):
     return False, tail[-1] if tail else f"exited {r.returncode}"
 
 
+#: uns values simple enough that every anndata since 0.8 encodes and reads them identically.
+_PORTABLE = (str, bool, int, float)
+
+
+def _portable_uns(uns):
+    """The uns entries worth carrying into a kernel, and the names of those left behind.
+
+    `uns` is where the encodings diverge, because it is the one slot holding arbitrary python.
+    scanpy writes `uns['log1p'] = {'base': None}` after a log transform, and a `None` inside a
+    mapping is written in an encoding anndata 0.10 has no reader for - the second failure this
+    conversion hit, immediately after the string one was fixed.
+
+    Chasing encodings one at a time is the wrong shape of fix. What a kernel needs from the object
+    is X, layers, obs, var and obsm; everything the host knows ABOUT the object - keys, organism,
+    assay, the upstream constraint - already reaches it through `in.json`, which is plain JSON and
+    has no encoding problem at all. So the copy carries the matrices and only the uns values that
+    are trivially portable, and NAMES what it left behind rather than counting it.
+    """
+    keep, dropped = {}, []
+    for k, v in dict(uns or {}).items():
+        if isinstance(v, _PORTABLE):
+            keep[k] = v
+        elif isinstance(v, (list, tuple)) and all(isinstance(x, _PORTABLE) for x in v):
+            keep[k] = list(v)
+        else:
+            dropped.append(k)
+    return keep, sorted(dropped)
+
+
 def write_compatible(adata, path, *, log=print):
-    """One copy in the classic string encoding, from the object already in memory."""
+    """A copy a kernel's older anndata can read: the matrices, classic strings, portable uns.
+
+    Deliberately NOT a faithful copy. It is an input handed to a subprocess, not a deliverable -
+    the run's own output object is written by the host from the full original, and nothing here
+    reaches it.
+    """
+    import anndata as ad
+
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    log(f"  writing a compatibility copy in the classic string encoding -> {p.name}")
+    uns, dropped = _portable_uns(getattr(adata, "uns", {}))
+
+    B = ad.AnnData(
+        X=adata.X,
+        obs=adata.obs.copy(),
+        var=adata.var.copy(),
+        obsm={k: adata.obsm[k] for k in adata.obsm},
+        layers={k: adata.layers[k] for k in adata.layers if k is not None},
+        uns=uns,
+    )
+    log(f"  writing a copy this kernel can read -> {p.name}")
+    if dropped:
+        log(f"    uns entries not carried, by name: {', '.join(dropped)}")
+        log(f"    (a kernel gets keys, organism, assay and the constraint from in.json instead)")
+    for slot in ("obsp", "varm", "varp"):
+        if len(getattr(adata, slot, {}) or {}):
+            log(f"    {slot} not carried: {', '.join(getattr(adata, slot).keys())}")
     with classic_string_encoding():
-        adata.write_h5ad(p)
-    log(f"  {p.stat().st_size / 1e9:.2f} GB")
+        B.write_h5ad(p)
+    log(f"    {p.stat().st_size / 1e9:.2f} GB, {B.n_obs:,} x {B.n_vars:,}, "
+        f"layers {sorted(k for k in B.layers if k)}")
     return p
 
 
@@ -122,7 +175,7 @@ def readable_input(adata, h5ad, python_exe, workdir, *, cache, log=print):
     log(f"    {detail}")
     conv = cache.get("converted")
     if conv is None:
-        conv = write_compatible(adata, Path(workdir) / "input_classic_strings.h5ad", log=log)
+        conv = write_compatible(adata, Path(workdir) / "input_for_kernels.h5ad", log=log)
         cache["converted"] = conv
     ok2, detail2 = can_read(exe, conv)
     if not ok2:
