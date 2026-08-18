@@ -154,13 +154,28 @@ def test_unmet_names_the_fix():
     print("\nunmet prerequisites name their fix")
     ks = discover()
     k = ks["velocity"]
-    probs = unmet(k, obs=set(), obsm=set(), layers={"counts"}, ran=())
-    check("refuses without spliced", any("spliced" in p for p in probs))
-    check("says it cannot be derived later",
-          any("aligner" in p.lower() or "cannot be derived" in p.lower() for p in probs),
-          " | ".join(probs))
-    ok = unmet(k, obs=set(), obsm=set(), layers={"spliced", "unspliced"}, ran=())
-    check("passes when both layers are present", ok == [], str(ok))
+
+    # velocity declares can_source_layers, so the HOST must not block it on a missing layer: the
+    # kernel goes and looks, and refuses with a list of everywhere it searched. Blocking here
+    # would mean the search never runs and the user is told "layers absent" about files that are
+    # sitting on disk beside the object.
+    check("host does not block a kernel that can source its own layers",
+          unmet(k, obs=set(), obsm=set(), layers={"counts"}, ran=()) == [])
+    check("velocity declares it", k.can_source_layers)
+    check("it still declares WHAT it needs, for doctor",
+          set(k.needs_layers) == {"spliced", "unspliced"})
+    check("it ships the finder", (k.path / "sources.py").exists())
+
+    # A kernel that cannot source its own inputs is still blocked, and still names the fix.
+    import types
+    fake = types.SimpleNamespace(
+        needs_obs=["phase"], needs_obsm=[], needs_layers=["spliced"], needs_kernels=[],
+        needs_design=False, can_source_layers=False, name="fake")
+    probs = unmet(fake, obs=set(), obsm=set(), layers=set(), ran=())
+    check("a non-sourcing kernel is still blocked", len(probs) == 2, str(probs))
+    check("and names its producer", any("cellcycle" in p for p in probs), " | ".join(probs))
+    check("and says spliced cannot be derived",
+          any("aligner" in p.lower() for p in probs), " | ".join(probs))
 
 
 def test_ordering():

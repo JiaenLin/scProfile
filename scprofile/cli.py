@@ -121,7 +121,7 @@ def _split(s):
 # -------------------------------------------------------------------------------------- run
 
 def _run(a):
-    from . import compat, inputs, manifest, merge, refs, report, runner
+    from . import compat, inputs, manifest, merge, provenance, refs, report, runner
     from .kernels import (discover, guard_verdict, log_escape, order, undeclared, unmet)
 
     try:
@@ -171,6 +171,9 @@ def _run(a):
         print("\nscprofile: REFUSE - no label column found and none given.\n"
               f"  Fix: --label-key <one of> {list(A.obs.columns)[:12]}", file=sys.stderr)
         return REFUSE
+
+    prov = provenance.harvest(A, extra_roots=_split(a.search or ""))
+    provenance.describe(prov, log=print)
 
     have_obs = set(A.obs.columns)
     have_obsm = set(A.obsm)
@@ -245,7 +248,8 @@ def _run(a):
             keys={r_: v[0] for r_, v in keys.items() if v[0]},
             organism=organism[0], assay=assay[0], design=a.design, references=r,
             params=json.loads(a.params) if a.params else {},
-            upstream=dict(upstream), sentinels=inputs.DEFAULT_SENTINELS)
+            upstream=dict(upstream), sentinels=inputs.DEFAULT_SENTINELS,
+            provenance=prov)
         try:
             payload = runner.run(k, inp=kout / "in.json", out_dir=kout, prefix=a.prefix)
         except Exception as e:                                            # noqa: BLE001
@@ -365,6 +369,11 @@ def main(argv=None):
     r.add_argument("--design", default=None, type=Path,
                    help="CSV keyed on the sample column, carrying the experimental factors")
     r.add_argument("--params", default=None, help="JSON passed through to every kernel")
+    r.add_argument("--search", default=None, metavar="DIRS",
+                   help="extra directories a kernel may look in for files that are NOT in the "
+                        "object - spliced/unspliced counts, most often. Comma-separated. The "
+                        "upstream chain recorded in uns is searched automatically; this is for "
+                        "data that moved, or a pipeline that recorded nothing")
     r.add_argument("--object-name", default="cohort_profiled.h5ad")
     r.add_argument("--allow", default=None, metavar="KERNELS",
                    help="run these kernels even though their own guard refused. Comma separated. "

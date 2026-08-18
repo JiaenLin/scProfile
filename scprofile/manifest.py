@@ -60,7 +60,7 @@ DEFAULT_SENTINELS = ("EXCLUDED", "UNRESOLVED")
 
 def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=None,
                 references=None, params=None, upstream=None, sentinels=DEFAULT_SENTINELS,
-                contract=CONTRACT_VERSION):
+                provenance=None, contract=CONTRACT_VERSION):
     """Write `in.json`. Every path is made ABSOLUTE first.
 
     A kernel runs with its own working directory - a different interpreter, sometimes a different
@@ -85,6 +85,11 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
         "params": dict(params or {}),
         "upstream": {k: str(Path(v).resolve()) for k, v in (upstream or {}).items()},
         "sentinels": list(sentinels or ()),
+        # What the upstream tools recorded about where this object came from. Harvested by the
+        # host because `uns` is dropped from the kernel copy, and because a kernel needing a file
+        # that is not IN the object still needs to be told where to look. Plain JSON, so it
+        # crosses every version boundary the object itself cannot.
+        "provenance": dict(provenance or {}),
     }
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -109,6 +114,7 @@ def read_input(path):
     d.setdefault("upstream", {})
     d.setdefault("sentinels", list(DEFAULT_SENTINELS))
     d.setdefault("params", {})
+    d.setdefault("provenance", {})
     return d
 
 

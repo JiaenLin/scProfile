@@ -10,6 +10,13 @@ needs_env: true
 needs_layers:
   - spliced
   - unspliced
+# ... but the kernel goes and LOOKS for them before refusing. An object that has been through QC,
+# annotation and integration has almost certainly lost these layers, while the aligner output is
+# still on disk - and the upstream tools recorded where their own inputs were. The host harvests
+# that chain from uns and passes it in; this kernel searches it for a velocyto .loom, an mtx
+# triplet, or an .h5ad carrying both layers, and attaches what it finds BY BARCODE, within each
+# sample. It refuses with a list of everywhere it looked rather than with "layers absent".
+can_source_layers: true
 # Parameters, all optional, passed as --params '{"mode": "dynamical", "n_top_genes": 3000}':
 #   mode               stochastic (default) | deterministic | dynamical
 #                      dynamical also fits kinetic rates and writes obs[latent_time]; it is the

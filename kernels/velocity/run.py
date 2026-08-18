@@ -47,6 +47,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import sources                                                            # noqa: E402
 from scprofile import manifest                                            # noqa: E402
 
 VERSION = "0.1.0"
@@ -62,6 +64,8 @@ DEFAULTS = {
     "min_dist": 0.2,             # only used if a UMAP has to be computed here
     "n_jobs": None,
     "min_confidence": 0.5,       # below this median, the arrows are reported as unreadable
+    "spliced_source": None,      # a path to search FIRST for spliced/unspliced counts
+    "min_barcode_match": 0.5,    # a source matching fewer of a sample's barcodes is not used
 }
 
 #: Embeddings to project arrows onto, best first. An integrated embedding is preferred because
@@ -137,21 +141,57 @@ def main(argv):
     print(f"read {n0:,} cells x {g0:,} genes")
 
     # ---------------------------------------------------------------- is there anything to fit
+    #
+    # An object that has been through QC, annotation and integration has almost certainly lost
+    # its spliced/unspliced layers - they come from the aligner and nothing downstream carries
+    # them. But the aligner's output is usually still on disk, and the upstream tools recorded
+    # where their own inputs were. So before refusing, LOOK: the host passes the chain it
+    # harvested from uns, and this searches it.
     have = {k for k in A.layers if k is not None}
-    absent = []
-    for need in ("spliced", "unspliced"):
-        if need not in have:
-            absent.append({"what": "velocity", "why":
-                           f"layers[{need!r}] is absent. Spliced/unspliced counts come from the "
-                           f"ALIGNER - they cannot be derived from a counts matrix, and the only "
-                           f"route is to re-quantify from FASTQ or BAM with an intron-aware "
-                           f"mode. Present layers: {sorted(have) or 'none'}."})
-    if absent:
-        manifest.write_output(out, kernel="velocity", version=VERSION, status="refused",
-                              headline="no spliced/unspliced layers on this object",
-                              absent=absent, caveats=["Nothing was fitted."])
-        print("REFUSED: no spliced/unspliced layers")
-        return 0
+    sourced_note = ""
+    if not {"spliced", "unspliced"} <= have:
+        print(f"spliced/unspliced are not on the object (layers: {sorted(have) or 'none'})")
+        prov = inp.get("provenance") or {}
+        roots = []
+        if P["spliced_source"]:
+            roots.append(str(P["spliced_source"]))
+        roots += list(prov.get("search_paths") or [])
+        roots.append(str(Path(inp["h5ad"]).parent))
+        hints = list(prov.get("sample_hints") or [])
+        if keys.get("sample") and keys["sample"] in A.obs:
+            hints += [str(x) for x in A.obs[keys["sample"]].astype(str).unique()]
+        hints = sorted(set(h for h in hints if h))
+
+        print(f"searching {len(roots)} lead(s) for aligner output"
+              + (f", {len(hints)} sample name(s) known" if hints else ""))
+        cands = sources.find(roots, hints, log=print)
+        print(f"  visited {sources.find.visited} director(ies), found {len(cands)} candidate(s)")
+        ok = False
+        if cands:
+            ok, sourced_note = sources.attach(
+                A, cands, sample_key=keys.get("sample"),
+                min_match=float(P["min_barcode_match"]), log=print)
+        if not ok:
+            manifest.write_output(
+                out, kernel="velocity", version=VERSION, status="refused",
+                headline="no spliced/unspliced counts on the object or beside it",
+                absent=[{"what": "velocity", "why":
+                         "Spliced/unspliced counts come from the ALIGNER. They cannot be derived "
+                         "from a counts matrix, and the only route is to re-quantify from FASTQ "
+                         "or BAM in an intron-aware mode.\n"
+                         f"  Present layers: {sorted(have) or 'none'}.\n"
+                         f"  Searched {sources.find.visited} directories under "
+                         f"{len(sources.find.looked)} lead(s) taken from the upstream chain:\n    "
+                         + "\n    ".join(sources.find.looked[:8] or ["(none recorded)"])
+                         + (f"\n  Candidates opened but not usable: {sourced_note}"
+                            if sourced_note else "")
+                         + "\n  Fix: --search <dir> to point at the aligner output, or "
+                           "--params '{\"spliced_source\": \"<dir>\"}'."}],
+                caveats=["Nothing was fitted."])
+            print("REFUSED: no spliced/unspliced counts found")
+            return 0
+        have = {k for k in A.layers if k is not None}
+        print(f"sourced from beside the object: {sourced_note}")
 
     s_tot = float(A.layers["spliced"].sum())
     u_tot = float(A.layers["unspliced"].sum())
@@ -408,7 +448,14 @@ def main(argv):
     print(f"wrote {f_obj.name}  ({A.n_obs:,} x {A.n_vars:,}, velocity graph included)")
 
     # ---------------------------------------------------------------- caveats, from the data
-    caveats = [
+    caveats = []
+    if sourced_note:
+        caveats.append(
+            "Spliced/unspliced counts were NOT on the input object. They were found beside it by "
+            "following the provenance the upstream tools recorded, and attached BY BARCODE: "
+            + sourced_note + ". Cells that matched no source carry zeros in those layers, which "
+            "the fit treats as no signal - check the coverage above before reading the field.")
+    caveats += [
         f"Fitted on {g1:,} of {g0:,} genes, selected inside this kernel from {x_src} "
         f"(min_shared_counts={P['min_shared_counts']}, n_top_genes={n_top}). No gene "
         f"or cell was removed from the merged object; the fitted layers ship as "

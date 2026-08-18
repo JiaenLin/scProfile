@@ -117,6 +117,18 @@ class Kernel:
         return self._list("needs_layers")
 
     @property
+    def can_source_layers(self):
+        """This kernel can FETCH a missing layer from files beside the object.
+
+        Velocity needs spliced/unspliced, which come from the aligner and are absent from almost
+        every object that has been through QC and annotation - while the files are usually still
+        on disk. A kernel that declares this is not blocked by the host's prerequisite check; it
+        gets to run its own search and refuse with a report of everywhere it looked, which is
+        strictly more useful than "layers absent".
+        """
+        return bool(self.spec.get("can_source_layers"))
+
+    @property
     def needs_kernels(self):
         return self._list("needs_kernels")
 
@@ -270,6 +282,8 @@ def unmet(kernel, *, obs=(), obsm=(), layers=(), ran=(), has_design=False):
             problems.append(f"obsm[{c!r}] is absent.  Fix: pass --embedding to name the one to "
                             f"use, or run the integration step that writes it.")
     for c in kernel.needs_layers:
+        if c not in layers and kernel.can_source_layers:
+            continue          # the kernel searches for it and reports what it found
         if c not in layers:
             problems.append(
                 f"layers[{c!r}] is absent.  Fix: this kernel cannot run on this dataset. "
