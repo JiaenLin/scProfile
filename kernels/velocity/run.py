@@ -376,7 +376,7 @@ def main(argv):
     sdir = out / "figures" / "source_data"
     sdir.mkdir(parents=True, exist_ok=True)
     labels = lab_series.values if lab_series is not None else None
-    colours = figure.palette(set(labels)) if labels is not None else {}
+    colours = figs_mod.colours_for(labels, sentinels) if labels is not None else {}
     print("figures:")
     figs = []
 

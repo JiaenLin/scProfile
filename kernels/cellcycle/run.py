@@ -92,6 +92,7 @@ def main(argv):
 
     ph = A.obs["phase"].astype(str)
     counts = ph.value_counts()
+    cycling_fraction = float((ph != "G1").mean())
     print("phase:", dict(counts))
 
     # ---------------------------------------------------------------- figures
@@ -142,11 +143,11 @@ def main(argv):
             dd["label"] = labs.values
         pd.DataFrame(dd).to_csv(srcs, index=False)
         fig, ax = plt.subplots(figsize=(figure.SINGLE, figure.SINGLE * 0.9))
-        for ph, col in (("G1", "#D9D9D9"), ("S", "#0072B2"), ("G2M", "#D55E00")):
-            m = A.obs["phase"].astype(str).values == ph
+        for phase_name, col in (("G1", "#D9D9D9"), ("S", "#0072B2"), ("G2M", "#D55E00")):
+            m = A.obs["phase"].astype(str).values == phase_name
             if m.any():
                 ax.scatter(A.obs["S_score"].values[m], A.obs["G2M_score"].values[m], s=2, c=col,
-                           label=ph, linewidths=0, rasterized=True)
+                           label=phase_name, linewidths=0, rasterized=True)
         ax.axhline(0, color=figure.INK, lw=.5), ax.axvline(0, color=figure.INK, lw=.5)
         ax.set_xlabel("S score"), ax.set_ylabel("G2M score")
         figure.legend_outside(fig, ax)
@@ -181,7 +182,7 @@ def main(argv):
         caveats.append(
             "The assay was not declared or detected. If these are nuclei the scores are "
             "compressed; pass --assay nucleus so this is stated rather than left open.")
-    frac = float((ph != "G1").mean())
+    frac = cycling_fraction
     caveats.append(
         f"{100 * frac:.1f}% of cells score S or G2M. Read that as 'these genes are relatively "
         f"high', not as a proliferation rate.")

@@ -29,10 +29,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scprofile import figure                                              # noqa: E402
 
 
-def _clean(ax):
+def _clean(ax, basis=None):
     ax.set_xticks([]), ax.set_yticks([])
     for s in ax.spines.values():
         s.set_visible(False)
+    if basis:
+        # A publication panel names its axes even when the values are meaningless. An unlabelled
+        # embedding is the commonest reason a reviewer asks what they are looking at.
+        ax.set_xlabel(f"{basis.upper()} 1", loc="left")
+        ax.set_ylabel(f"{basis.upper()} 2", loc="bottom")
+
+
+def colours_for(labels, sentinels=()):
+    """A colour per population, with annotator sentinels forced to GREY.
+
+    A sentinel is not a cell type - it is the annotator saying it declined to call one. Giving it
+    a hue of its own in the legend puts it beside the real populations as though it were one, and
+    a reader has no way to tell from the figure that it is not.
+    """
+    sent = {str(s) for s in sentinels}
+    real = [l for l in sorted(set(map(str, labels))) if l not in sent]
+    cols = figure.palette(real)
+    for s in sorted(set(map(str, labels))) :
+        if s in sent:
+            cols[s] = figure.GREY
+    return cols
 
 
 def proportions(A, labels, out, sources_dir, plt, log=print):
@@ -103,15 +124,24 @@ def stream_and_grid(A, basis, label_key, out, sources_dir, plt, scv, colours, lo
     ):
         try:
             fig, ax = plt.subplots(figsize=(figure.SINGLE, figure.SINGLE * 0.92))
-            fn(A, basis=basis, color=label_key, ax=ax, show=False, legend_loc="none",
-               palette=[colours[l] for l in sorted(colours)] if colours else None,
-               size=12, alpha=0.75, arrow_color=figure.INK, linewidth=0.5, dpi=400,
-               title="", frameon=False)
+            # arrow_size is in POINTS and does not scale with the figure. At scvelo's default a
+            # figure built for an 85 mm column comes out with arrowheads the size of a cell type.
+            kw = dict(basis=basis, color=label_key, ax=ax, show=False, legend_loc="none",
+                      size=10, alpha=0.75, arrow_color=figure.INK, dpi=400, title="",
+                      frameon=False, colorbar=False)
+            if colours:
+                kw["palette"] = [colours[l] for l in sorted(colours)]
+            if "stream" in kind:
+                kw.update(linewidth=0.35, arrow_size=0.7, density=1.4)
+            else:
+                kw.update(arrow_length=1.6, arrow_size=1.6, density=0.7)
+            fn(A, **kw)
             figure.rasterize_points(ax)
-            _clean(ax)
+            _clean(ax, basis)
             if colours:
                 import matplotlib.lines as ml
-                h = [ml.Line2D([], [], marker="o", ls="", ms=3, color=c, label=l)
+                h = [ml.Line2D([], [], marker="o", ls="", ms=2.5, color=c,
+                               label=(f"{l} (not a cell type)" if c == figure.GREY else l))
                      for l, c in sorted(colours.items())]
                 figure.legend_outside(fig, ax, h, [x.get_label() for x in h],
                                       ncol=1 if len(h) <= 14 else 2)
@@ -143,7 +173,7 @@ def confidence(A, labels, basis, out, sources_dir, plt, scv, colours, log=print)
     o = np.argsort(conf)
     sc = ax.scatter(xy[o, 0], xy[o, 1], c=conf[o], s=2, cmap="RdYlBu_r", vmin=0, vmax=1,
                     linewidths=0, rasterized=True)
-    _clean(ax)
+    _clean(ax, basis)
     ax.set_title("velocity confidence", loc="left")
     cb = fig.colorbar(sc, ax=ax, fraction=0.04, pad=0.02)
     cb.outline.set_visible(False)
@@ -194,14 +224,23 @@ def phase_portraits(A, genes, label_key, out, sources_dir, plt, scv, colours, lo
     try:
         ncol = 3
         nrow = (len(genes) + ncol - 1) // ncol
-        fig, axs = plt.subplots(nrow, ncol, figsize=(figure.DOUBLE, 1.55 * nrow), squeeze=False)
-        for ax, g in zip(axs.ravel(), genes):
-            scv.pl.scatter(A, x="Ms", y="Mu", color=label_key, basis=g, ax=ax, show=False,
-                           legend_loc="none", size=8, alpha=0.6, frameon=True,
-                           title=g, fontsize=7, dpi=400,
-                           palette=[colours[l] for l in sorted(colours)] if colours else None)
+        # constrained_layout, because a title in row 2 lands on row 1's x-axis label otherwise -
+        # which is how a grid of panels turns into a grid of overlapping text.
+        fig, axs = plt.subplots(nrow, ncol, figsize=(figure.DOUBLE, 1.75 * nrow), squeeze=False,
+                                layout="constrained")
+        for i, (ax, g) in enumerate(zip(axs.ravel(), genes)):
+            kw = dict(x="Ms", y="Mu", color=label_key, basis=g, ax=ax, show=False,
+                      legend_loc="none", size=6, alpha=0.6, frameon=True, title=g,
+                      fontsize=7, dpi=400, colorbar=False)
+            if colours:
+                kw["palette"] = [colours[l] for l in sorted(colours)]
+            scv.pl.scatter(A, **kw)
             figure.rasterize_points(ax)
             ax.set_xlabel("spliced (Ms)"), ax.set_ylabel("unspliced (Mu)")
+            # scvelo draws its own "steady-state ratio" key in EVERY panel. One is a legend; six
+            # is noise repeated six times.
+            if i > 0 and ax.get_legend() is not None:
+                ax.get_legend().remove()
         for ax in axs.ravel()[len(genes):]:
             ax.set_visible(False)
         return figure.save(
@@ -255,7 +294,7 @@ def pseudotime(A, basis, out, sources_dir, plt, log=print):
     xy = np.asarray(A.obsm[f"X_{basis}"])[:, :2]
     fig, ax = plt.subplots(figsize=(figure.SINGLE, figure.SINGLE * 0.9))
     sc = ax.scatter(xy[:, 0], xy[:, 1], c=pt, s=2, cmap="viridis", linewidths=0, rasterized=True)
-    _clean(ax)
+    _clean(ax, basis)
     cb = fig.colorbar(sc, ax=ax, fraction=0.04, pad=0.02)
     cb.outline.set_visible(False)
     cb.set_label("velocity pseudotime")
