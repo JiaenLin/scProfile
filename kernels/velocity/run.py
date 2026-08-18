@@ -169,9 +169,43 @@ def main(argv):
         print("REFUSED: unspliced layer is empty")
         return 0
 
+    # ---------------------------------------------------------------- start from COUNTS
+    # The model is fitted on spliced/unspliced abundances, and X is used only for the HVG
+    # selection and the PCA the neighbour graph is built on. An upstream tool typically delivers
+    # lognormalised X with the counts kept in a layer - log1p applied to that would be a SECOND
+    # log, which produces a perfectly plausible embedding and no error anywhere.
+    counts_layer = keys.get("counts_layer")
+    if counts_layer and counts_layer in have:
+        A.X = A.layers[counts_layer].copy()
+        x_src = f"layers[{counts_layer!r}], as named by the host"
+    else:
+        xmax = float(A.X.max())
+        if xmax < 30:
+            manifest.write_output(
+                out, kernel="velocity", version=VERSION, status="refused",
+                headline="X looks log-transformed and no counts layer was named",
+                absent=[{"what": "velocity", "why":
+                         f"X has maximum {xmax:.2f}, which is the range of log1p data rather than "
+                         f"of counts, and no counts layer was named. Preprocessing it again would "
+                         f"apply a second log transform - which produces a plausible embedding and "
+                         f"reports no error.\n  Fix: --counts-layer <name>. Layers present: "
+                         f"{sorted(have)}."}],
+                caveats=["Nothing was fitted."])
+            print("REFUSED: X looks logged and no counts layer was named")
+            return 0
+        x_src = f"X as delivered (max {xmax:.0f}, count-like)"
+    print(f"counts from {x_src}")
+
     # ---------------------------------------------------------------- the fit
-    scv.pp.filter_and_normalize(A, min_shared_counts=int(P["min_shared_counts"]),
-                                n_top_genes=int(P["n_top_genes"]))
+    # scvelo 0.3 REMOVED gene selection and the log transform from filter_and_normalize - it is
+    # now filter_genes + normalize_per_cell and nothing else, though its own docstring still says
+    # "Filtering, normalization and log transform". Passing n_top_genes reaches
+    # normalize_per_cell through **kwargs and raises. The selection and the log are done here,
+    # explicitly, where they can be counted and reported.
+    scv.pp.filter_and_normalize(A, min_shared_counts=int(P["min_shared_counts"]))
+    sc.pp.log1p(A)
+    n_top = min(int(P["n_top_genes"]), A.n_vars)
+    sc.pp.highly_variable_genes(A, n_top_genes=n_top, subset=True)
     g1 = A.n_vars
     # The host merges obsm BY POSITION, so a step that dropped cells would misalign every arrow
     # against every barcode and nothing downstream would notice. filter_and_normalize selects
@@ -181,7 +215,7 @@ def main(argv):
             f"velocity: gene selection changed the CELL count, {n0:,} -> {A.n_obs:,}. The host "
             f"merges obsm by position and this would silently misalign it. Refusing.")
     print(f"fitted on {g1:,} of {g0:,} genes "
-          f"(min_shared_counts={P['min_shared_counts']}, n_top_genes={P['n_top_genes']})")
+          f"(min_shared_counts={P['min_shared_counts']}, n_top_genes={n_top})")
     if g1 < 50:
         manifest.write_output(
             out, kernel="velocity", version=VERSION, status="refused",
@@ -375,8 +409,8 @@ def main(argv):
 
     # ---------------------------------------------------------------- caveats, from the data
     caveats = [
-        f"Fitted on {g1:,} of {g0:,} genes, selected inside this kernel "
-        f"(min_shared_counts={P['min_shared_counts']}, n_top_genes={P['n_top_genes']}). No gene "
+        f"Fitted on {g1:,} of {g0:,} genes, selected inside this kernel from {x_src} "
+        f"(min_shared_counts={P['min_shared_counts']}, n_top_genes={n_top}). No gene "
         f"or cell was removed from the merged object; the fitted layers ship as "
         f"objects/velocity.h5ad rather than being padded onto the full gene list, because a zero "
         f"in a velocity layer would assert no change where the truth is not fitted.",

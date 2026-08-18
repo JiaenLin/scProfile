@@ -62,13 +62,19 @@ def main():
     A.var_names = [f"Gene{j}" for j in range(g)]
     A.obs["label"] = pd.Categorical(np.where(t < 0.5, "early", "late"))
 
-    scv.pp.filter_and_normalize(A, min_shared_counts=5, n_top_genes=200)
+    # The 0.3.x sequence. filter_and_normalize no longer selects genes or takes a log - it is
+    # filter_genes + normalize_per_cell - and passing n_top_genes to it raises inside
+    # normalize_per_cell. This selftest exists to catch exactly that class of drift.
+    scv.pp.filter_and_normalize(A, min_shared_counts=5)
+    sc.pp.log1p(A)
+    sc.pp.highly_variable_genes(A, n_top_genes=min(200, A.n_vars), subset=True)
     scv.pp.moments(A, n_pcs=15, n_neighbors=15)
     scv.tl.velocity(A, mode="stochastic")
     scv.tl.velocity_graph(A, n_jobs=1)
     scv.tl.velocity_confidence(A)
     scv.tl.velocity_pseudotime(A)
 
+    sc.pp.neighbors(A, n_neighbors=15, n_pcs=15)
     sc.tl.umap(A)
     scv.tl.velocity_embedding(A, basis="umap")
 
@@ -81,6 +87,10 @@ def main():
         # A velocity matrix that is entirely NaN is what a broken numba backend produces, and it
         # travels all the way to a stream plot with no arrows and no error message.
         ("velocity not all-NaN", bool(np.isfinite(np.asarray(A.layers["velocity"])).any())),
+        # Ms/Mu are moments of the NORMALISED, UNLOGGED spliced and unspliced layers. If a future
+        # version starts logging them the fit silently changes meaning, so pin the shape here.
+        ("Ms present", "Ms" in A.layers and A.layers["Ms"].shape == A.shape),
+        ("Mu present", "Mu" in A.layers and A.layers["Mu"].shape == A.shape),
     ]
     bad = [name for name, ok in checks if not ok]
     for name, ok in checks:

@@ -34,6 +34,15 @@ if ! command -v micromamba >/dev/null 2>&1 \
   module load "${CONDA_MODULE:-anaconda3}" 2>/dev/null || true
 fi
 
+# Stream to a log on SHARED storage as we go. PBS copies the -o file only when the job EXITS, so
+# a build that is still running, or one that was killed, leaves nothing to read - and "no output"
+# then looks the same as "never started". Also: never /tmp, which on most clusters is node-local,
+# so a log written there is invisible from the machine you are sitting on.
+LIVE="${LIVE_LOG:-${PREFIX}/scprofile-${KERNEL}.build.log}"
+mkdir -p "$(dirname "${LIVE}")"
+exec > >(tee -a "${LIVE}") 2>&1
+echo "live log  ${LIVE}"
+
 echo "host      $(hostname)"
 echo "kernel    ${KERNEL}"
 echo "prefix    ${PREFIX}"
