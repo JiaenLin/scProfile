@@ -1,0 +1,17 @@
+name: cellcycle
+summary: cell-cycle phase per cell, and the check that a trajectory is not a cell-cycle axis
+language: python
+entry: run.py
+# Runs in the HOST interpreter. It needs scanpy, which the host already needs in order to read the
+# object at all, so a separate environment for a two-minute scoring step would be friction with
+# nothing behind it. Kernels that pin awkward dependencies declare needs_env: true instead.
+needs_env: false
+produces:
+  - obs[phase]
+  - obs[S_score]
+  - obs[G2M_score]
+cannot_show:
+  - Phase is SCORED from a gene set, not measured. A cell scored G2M is one whose G2M genes are relatively high, which is not the same as a cell in G2M.
+  - The gene sets are the standard human ones, title-cased for mouse. They are not tissue-specific and were not curated for this dataset.
+  - On single nuclei the signal is weaker - cell-cycle transcripts are partly cytoplasmic - so a low score is as consistent with the assay as with a resting population.
+  - A cycling population is not a proliferating one. Scoring says which genes are high, not how many cells divided.
