@@ -217,6 +217,11 @@ def install(kernel, prefix, *, force=False, log=print):
             raise RuntimeError(
                 f"{kernel.name}'s selftest FAILED, so the environment is not usable:\n"
                 + (r.stdout or "") + (r.stderr or ""))
+        # Print it on SUCCESS too. "selftest ok" tells you a check passed and not which versions
+        # it passed against, and the versions are the thing anyone debugging this later needs -
+        # a lock is a claim about an environment, and this is the receipt.
+        for line in (r.stdout or "").splitlines():
+            log(f"    {line}")
         log("  selftest ok")
     return p
 

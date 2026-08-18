@@ -1,0 +1,63 @@
+#!/bin/bash
+#PBS -N scprofile_smoke
+#PBS -q workq
+#PBS -l select=1:ncpus=4:mem=16gb
+#PBS -l walltime=01:00:00
+#PBS -j oe
+
+# Prove the whole path on a synthetic dataset: build a fixture, run the kernels over it, merge,
+# report. Nothing here touches your data.
+#
+#   qsub -v PREFIX=$HOME/envs,TOOL=$HOME/tools/scProfile,OUT=$HOME/scprofile_smoke \
+#        -o $HOME/scprofile_smoke.log  setup/smoke_test.pbs
+#
+# Run this after `install`. A selftest proves a kernel's ENVIRONMENT works; this proves the
+# kernel, the contract, the merge and the report work together - which is a different claim, and
+# the one that breaks when a kernel starts writing something the host was not expecting.
+
+set -euo pipefail
+
+: "${PREFIX:?pass -v PREFIX=<dir holding the kernel envs>}"
+: "${TOOL:?pass -v TOOL=<path to the scProfile checkout>}"
+: "${OUT:?pass -v OUT=<a scratch directory for the results>}"
+KERNELS="${KERNELS:-velocity,cellcycle}"
+
+# The HOST needs anndata; it does not need any kernel's pins. Point HOST_PYTHON at an interpreter
+# that has anndata, scanpy, numpy and pandas - a kernel env will do if you have nothing else.
+HOST="${HOST_PYTHON:-python3}"
+
+LIVE="${LIVE_LOG:-${OUT}/smoke.log}"
+mkdir -p "${OUT}"
+exec > >(tee -a "${LIVE}") 2>&1
+
+echo "host      $(hostname)"
+echo "tool      ${TOOL}"
+echo "kernels   ${KERNELS}"
+echo "out       ${OUT}"
+echo "started   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+echo
+
+cd "${TOOL}"
+export PYTHONPATH="${TOOL}"
+
+echo "=== 1. build the fixture ==="
+"${HOST}" tests/make_fixture.py "${OUT}/fixture.h5ad"
+
+echo
+echo "=== 2. what the host makes of it ==="
+"${HOST}" -m scprofile.cli doctor --prefix "${PREFIX}" || true
+
+echo
+echo "=== 3. run ==="
+"${HOST}" -m scprofile.cli run \
+    --h5ad "${OUT}/fixture.h5ad" \
+    --out  "${OUT}/results" \
+    --kernel "${KERNELS}" \
+    --prefix "${PREFIX}"
+
+echo
+echo "=== 4. what landed ==="
+find "${OUT}/results" -type f | sed "s|${OUT}/results|  results|" | sort
+
+echo
+echo "finished  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
