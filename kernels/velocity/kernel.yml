@@ -1,0 +1,26 @@
+name: velocity
+summary: RNA velocity from spliced/unspliced counts - the DIRECTION of transcriptional change
+when_to_use: your object carries spliced and unspliced layers and you want direction of change, not just position
+language: python
+entry: run.py
+needs_env: true
+# The one prerequisite most datasets fail, and it cannot be repaired later: spliced/unspliced
+# counts come from the ALIGNER. An object quantified without them has no route to velocity short
+# of re-running alignment from FASTQ or BAM.
+needs_layers:
+  - spliced
+  - unspliced
+produces:
+  - layers[velocity]
+  - layers[Ms]
+  - layers[Mu]
+  - obs[velocity_confidence]
+  - obs[velocity_pseudotime]
+cannot_show:
+  - Velocity is a DIRECTION, not a rate of change in real time. Arrow length is not speed in hours, and two datasets' arrow lengths are not comparable.
+  - The validated single-nucleus use is DIRECTIONAL. Nucleus and cell velocities correlate 0.94-0.99 on matched microglia (Sci Rep 2024), but that study projected vectors and measured cell speed - it did not derive a pseudotime from them. `velocity_pseudotime` rests on more assumptions than the arrows do.
+  - Quantification choices change the answer. How intronic reads were counted, and whether the reference included intronic regions, alter library size, cell-type assignment and therefore velocity - so a velocity result is a property of the alignment as much as of the biology.
+  - snRNA intronic reads carry a GENE LENGTH BIAS, in both exonic and intronic counts. A long gene contributes more unspliced signal for reasons that are not kinetic.
+  - Unspliced counts are noisy, especially for 3-prime tagging chemistries. Nuclei have proportionally more intronic signal than cells, which helps - but the per-gene counts are still small.
+  - Unspliced mRNA is read as a transitional state, and need not be. A stable population can hold an unspliced reservoir for rapid transcription-independent expression, and looks identical here.
+  - These counts are NOT ambient-corrected. Correction is applied to total counts and cannot be decomposed into spliced and unspliced parts. Published snRNA velocity does not correct either, and the effect is contained to this kernel's own outputs - nothing else in the object reads these layers.

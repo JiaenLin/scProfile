@@ -128,10 +128,55 @@ class Kernel:
     def produces(self):
         return self._list("produces")
 
+    def declared_slots(self):
+        """`produces` parsed into {slot: {name}}, e.g. obs[phase] -> {"obs": {"phase"}}.
+
+        The harness lets a skill declare `allowed-tools` and then HOLDS IT TO THAT. Here the same
+        idea: `produces` stops being a comment and becomes the set the host checks a kernel's
+        actual output against. A kernel that quietly starts writing a second obs column is a
+        kernel whose documentation, report section and provenance have all silently gone stale.
+        """
+        out = {}
+        for item in self.produces:
+            s = str(item).strip()
+            if "[" in s and s.endswith("]"):
+                slot, _, rest = s.partition("[")
+                out.setdefault(slot.strip(), set()).add(rest[:-1].strip())
+            else:
+                out.setdefault("tables", set()).add(s)
+        return out
+
     @property
     def cannot_show(self):
         """What this kernel's own result does NOT establish. Printed under its section."""
         return self._list("cannot_show")
+
+    @property
+    def when_to_use(self):
+        """One line saying WHEN this kernel is the right thing to run.
+
+        Taken from the agent-harness convention where every skill carries a description whose job
+        is to let a router decide RELEVANCE without loading the skill. `doctor` prints it, and
+        `applicable()` turns it into a per-dataset answer rather than a general one: a user should
+        be told that velocity is irrelevant to their object because it has no unspliced layer, not
+        merely that it is not installed.
+        """
+        return self.spec.get("when_to_use") or self.summary
+
+    @property
+    def guard(self):
+        """A `guard.py` this kernel ships, or None.
+
+        The harness pattern is a PreToolUse hook: it inspects the intended action, DENIES it, and
+        names the remedy - and its escape hatch is logged rather than absent, because a gate with
+        no escape gets switched off and a gate whose escapes are recorded does not.
+
+        A kernel guard runs in the HOST, before the environment is resolved or the kernel is
+        launched, and answers one question: is this dataset one where my output would mean what my
+        report says it means?
+        """
+        g = self.path / "guard.py"
+        return g if g.exists() else None
 
     @property
     def needs_env(self):
@@ -169,14 +214,24 @@ def discover(root=None):
     extra = os.environ.get("SCPROFILE_KERNELS")
     if extra:
         roots += [Path(p) for p in extra.split(os.pathsep) if p]
-    found = {}
+    found, shadowed = {}, []
     for base in roots:
         if not base.is_dir():
             continue
         for d in sorted(base.iterdir()):
             if (d / "kernel.yml").exists():
-                found[d.name] = Kernel(d)          # later roots win, so a site can override
+                if d.name in found:
+                    # A site kernel overriding a shipped one is legitimate and is the reason
+                    # $SCPROFILE_KERNELS exists. Doing it SILENTLY is not: a run would use code
+                    # from a directory nobody mentioned. Recorded, and doctor prints it.
+                    shadowed.append((d.name, str(found[d.name].path), str(d)))
+                found[d.name] = Kernel(d)
+    discover.shadowed = shadowed
     return found
+
+
+#: Populated by the last `discover()`: [(name, shadowed_path, winning_path)].
+discover.shadowed = []
 
 
 def order(names, available):
@@ -227,6 +282,63 @@ def unmet(kernel, *, obs=(), obsm=(), layers=(), ran=(), has_design=False):
         problems.append("no --design was given.  Fix: pass a CSV keyed on the sample column. "
                         "Without it there is no contrast to test.")
     return problems
+
+
+def undeclared(kernel, payload):
+    """What a kernel WROTE that it never declared it produces.
+
+    Not fatal - a kernel may legitimately gain an output before its declaration is updated, and
+    refusing the run would punish the user for the author's oversight. But it is reported at every
+    level: on the console, in the kernel's report page, and in the provenance. An undeclared output
+    is one that no `cannot_show` covers and no documentation mentions.
+    """
+    want = kernel.declared_slots()
+    extra = []
+    for slot in ("obs", "obsm", "layers"):
+        got = set((payload.get(slot) or {}).keys())
+        for name in sorted(got - want.get(slot, set())):
+            extra.append(f"{slot}[{name}]")
+    return extra
+
+
+def guard_verdict(kernel, *, describe, constraint, params, log=print):
+    """Run a kernel's own guard, if it ships one. Returns (allow, reason, escape_flag).
+
+    The guard is given what the host knows about the dataset and answers whether this kernel's
+    output would MEAN what its report says. It is not a prerequisite check - those are structural
+    and live in `unmet()`. A guard is about interpretability: an abundance test on a design whose
+    factor is nested in the batch key runs perfectly and returns p-values for a contrast that is
+    not identifiable.
+    """
+    g = kernel.guard
+    if g is None:
+        return True, "", ""
+    import json
+    import subprocess
+    import sys
+    payload = json.dumps({"describe": describe, "constraint": constraint,
+                          "params": dict(params or {})})
+    r = subprocess.run([sys.executable, str(g)], input=payload, capture_output=True, text=True)
+    if r.returncode == 0:
+        return True, (r.stdout or "").strip(), ""
+    reason = (r.stdout or "") + (r.stderr or "")
+    return False, reason.strip(), f"--allow {kernel.name}"
+
+
+def log_escape(path, kernel_name, reason, who=""):
+    """Append a guard override to the escape log. The harness's lesson, verbatim:
+
+    a gate with no escape gets switched off; a gate whose escapes are all recorded does not.
+    """
+    import datetime
+    import json
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({
+            "when": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+            "kernel": kernel_name, "overridden_reason": reason, "by": who}) + "\n")
+    return p
 
 
 #: Which kernel writes which cell-level column, so an unmet prerequisite can name its own fix

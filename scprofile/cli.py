@@ -53,12 +53,28 @@ def _doctor(a):
                 bad = [n for n, v in st.items() if v[0] != "present"]
                 print(f"        references: {len(st) - len(bad)}/{len(st)} present"
                       + (f"   fix: scprofile fetch {name} --to {a.references}" if bad else ""))
-        if k.summary:
-            print(f"        {k.summary}")
+        if k.when_to_use:
+            print(f"        when: {k.when_to_use}")
+        need = []
+        if k.needs_layers:
+            need.append("layers " + ", ".join(k.needs_layers))
+        if k.needs_obs:
+            need.append("obs " + ", ".join(k.needs_obs))
+        if k.needs_kernels:
+            need.append("after " + ", ".join(k.needs_kernels))
+        if k.needs_design:
+            need.append("a --design")
+        if need:
+            print(f"        needs: {'; '.join(need)}")
+    for name, lost, won in getattr(discover, "shadowed", []):
+        print(f"\n  NOTE  {name} is SHADOWED: {won} overrides {lost}")
+        print("        A site kernel overriding a shipped one is legitimate; doing it without")
+        print("        saying so would mean a run used code from a directory nobody mentioned.")
     print("")
     print("A kernel that is MISSING is not a failure - it is a kernel you have not installed.")
     print("Its absence is named in the report rather than leaving a gap.")
-    return 0 if worst == 0 else 0        # never fatal: doctor reports, it does not gate
+    print("Point `run --h5ad` at an object to see which kernels are RELEVANT to it.")
+    return 0
 
 
 def _v():
@@ -106,7 +122,7 @@ def _split(s):
 
 def _run(a):
     from . import inputs, manifest, merge, refs, report, runner
-    from .kernels import discover, order, unmet
+    from .kernels import (discover, guard_verdict, log_escape, order, undeclared, unmet)
 
     try:
         import anndata as ad
@@ -159,6 +175,7 @@ def _run(a):
     have_obs = set(A.obs.columns)
     have_obsm = set(A.obsm)
     have_layers = {k for k in A.layers if k is not None}
+    allowed = set(_split(a.allow or ""))
     ran, payloads, skipped = [], [], []
 
     for name in order(want, ks):
@@ -172,6 +189,24 @@ def _run(a):
                 print(f"    {p}")
             skipped.append({"kernel": name, "why": probs})
             continue
+        allow, why, escape = guard_verdict(
+            k, describe=inputs.describe(A, keys, organism, assay, csrc),
+            constraint=constraint, params={})
+        if not allow and k.name not in allowed:
+            print(f"  NOT RUN - this kernel's own guard refused:")
+            for line in str(why).splitlines():
+                print(f"    {line}")
+            print(f"    Override with: {escape}   (it will be logged)")
+            skipped.append({"kernel": name, "why": [str(why)]})
+            continue
+        if not allow:
+            print(f"  GUARD OVERRIDDEN with --allow {k.name}. Logged.")
+            for line in str(why).splitlines():
+                print(f"    {line}")
+            log_escape(out / "guard_overrides.jsonl", k.name, str(why))
+        elif why:
+            print(f"  guard: {why}")
+
         try:
             r = refs.resolve(k, a.references, organism[0]) if k.references(organism[0]) else {}
         except FileNotFoundError as e:
@@ -193,6 +228,16 @@ def _run(a):
             skipped.append({"kernel": name, "why": [str(e)]})
             continue
         print(f"  status {payload['status']}   {payload.get('headline', '')}")
+        extra = undeclared(k, payload)
+        if extra:
+            # `produces` is a contract, not a comment - the harness holds a skill to its declared
+            # tools, and the same applies here. Not fatal, because a stale declaration is the
+            # author's oversight rather than the user's, but reported everywhere it will be seen.
+            print(f"  UNDECLARED OUTPUT: {', '.join(extra)}")
+            print(f"    {k.name}'s kernel.yml does not list these under `produces`, so no")
+            print(f"    `cannot_show` covers them and no documentation mentions them.")
+            payload.setdefault("caveats", []).append(
+                "Wrote " + ", ".join(extra) + " without declaring them in kernel.yml.")
         for c in payload.get("caveats", []):
             print(f"  caveat: {c}")
         try:
@@ -291,6 +336,11 @@ def main(argv=None):
                    help="CSV keyed on the sample column, carrying the experimental factors")
     r.add_argument("--params", default=None, help="JSON passed through to every kernel")
     r.add_argument("--object-name", default="cohort_profiled.h5ad")
+    r.add_argument("--allow", default=None, metavar="KERNELS",
+                   help="run these kernels even though their own guard refused. Comma separated. "
+                        "Every override is written to guard_overrides.jsonl with its reason - a "
+                        "gate with no escape gets switched off, and one whose escapes are all "
+                        "recorded does not")
     r.add_argument("--force", action="store_true",
                    help="run a kernel whose prerequisites are unmet. It will probably refuse "
                         "itself, and its result would not mean what the report says it means")

@@ -142,6 +142,26 @@ No automatic DAG execution. Asking for one kernel must never silently spend an h
 
 ---
 
+### Four patterns taken from the agent harness this was built inside
+
+The harness that runs these tools had already solved several of these problems, and the design was
+half-reinventing them. Adopted verbatim:
+
+| harness | here |
+|---|---|
+| a skill's `description` says **when** to use it, so a router judges relevance without loading it | `when_to_use` in `kernel.yml`; `doctor` reports whether a kernel is RELEVANT to this dataset, not only whether it is installed |
+| `allowed-tools` — a skill is **held to** what it declared | `produces` is checked against what the kernel actually wrote. An undeclared output is reported everywhere, because nothing in `cannot_show` covers it and no documentation mentions it |
+| a `PreToolUse` hook **denies** an action and names the remedy, and its escape is **logged** | `guard.py` per kernel, run in the host before anything is spent. `--allow <kernel>` overrides, and every override lands in `guard_overrides.jsonl` with its reason |
+| plugin namespacing makes an override visible | a site kernel shadowing a shipped one is legitimate and is why `$SCPROFILE_KERNELS` exists — doing it **silently** is not, so `doctor` prints it |
+
+The escape-hatch rule is the harness's own, and it is the one worth stating twice: **a gate with no
+escape gets switched off; a gate whose escapes are all recorded does not.**
+
+A guard is not a prerequisite check. `unmet()` refuses when a required layer is absent — that is
+structural, and no willingness makes it runnable. A guard is about **interpretability**: the run
+would succeed, produce numbers, and those numbers would not support the sentence a reader writes
+under them.
+
 ## 3. Output
 
 **One h5ad for cell-level results, sidecar tables for everything else.**
