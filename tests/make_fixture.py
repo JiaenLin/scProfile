@@ -26,6 +26,26 @@ import sys
 from pathlib import Path
 
 
+#: Real MOUSE symbols - the casing probes the host uses to detect organism, and enough of the
+#: Tirosh cell-cycle panel that `cellcycle` takes its scoring path rather than only its refusal
+#: path. A fixture that only ever provokes refusals proves the refusals and nothing else.
+_REAL = """Actb Gapdh Malat1 Rpl13a Ptprc Eef1a1 Epcam Pecam1 Col1a1 Myh11 Alb
+Mcm5 Pcna Tyms Fen1 Mcm2 Mcm4 Rrm1 Ung Gins2 Mcm6 Cdca7 Dtl Prim1 Uhrf1 Hells Rfc2 Rpa2 Nasp
+Gmnn Wdr76 Slbp Ccne2 Ubr7 Pold3 Msh2 Atad2 Rad51 Rrm2 Cdc45 Cdc6 Exo1 Tipin Dscc1 Blm Usp1
+Clspn Pola1 Chaf1b Brip1 E2f8
+Hmgb2 Cdk1 Nusap1 Ube2c Birc5 Tpx2 Top2a Ndc80 Cks2 Nuf2 Cks1b Mki67 Tmpo Cenpf Tacc3 Smc4 Ccnb2
+Ckap2l Ckap2 Aurkb Bub1 Kif11 Anp32e Tubb4b Gtse1 Kif20b Hjurp Cdca3 Cdc20 Ttk Cdc25c Kif2c
+Rangap1 Ncapd2 Dlgap5 Cdca2 Cdca8 Ect2 Kif23 Hmmr Aurka Psrc1 Anln Lbr Ckap5 Cenpe Ctcf Nek2
+G2e3 Gas2l3 Cbx5 Cenpa""".split()
+
+
+def _gene_names(g):
+    """Real symbols first, then filler. Deterministic, and unique."""
+    names = list(dict.fromkeys(_REAL))[:g]
+    names += [f"Gm{10000 + j}" for j in range(g - len(names))]
+    return names
+
+
 def build(n=1200, g=400, seed=0):
     import anndata as ad
     import numpy as np
@@ -54,7 +74,7 @@ def build(n=1200, g=400, seed=0):
     A.layers["spliced"] = sp.csr_matrix(spliced)
     A.layers["unspliced"] = sp.csr_matrix(unspliced)
     A.obs_names = [f"CELL{i:05d}" for i in range(n)]
-    A.var_names = [f"Gene{j:04d}" for j in range(g)]
+    A.var_names = _gene_names(g)
     A.obs["cell_type"] = pd.Categorical(lab)
     A.obs["sample"] = pd.Categorical(rng.choice([f"S{i}" for i in range(1, 5)], size=n))
     A.obs["group"] = pd.Categorical(np.where(

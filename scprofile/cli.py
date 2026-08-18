@@ -121,7 +121,7 @@ def _split(s):
 # -------------------------------------------------------------------------------------- run
 
 def _run(a):
-    from . import inputs, manifest, merge, refs, report, runner
+    from . import compat, inputs, manifest, merge, refs, report, runner
     from .kernels import (discover, guard_verdict, log_escape, order, undeclared, unmet)
 
     try:
@@ -181,6 +181,9 @@ def _run(a):
     #: can read a predecessor's result directly. This is what makes `needs_kernels` mean something
     #: beyond ordering.
     upstream = {}
+    #: Probe results per interpreter, and at most one compatibility copy of the object. A kernel's
+    #: pinned anndata may have no reader for the encoding a current one writes; see compat.py.
+    readable = {}
 
     for name in order(want, ks):
         k = ks[name]
@@ -220,8 +223,25 @@ def _run(a):
 
         kout = out / "kernels" / name
         kout.mkdir(parents=True, exist_ok=True)
+
+        # Ask the kernel's OWN interpreter whether it can read the object, before launching it.
+        # A version skew in anndata's IO registry otherwise surfaces as a traceback on the
+        # kernel's first line, about an IO registry, in a user who installed everything right.
+        exe, _src = runner.interpreter(k, a.prefix)
+        k_h5ad = a.h5ad
+        if exe:
+            k_h5ad = compat.readable_input(A, a.h5ad, exe, out, cache=readable)
+            if k_h5ad is None:
+                why = (f"{name}'s interpreter cannot read this object, and re-writing it in the "
+                       f"classic string encoding did not help. The kernel environment's anndata "
+                       f"is too old for how this file is encoded.  Fix: rebuild the kernel with "
+                       f"a newer lock, or re-export the object from an older anndata.")
+                print(f"  NOT RUN - {why}")
+                skipped.append({"kernel": name, "why": [why]})
+                continue
+
         manifest.write_input(
-            kout / "in.json", h5ad=a.h5ad, out_dir=kout,
+            kout / "in.json", h5ad=k_h5ad, out_dir=kout,
             keys={r_: v[0] for r_, v in keys.items() if v[0]},
             organism=organism[0], assay=assay[0], design=a.design, references=r,
             params=json.loads(a.params) if a.params else {},
