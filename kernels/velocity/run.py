@@ -48,8 +48,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import figures as figs_mod                                                # noqa: E402
 import sources                                                            # noqa: E402
-from scprofile import manifest                                            # noqa: E402
+from scprofile import figure, manifest                                    # noqa: E402
 
 VERSION = "0.1.0"
 
@@ -111,9 +112,7 @@ def _pick_basis(A, declared, keys):
 
 
 def main(argv):
-    import matplotlib
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
+    plt = figure.use()               # journal conventions, applied before anything is drawn
     import numpy as np
     import pandas as pd
     import scanpy as sc
@@ -324,7 +323,7 @@ def main(argv):
     # "this population moves TOWARD that one". It is also the honest place to see that a direction
     # is absent - a symmetric transition matrix means the arrows carry no between-label signal.
     tables = [f_bylabel]
-    trans_note = ""
+    trans_note, trows = "", []
     if lab_series is not None and lab_series.nunique() > 1:
         try:
             scv.tl.paga(A, groups=label_key)
@@ -364,65 +363,65 @@ def main(argv):
     f_genes = out / "tables" / "velocity_genes.csv"
     gv[cols].head(500).to_csv(f_genes)
     tables.append(f_genes)
+    # The genes the phase portraits are drawn for: the highest-ranked by whichever score this
+    # mode produced. Named here so the figure block and the table cannot disagree about them.
+    top_genes = list(gv.index[:6]) if cols else []
 
     # ---------------------------------------------------------------- figures
+    #
+    # The set a velocity paper contains, not a sample of the result. Each panel is written as a
+    # raster preview and a vector PDF with live text, at journal column width, with a caption
+    # saying what it is FOR and the table it was drawn from beside it.
+    fdir = out / "figures"
+    sdir = out / "figures" / "source_data"
+    sdir.mkdir(parents=True, exist_ok=True)
+    labels = lab_series.values if lab_series is not None else None
+    colours = figure.palette(set(labels)) if labels is not None else {}
+    print("figures:")
     figs = []
-    scv.settings.figdir = str(out / "figures")
-    try:
-        ax = scv.pl.velocity_embedding_stream(
-            A, basis=basis, color=label_key if lab_series is not None else None,
-            legend_loc="right margin", dpi=140, show=False,
-            title=f"velocity on X_{basis}   —   DIRECTION only; arrow length is not a rate")
-        f = out / "figures" / "velocity_stream.png"
-        ax.figure.savefig(f, dpi=140, bbox_inches="tight"); plt.close(ax.figure)
-        figs.append(f)
-    except Exception as e:                                                # noqa: BLE001
-        print(f"  stream plot not drawn: {e}")
 
-    try:
-        ax = scv.pl.scatter(A, basis=basis, color="velocity_confidence", cmap="coolwarm",
-                            show=False, dpi=140,
-                            title="velocity_confidence   —   grey-blue means the arrows here "
-                                  "disagree with their neighbours")
-        f = out / "figures" / "velocity_confidence.png"
-        ax.figure.savefig(f, dpi=140, bbox_inches="tight"); plt.close(ax.figure)
-        figs.append(f)
-    except Exception as e:                                                # noqa: BLE001
-        print(f"  confidence plot not drawn: {e}")
+    def _add(x):
+        if isinstance(x, list):
+            figs.extend([y for y in x if y])
+        elif x:
+            figs.append(x)
 
-    # Confidence beside unspliced fraction, per label. The pairing is the point: a population whose
-    # arrows are unconfident AND whose unspliced fraction is low has no velocity to read, and a bar
-    # chart says that in one glance where two columns of numbers do not.
+    _add(figs_mod.proportions(A, labels, fdir, sdir, plt, log=print))
+    _add(figs_mod.stream_and_grid(A, basis, label_key if lab_series is not None else None,
+                                  fdir, sdir, plt, scv, colours, log=print))
+    _add(figs_mod.confidence(A, labels, basis, fdir, sdir, plt, scv, colours, log=print))
+    _add(figs_mod.phase_portraits(A, top_genes, label_key if lab_series is not None else None,
+                                  fdir, sdir, plt, scv, colours, log=print))
+    _add(figs_mod.transitions(trows, fdir, sdir, plt, colours, log=print))
+    _add(figs_mod.pseudotime(A, basis, fdir, sdir, plt, log=print))
+    _add(figs_mod.drivers(gv, cols, fdir, sdir, plt, log=print))
+
+    # The per-population diagnostic pair: is there a direction here, and is there signal to build
+    # it from? Kept because the pairing is the finding and two columns of numbers hide it.
     if len(by_label) and not by_label["velocity_confidence_median"].isna().all():
         d = by_label[~by_label["is_sentinel"]] if (~by_label["is_sentinel"]).any() else by_label
-        h = max(2.6, 0.34 * len(d) + 1.4)
-        fig, axs = plt.subplots(1, 2, figsize=(10.5, h), sharey=True)
+        fig, axs = plt.subplots(1, 2, figsize=(figure.DOUBLE, max(1.6, 0.20 * len(d) + 0.9)),
+                                sharey=True)
         y = np.arange(len(d))
-        axs[0].barh(y, d["velocity_confidence_median"], color="#4f81bd")
-        axs[0].axvline(float(P["min_confidence"]), color="#1a1a1a", ls="--", lw=1)
-        axs[0].set_title(f"velocity_confidence (median)   dashed = {P['min_confidence']}",
-                         fontsize=9, loc="left")
-        axs[1].barh(y, d["unspliced_fraction"], color="#9bbb59")
-        axs[1].set_title("unspliced fraction of the fitted counts", fontsize=9, loc="left")
-        axs[0].set_yticks(y); axs[0].set_yticklabels(d["label"], fontsize=8)
+        axs[0].barh(y, d["velocity_confidence_median"], color="#0072B2", height=0.72)
+        axs[0].axvline(float(P["min_confidence"]), color=figure.INK, ls="--", lw=0.6)
+        axs[0].set_xlabel("velocity confidence (median)")
+        axs[1].barh(y, d["unspliced_fraction"], color="#E69F00", height=0.72)
+        axs[1].set_xlabel("unspliced fraction of fitted counts")
+        axs[0].set_yticks(y), axs[0].set_yticklabels(d["label"])
         axs[0].invert_yaxis()
         for ax_ in axs:
-            ax_.spines[["top", "right"]].set_visible(False)
-        fig.suptitle("Per population: is there a direction here, and is there signal to build it "
-                     "from?", fontsize=10, x=.01, ha="left")
-        f = out / "figures" / "velocity_by_label.png"
-        fig.savefig(f, dpi=140, bbox_inches="tight"); plt.close(fig)
-        figs.append(f)
-
-    try:
-        ax = scv.pl.scatter(A, basis=basis, color="velocity_pseudotime", cmap="gnuplot",
-                            show=False, dpi=140,
-                            title="velocity_pseudotime   —   ORDER, not elapsed time")
-        f = out / "figures" / "velocity_pseudotime.png"
-        ax.figure.savefig(f, dpi=140, bbox_inches="tight"); plt.close(ax.figure)
-        figs.append(f)
-    except Exception as e:                                                # noqa: BLE001
-        print(f"  pseudotime plot not drawn: {e}")
+            ax_.spines["left"].set_visible(False)
+            ax_.tick_params(axis="y", length=0)
+        figs.append(figure.save(
+            fig, fdir, "F9_by_population",
+            caption=("Per population, side by side: how much the arrows agree with their "
+                     "neighbours, and how much unspliced signal there was to build them from. "
+                     "The pairing is the point - a population low on both has no velocity to "
+                     "read, and a population low on the left but high on the right has signal "
+                     "the model could not resolve into a direction. Sentinel labels are excluded "
+                     "from this panel."),
+            source=f_bylabel, log=print))
 
     # ---------------------------------------------------------------- what the host merges
     written_obs = {}

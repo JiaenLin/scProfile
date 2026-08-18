@@ -72,6 +72,61 @@ def test_objects_slot(tmp):
     check("no unknown keys", manifest.unknown_keys(d) == [], str(manifest.unknown_keys(d)))
 
 
+def test_captioned_figures(tmp):
+    """A figure entry may be a bare path or a mapping with caption, vector copy and source data.
+    Every file it names is validated, because a report linking a missing PDF is a report that
+    looks complete and is not."""
+    print("\ncaptioned figures")
+    out = tmp / "figs"
+    (out / "figures" / "source_data").mkdir(parents=True, exist_ok=True)
+    png = out / "figures" / "F1.png"; png.write_bytes(b"png")
+    pdf = out / "figures" / "F1.pdf"; pdf.write_bytes(b"pdf")
+    csv = out / "figures" / "source_data" / "F1.csv"; csv.write_text("a,b\n1,2\n")
+    bare = out / "figures" / "F2.png"; bare.write_bytes(b"png")
+    manifest.write_output(
+        out, kernel="k", status="ok",
+        figures=[{"path": png, "vector": pdf, "source": csv, "caption": "what it shows"},
+                 bare])
+    d = manifest.read_output(out)
+    f0, f1 = d["figures"]
+    check("caption survives", f0["caption"] == "what it shows")
+    check("vector recorded", f0.get("vector") == "figures/F1.pdf", str(f0))
+    check("source recorded", f0.get("source") == "figures/source_data/F1.csv", str(f0))
+    check("subdirectory kept in the path", f0["path"] == "figures/F1.png", str(f0))
+    check("a bare path still works", f1 == {"path": "figures/F2.png", "caption": ""}, str(f1))
+    check("figure_paths finds every file", len(manifest.figure_paths(d)) == 4,
+          str(manifest.figure_paths(d)))
+
+    # A vector copy named but not written must be caught: the report would link it.
+    out2 = tmp / "figs2"
+    (out2 / "figures").mkdir(parents=True, exist_ok=True)
+    (out2 / "figures" / "F1.png").write_bytes(b"png")
+    import json as _j
+    (out2 / "out.json").write_text(_j.dumps({
+        "contract": manifest.CONTRACT_VERSION, "kernel": "k", "status": "ok",
+        "figures": [{"path": "figures/F1.png", "vector": "figures/F1.pdf", "caption": ""}]}))
+    try:
+        manifest.read_output(out2)
+        check("a missing vector copy is caught", False)
+    except manifest.ContractError as e:
+        check("a missing vector copy is caught", "F1.pdf" in str(e))
+
+
+def test_figure_conventions():
+    """The settings that decide whether a figure is publishable rather than merely readable."""
+    print("\npublication conventions")
+    from scprofile import figure
+    check("vector text stays live (fonttype 42)", figure.RC["pdf.fonttype"] == 42,
+          "type 3 converts glyphs to paths; journals reject it and you find out at resubmission")
+    check("raster output is print resolution", figure.RC["savefig.dpi"] >= 300)
+    check("journal column widths", round(figure.SINGLE * 25.4) == 85
+          and round(figure.DOUBLE * 25.4) == 174)
+    check("colourblind-safe palette", len(figure.OKABE_ITO) >= 8)
+    pal = figure.palette(["Beta", "Alpha"])
+    check("colour per label is order-independent", pal == figure.palette(["Alpha", "Beta"]),
+          "a legend meaning one thing in panel A and another in panel B is worse than none")
+
+
 def test_declared_but_absent_is_refused(tmp):
     """The one failure this contract exists to catch: a kernel naming a file it did not write."""
     print("\na declared output that does not exist")
@@ -196,7 +251,9 @@ def main():
         test_contract_roundtrip(tmp)
         test_old_kernel_reads_new_input(tmp)
         test_objects_slot(tmp)
+        test_captioned_figures(tmp)
         test_declared_but_absent_is_refused(tmp)
+    test_figure_conventions()
     test_velocity_declaration()
     test_lock_is_read_not_delegated()
     test_unmet_names_the_fix()

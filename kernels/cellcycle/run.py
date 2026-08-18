@@ -94,6 +94,73 @@ def main(argv):
     counts = ph.value_counts()
     print("phase:", dict(counts))
 
+    # ---------------------------------------------------------------- figures
+    # A trajectory that is secretly a cell-cycle axis is what this kernel exists to catch, and
+    # that is a claim someone will have to make in print. So it ships the two panels that support
+    # it, to the same standard as every other kernel: vector, captioned, with their source data.
+    figs = []
+    try:
+        from scprofile import figure
+        plt = figure.use()
+        fdir, sdir = out / "figures", out / "figures" / "source_data"
+        sdir.mkdir(parents=True, exist_ok=True)
+        lab_key = inp["keys"].get("label")
+        labs = A.obs[lab_key].astype(str) if lab_key and lab_key in A.obs else None
+
+        # F1: where the cycling cells are, per population.
+        if labs is not None:
+            ct = pd.crosstab(labs, A.obs["phase"].astype(str))
+            for c in ("G1", "S", "G2M"):
+                if c not in ct:
+                    ct[c] = 0
+            ct = ct[["G1", "S", "G2M"]]
+            frac = ct.div(ct.sum(axis=1), axis=0).sort_values("G1")
+            srcf = sdir / "F1_phase_by_population.csv"
+            ct.assign(n_cells=ct.sum(axis=1)).to_csv(srcf)
+            fig, ax = plt.subplots(figsize=(figure.SINGLE, max(1.6, 0.20 * len(frac) + 0.9)))
+            left = np.zeros(len(frac))
+            for c, col in zip(["G1", "S", "G2M"], ["#D9D9D9", "#0072B2", "#D55E00"]):
+                ax.barh(np.arange(len(frac)), frac[c], left=left, color=col, label=c, height=.72)
+                left += frac[c].values
+            ax.set_yticks(np.arange(len(frac))), ax.set_yticklabels(frac.index)
+            ax.invert_yaxis(), ax.set_xlim(0, 1), ax.set_xlabel("fraction of cells")
+            ax.spines["left"].set_visible(False), ax.tick_params(axis="y", length=0)
+            figure.legend_outside(fig, ax)
+            figs.append(figure.save(
+                fig, fdir, "F1_phase_by_population",
+                caption=("Scored cell-cycle phase per population. Phase is SCORED from a gene "
+                         "panel, not measured: a cell called G2M is one whose G2M panel genes are "
+                         "relatively high. Use this to check whether a trajectory follows the "
+                         "cycling fraction - if it does, the trajectory may be a cell-cycle axis."),
+                source=srcf, log=print))
+
+        # F2: the scores themselves, which is where a weak panel shows up as a blob at the origin.
+        srcs = sdir / "F2_scores.csv"
+        dd = {"barcode": A.obs_names.astype(str), "S_score": A.obs["S_score"].values,
+              "G2M_score": A.obs["G2M_score"].values, "phase": A.obs["phase"].astype(str).values}
+        if labs is not None:
+            dd["label"] = labs.values
+        pd.DataFrame(dd).to_csv(srcs, index=False)
+        fig, ax = plt.subplots(figsize=(figure.SINGLE, figure.SINGLE * 0.9))
+        for ph, col in (("G1", "#D9D9D9"), ("S", "#0072B2"), ("G2M", "#D55E00")):
+            m = A.obs["phase"].astype(str).values == ph
+            if m.any():
+                ax.scatter(A.obs["S_score"].values[m], A.obs["G2M_score"].values[m], s=2, c=col,
+                           label=ph, linewidths=0, rasterized=True)
+        ax.axhline(0, color=figure.INK, lw=.5), ax.axvline(0, color=figure.INK, lw=.5)
+        ax.set_xlabel("S score"), ax.set_ylabel("G2M score")
+        figure.legend_outside(fig, ax)
+        figs.append(figure.save(
+            fig, fdir, "F2_scores",
+            caption=("S against G2M score, one point per cell; the phase call is which score is "
+                     "higher, and positive. A cloud sitting at the origin means the panel found "
+                     "little to score - on single nuclei that is expected, because cell-cycle "
+                     "transcripts are partly cytoplasmic, and is as consistent with the assay as "
+                     "with a resting population."),
+            source=srcs, log=print))
+    except Exception as e:                                                # noqa: BLE001
+        print(f"  figures not drawn: {e}")
+
     (out / "obs").mkdir(parents=True, exist_ok=True)
     written = {}
     for col in ("phase", "S_score", "G2M_score"):
@@ -124,7 +191,7 @@ def main(argv):
         headline=f"{100 * frac:.1f}% of cells score S or G2M "
                  f"(G1 {int(counts.get('G1', 0)):,}, S {int(counts.get('S', 0)):,}, "
                  f"G2M {int(counts.get('G2M', 0)):,})",
-        obs=written, absent=absent, caveats=caveats)
+        obs=written, figures=figs, absent=absent, caveats=caveats)
     print("wrote out.json")
     return 0
 

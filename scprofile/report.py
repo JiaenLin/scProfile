@@ -39,6 +39,8 @@ vertical-align:top}
 th{background:var(--card);font-size:.7rem;text-transform:uppercase;color:var(--mut)}
 code{font-family:ui-monospace,Consolas,monospace;font-size:.85em}
 a{color:inherit}
+figcaption{margin-top:.7rem;font-size:.86rem;line-height:1.5}
+.nosrc{color:#b45309;font-weight:600}
 figure{margin:1.6rem 0;padding:1rem;background:var(--card);border:1px solid var(--line);
 border-radius:8px}img{max-width:100%;height:auto;display:block;border-radius:4px;background:#fff}
 ul{margin:.4rem 0 .4rem 1.1rem;padding:0}li{margin:.25rem 0}
@@ -98,9 +100,31 @@ def write_kernel(out_dir, name, payload, cannot_show, summary=""):
                               for a in absent) + "</ul></div>")
     figs = p.get("figures") or []
     if figs:
-        body.append("<h2>Figures</h2>" + "".join(
-            f'<figure><img src="../kernels/{_e(name)}/{_e(Path(f).name)}" alt="{_e(f)}"></figure>'
-            for f in figs))
+        # The path in the manifest is relative to the KERNEL's output directory and usually has a
+        # subdirectory in it. Rendering only its basename produced a page of broken images that
+        # looked exactly like a page with no figures.
+        panels = []
+        for i, f in enumerate(figs):
+            if not isinstance(f, dict):
+                f = {"path": f, "caption": ""}
+            rel = f"../kernels/{name}/{f['path']}"
+            extra = []
+            if f.get("vector"):
+                extra.append(f'<a href="../kernels/{name}/{_e(f["vector"])}">vector (PDF)</a>')
+            if f.get("source"):
+                extra.append(f'<a href="../kernels/{name}/{_e(f["source"])}">source data</a>')
+            else:
+                extra.append('<span class="nosrc">no source data</span>')
+            cap = _e(f.get("caption") or "")
+            panels.append(
+                f'<figure><img src="{_e(rel)}" alt="{_e(f["path"])}">'
+                f'<figcaption><b>Figure {i + 1}.</b> {cap}'
+                f'<br><span class="sub">{" &middot; ".join(extra)}</span></figcaption></figure>')
+        body.append(
+            "<h2>Figures</h2>"
+            "<p class='sub'>Every panel is written as a raster preview and as a vector PDF with "
+            "live text, at journal column width. The source data link opens the table the panel "
+            "was drawn from.</p>" + "".join(panels))
     body.append(_limits(cannot_show))
     body.append('<p class="sub"><a href="index.html">&larr; back to the index</a></p>')
     d = Path(out_dir) / "report"

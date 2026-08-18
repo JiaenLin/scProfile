@@ -152,7 +152,7 @@ def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=Non
         "obsm": {str(k): rel(v) for k, v in (obsm or {}).items()},
         "layers": {str(k): rel(v) for k, v in (layers or {}).items()},
         "tables": [rel(v) for v in (tables or [])],
-        "figures": [rel(v) for v in (figures or [])],
+        "figures": [_figure(v, rel) for v in (figures or [])],
         "objects": {str(k): rel(v) for k, v in (objects or {}).items()},
         "absent": [dict(a) for a in (absent or [])],
         "caveats": [str(c) for c in (caveats or [])],
@@ -161,6 +161,34 @@ def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=Non
         raise ContractError(f"status {status!r} is not one of {STATUSES}")
     (out / "out.json").write_text(json.dumps(payload, indent=1), encoding="utf-8")
     return payload
+
+
+def _figure(v, rel):
+    """A figure entry: a bare path, or a mapping with a caption, a vector copy and source data.
+
+    Both forms are accepted because a kernel should be able to declare a figure in one line while
+    it is being written, and grow the caption and the source table later. The report renders
+    whichever it is given, and says so when a figure arrives with no source data - "the numbers
+    behind this figure are not on disk" is a fact a reader is entitled to.
+    """
+    if isinstance(v, dict):
+        e = {"path": rel(v["path"]), "caption": str(v.get("caption") or "")}
+        for k in ("vector", "source"):
+            if v.get(k):
+                e[k] = rel(v[k])
+        return e
+    return {"path": rel(v), "caption": ""}
+
+
+def figure_paths(payload):
+    """Every file a figure entry points at, for validation and for copying."""
+    out = []
+    for f in (payload.get("figures") or []):
+        if isinstance(f, dict):
+            out += [f[k] for k in ("path", "vector", "source") if f.get(k)]
+        else:
+            out.append(f)
+    return out
 
 
 def read_output(out_dir):
@@ -193,10 +221,12 @@ def read_output(out_dir):
         for k, v in (d.get(slot) or {}).items():
             if not (out / v).exists():
                 missing.append(f"{slot}[{k}] -> {v}")
-    for slot in ("tables", "figures"):
-        for v in (d.get(slot) or []):
-            if not (out / v).exists():
-                missing.append(f"{slot} -> {v}")
+    for v in (d.get("tables") or []):
+        if not (out / v).exists():
+            missing.append(f"tables -> {v}")
+    for v in figure_paths(d):
+        if not (out / v).exists():
+            missing.append(f"figures -> {v}")
     if missing:
         raise ContractError(
             f"{d['kernel']} declared {len(missing)} output(s) that do not exist on disk:\n  "
