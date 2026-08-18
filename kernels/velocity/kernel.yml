@@ -10,12 +10,33 @@ needs_env: true
 needs_layers:
   - spliced
   - unspliced
+# Parameters, all optional, passed as --params '{"mode": "dynamical", "n_top_genes": 3000}':
+#   mode               stochastic (default) | deterministic | dynamical
+#                      dynamical also fits kinetic rates and writes obs[latent_time]; it is the
+#                      slow one, minutes to hours, and it is what you want if you intend to read
+#                      per-gene kinetics rather than only the field.
+#   n_top_genes        2000    genes carried into the fit
+#   min_shared_counts  20      minimum spliced+unspliced counts for a gene to be fitted
+#   n_pcs              30
+#   n_neighbors        30
+#   basis              obsm key to draw arrows on, without the X_ prefix. Default: the first of
+#                      umap, scanvi, scvi, harmony, tsne, pca present - so an integrated
+#                      embedding wins, and the arrows land on the same manifold the annotation
+#                      and the rest of the report already use.
+#   min_dist           0.2     only used if no embedding exists and one has to be computed
+#   min_confidence     0.5     below this MEDIAN, the run reports `partial` and says the field is
+#                              unresolved rather than presenting it as a direction
+#   n_jobs             honours NCPUS / PBS_NCPUS / SLURM_CPUS_PER_TASK before the machine's count
 produces:
-  - layers[velocity]
-  - layers[Ms]
-  - layers[Mu]
   - obs[velocity_confidence]
+  - obs[velocity_length]
   - obs[velocity_pseudotime]
+  - obs[latent_time]
+  - obsm[velocity_*]
+  - objects[velocity_h5ad]
+  - velocity_by_label.csv
+  - velocity_transitions.csv
+  - velocity_genes.csv
 cannot_show:
   - Velocity is a DIRECTION, not a rate of change in real time. Arrow length is not speed in hours, and two datasets' arrow lengths are not comparable.
   - The validated single-nucleus use is DIRECTIONAL. Nucleus and cell velocities correlate 0.94-0.99 on matched microglia (Sci Rep 2024), but that study projected vectors and measured cell speed - it did not derive a pseudotime from them. `velocity_pseudotime` rests on more assumptions than the arrows do.
@@ -24,3 +45,4 @@ cannot_show:
   - Unspliced counts are noisy, especially for 3-prime tagging chemistries. Nuclei have proportionally more intronic signal than cells, which helps - but the per-gene counts are still small.
   - Unspliced mRNA is read as a transitional state, and need not be. A stable population can hold an unspliced reservoir for rapid transcription-independent expression, and looks identical here.
   - These counts are NOT ambient-corrected. Correction is applied to total counts and cannot be decomposed into spliced and unspliced parts. Published snRNA velocity does not correct either, and the effect is contained to this kernel's own outputs - nothing else in the object reads these layers.
+  - The arrows are drawn as a PROJECTION into two dimensions. The fit happens in gene space, and a 2-D layout that tore the manifold can make a coherent field look incoherent, or the reverse. Read the field beside velocity_confidence, never alone.

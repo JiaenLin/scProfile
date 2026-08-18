@@ -16,6 +16,7 @@ because forcing an edge list into `uns` makes it readable by this tool and nothi
 """
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -106,6 +107,33 @@ def copy_tables(out_dir, payload, dest, *, log=print):
                       f"{payload['kernel']}_{name}")
         shutil.copy2(src, tgt)
         made.append(tgt.name)
+    return made
+
+
+def link_objects(out_dir, payload, dest, *, log=print):
+    """Side-car objects, HARDLINKED beside the merged object rather than copied.
+
+    A kernel ships its own `.h5ad` when its result does not fit the merged one - velocity's fitted
+    layers are on a selected gene set, not the full one. Those files are large, so they are
+    hardlinked; a copy would double the run's footprint for a file that is byte-identical to one
+    already on disk. Falls back to a copy across filesystems.
+    """
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    made = []
+    for key, rel in (payload.get("objects") or {}).items():
+        src = Path(out_dir) / rel
+        name = Path(rel).name
+        tgt = dest / (name if name.startswith(payload["kernel"]) else
+                      f"{payload['kernel']}_{name}")
+        if tgt.exists():
+            tgt.unlink()
+        try:
+            os.link(src, tgt)
+        except OSError:
+            shutil.copy2(src, tgt)
+        made.append(tgt.name)
+        log(f"  object {key} -> objects/{tgt.name}")
     return made
 
 

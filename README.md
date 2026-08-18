@@ -25,7 +25,7 @@ the report as not run.
 |---|---|---|
 | `cellcycle` | phase, S and G2M scores | — |
 | `velocity` | direction of transcriptional change | spliced/unspliced layers |
-| `pseudotime` | ordering along a trajectory | an embedding, `cellcycle` |
+| `pseudotime` | ordering along a trajectory, oriented by `velocity` if you ran it | an embedding, `cellcycle` |
 | `scenic` | regulon activity per cell, inferred from your data | counts, cisTarget databases |
 | `decoupler` | TF and pathway activity from curated priors | — |
 | `liana` | cell–cell communication, consensus over several methods | — |
@@ -82,8 +82,10 @@ results/
   README.md                      written by inspecting the directory
 ```
 
-Velocity layers, pseudotime and regulon scores go into the object. Cell–cell communication is edge
-data — cell type × cell type × ligand–receptor — and goes to CSV beside it.
+Pseudotime and regulon scores go into the object. Cell–cell communication is edge data — cell type
+× cell type × ligand–receptor — and goes to CSV beside it. Velocity's fitted layers ship as their
+own `.h5ad`: they are on a selected gene set, and padding the rest with zeros would claim those
+genes have no velocity rather than that they were not fitted.
 
 `uns['scprofile']` records which kernels ran, at which versions, against which references, and the
 caveats each one declared.
@@ -94,7 +96,7 @@ A kernel is a directory:
 
 ```
 kernels/<name>/
-  kernel.yml       what it needs, what it produces, what it cannot show
+  kernel.yml       what it needs, what it produces (globs allowed), what it cannot show
   lock.yml         its environment
   references.yml   reference data, with checksums
   run.py | run.R   entry point: reads in.json, writes out.json

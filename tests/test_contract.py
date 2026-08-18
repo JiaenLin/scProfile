@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+"""The contract, tested with the standard library only.
+
+`manifest` and `kernels` are stdlib-only BY DESIGN - a kernel in a pinned environment imports
+`manifest`, and a host that could not enumerate its kernels without pyyaml would fail at exactly
+the moment a user is trying to work out why nothing runs. This file holds that line: it runs on a
+bare interpreter, so if it ever needs numpy the design has drifted.
+
+    python3 tests/test_contract.py
+"""
+from __future__ import annotations
+
+import json
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scprofile import manifest                                            # noqa: E402
+from scprofile.kernels import Kernel, discover, order, undeclared, unmet   # noqa: E402
+
+FAILED = []
+
+
+def check(name, cond, detail=""):
+    print(f"  {'ok  ' if cond else 'FAIL'} {name}" + (f"   {detail}" if detail and not cond
+                                                      else ""))
+    if not cond:
+        FAILED.append(name)
+
+
+def test_contract_roundtrip(tmp):
+    print("\ncontract round-trip")
+    p = tmp / "in.json"
+    manifest.write_input(p, h5ad=tmp / "x.h5ad", out_dir=tmp / "k", keys={"label": "cell_type"},
+                         organism="mouse", assay="nucleus",
+                         upstream={"velocity": tmp / "k" / "velocity"},
+                         params={"mode": "dynamical"})
+    d = manifest.read_input(p)
+    check("upstream survives", d["upstream"] == {"velocity": str((tmp / "k" / "velocity").resolve())})
+    check("sentinels defaulted", d["sentinels"] == list(manifest.DEFAULT_SENTINELS))
+    check("params survive", d["params"] == {"mode": "dynamical"})
+    check("paths absolute", Path(d["h5ad"]).is_absolute())
+
+
+def test_old_kernel_reads_new_input(tmp):
+    """A kernel written against 1.0 must still run: only the MAJOR is compared."""
+    print("\na 1.0 kernel against a 1.1 host")
+    p = tmp / "in10.json"
+    payload = json.loads((tmp / "in.json").read_text())
+    payload["contract"] = "1.0"
+    p.write_text(json.dumps(payload))
+    try:
+        d = manifest.read_input(p)
+        check("1.0 in.json still readable", True)
+        check("missing 1.1 fields default", d.get("upstream") is not None)
+    except manifest.ContractError as e:
+        check("1.0 in.json still readable", False, str(e))
+
+
+def test_objects_slot(tmp):
+    print("\nthe objects slot")
+    out = tmp / "vel"
+    out.mkdir(parents=True, exist_ok=True)
+    obj = out / "velocity.h5ad"
+    obj.write_bytes(b"not really an h5ad, but it exists")
+    manifest.write_output(out, kernel="velocity", version="0.1.0", status="ok",
+                          objects={"velocity_h5ad": obj}, caveats=["synthetic"])
+    d = manifest.read_output(out)
+    check("objects declared and found", d["objects"] == {"velocity_h5ad": "velocity.h5ad"})
+    check("path is RELATIVE to out_dir", not Path(d["objects"]["velocity_h5ad"]).is_absolute())
+    check("no unknown keys", manifest.unknown_keys(d) == [], str(manifest.unknown_keys(d)))
+
+
+def test_declared_but_absent_is_refused(tmp):
+    """The one failure this contract exists to catch: a kernel naming a file it did not write."""
+    print("\na declared output that does not exist")
+    out = tmp / "liar"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "out.json").write_text(json.dumps({
+        "contract": manifest.CONTRACT_VERSION, "kernel": "liar", "status": "ok",
+        "objects": {"thing": "nowhere.h5ad"}}))
+    try:
+        manifest.read_output(out)
+        check("refuses a promise", False, "it merged a file that does not exist")
+    except manifest.ContractError as e:
+        check("refuses a promise", "nowhere.h5ad" in str(e))
+        check("names the offending path", "objects[thing]" in str(e), str(e))
+
+
+def test_velocity_declaration():
+    print("\nvelocity's own declaration")
+    k = Kernel(Path(__file__).resolve().parents[1] / "kernels" / "velocity")
+    slots = k.declared_slots()
+    check("declares the side-car object", "velocity_h5ad" in slots.get("objects", set()))
+    check("declares no layers", "layers" not in slots,
+          "velocity layers are on a SELECTED gene set and must not be merged into the full object")
+    check("needs both layers", set(k.needs_layers) == {"spliced", "unspliced"})
+    check("ships a guard", k.guard is not None)
+    check("ships a lock", (k.path / "lock.yml").exists())
+    check("ships a selftest", (k.path / "selftest.py").exists())
+    check("declares its limits", len(k.cannot_show) >= 6, f"{len(k.cannot_show)}")
+
+    # The lock exists to STOP the resolver picking today's versions. A lock with no `==` is a
+    # lock in name only, and this is the exact failure it was written for.
+    lock = (k.path / "lock.yml").read_text()
+    pins = [ln.strip() for ln in lock.splitlines()
+            if ln.strip().startswith("- ") and "==" in ln]
+    check("lock pins exactly", len(pins) >= 10, f"only {len(pins)} `==` pins")
+    check("scvelo is pinned", any("scvelo==" in p for p in pins))
+    check("pandas is pinned", any("pandas==" in p for p in pins),
+          "scvelo declares pandas>=1.1.1, which today resolves to pandas 3")
+
+    # A wildcard in `produces` must still HOLD the kernel to a shape.
+    ok = {"kernel": "velocity", "obsm": {"velocity_scanvi": "a.npy"},
+          "objects": {"velocity_h5ad": "v.h5ad"}}
+    check("glob accepts the runtime basis", undeclared(k, ok) == [], str(undeclared(k, ok)))
+    bad = {"kernel": "velocity", "obsm": {"something_else": "a.npy"}}
+    check("glob still catches an undeclared output", undeclared(k, bad) == ["obsm[something_else]"],
+          str(undeclared(k, bad)))
+
+
+def test_unmet_names_the_fix():
+    print("\nunmet prerequisites name their fix")
+    ks = discover()
+    k = ks["velocity"]
+    probs = unmet(k, obs=set(), obsm=set(), layers={"counts"}, ran=())
+    check("refuses without spliced", any("spliced" in p for p in probs))
+    check("says it cannot be derived later",
+          any("aligner" in p.lower() or "cannot be derived" in p.lower() for p in probs),
+          " | ".join(probs))
+    ok = unmet(k, obs=set(), obsm=set(), layers={"spliced", "unspliced"}, ran=())
+    check("passes when both layers are present", ok == [], str(ok))
+
+
+def test_ordering():
+    print("\nordering")
+    ks = discover()
+    names = sorted(ks)
+    o = order(names, ks)
+    check("orders every kernel exactly once", sorted(o) == names, str(o))
+    for n in names:
+        for dep in ks[n].needs_kernels:
+            if dep in o:
+                check(f"{dep} before {n}", o.index(dep) < o.index(n))
+
+
+def main():
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        test_contract_roundtrip(tmp)
+        test_old_kernel_reads_new_input(tmp)
+        test_objects_slot(tmp)
+        test_declared_but_absent_is_refused(tmp)
+    test_velocity_declaration()
+    test_unmet_names_the_fix()
+    test_ordering()
+    print()
+    if FAILED:
+        print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")
+        return 1
+    print("all contract checks passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

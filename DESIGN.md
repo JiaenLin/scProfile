@@ -36,8 +36,8 @@ Seven, each independently installable, each with its own environment.
 | kernel | what it produces | needs |
 |---|---|---|
 | `cellcycle` | `obs[phase, S_score, G2M_score]` | nothing beyond the object |
-| `velocity` | `layers[velocity, Ms, Mu]`, `obs[velocity_confidence]` | **spliced/unspliced layers** |
-| `pseudotime` | `obs[pseudotime]`, `uns[paga]` | an embedding, and `cellcycle` |
+| `velocity` | `obs[velocity_confidence, velocity_length, velocity_pseudotime]`, `obsm[velocity_*]`, `objects[velocity_h5ad]` | **spliced/unspliced layers** |
+| `pseudotime` | `obs[pseudotime]`, `uns[paga]` | an embedding, and `cellcycle`; **uses `velocity` when present** |
 | `scenic` | `obsm[X_regulon_auc]`, `tables/regulon_targets.csv` | counts, cisTarget refs |
 | `decoupler` | `obsm[X_tf_activity, X_pathway_activity]` | lognorm; prior nets |
 | `liana` | `tables/ccc_edges.csv` | lognorm, labels |
@@ -52,6 +52,36 @@ is a finding. Neither pair is a duplicate.
 `cellcycle` is a **prerequisite of `pseudotime`**, not a sibling. A trajectory that is secretly a
 cell-cycle axis is the commonest false positive in this class of analysis, and the check costs
 seconds. `--no-cellcycle-check` exists and says in its own help what accepting it means.
+
+### `velocity` and `pseudotime`: independent, and one orients the other
+
+They are separate kernels because they answer separate questions and because **most datasets can
+run only one of them.** Spliced/unspliced counts come from the aligner; an object quantified
+without them has no route to velocity, and making pseudotime depend on velocity would put a
+trajectory out of reach of the majority of data that reaches this tool.
+
+Four things get conflated under "pseudotime", and they are not interchangeable:
+
+| | what it measures | needs unspliced | gives a direction |
+|---|---|---|---|
+| diffusion pseudotime (DPT) | distance along the expression kNN graph from a root | no | **no** — you choose the root |
+| `velocity_pseudotime` | DPT on the **velocity** graph, root inferred from where the arrows point | yes | yes |
+| `latent_time` | the dynamical model's gene-shared time — a fitted kinetic parameter, not a graph distance | yes, plus the slow fit | yes |
+| CellRank fate probabilities | a Markov chain built from velocity, *or* a pseudotime, *or* similarity, *or* real time | optional | depends on its input |
+
+**The connection is orientation.** An expression-graph pseudotime gives an axis and cannot say
+which end is the beginning; that is normally an analyst pointing at the cluster they believe is the
+start. Velocity makes the decision from the data instead.
+
+So `velocity` ships its fitted object — velocity graph included — as a side-car, and `pseudotime`
+reads it through `in.json`'s `upstream`. Without it, `pseudotime` still runs and reports an
+**unoriented** axis, saying so. With it, the two are computed and **compared**: an orientation that
+disagrees with the root-cell version is a finding, not a detail to reconcile silently.
+
+`velocity` also writes `velocity_pseudotime` itself, because it is nearly free once the graph
+exists. It is the weaker of that kernel's two claims and is labelled as such — the single-nucleus
+validation in the literature is *directional* (r 0.94–0.99 against matched cells), and that
+comparison did not extend to a pseudotime derived from the arrows.
 
 ---
 

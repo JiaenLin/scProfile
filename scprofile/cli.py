@@ -177,6 +177,10 @@ def _run(a):
     have_layers = {k for k in A.layers if k is not None}
     allowed = set(_split(a.allow or ""))
     ran, payloads, skipped = [], [], []
+    #: {kernel: out_dir} for kernels that have already finished, handed to each later kernel so it
+    #: can read a predecessor's result directly. This is what makes `needs_kernels` mean something
+    #: beyond ordering.
+    upstream = {}
 
     for name in order(want, ks):
         k = ks[name]
@@ -220,13 +224,18 @@ def _run(a):
             kout / "in.json", h5ad=a.h5ad, out_dir=kout,
             keys={r_: v[0] for r_, v in keys.items() if v[0]},
             organism=organism[0], assay=assay[0], design=a.design, references=r,
-            params=json.loads(a.params) if a.params else {})
+            params=json.loads(a.params) if a.params else {},
+            upstream=dict(upstream), sentinels=inputs.DEFAULT_SENTINELS)
         try:
             payload = runner.run(k, inp=kout / "in.json", out_dir=kout, prefix=a.prefix)
         except Exception as e:                                            # noqa: BLE001
             print(f"  FAILED: {e}")
             skipped.append({"kernel": name, "why": [str(e)]})
             continue
+        # Only a kernel that actually produced something becomes available upstream. A `refused`
+        # status is a result, but it is not a result another kernel can read.
+        if payload.get("status") in ("ok", "partial"):
+            upstream[name] = kout
         print(f"  status {payload['status']}   {payload.get('headline', '')}")
         extra = undeclared(k, payload)
         if extra:
@@ -247,6 +256,7 @@ def _run(a):
             skipped.append({"kernel": name, "why": [str(e)]})
             continue
         tabs = merge.copy_tables(kout, payload, out / "tables")
+        merge.link_objects(kout, payload, out / "objects")
         for slot, v in got.items():
             if v:
                 print(f"  merged {slot}: {', '.join(v)}")

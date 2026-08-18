@@ -1,0 +1,45 @@
+# velocity's environment. Built with:  scprofile install velocity --prefix <dir>
+#
+# WHY THIS IS PINNED HARD, AND NOT `pip install scvelo`
+#
+# scvelo 0.3.4 declares `pandas!=1.4.0,>=1.1.1`, `numpy>=1.17`, `scanpy>=1.5`. Those lower bounds
+# are honest about what it was written against and say NOTHING about what it still works with.
+# Resolved today they pull pandas 3.0.5, numpy 2.5.2 and scanpy 1.12.3 - a stack released long
+# after scvelo's last commit. An upper bound nobody wrote is not an upper bound that does not
+# exist.
+#
+# This is not hypothetical caution. In this project a neighbouring tool resolved that way, called
+# a pandas function removed in 2.0, and the metric it computed came back ABSENT rather than
+# failing - a silent hole in a benchmark table. The stack below is the one scvelo 0.3.4 was
+# released alongside, and `selftest.py` runs a complete velocity fit against it before any real
+# run is spent.
+#
+# If you already have a working scvelo environment, do not build this one:
+#     export SCPROFILE_VELOCITY_PYTHON=/path/to/that/env/bin/python
+# `doctor` reports which route the kernel took, so the answer is never ambiguous.
+
+name: scprofile-velocity
+channels:
+  - conda-forge
+dependencies:
+  # Only the interpreter and pip come from conda. Everything else is a pip pin, so the lock reads
+  # as one list rather than two that can disagree about the same package.
+  - python=3.11
+  - pip
+  - pip:
+      - numpy==1.26.4
+      - scipy==1.13.1
+      - pandas==2.2.3
+      - numba==0.60.0
+      - llvmlite==0.43.0
+      - scikit-learn==1.5.2
+      - matplotlib==3.9.2
+      - h5py==3.12.1
+      - anndata==0.10.9
+      - scanpy==1.10.4
+      - umap-learn==0.5.7
+      - pynndescent==0.5.13
+      - igraph==0.11.8
+      - leidenalg==0.10.2
+      - loompy==3.0.7
+      - scvelo==0.3.4

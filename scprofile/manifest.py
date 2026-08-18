@@ -27,11 +27,19 @@ from pathlib import Path
 
 #: Bumped when the contract changes shape. A kernel built against an older major refuses rather
 #: than being read with the wrong expectations.
-CONTRACT_VERSION = "1.0"
+#: 1.1 added `upstream`, `sentinels` and the `objects` slot. Only the MAJOR is compared, so a
+#: kernel written against 1.0 still runs - it simply does not read the new fields.
+CONTRACT_VERSION = "1.1"
 
 #: What a kernel may declare it produced. Anything else in `out.json` is ignored with a warning -
 #: silently accepting unknown keys is how two versions of a contract drift into three.
-OUTPUT_SLOTS = ("obs", "obsm", "layers", "tables", "figures")
+#:
+#: `objects` exists because not every result is cell-by-something. Velocity is fitted on a
+#: SELECTED gene set, so its `velocity`/`Ms`/`Mu` layers are cells x (a few thousand) genes and
+#: cannot be merged into an object with the full gene list - padding the rest with zeros would
+#: assert that those genes have zero velocity, which is the opposite of "not fitted". A kernel
+#: whose result does not fit the merged object ships it as its own file instead.
+OUTPUT_SLOTS = ("obs", "obsm", "layers", "tables", "figures", "objects")
 
 #: Statuses a kernel may report. `partial` exists because "it ran, some of it worked" is real and
 #: must not be rounded to either success or failure.
@@ -44,13 +52,26 @@ class ContractError(Exception):
 
 # ------------------------------------------------------------------------------ host -> kernel
 
+#: Labels an upstream annotator uses to mean "not a cell type". Passed to every kernel because a
+#: kernel cannot import the host's `inputs` module - that module needs pandas, and a kernel lives
+#: in a pinned environment that may not have the host's version of anything.
+DEFAULT_SENTINELS = ("EXCLUDED", "UNRESOLVED")
+
+
 def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=None,
-                references=None, params=None, contract=CONTRACT_VERSION):
+                references=None, params=None, upstream=None, sentinels=DEFAULT_SENTINELS,
+                contract=CONTRACT_VERSION):
     """Write `in.json`. Every path is made ABSOLUTE first.
 
     A kernel runs with its own working directory - a different interpreter, sometimes a different
     container - so a relative path in the manifest is a path resolved against somewhere the host
     did not choose. Absolute or nothing.
+
+    `upstream` is {kernel_name: its out_dir} for kernels that have ALREADY RUN in this invocation.
+    It is how one kernel reads another's result without the host merging first, and it is the
+    mechanism behind `needs_kernels`. The alternative - merge after every kernel and hand the next
+    one a rewritten object - would make each kernel's input depend on the order of everything
+    before it, and a re-run of one kernel would no longer reproduce.
     """
     payload = {
         "contract": contract,
@@ -62,6 +83,8 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
         "design": str(Path(design).resolve()) if design else None,
         "references": {k: str(Path(v).resolve()) for k, v in (references or {}).items()},
         "params": dict(params or {}),
+        "upstream": {k: str(Path(v).resolve()) for k, v in (upstream or {}).items()},
+        "sentinels": list(sentinels or ()),
     }
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -81,13 +104,18 @@ def read_input(path):
     for req in ("h5ad", "out_dir", "keys"):
         if not d.get(req):
             raise ContractError(f"in.json has no {req!r}")
+    # Defaults for the 1.1 fields, so a kernel may read them unconditionally against a host that
+    # has not been updated. Absent and empty mean the same thing for all three.
+    d.setdefault("upstream", {})
+    d.setdefault("sentinels", list(DEFAULT_SENTINELS))
+    d.setdefault("params", {})
     return d
 
 
 # ------------------------------------------------------------------------------ kernel -> host
 
 def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=None, layers=None,
-                 tables=None, figures=None, absent=None, caveats=None, headline="",
+                 tables=None, figures=None, objects=None, absent=None, caveats=None, headline="",
                  contract=CONTRACT_VERSION):
     """Write `out.json` from inside a kernel. The only supported way for a kernel to report.
 
@@ -119,6 +147,7 @@ def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=Non
         "layers": {str(k): rel(v) for k, v in (layers or {}).items()},
         "tables": [rel(v) for v in (tables or [])],
         "figures": [rel(v) for v in (figures or [])],
+        "objects": {str(k): rel(v) for k, v in (objects or {}).items()},
         "absent": [dict(a) for a in (absent or [])],
         "caveats": [str(c) for c in (caveats or [])],
     }
@@ -154,7 +183,7 @@ def read_output(out_dir):
         raise ContractError(f"{f} does not say which kernel wrote it")
 
     missing = []
-    for slot in ("obs", "obsm", "layers"):
+    for slot in ("obs", "obsm", "layers", "objects"):
         for k, v in (d.get(slot) or {}).items():
             if not (out / v).exists():
                 missing.append(f"{slot}[{k}] -> {v}")
@@ -170,6 +199,7 @@ def read_output(out_dir):
               "merged as a promise.")
     d.setdefault("caveats", [])
     d.setdefault("absent", [])
+    d.setdefault("objects", {})
     return d
 
 

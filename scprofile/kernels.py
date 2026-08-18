@@ -292,12 +292,20 @@ def undeclared(kernel, payload):
     level: on the console, in the kernel's report page, and in the provenance. An undeclared output
     is one that no `cannot_show` covers and no documentation mentions.
     """
+    import fnmatch
     want = kernel.declared_slots()
     extra = []
-    for slot in ("obs", "obsm", "layers"):
-        got = set((payload.get(slot) or {}).keys())
-        for name in sorted(got - want.get(slot, set())):
-            extra.append(f"{slot}[{name}]")
+    for slot in ("obs", "obsm", "layers", "objects"):
+        pats = want.get(slot, set())
+        for name in sorted((payload.get(slot) or {}).keys()):
+            # Glob, because some outputs are named after a runtime choice. velocity writes
+            # `obsm[velocity_<basis>]` and the basis is whichever embedding the object turned out
+            # to carry - so `velocity_*` is the honest declaration and enumerating every possible
+            # embedding name would be a declaration that goes stale the first time somebody adds
+            # one. A pattern still HOLDS the kernel to a shape; it just does not pretend to know
+            # the suffix in advance.
+            if not any(fnmatch.fnmatchcase(name, pat) for pat in pats):
+                extra.append(f"{slot}[{name}]")
     return extra
 
 
@@ -348,6 +356,8 @@ _PRODUCERS = {
     "obs[S_score]": "cellcycle",
     "obs[G2M_score]": "cellcycle",
     "obs[pseudotime]": "pseudotime",
+    "obs[velocity_confidence]": "velocity",
+    "obs[velocity_pseudotime]": "velocity",
 }
 
 
