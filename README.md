@@ -122,7 +122,7 @@ override shipped ones, and `doctor` says when that happens.
 - Nothing is assumed about your data — no column name, organism, assay, design or cell type.
   scIntegrate is optional.
 
-`DESIGN.md` has the full contract and the reasoning.
+`DESIGN.md` has the full contract and the reasoning. `ROADMAP.md` is what is planned, what was declined and why.
 
 ## Requirements
 
