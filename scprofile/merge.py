@@ -176,7 +176,9 @@ def merge_many(adata, results, *, log=print):
                 log(f"    NOT MERGED: unit {payload.get('unit')!r} {why}")
                 payload.setdefault("absent", []).append(
                     {"what": f"{slot}[{key}]", "why": why})
-                merged.setdefault("dropped", []).append(f"{slot}[{key}]")
+                d = merged.setdefault("dropped", [])
+                if f"{slot}[{key}]" not in d:      # one key, however many units returned it
+                    d.append(f"{slot}[{key}]")
     return merged
 
 

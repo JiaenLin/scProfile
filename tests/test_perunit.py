@@ -134,6 +134,25 @@ ck("per_unit with no unit key is announced", "per_unit and no unit key" in src.r
    or "declare per_unit" in src)
 ck("the README is written after the report", src.index("report.write_all") < src.index("_write_readme(out"))
 
+print("\nthe budget divides once, however many times it is applied")
+from scprofile.kernels import _budget                                          # noqa: E402
+w = [{"plugin": "velocity", "unit": None, "cores": 8},
+     {"plugin": "cellcycle", "unit": None, "cores": 1}] + \
+    [{"plugin": "perunit", "unit": f"S{i}", "cores": 1} for i in range(1, 5)]
+_budget(w, 4)
+first = [i["cores"] for i in w]
+_budget(w, 4)
+ck("re-budgeting an unfiltered wave changes nothing", [i["cores"] for i in w] == first,
+   f"{first} became {[i['cores'] for i in w]}")
+ck("velocity keeps its planned share", first[0] == 2, str(first))
+live = [i for i in w if i["plugin"] != "perunit"]
+_budget(live, 4)
+ck("re-budgeting a FILTERED wave gives the survivors more",
+   [i["cores"] for i in live] == [3, 1], str([i["cores"] for i in live]))
+w2 = [{"plugin": "a", "unit": None, "cores": 2}, {"plugin": "b", "unit": None, "cores": 1}]
+_budget(w2, 8)
+ck("an under-subscribed wave is left alone", [i["cores"] for i in w2] == [2, 1])
+
 print("\nthe uns payload is writable, checked before write_h5ad")
 prov = merge.provenance(f, {"n_obs": 10, "compartment": None}, {"liana": ["x"]},
                         merged={"liana": {"obs": ["ccc_score"], "obsm": [],

@@ -378,14 +378,21 @@ def _budget(wave, budget):
     A plugin reading `os.cpu_count()` inside itself is a bug: it reports the NODE, not its share,
     and four concurrent plugins each doing it start four times the node's cores in threads. The
     share is passed in `in.json` and the plugin is required to use it.
+
+    IDEMPOTENT, and it has to be, because it is applied twice: once when the plan is computed and
+    again over the instances that survive a wave's filters. Scaling the ALREADY-SCALED number the
+    second time compounded - a six-instance wave in which nothing was filtered out went from a
+    planned velocity(2c) to a run velocity(1c), so the fix for over-division became an
+    under-division whenever the filters removed nothing. Every division is from `declared`.
     """
     if not wave:
         return wave
-    want = sum(i["cores"] for i in wave)
-    if want <= budget:
-        return wave
     for i in wave:
-        i["cores"] = max(1, min(budget, int(i["cores"] * budget / want)))
+        i.setdefault("declared", i["cores"])
+    want = sum(i["declared"] for i in wave)
+    for i in wave:
+        i["cores"] = (i["declared"] if want <= budget
+                      else max(1, min(budget, int(i["declared"] * budget / want))))
     return wave
 
 
