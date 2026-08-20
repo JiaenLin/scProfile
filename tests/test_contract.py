@@ -245,6 +245,27 @@ def test_ordering():
                 check(f"{dep} before {n}", o.index(dep) < o.index(n))
 
 
+def test_no_project_data():
+    """This repository is public. Nothing from any particular dataset belongs in it.
+
+    Checked because it has happened in a sibling repo: a worked example carried a real cell type
+    and a real cell count as sample output. Example output is the SHAPE of a table, never a result.
+    """
+    import re
+    print("\nno dataset-specific content")
+    pat = re.compile(r"cardiomyo|matrifibro|endocardial|pericyte|celescope|cellbender"
+                     r"|\bsambo\b|wangyb|duke-nus|aging_hfd|young_hfd", re.I)
+    bad = []
+    root = pathlib.Path(__file__).resolve().parents[1]
+    for f in list(root.glob("*.md")) + list(root.glob("docs/**/*.md")) \
+            + list(root.glob("scprofile/*.py")) + list(root.glob("kernels/**/*.py")) \
+            + list(root.glob("kernels/**/*.yml")):
+        for i, ln in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            if pat.search(ln):
+                bad.append(f"{f.relative_to(root)}:{i}")
+    check("no dataset-specific content anywhere", not bad, ", ".join(bad[:6]))
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)

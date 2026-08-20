@@ -13,7 +13,7 @@ Takes the output of [scQC](https://github.com/JiaenLin/scQC) →
 [scIntegrate](https://github.com/JiaenLin/scIntegrate), or any `.h5ad` with counts, a label column
 and a sample column.
 
-📖 **[Design](DESIGN.md)** · **[Roadmap](ROADMAP.md)**
+📖 **[Design](DESIGN.md)** · **[Roadmap](ROADMAP.md)** · **[Build plan](BUILD_PLAN.md)**
 
 ---
 
