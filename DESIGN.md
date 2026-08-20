@@ -270,3 +270,28 @@ The clearest case so far: LIANA+ defaults to a **human** ligand-receptor resourc
 mouse symbols it does not error — it matches almost nothing, or the few symbols that coincide
 between species, and returns a small plausible table. Nothing in the output says the resource was
 for the wrong organism.
+
+---
+
+## A design defect is the only legitimate reason to skip a plugin
+
+Four things stop a plugin, and only one of them is a reason not to run it.
+
+| stops it | is | what to do |
+|---|---|---|
+| the input is not in the object | often **on disk elsewhere** | find it and pass it |
+| no environment | **work** | install it |
+| no implementation | **work** | build it |
+| **the design cannot support the test** | a **finding about the experiment** | report it, whether or not the plugin runs |
+
+The first three are findings about the tooling. Listing them beside the fourth makes the two look
+alike, and a reader cannot then tell *this experiment cannot answer that question* from *nobody has
+written this yet*. Those are opposite facts and they have opposite remedies.
+
+So `plan` separates them: fixable gaps are printed with the command that closes each, under a
+heading that says they are all fixable; design limits are printed separately and marked as
+belonging in the report **whether or not the plugin runs**.
+
+The rule this encodes: **a plugin is never skipped for a reason that is work.** If it cannot run
+because something is missing, the missing thing gets built. If it cannot run because the
+experiment cannot answer the question, that is the result, and it is written down.

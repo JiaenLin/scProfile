@@ -417,6 +417,7 @@ def _plan(a):
             if line.strip():
                 print(f"      {line.strip()[:100]}")
         print("      a plugin whose claim this forbids must refuse and name the alternative")
+    design_levels = {}
     if a.design:
         try:
             samples_in_obj = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
@@ -434,6 +435,7 @@ def _plan(a):
                 import collections
                 for f in factors:
                     cnt = collections.Counter(tab[s][f] for s in samples if s in tab)
+                    design_levels[f] = dict(cnt)
                     small = {k: v for k, v in cnt.items() if v < 3}
                     print(f"      {f:<12} " + ", ".join(f"{k}={v}" for k, v in sorted(cnt.items()))
                           + ("   <- BELOW 3 PER GROUP: compositional and pseudobulk tests refuse"
@@ -525,19 +527,53 @@ def _plan(a):
                              f"scprofile scaffold {name}   # manifest exists; lock, selftest, "
                              f"run.py and UPSTREAM.md do not"))
 
+    # ---- design defects: the ONLY legitimate reason to skip a plugin ------------------------
+    #
+    # Everything else that stops a plugin - a missing environment, an unbuilt implementation, an
+    # input that exists elsewhere on disk - is WORK, and listing it beside a genuine limit of the
+    # experiment makes the two look alike. A design defect is a finding about the study; a missing
+    # build is a finding about us. Only the first is a reason not to run something.
+    defects = []
+    if design_levels:
+        for name in sorted(want):
+            k = ks[name]
+            if not (k.needs_design or k.design_aware):
+                continue
+            for f, counts in design_levels.items():
+                small = {lv: n for lv, n in counts.items() if n < 3}
+                if small and k.needs_design:
+                    defects.append((name, f"factor {f!r} has {', '.join(f'{lv}=n{n}' for lv, n in sorted(small.items()))}"
+                                          f" — below 3 replicates, so an effect is estimable but"
+                                          f" weakly powered, and an interaction across two such"
+                                          f" levels is the weakest term in the model"))
+    if constraint and "must NOT" in str(constraint):
+        for name in sorted(want):
+            k = ks[name]
+            if k.needs_design and k.needs_obsm:
+                defects.append((name, "the upstream constraint forbids a claim across the tested "
+                                      "factor on the chosen embedding; it must use the "
+                                      "uncorrected one and say so"))
+    if defects:
+        print("\ndesign limits — the only legitimate reason to skip a plugin")
+        for name, why in defects:
+            print(f"  {name:<12} {why}")
+        print("  These are findings about the EXPERIMENT. They belong in the report whether or "
+              "not the plugin runs.")
+
     # ---- what to do about it ------------------------------------------------------------------
     #
     # A gap reported without the command that closes it is an excuse. Everything above that
     # stopped something is repeated here as an action, in the order it has to happen.
     if todo:
-        print("\nto make this runnable")
+        print(f"\nto make this runnable — {len(todo)} gap(s), all FIXABLE")
         order = {"data": 0, "env": 1, "build": 2}
         for kind, name, cmd in sorted(todo, key=lambda x: (order.get(x[0], 9), x[1])):
             print(f"  [{kind:<5}] {name:<12} {cmd}")
         print("\n  `scprofile plan --fix` runs the env and reference steps. A [build] step needs "
-              "a person:")
-        print("  scaffold writes the skeleton from the manifest, and the method still has to be "
-              "wrapped correctly.")
+              "a person: scaffold writes the skeleton from the manifest, and the method still has "
+              "to be wrapped correctly.")
+        print("  NONE of these is a reason to skip a plugin. A missing build is a finding about "
+              "the tooling, not about the data.")
 
     # ---- the schedule -------------------------------------------------------------------------
     if runnable:
