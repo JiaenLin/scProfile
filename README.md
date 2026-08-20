@@ -22,10 +22,23 @@ and a sample column.
 ```bash
 pip install -e '.[run]'
 
-scprofile doctor                             # what you have, what you need
-scprofile install velocity --prefix ~/envs   # build a kernel's environment
-scprofile fetch   scenic   --to ~/references # get its reference data
+scprofile doctor                              # what you have, what you need
+scprofile plan   --h5ad c.h5ad --all          # what WOULD run, and what stops it
+scprofile validate                            # static checks on plugins and references
+scprofile scaffold abundance                  # a declared plugin's build skeleton
+scprofile install velocity --prefix ~/envs    # build a plugin's environment
+scprofile fetch   scenic --to ~/refs --dry-run  # how much, and does it fit
+scprofile run    --h5ad c.h5ad --out r/ --all
 ```
+
+**`plan` first.** It reads the object, resolves every prerequisite, searches for inputs that are
+not in the object but may be beside it, and ends with the command that closes each gap. It runs
+nothing, and every refusal a real run would produce arrives in seconds.
+
+A gap is only ever one of four things, and **only the last is a reason to skip a plugin**: an
+input that is elsewhere on disk (find it), a missing environment (install it), a missing
+implementation (build it), or a design that cannot support the test — which is a finding about the
+experiment and belongs in the report whether or not the plugin runs.
 
 The host needs numpy and pandas; `[run]` adds anndata and scanpy. Kernel environments are built
 with conda/mamba, or point scProfile at ones you already have with
