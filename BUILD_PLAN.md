@@ -186,3 +186,53 @@ against something that was not needs to know.
 5. `de`, same shape.
 6. Run both on a real cohort. **Its refusals are the result**, if that is what it produces.
 7. `decoupler`.
+
+---
+
+## The tool family is additive. Nothing leaves it.
+
+**A plugin is never removed from the plan because it is expensive or blocked.** It is sequenced by
+what blocks it, and what blocks it is written down. A tool dropped from a build order with no
+reason recorded is indistinguishable, later, from one nobody thought of — and this plan lost three
+that way once before this section existed.
+
+Every declared plugin appears below with its blocker and its cost. New tools join by the same
+route: a manifest declaring `needs` / `produces` / `cannot_show`, then `UPSTREAM.md`, then the
+build. The manifest comes first precisely so a tool can be evaluated against a real dataset with
+`scprofile plan` before anyone commits to writing it.
+
+| plugin | blocked on | cost |
+|---|---|---|
+| `velocity` | nothing — inputs found beside the object | S |
+| `de` | nothing — its dependency is already installed | S |
+| `liana` | its own environment | M |
+| `cellchat` | **the R bridge** | M |
+| `abundance` | its own environment | M |
+| `decoupler` | a dependency resolve | S |
+| `pseudotime` | its own environment; consumes velocity | M |
+| `scenic` | **a multi-GB reference fetch**, untested at that scale | L |
+
+### Two of these are infrastructure wearing a plugin's name
+
+**`cellchat` is the R bridge.** The contract already allows `run.R` and `manifest.py` is
+stdlib-only so an R shim can read it. What is missing is a lock that builds R reproducibly and a
+selftest that proves it. Building it for one plugin unlocks every R tool behind it —
+`tradeseq`, `nichenet`, `hdWGCNA` — so its cost is amortised across four, not one.
+
+It is also **half of a pair**. Running one communication method alone contradicts the reason the
+pair exists: agreement between two is evidence, disagreement is a finding about the databases as
+much as about the cells. Shipping `liana` without it is shipping half the argument.
+
+**`scenic` is the reference-fetch test.** `refs.py` exists and has never handled anything at the
+scale cisTarget databases arrive in. Doing it last is a sequencing decision about risk, not a
+judgement about the method — and it is the other half of the `decoupler` pair, where a network
+inferred from the data is checked against curated priors.
+
+### What "sequenced later" must never mean
+
+- absent from the plan
+- absent from `scprofile plan` output against a real dataset
+- absent from the report, which names every plugin that did not run and why
+
+A plugin that is declared but unbuilt still answers *what would you need from me* — which is worth
+having before it is written, and is why the declarations exist ahead of the implementations.
