@@ -381,23 +381,46 @@ def _budget(wave, budget):
     return wave
 
 
-def unmet(kernel, *, obs=(), obsm=(), layers=(), ran=(), has_design=False):
+def resolve_keys(items, keys):
+    """Substitute `{label}`, `{counts}` and the rest through the key map.
+
+    The plugin format REQUIRES a plugin to name keys rather than columns — a plugin naming a real
+    column has bound itself to one project. So every consumer of `needs` must resolve them, and
+    this one did not: it checked for a column literally called `{label}`, which no object has.
+
+    Every correctly-written plugin therefore failed its own prerequisite check, and the failure
+    read as a property of the dataset rather than of the resolver.
+
+    An unresolvable key is returned UNCHANGED so it surfaces as a missing capability naming the
+    key, rather than being silently dropped.
+    """
+    out = []
+    for it in items:
+        s = str(it)
+        for k, v in (keys or {}).items():
+            if v:
+                s = s.replace("{" + k + "}", str(v))
+        out.append(s)
+    return out
+
+
+def unmet(kernel, *, obs=(), obsm=(), layers=(), ran=(), has_design=False, keys=None):
     """Everything `kernel` needs and does not have. One line per problem, each with its FIX.
 
     Checked before the kernel is launched. A prerequisite discovered inside a kernel is a
     prerequisite discovered after the environment was resolved and the object was read.
     """
     problems = []
-    for c in kernel.needs_obs:
+    for c in resolve_keys(kernel.needs_obs, keys):
         if c not in obs:
             who = _who_produces(f"obs[{c}]")
             problems.append(f"obs[{c!r}] is absent." + (f"  Fix: run --kernel {who} first." if who
                                                         else "  It must be on the input object."))
-    for c in kernel.needs_obsm:
+    for c in resolve_keys(kernel.needs_obsm, keys):
         if c not in obsm:
             problems.append(f"obsm[{c!r}] is absent.  Fix: pass --embedding to name the one to "
                             f"use, or run the integration step that writes it.")
-    for c in kernel.needs_layers:
+    for c in resolve_keys(kernel.needs_layers, keys):
         if c not in layers and kernel.can_source_layers:
             continue          # the kernel searches for it and reports what it found
         if c not in layers:

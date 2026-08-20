@@ -175,6 +175,10 @@ def _run(a):
     prov = provenance.harvest(A, extra_roots=_split(a.search or ""))
     provenance.describe(prov, log=print)
 
+    _km = {r_: v[0] for r_, v in keys.items() if v[0]}
+    _km.setdefault('lognorm', 'lognorm' if 'lognorm' in A.layers else None)
+    _km.setdefault('counts', _km.get('counts_layer'))
+    _km = {k2: v2 for k2, v2 in _km.items() if v2}
     have_obs = set(A.obs.columns)
     have_obsm = set(A.obsm)
     have_layers = {k for k in A.layers if k is not None}
@@ -192,7 +196,7 @@ def _run(a):
         k = ks[name]
         print(f"\n=== {name} ===")
         probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers, ran=ran,
-                      has_design=bool(a.design))
+                      has_design=bool(a.design), keys=_km)
         if probs and not a.force:
             print(f"  NOT RUN - {len(probs)} prerequisite(s) unmet:")
             for p in probs:
@@ -443,6 +447,12 @@ def _plan(a):
 
     # ---- per plugin ---------------------------------------------------------------------------
     print("\nplugins")
+    _km = {r_: v[0] for r_, v in keys.items() if v[0]}
+    _km.setdefault('lognorm', 'lognorm' if 'lognorm' in A.layers else None)
+    _km.setdefault('counts', _km.get('counts_layer'))
+    _km.setdefault('embedding', next((e for e in ('X_scanvi', 'X_umap', 'X_pca')
+                                      if e in A.obsm), None))
+    _km = {k2: v2 for k2, v2 in _km.items() if v2}
     have_obs, have_obsm = set(A.obs.columns), set(A.obsm)
     have_layers = {k for k in A.layers if k is not None}
     runnable, planned = [], []
@@ -452,7 +462,7 @@ def _plan(a):
             planned.append((name, k))
             continue
         probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers,
-                      ran=set(want), has_design=bool(a.design))
+                      ran=set(want), has_design=bool(a.design), keys=_km)
         state, why, fix = runner.env_state(k, a.prefix)
         env_ok = state in ("installed", "override", "host")
         if probs:
@@ -486,7 +496,7 @@ def _plan(a):
         for name, k in planned:
             probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers,
                           ran={n for n, _ in planned} | set(runnable),
-                          has_design=bool(a.design))
+                          has_design=bool(a.design), keys=_km)
             mark = "ready when built" if not probs else "would refuse"
             wraps = k.spec.get("plans_to_wrap") or "-"
             unit = f", per {k.per_unit}" if k.per_unit else ""

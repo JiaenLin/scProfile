@@ -331,6 +331,38 @@ def test_schedule():
           solo[0][0]["cores"] == 8, str(solo))
 
 
+def test_key_map_is_resolved():
+    """`needs` names KEYS, so every consumer of it must resolve them.
+
+    The format requires a plugin to name `{label}` rather than a real column — a plugin naming a
+    column has bound itself to one project. `unmet()` checked for a column literally called
+    `{label}`, which no object has, so every correctly-written plugin failed its own prerequisite
+    check. The failure read as a property of the dataset rather than of the resolver, which is why
+    it survived: seven plugins reported "would refuse: obs['{label}'] is absent" against an object
+    that had the column.
+    """
+    print("\nkey map")
+    import types
+    from scprofile.kernels import resolve_keys, unmet
+
+    keys = {"label": "cell_type", "counts": "counts", "lognorm": "lognorm"}
+    check("placeholders substitute",
+          resolve_keys(["obs/{label}", "layers/{counts}"], keys)
+          == ["obs/cell_type", "layers/counts"])
+    check("an unknown key is left intact, not dropped",
+          resolve_keys(["{nosuch}"], keys) == ["{nosuch}"],
+          "it must surface as a missing capability naming the key")
+
+    k = types.SimpleNamespace(
+        needs_obs=["{label}"], needs_obsm=[], needs_layers=["{counts}"], needs_kernels=[],
+        needs_design=False, can_source_layers=False, name="x")
+    check("resolved needs are satisfied",
+          unmet(k, obs={"cell_type"}, layers={"counts"}, keys=keys) == [])
+    got = unmet(k, obs=set(), layers=set(), keys=keys)
+    check("and an absence names the RESOLVED column", any("cell_type" in p for p in got),
+          " | ".join(got))
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -345,6 +377,7 @@ def main():
     test_unmet_names_the_fix()
     test_ordering()
     test_schedule()
+    test_key_map_is_resolved()
     test_wrapping_plugins_record_upstream()
     print()
     if FAILED:
