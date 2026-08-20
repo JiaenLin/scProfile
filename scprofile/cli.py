@@ -465,6 +465,18 @@ def _plan(a):
             e = k.executor
             unit = f", per {k.per_unit}" if k.per_unit else ""
             print(f"  runnable      {name}   cost {e['cost']}, {e['cores']} core(s){unit}")
+            # `runnable` here means the prerequisite check did not block it. A plugin that
+            # declares can_source_layers is NOT blocked on a missing layer - it goes and looks -
+            # so reporting it as plainly runnable overstates the case. Say what it will look for
+            # and what happens if it does not find it.
+            miss = [c for c in k.needs_layers if c not in have_layers]
+            if miss and k.can_source_layers:
+                print(f"      WILL SEARCH for layers {', '.join(repr(m) for m in miss)}, which "
+                      f"are not on this object.")
+                print(f"      It will follow the provenance recorded upstream and refuse, naming "
+                      f"every directory it looked in, if they are not there.")
+            if k.needs_design and not a.design:
+                print(f"      needs a design table")
 
     # ---- the schedule -------------------------------------------------------------------------
     if runnable:
