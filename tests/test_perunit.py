@@ -134,6 +134,33 @@ ck("per_unit with no unit key is announced", "per_unit and no unit key" in src.r
    or "declare per_unit" in src)
 ck("the README is written after the report", src.index("report.write_all") < src.index("_write_readme(out"))
 
+print("\nevery file that names a module imports it")
+import ast as _ast                                                             # noqa: E402
+_bad = []
+for _f in list(Path("scprofile").rglob("*.py")) + list(Path("tests").rglob("*.py")) \
+        + list(Path("kernels").rglob("*.py")):
+    src = _f.read_text()
+    tree = _ast.parse(src)
+    bound = set()
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.Import):
+            bound |= {(a.asname or a.name).split(".")[0] for a in node.names}
+        elif isinstance(node, _ast.ImportFrom):
+            bound |= {(a.asname or a.name) for a in node.names}
+        elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
+            bound.add(node.name)
+        elif isinstance(node, _ast.Name) and isinstance(node.ctx, _ast.Store):
+            bound.add(node.id)
+    # ATTRIBUTE ACCESS IN THE AST, not a substring. A substring search matched the word
+    # "manifest." in a docstring and "the report." in a comment, and a check that fires on correct
+    # code is a check somebody switches off.
+    used = {n.value.id for n in _ast.walk(tree)
+            if isinstance(n, _ast.Attribute) and isinstance(n.value, _ast.Name)}
+    for mod in ("manifest", "merge", "report", "runner", "refs", "compat", "inputs", "figure"):
+        if mod in used and mod not in bound:
+            _bad.append(f"{_f}: uses {mod}. without importing it")
+ck("no file uses a module it did not import", not _bad, "; ".join(_bad[:3]))
+
 print("\nlayer_names knows what list(adata.layers) does not")
 from scprofile import manifest                                                 # noqa: E402
 class _L(dict):

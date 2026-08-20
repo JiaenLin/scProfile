@@ -36,7 +36,11 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from scprofile import manifest                                            # noqa: E402
 
 #: 10x-style barcodes are ACGT runs. Pulling the longest one out of a name absorbs sample
 #: prefixes, `-1` suffixes and velocyto's trailing `x` in a single rule. A name with no such run

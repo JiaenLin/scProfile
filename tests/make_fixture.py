@@ -25,6 +25,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scprofile import manifest                                            # noqa: E402
+
 
 #: Real MOUSE symbols - the casing probes the host uses to detect organism, and enough of the
 #: Tirosh cell-cycle panel that `cellcycle` takes its scoring path rather than only its refusal
