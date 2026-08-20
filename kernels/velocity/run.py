@@ -75,19 +75,29 @@ DEFAULTS = {
 BASIS_PREFERENCE = ("umap", "scanvi", "scvi", "harmony", "umap_integrated", "tsne", "pca")
 
 
-def _cpus(requested):
-    """How many workers to give the graph step, honouring the scheduler over the machine.
+def _cpus(requested, resources=None):
+    """How many workers to give the graph step.
 
-    A PBS job that asks for 8 cores and then starts 128 threads is oversubscribing a shared node,
-    and the usual symptom is a job that is slower than the serial version.
+    THE HOST'S ALLOCATION FIRST. `in.json['resources']['cores']` is this plugin's SHARE, divided
+    by the scheduler across everything running concurrently. The machine's core count is the
+    node's, and four plugins each reading it start four times the node's worth of threads - the
+    usual symptom being a wave slower than running the same work serially.
+
+    The environment variables are the fallback for a standalone invocation outside the harness,
+    where nobody has allocated a share. The machine count is the last resort and is capped,
+    because an uncapped guess on a shared node is the failure this function exists to avoid.
     """
     if requested:
         return int(requested)
+    share = (resources or {}).get("cores")
+    if share:
+        return max(1, int(share))
     for var in ("NCPUS", "PBS_NCPUS", "SLURM_CPUS_PER_TASK", "OMP_NUM_THREADS"):
         v = os.environ.get(var)
         if v and v.isdigit() and int(v) > 0:
             return int(v)
-    return max(1, min(8, os.cpu_count() or 1))
+    import multiprocessing
+    return max(1, min(8, multiprocessing.cpu_count()))
 
 
 def _pick_basis(A, declared, keys):
@@ -132,7 +142,7 @@ def main(argv):
     label_key = keys.get("label")
     assay = (inp.get("assay") or "").lower()
     sentinels = set(inp.get("sentinels") or ())
-    n_jobs = _cpus(P["n_jobs"])
+    n_jobs = _cpus(P["n_jobs"], inp.get("resources"))
 
     print(f"scvelo {scv.__version__}, mode {P['mode']}, {n_jobs} worker(s)")
     A = sc.read_h5ad(inp["h5ad"])

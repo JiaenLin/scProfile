@@ -389,6 +389,64 @@ def test_scaffold_cannot_produce_a_running_noop():
           "from memory" in SC.REFERENCES)
 
 
+def test_validate_catches_what_got_through():
+    """Every check in the validator exists because something got through.
+
+    Asserted against synthetic defects rather than against the real plugins, so the checks keep
+    firing once the real plugins are clean — a check that only ever passes is a check nobody knows
+    is broken.
+    """
+    print("\nvalidate")
+    import tempfile
+    from scprofile import validate as V
+    from scprofile.kernels import Kernel
+
+    with tempfile.TemporaryDirectory() as td:
+        d = pathlib.Path(td) / "bad"
+        d.mkdir()
+        (d / "kernel.yml").write_text(
+            "name: bad\nsummary: a plugin with every defect\nstatus: built\n"
+            "language: python\nentry: run.py\nneeds_env: true\n"
+            "wraps:\n  tool: something\nproduces:\n  - obs[x]\n")
+        (d / "run.py").write_text(
+            "import os\nn = os.cpu_count()\nlab = adata.obs['cell_type']\n")
+        (d / "lock.yml").write_text(
+            "name: x\nchannels:\n  - conda-forge\ndependencies:\n  - python=3.11\n  - pip\n"
+            "  - pip:\n      - numpy\n")
+        (d / "UPSTREAM.md").write_text("# Upstream\n\nTODO\n")
+        f = V.validate_plugin(Kernel(d))
+        got = {x.check for x in f}
+
+        def has(frag):
+            return any(frag in c for c in got)
+
+        check("empty cannot_show", has("cannot_show is empty"))
+        check("os.cpu_count()", has("os.cpu_count()"))
+        check("hard-coded column name", has("hard-coded domain name"))
+        check("unpinned dependency", has("unpinned dependencies"))
+        check("missing selftest", has("no selftest"))
+        check("UPSTREAM still the template", has("still the template"))
+        check("licence not recorded", has("wraps.license"))
+
+        # a channel is not a dependency: counting it trains a reader to ignore the check
+        loose = [x for x in f if "unpinned" in x.check]
+        check("channels are not reported as unpinned",
+              all("conda-forge" not in (x.detail or "") for x in loose),
+              str([x.detail for x in loose]))
+
+    # references
+    with tempfile.TemporaryDirectory() as td:
+        d = pathlib.Path(td) / "refs"
+        d.mkdir()
+        (d / "kernel.yml").write_text("name: refs\nsummary: s\ncannot_show:\n  - x\n")
+        (d / "references.yml").write_text(
+            "db:\n  url: https://example.org/db.feather\n  sha256: notahash\n")
+        f = V.validate_references(Kernel(d))
+        got = {x.check for x in f}
+        check("a bad checksum is caught", any("not a 64-char hex" in c for c in got), str(got))
+        check("a missing size is caught", any("declares no size" in c for c in got), str(got))
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -405,6 +463,7 @@ def main():
     test_schedule()
     test_key_map_is_resolved()
     test_scaffold_cannot_produce_a_running_noop()
+    test_validate_catches_what_got_through()
     test_wrapping_plugins_record_upstream()
     print()
     if FAILED:

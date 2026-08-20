@@ -318,6 +318,34 @@ def _run(a):
     return 0
 
 
+def _validate(a):
+    """Static checks on plugins and their references. Runs nothing."""
+    from . import validate as V
+    from .kernels import discover
+    ks = discover()
+    names = _split(a.name or "") or sorted(ks)
+    bad = [n for n in names if n not in ks]
+    if bad:
+        print(f"scprofile: unknown plugin(s) {bad}", file=sys.stderr)
+        return REFUSE
+
+    print("plugins")
+    errs = 0
+    for n in names:
+        k = ks[n]
+        f = V.validate_plugin(k) + V.validate_references(
+            k, dest=a.references, organism=a.organism, deep=a.deep)
+        errs += V.report(k, f)
+    print()
+    if errs:
+        print(f"{errs} error(s). Each is a defect that would produce a plausible wrong answer "
+              f"rather than a failure.")
+        return REFUSE
+    print("no errors. Warnings are worth reading: none of them stops a run, and each is "
+          "something a reader of the result would want to know.")
+    return 0
+
+
 def _scaffold(a):
     """Write a declared plugin's build skeleton. The judgement is still yours."""
     from . import scaffold as SC
@@ -694,6 +722,17 @@ def main(argv=None):
               "organism", "assay"):
         pl.add_argument(f"--{f}", default=None)
     pl.set_defaults(fn=_plan)
+
+    va = sub.add_parser("validate", help="static checks on plugins and their references")
+    va.add_argument("name", nargs="?", default=None,
+                    help="plugin name(s), comma-separated. Default: all")
+    va.add_argument("--references", default=None, metavar="DIR",
+                    help="also check the reference files on disk under this directory")
+    va.add_argument("--deep", action="store_true",
+                    help="verify reference checksums. Hashes gigabytes; this is what a run does "
+                         "before trusting them")
+    va.add_argument("--organism", default=None)
+    va.set_defaults(fn=_validate)
 
     sc_ = sub.add_parser("scaffold", help="write a declared plugin's build skeleton")
     sc_.add_argument("name", help="plugin name(s), comma-separated")
