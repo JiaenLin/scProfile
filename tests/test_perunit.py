@@ -134,6 +134,16 @@ ck("per_unit with no unit key is announced", "per_unit and no unit key" in src.r
    or "declare per_unit" in src)
 ck("the README is written after the report", src.index("report.write_all") < src.index("_write_readme(out"))
 
+print("\nthe smoke fixture is not a shipped plugin")
+from scprofile.kernels import discover                                         # noqa: E402
+import os as _os
+_os.environ.pop("SCPROFILE_KERNELS", None)
+ck("perunit is absent from the default set", "perunit" not in discover(),
+   "a fixture that computes nothing must never be discoverable as a method")
+_os.environ["SCPROFILE_KERNELS"] = str(Path(__file__).resolve().parent / "smoke")
+ck("it IS discoverable when a site asks for it", "perunit" in discover())
+_os.environ.pop("SCPROFILE_KERNELS", None)
+
 print("\nthe budget divides once, however many times it is applied")
 from scprofile.kernels import _budget                                          # noqa: E402
 w = [{"plugin": "velocity", "unit": None, "cores": 8},
