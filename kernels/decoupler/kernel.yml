@@ -1,0 +1,25 @@
+name: decoupler
+summary: TF and pathway activity per cell, from curated priors
+when_to_use: you want regulatory activity without inferring a network from your own data
+status: planned
+plans_to_wrap: decoupler
+language: python
+entry: run.py
+needs_env: false
+layer: stack
+reversible: true
+sees: []
+design_aware: true
+needs_layers:
+  - "{lognorm}"
+produces:
+  - obsm[X_tf_activity]
+  - obsm[X_pathway_activity]
+  - tables/activity_by_label.csv
+executor:
+  cost: low
+  cores: 4
+cannot_show:
+  - Activity is inferred from a CURATED PRIOR, not measured. A high score means the prior's targets are high, which is not the same as the factor being active.
+  - The priors are largely human-derived and are not tissue-specific.
+  - A prior contains what has been studied. A factor absent from it scores nothing, and that is a property of the literature rather than of the cells.

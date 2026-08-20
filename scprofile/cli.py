@@ -445,9 +445,12 @@ def _plan(a):
     print("\nplugins")
     have_obs, have_obsm = set(A.obs.columns), set(A.obsm)
     have_layers = {k for k in A.layers if k is not None}
-    runnable = []
+    runnable, planned = [], []
     for name in sorted(want):
         k = ks[name]
+        if k.status != "built":
+            planned.append((name, k))
+            continue
         probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers,
                       ran=set(want), has_design=bool(a.design))
         state, why, fix = runner.env_state(k, a.prefix)
@@ -477,6 +480,19 @@ def _plan(a):
                       f"every directory it looked in, if they are not there.")
             if k.needs_design and not a.design:
                 print(f"      needs a design table")
+
+    if planned:
+        print("\ndeclared, not built — what each WOULD need on this object")
+        for name, k in planned:
+            probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers,
+                          ran={n for n, _ in planned} | set(runnable),
+                          has_design=bool(a.design))
+            mark = "ready when built" if not probs else "would refuse"
+            wraps = k.spec.get("plans_to_wrap") or "-"
+            unit = f", per {k.per_unit}" if k.per_unit else ""
+            print(f"  {mark:<16} {name:<12} wraps {wraps}{unit}")
+            for pr in probs:
+                print(f"      {pr}")
 
     # ---- the schedule -------------------------------------------------------------------------
     if runnable:

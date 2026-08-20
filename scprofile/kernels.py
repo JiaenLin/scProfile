@@ -131,6 +131,16 @@ class Kernel:
         return self._list("needs_layers")
 
     @property
+    def status(self):
+        """`built` or `planned`. A planned plugin is a DECLARATION with no implementation.
+
+        It exists so `plan` can answer, against a real dataset, which of the whole roadmap is
+        runnable and what each would need — before any of it is written. A roadmap in prose says
+        what is intended; a manifest says what it would require, and can be checked.
+        """
+        return self.spec.get("status", "built")
+
+    @property
     def executor(self):
         """Scheduling hints: cost, cores, memory. Advisory — the executor plugin decides.
 

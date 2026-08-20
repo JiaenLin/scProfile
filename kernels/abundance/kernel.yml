@@ -1,0 +1,27 @@
+name: abundance
+summary: whether a population's share shifts across the design
+when_to_use: you have a design table and want to know whether composition changed
+status: planned
+plans_to_wrap: pertpy
+language: python
+entry: run.py
+needs_env: true
+layer: stack
+reversible: true
+sees:
+  - design
+needs_design: true
+needs_obs:
+  - "{label}"
+produces:
+  - tables/abundance_scoda.csv
+  - tables/abundance_milo.csv
+  - obs[milo_nhood]
+executor:
+  cost: medium
+  cores: 4
+cannot_show:
+  - Composition is RELATIVE by construction. One population rising makes every other fall, and which moved is not recoverable from shares alone.
+  - Absolute cell numbers are not measured. A share is not a count of cells in a tissue.
+  - A shift measured after a batch correction cannot be separated from what the correction removed.
+  - Neighbourhood testing depends on the embedding it is run on, so a constrained embedding constrains the result.
