@@ -21,7 +21,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scprofile import manifest                                            # noqa: E402
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
+
+#: scanpy's own defaults, named rather than inherited. The score is the panel mean MINUS the mean
+#: of a control set drawn from matched expression bins - that subtraction is the method, and it is
+#: what makes zero a meaningful reference. Changing either changes every score, so they are
+#: recorded in the caveats.
+CTRL_SIZE, N_BINS, SEED = 50, 25, 0
 
 #: Tirosh et al. regulon, the de-facto standard. HUMAN symbols; title-cased for mouse below.
 #: Not tissue-specific and not curated for any particular dataset - which is stated in
@@ -88,7 +94,20 @@ def main(argv):
 
     if A.X is None:
         raise SystemExit("cellcycle: the object has no X to score")
-    sc.tl.score_genes_cell_cycle(A, s_genes=s, g2m_genes=g2m)
+
+    # use_raw=None - scanpy's default - means USE .raw IF PRESENT. So the same plugin, on two
+    # objects differing only in whether an upstream step left .raw behind, scores DIFFERENT
+    # values, and nothing in the output says which was used. An object whose .raw holds counts
+    # rather than log-normalised values gets a score computed on counts.
+    #
+    # Named explicitly. See UPSTREAM.md.
+    lognorm = inp["keys"].get("lognorm")
+    layer = lognorm if lognorm and lognorm in A.layers else None
+    scored_from = f"layers[{layer!r}]" if layer else "X"
+    print(f"scoring from {scored_from} (use_raw=False, explicitly)")
+    sc.tl.score_genes_cell_cycle(A, s_genes=s, g2m_genes=g2m,
+                                 use_raw=False, layer=layer,
+                                 ctrl_size=CTRL_SIZE, n_bins=N_BINS, random_state=SEED)
 
     ph = A.obs["phase"].astype(str)
     counts = ph.value_counts()
@@ -170,6 +189,15 @@ def main(argv):
             f, index=False)
         written[col] = str(f)
 
+    caveats.append(
+        f"Scored from {scored_from} with use_raw=False, named explicitly: scanpy's default would "
+        f"have used .raw where present, so an object that had one would have been scored on "
+        f"different values with nothing in the output saying so.")
+    caveats.append(
+        f"The score is the panel mean minus the mean of a control set drawn from matched "
+        f"expression bins (ctrl_size={CTRL_SIZE}, n_bins={N_BINS}, random_state={SEED}). That "
+        f"subtraction is what makes zero a meaningful reference; a naive panel mean is dominated "
+        f"by how abundant its genes happen to be.")
     caveats.append(
         f"Scored from {len(s)} S and {len(g2m)} G2M panel genes present in this object, out of "
         f"{len(S_GENES)} and {len(G2M_GENES)} declared.")

@@ -48,6 +48,20 @@ def _mini_yaml(text):
                 raise ValueError(f"{key!r} has both a value and list items")
             out[key].append(_scalar(item))
             continue
+        if line.startswith("  ") and ":" in line and not line.strip().startswith("- "):
+            # ONE level of nested mapping, for `wraps:` and `executor:`. Deliberately one: a
+            # parser that accepts arbitrary depth is a YAML parser, and this is not one. Anything
+            # deeper still raises rather than being guessed at, because a config silently
+            # mis-parsed is worse than one that will not load.
+            if key is None:
+                raise ValueError(f"indented mapping with no key: {raw!r}")
+            if out.get(key) is None:
+                out[key] = {}
+            if not isinstance(out[key], dict):
+                raise ValueError(f"{key!r} has both a value and nested keys")
+            k2, _, v2 = line.strip().partition(":")
+            out[key][k2.strip()] = _scalar(v2.strip()) if v2.strip() else None
+            continue
         if line.startswith(" "):
             raise ValueError(f"unsupported indentation: {raw!r}")
         if ":" not in line:

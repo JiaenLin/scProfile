@@ -256,7 +256,6 @@ def test_no_project_data():
     pat = re.compile(r"cardiomyo|matrifibro|endocardial|pericyte|celescope|cellbender"
                      r"|\bsambo\b|wangyb|duke-nus|aging_hfd|young_hfd", re.I)
     bad = []
-    root = pathlib.Path(__file__).resolve().parents[1]
     for f in list(root.glob("*.md")) + list(root.glob("docs/**/*.md")) \
             + list(root.glob("scprofile/*.py")) + list(root.glob("kernels/**/*.py")) \
             + list(root.glob("kernels/**/*.yml")):
@@ -264,6 +263,35 @@ def test_no_project_data():
             if pat.search(ln):
                 bad.append(f"{f.relative_to(root)}:{i}")
     check("no dataset-specific content anywhere", not bad, ", ".join(bad[:6]))
+
+
+def test_wrapping_plugins_record_upstream():
+    """A plugin that wraps someone else's tool must carry that tool's own instructions.
+
+    Not a documentation nicety. The defaults that matter are the ones that do not error: LIANA+
+    defaults to a HUMAN ligand-receptor resource and returns a small plausible table on mouse data;
+    scanpy's score_genes defaults to `use_raw=None`, meaning use `.raw` if present, so the same
+    plugin scores different values on two objects that differ only in whether an upstream step
+    left one behind. Both were found by reading the documentation and writing it down, and neither
+    would have been found by reading the plugin.
+    """
+    print("\nwrapping plugins record upstream")
+    root = pathlib.Path(__file__).resolve().parents[1]
+    for name, k in sorted(discover().items()):
+        w = k.spec.get("wraps") or {}
+        if not w:
+            continue
+        up = k.path / "UPSTREAM.md"
+        check(f"{name}: UPSTREAM.md present", up.exists())
+        if not up.exists():
+            continue
+        s = up.read_text(encoding="utf-8")
+        check(f"{name}: records the licence", bool(w.get("license")))
+        check(f"{name}: records a citation", bool(w.get("cite")))
+        check(f"{name}: names the defaults it changes", "default" in s.lower())
+        check(f"{name}: records what it does NOT use", "not used" in s.lower()
+              or "under-use" in s.lower())
+        check(f"{name}: links the upstream docs", "http" in s)
 
 
 def main():
@@ -279,6 +307,7 @@ def main():
     test_lock_is_read_not_delegated()
     test_unmet_names_the_fix()
     test_ordering()
+    test_wrapping_plugins_record_upstream()
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")

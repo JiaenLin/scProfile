@@ -1,6 +1,12 @@
 name: velocity
 summary: RNA velocity from spliced/unspliced counts - the DIRECTION of transcriptional change
 when_to_use: your object carries spliced and unspliced layers and you want direction of change, not just position
+wraps:
+  tool: scvelo
+  version: "0.3.4"
+  homepage: https://scvelo.readthedocs.io
+  license: BSD-3-Clause
+  cite: "Bergen et al., Nat Biotechnol 2020"
 language: python
 entry: run.py
 needs_env: true

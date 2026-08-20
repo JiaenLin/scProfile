@@ -1,5 +1,11 @@
 name: cellcycle
 summary: cell-cycle phase per cell, and the check that a trajectory is not a cell-cycle axis
+wraps:
+  tool: scanpy
+  function: sc.tl.score_genes_cell_cycle
+  homepage: https://scanpy.readthedocs.io
+  license: BSD-3-Clause
+  cite: "Tirosh et al., Science 2016 (gene sets); Wolf et al., Genome Biol 2018 (scanpy)"
 language: python
 entry: run.py
 # Runs in the HOST interpreter. It needs scanpy, which the host already needs in order to read the
