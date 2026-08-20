@@ -314,6 +314,170 @@ def _run(a):
     return 0
 
 
+def _plan(a):
+    """What WOULD run, and what stops it. Reads the object; runs nothing.
+
+    Exists because the useful answer before a long run is not "it failed" but "here is what is
+    missing and here is the command that fixes it". Every refusal a real run would produce is
+    produced here in seconds, and the schedule is printed so the shape of the work is visible
+    before any of it is spent.
+    """
+    from . import compat, inputs, provenance, runner
+    from .kernels import discover, guard_verdict, schedule, unmet
+
+    try:
+        import anndata as ad
+    except ImportError:
+        print("scprofile: plan needs anndata.  pip install -e '.[run]'", file=sys.stderr)
+        return REFUSE
+
+    ks = discover()
+    want = sorted(ks) if a.all else _split(a.kernel or "")
+    if not want:
+        want = sorted(ks)
+    bad = [n for n in want if n not in ks]
+    if bad:
+        print(f"scprofile: unknown plugin(s) {bad}. Known: {', '.join(sorted(ks))}",
+              file=sys.stderr)
+        return REFUSE
+
+    print(f"reading {a.h5ad}")
+    A = ad.read_h5ad(a.h5ad, backed="r")
+    print(f"  {A.n_obs:,} cells x {A.n_vars:,} genes\n")
+
+    try:
+        keys = inputs.detect_keys(
+            A.obs.columns, layers=[k for k in A.layers if k is not None], obsm=list(A.obsm),
+            overrides={"label": a.label_key, "sample": a.sample_key, "batch": a.batch_key,
+                       "counts_layer": a.counts_layer, "compartment": a.compartment_key})
+    except inputs.Refuse as e:
+        print(f"scprofile: REFUSE - {e}", file=sys.stderr)
+        return REFUSE
+    organism = inputs.detect_organism(list(A.var_names), a.organism)
+    assay = inputs.detect_assay(A, a.assay)
+    constraint, csrc = inputs.read_constraint(A)
+
+    print("what this object is, and how each was decided:")
+    for role, (name, why) in keys.items():
+        print(f"  {role:<14} {str(name or '(none)'):<30} {why}")
+    print(f"  {'organism':<14} {str(organism[0] or '(unknown)'):<30} {organism[1]}")
+    print(f"  {'assay':<14} {str(assay[0] or '(unknown)'):<30} {assay[1]}")
+    print(f"  {'constraint':<14} {(csrc or 'ABSENT'):<30} "
+          + ("read from the object" if csrc else "no upstream constraint recorded"))
+
+    # ---- what the upstream stages left, and whether it is usable -----------------------------
+    print("\nupstream prerequisites")
+    import numpy as np
+    ok_all = True
+
+    labels = [c for c in A.obs.columns
+              if A.obs[c].dtype.name in ("category", "object", "string")
+              and 1 < A.obs[c].astype(str).nunique() <= 200]
+    print(f"  label columns available     {len(labels)}: {', '.join(labels[:6])}"
+          + (" ..." if len(labels) > 6 else ""))
+
+    sent = [s for s in inputs.DEFAULT_SENTINELS
+            if keys["label"][0] and s in set(A.obs[keys["label"][0]].astype(str))]
+    print(f"  annotator sentinels         {', '.join(sent) if sent else 'none present'}")
+
+    cl = keys.get("counts_layer", (None,))[0]
+    if cl:
+        sub = A.layers[cl][:2000] if A.n_obs > 2000 else A.layers[cl][:]
+        d = np.asarray(sub.data if hasattr(sub, "data") and not isinstance(
+            sub.data, memoryview) else sub).ravel()
+        integral = bool(d.size) and bool(np.all(d == np.rint(d)))
+        print(f"  counts layer                layers[{cl!r}] "
+              + ("integral - usable by count models" if integral
+                 else "NOT INTEGRAL - a count model handed this returns a plausible embedding"))
+        ok_all &= integral
+    else:
+        print("  counts layer                ABSENT - count models cannot run")
+        ok_all = False
+
+    nan_emb = []
+    for k in A.obsm:
+        arr = A.obsm[k]
+        if getattr(arr, "ndim", 0) == 2 and arr.shape[1] >= 2:
+            n = int(np.isnan(np.asarray(arr[:, 0])).sum())
+            if n:
+                nan_emb.append((k, n))
+    if nan_emb:
+        print(f"  embeddings with NaN rows    " + ", ".join(f"{k} ({n:,})" for k, n in nan_emb))
+        print(f"      cells withheld upstream. A plugin using one MUST exclude them and say how "
+              f"many, or refuse - a NaN row in a neighbour graph either raises or silently")
+        print(f"      yields a graph those cells are absent from.")
+
+    if constraint:
+        print(f"  constraint on use           PRESENT")
+        for line in str(constraint).strip().splitlines()[:4]:
+            if line.strip():
+                print(f"      {line.strip()[:100]}")
+        print("      a plugin whose claim this forbids must refuse and name the alternative")
+    if a.design:
+        try:
+            tab, key, factors = inputs.read_design(a.design, None)
+            print(f"  design table                {a.design} - key {key!r}, "
+                  f"factors {', '.join(factors)}")
+            if keys["sample"][0]:
+                samples = sorted(set(A.obs[keys["sample"][0]].astype(str)))
+                missing = [s for s in samples if s not in tab]
+                print(f"      {len(samples)} samples in the object, "
+                      + (f"{len(missing)} with NO ROW: {missing[:5]}" if missing
+                         else "every one has a row"))
+                ok_all &= not missing
+                import collections
+                for f in factors:
+                    cnt = collections.Counter(tab[s][f] for s in samples if s in tab)
+                    small = {k: v for k, v in cnt.items() if v < 3}
+                    print(f"      {f:<12} " + ", ".join(f"{k}={v}" for k, v in sorted(cnt.items()))
+                          + ("   <- BELOW 3 PER GROUP: compositional and pseudobulk tests refuse"
+                             if small else ""))
+        except Exception as e:                                            # noqa: BLE001
+            print(f"  design table                REFUSED - {e}")
+            ok_all = False
+    else:
+        print("  design table                NOT GIVEN - any plugin testing across a design "
+              "will refuse")
+
+    # ---- per plugin ---------------------------------------------------------------------------
+    print("\nplugins")
+    have_obs, have_obsm = set(A.obs.columns), set(A.obsm)
+    have_layers = {k for k in A.layers if k is not None}
+    runnable = []
+    for name in sorted(want):
+        k = ks[name]
+        probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers,
+                      ran=set(want), has_design=bool(a.design))
+        state, why = runner.env_state(k, a.prefix)
+        env_ok = state in ("installed", "override", "host")
+        if probs:
+            print(f"  NOT RUNNABLE  {name}")
+            for pr in probs:
+                print(f"      {pr}")
+        elif not env_ok:
+            print(f"  NO ENVIRONMENT {name}   {why[1] if isinstance(why, tuple) else why}")
+        else:
+            runnable.append(name)
+            e = k.executor
+            unit = f", per {k.per_unit}" if k.per_unit else ""
+            print(f"  runnable      {name}   cost {e['cost']}, {e['cores']} core(s){unit}")
+
+    # ---- the schedule -------------------------------------------------------------------------
+    if runnable:
+        units = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
+                 if keys["sample"][0] else None)
+        print(f"\nschedule ({a.cores} cores"
+              + (f", {len(units)} units" if units else "") + ")")
+        for i, wave in enumerate(schedule(runnable, ks, budget_cores=a.cores, units=units), 1):
+            print(f"  wave {i}: " + ", ".join(
+                f"{x['plugin']}" + (f"[{x['unit']}]" if x['unit'] else "")
+                + f"({x['cores']}c)" for x in wave))
+    else:
+        print("\nnothing is runnable on this object as it stands.")
+    print("\nnothing was run.")
+    return 0 if runnable and ok_all else REFUSE
+
+
 def _report(a):
     from . import report
     p = Path(a.out) / "report.json"
@@ -384,6 +548,18 @@ def main(argv=None):
                    help="run a kernel whose prerequisites are unmet. It will probably refuse "
                         "itself, and its result would not mean what the report says it means")
     r.set_defaults(fn=_run)
+
+    pl = sub.add_parser("plan", help="what WOULD run, and what stops it. Runs nothing")
+    pl.add_argument("--h5ad", required=True)
+    pl.add_argument("--kernel", default=None)
+    pl.add_argument("--all", action="store_true")
+    pl.add_argument("--prefix", default=None)
+    pl.add_argument("--design", default=None)
+    pl.add_argument("--cores", type=int, default=8)
+    for f in ("label-key", "sample-key", "batch-key", "counts-layer", "compartment-key",
+              "organism", "assay"):
+        pl.add_argument(f"--{f}", default=None)
+    pl.set_defaults(fn=_plan)
 
     p = sub.add_parser("report", help="rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)
