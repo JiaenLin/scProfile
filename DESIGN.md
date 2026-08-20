@@ -99,6 +99,7 @@ kernels/<name>/
   lock.yml         the environment, captured from a working install
   references.yml   URL + sha256 + size, organism-keyed
   run.py | run.R   the entry point. Reads in.json, writes out.json
+  UPSTREAM.md     what the wrapped tool's own documentation says
   selftest.py      proves the env works before a run is spent on it
 ```
 
@@ -242,3 +243,30 @@ skipping. Velocity's are not SCENIC's.
   every kernel says about its own result.
 - **It will not treat an annotator sentinel as a cell type.** Same rule as upstream: `EXCLUDED` and
   `UNRESOLVED` are statements about the annotation.
+
+---
+
+## UPSTREAM.md — required for any plugin that wraps a tool
+
+A plugin that wraps someone else's tool MUST carry `UPSTREAM.md`: **what that tool's own
+documentation says**, with links, recorded so the wrapping can be checked against the source
+rather than against the author's memory.
+
+It states, at minimum:
+
+- the **documented signature** with every default, and where results are written;
+- **every default that is wrong for this contract, and why** — a default that silently produces a
+  plausible wrong answer is the reason this file exists;
+- **what the tool drops** at its defaults, so those become named absences instead of empty rows;
+- **what the tool can do that the plugin does not use yet**, so under-use is visible and
+  deliberate rather than accidental;
+- the **licence and citation**.
+
+Where `UPSTREAM.md` and the installed package disagree, **the installed package is right** and the
+file is stale. `selftest.py` asserts the signature the plugin actually depends on, so the drift is
+caught by a run rather than by a reader.
+
+The clearest case so far: LIANA+ defaults to a **human** ligand-receptor resource. Run against
+mouse symbols it does not error — it matches almost nothing, or the few symbols that coincide
+between species, and returns a small plausible table. Nothing in the output says the resource was
+for the wrong organism.
