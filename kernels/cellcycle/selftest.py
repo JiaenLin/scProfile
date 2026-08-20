@@ -41,7 +41,9 @@ def main():
     import run as K
     print(f"  kernel      {K.VERSION}")
 
-    s_all, g_all = K.S_GENES.split(), K.G2M_GENES.split()
+    # ALREADY LISTS - `.split()` is applied to the literal at module scope. Assuming otherwise is
+    # what this selftest exists to catch, and it caught it in itself on the first real run.
+    s_all, g_all = list(K.S_GENES), list(K.G2M_GENES)
     rng = np.random.default_rng(0)
     n = 300
     # The panels plus filler, so binning has something to bin against. Genes are given a spread of

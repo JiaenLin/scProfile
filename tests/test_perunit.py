@@ -134,6 +134,24 @@ ck("per_unit with no unit key is announced", "per_unit and no unit key" in src.r
    or "declare per_unit" in src)
 ck("the README is written after the report", src.index("report.write_all") < src.index("_write_readme(out"))
 
+print("\nthe uns payload is writable, checked before write_h5ad")
+prov = merge.provenance(f, {"n_obs": 10, "compartment": None}, {"liana": ["x"]},
+                        merged={"liana": {"obs": ["ccc_score"], "obsm": [],
+                                          "dropped": ["obsm[X_ccc]"]}})
+ck("a per-unit plugin's units are strings", prov["kernels"]["liana"]["units"] == ["s1", "s2", "s3"])
+ck("a None in describe is normalised, not refused", prov["input"]["compartment"] == "")
+ck("produced_obsm reports the merge, not the declaration",
+   prov["kernels"]["liana"]["produced_obsm"] == [] and
+   prov["kernels"]["liana"]["not_merged"] == ["obsm[X_ccc]"])
+one_p = merge.provenance(one, {}, {})
+ck("a plugin with no units gets [], never [None]", one_p["kernels"]["cellcycle"]["units"] == [],
+   str(one_p["kernels"]["cellcycle"]["units"]))
+try:
+    merge._uns_safe({"k": ["a", None]})
+    ck("a None inside a list is refused", False, "it was accepted")
+except merge.MergeError as e:
+    ck("a None inside a list is refused", "None" in str(e))
+
 print("\nbarcodes must be unique before any reindex")
 ck("there is a precondition", hasattr(merge, "_require_unique_barcodes"))
 try:

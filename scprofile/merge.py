@@ -310,15 +310,66 @@ def fold_payloads(payloads):
     return out
 
 
+def _uns_safe(node, where="uns['scprofile']"):
+    """Refuse anything `uns` cannot hold, HERE, where the offending key is nameable.
+
+    This exists because a one-line addition to `provenance` put `[None]` into `uns` - the unit
+    list of a plugin that has no units - and h5py cannot write None inside a list. The whole run
+    then died at `write_h5ad`, AFTER every subprocess had finished and before `report.json`,
+    `report/` or the README were written: a total loss, from a provenance field, at the last step.
+
+    So the constraint is checked rather than hoped for. A dict destined for `uns` may hold only
+    strings, numbers, booleans and lists of those - no None anywhere, at any depth.
+    """
+    if isinstance(node, dict):
+        for k, v in node.items():
+            if not isinstance(k, str):
+                raise MergeError(f"{where}: key {k!r} is not a string; uns keys must be")
+            _uns_safe(v, f"{where}[{k!r}]")
+    elif isinstance(node, (list, tuple)):
+        for i, v in enumerate(node):
+            if v is None:
+                raise MergeError(
+                    f"{where}[{i}] is None. h5py cannot write None inside a list, and the failure "
+                    f"lands at write_h5ad - after every plugin has finished and before anything "
+                    f"is reported. Use a string, or leave the entry out.")
+            _uns_safe(v, f"{where}[{i}]")
+    elif node is None:
+        raise MergeError(f"{where} is None; use \"\" or omit the key")
+    elif not isinstance(node, (str, int, float, bool)):
+        raise MergeError(f"{where} is {type(node).__name__}, which uns cannot hold")
+    return node
+
+
+def _plain(node):
+    """Coerce a foreign dict into something `uns` can hold. None becomes "".
+
+    `describe` is assembled elsewhere and a missing key there legitimately reads as None - the
+    object has no compartment column, say. That is not a defect to refuse; it is a fact to record.
+    So it is NORMALISED on the way in, while the fields provenance builds itself are CHECKED by
+    `_uns_safe` and refused. Coercing everything would hide our own bugs; refusing everything
+    would turn someone else's honest absence into a failed run.
+    """
+    if isinstance(node, dict):
+        return {str(k): _plain(v) for k, v in node.items()}
+    if isinstance(node, (list, tuple)):
+        return [_plain(v) for v in node]
+    if node is None:
+        return ""
+    if isinstance(node, (str, int, float, bool)):
+        return node
+    return str(node)
+
+
 def provenance(folded, describe, kernel_specs, merged=None):
     """`uns['scprofile']`: what ran, against what, and every caveat. PROVENANCE ONLY, no results.
 
     Results live in obs/obsm/layers and in the tables. A uns that also carries results is a uns
     that disagrees with them the first time one is regenerated.
     """
-    return {
+    return _uns_safe({
         "contract": "1.0",
-        "input": dict(describe),
+        "input": _plain(dict(describe)),
         # `produced_*` is read from WHAT THE MERGE RETURNED, not from what the plugin declared.
         # Written from the declaration, it asserted `obsm[X_regulon_auc]` was in the object for a
         # per-unit plugin whose arrays merge_many had just refused to concatenate.
@@ -327,7 +378,10 @@ def provenance(folded, describe, kernel_specs, merged=None):
                 "version": p.get("version", ""),
                 "status": p.get("status", ""),
                 "headline": p.get("headline", ""),
-                "units": [u.get("unit") for u in (p.get("units") or [])],
+                # STRINGS, and no None. A plugin with no units yielded [None] here and killed
+                # the h5ad write for every run in the tree.
+                "units": [str(u["unit"]) for u in (p.get("units") or [])
+                          if u.get("unit") is not None],
                 "produced_obs": sorted((merged or {}).get(name, {}).get("obs", [])),
                 "produced_obsm": sorted((merged or {}).get(name, {}).get("obsm", [])),
                 "produced_layers": sorted((merged or {}).get(name, {}).get("layers", [])),
@@ -339,4 +393,4 @@ def provenance(folded, describe, kernel_specs, merged=None):
                 "cannot_show": list(kernel_specs.get(name, [])),
             } for name, p in sorted((folded or {}).items())
         },
-    }
+    })
