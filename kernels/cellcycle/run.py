@@ -27,7 +27,10 @@ VERSION = "0.2.0"
 #: of a control set drawn from matched expression bins - that subtraction is the method, and it is
 #: what makes zero a meaningful reference. Changing either changes every score, so they are
 #: recorded in the caveats.
-CTRL_SIZE, N_BINS, SEED = 50, 25, 0
+#: n_bins and random_state are scanpy's defaults, named rather than inherited. ctrl_size is NOT
+#: here: score_genes_cell_cycle computes it as min(len(s_genes), len(g2m_genes)) and forbids the
+#: keyword, so the control set is sized by the panels that matched THIS object.
+N_BINS, SEED = 25, 0
 
 #: Tirosh et al. regulon, the de-facto standard. HUMAN symbols; title-cased for mouse below.
 #: Not tissue-specific and not curated for any particular dataset - which is stated in
@@ -105,9 +108,14 @@ def main(argv):
     layer = lognorm if lognorm and lognorm in A.layers else None
     scored_from = f"layers[{layer!r}]" if layer else "X"
     print(f"scoring from {scored_from} (use_raw=False, explicitly)")
+    # ctrl_size is NOT passable here. scanpy's own docstring says so, and the function computes
+    # it as min(len(s_genes), len(g2m_genes)) before forwarding **kwargs - so passing it raises
+    # `got multiple values for keyword argument`. The control set for cell-cycle scoring is
+    # therefore sized by the PANELS, not by score_genes' own default of 50.
+    ctrl = min(len(s), len(g2m))
     sc.tl.score_genes_cell_cycle(A, s_genes=s, g2m_genes=g2m,
                                  use_raw=False, layer=layer,
-                                 ctrl_size=CTRL_SIZE, n_bins=N_BINS, random_state=SEED)
+                                 n_bins=N_BINS, random_state=SEED)
 
     ph = A.obs["phase"].astype(str)
     counts = ph.value_counts()
@@ -195,7 +203,8 @@ def main(argv):
         f"different values with nothing in the output saying so.")
     caveats.append(
         f"The score is the panel mean minus the mean of a control set drawn from matched "
-        f"expression bins (ctrl_size={CTRL_SIZE}, n_bins={N_BINS}, random_state={SEED}). That "
+        f"expression bins (ctrl_size={ctrl}, sized by the matched panels because scanpy "
+        f"computes it and forbids the keyword; n_bins={N_BINS}, random_state={SEED}). That "
         f"subtraction is what makes zero a meaningful reference; a naive panel mean is dominated "
         f"by how abundant its genes happen to be.")
     caveats.append(

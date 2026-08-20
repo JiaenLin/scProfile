@@ -119,6 +119,16 @@ def validate_plugin(kernel):
             f.append(Finding("ERROR", "needs_env but no selftest",
                              "an environment nothing proved is one that fails inside a run"))
 
+    if built and not spec.get("needs_env", True) \
+            and not (d / "selftest.py").exists() and not (d / "selftest.R").exists():
+        # The environment is not the only thing a selftest proves. It proves the CALL IS
+        # WELL-FORMED against the installed version, which is what changes underneath a wrapper.
+        # A host-interpreter plugin skipped this requirement, so nothing ever ran it before a real
+        # cohort did — and a keyword the wrapped function forbids reached that cohort.
+        f.append(Finding("WARN", "no selftest, and needs_env is false",
+                         "a host-interpreter plugin is still a wrapper: only a selftest proves "
+                         "the call is well-formed against the version actually installed"))
+
     wraps = spec.get("wraps") or {}
     if wraps:
         up = d / "UPSTREAM.md"

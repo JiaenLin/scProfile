@@ -36,8 +36,17 @@ were scored.
 ## What the score actually is
 
 `score_genes` is **not** the mean expression of the panel. It is the mean of the panel **minus the
-mean of a control set drawn from matched expression bins** — `ctrl_size=50` genes per bin,
-`n_bins=25`.
+mean of a control set drawn from matched expression bins**.
+
+**`ctrl_size` is `50` for `score_genes` and NOT for `score_genes_cell_cycle`.** The cell-cycle
+wrapper computes `ctrl_size = min(len(s_genes), len(g2m_genes))` and forwards `**kwargs`, so
+passing the keyword raises `got multiple values for keyword argument`. Its own docstring says the
+argument is not available.
+
+*This file asserted `ctrl_size=50` for the cell-cycle call. That was wrong, the plugin passed it,
+and the run died — in the document whose entire purpose is to stop exactly this. The signature was
+read; the surrounding six lines of source were not. `selftest` catches it, and `cellcycle` has none
+because it declares `needs_env: false` — see the note at the end.*
 
 That subtraction is the whole method. A naive panel mean is dominated by how abundant its genes
 happen to be, so a ribosomal signature scores high in every cell and means nothing. The control
@@ -49,7 +58,8 @@ parameters worth exposing rather than constants worth hiding.
 | default | plugin | why |
 |---|---|---|
 | `use_raw=None` | **`False`, layer named** | see above — the silent one |
-| `ctrl_size=50`, `n_bins=25` | kept, **recorded** | scanpy's own defaults; changing them changes every score |
+| `n_bins=25`, `random_state=0` | kept, **recorded** | scanpy's own defaults; changing them changes every score |
+| `ctrl_size` | **cannot be passed** | see below — this file said otherwise and was wrong |
 | `random_state=0` | kept | the control set is sampled |
 | human gene symbols | **matched by casing, and the match count reported** | the panel is human; the plugin tries exact, title-case and upper-case, and REFUSES below 10 matched genes per set — a low score from an unmatched panel looks exactly like a resting population |
 
@@ -68,3 +78,15 @@ as a control, and unused because no such case has been argued here.
   score is as consistent with the assay as with a resting population.
 - A cycling population is not a proliferating one. Scoring says which genes are high, not how many
   cells divided.
+
+---
+
+## A host-interpreter plugin still needs a selftest
+
+`cellcycle` declares `needs_env: false`, and the contract only requires a selftest when a plugin
+brings its own environment. So nothing ever ran this plugin before a real run did, and a wrong
+keyword reached a live cohort.
+
+The environment is not the only thing a selftest proves. It proves **the call is well-formed
+against the installed version**, which is exactly what changes underneath a wrapper. That
+requirement should not be conditional on `needs_env`.
