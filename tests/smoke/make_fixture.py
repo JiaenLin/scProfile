@@ -95,7 +95,17 @@ def main():
     A.write_h5ad(out)
     print(f"wrote {out}")
     print(f"  {A.n_obs:,} cells x {A.n_vars:,} genes")
-    print(f"  layers  {sorted(A.layers)}")
+    # `sorted(A.layers)` raised `'<' not supported between 'str' and 'NoneType'` here, which means
+    # iterating this anndata's layers yields a None key. The host already carries the same guard
+    # in two places - `{k for k in A.layers if k is not None}` - with no comment saying why, so it
+    # is a known behaviour that nobody wrote down. Measured and named rather than worked around
+    # silently, because a mapping that yields a key its own __getitem__ cannot take is worth
+    # knowing about before a plugin declares `layers[...]`.
+    lk = list(A.layers)
+    if any(k is None for k in lk):
+        print(f"  NOTE: A.layers yields a None key on anndata {ad.__version__}; "
+              f"raw keys {lk!r}. The host filters it; so does this.")
+    print(f"  layers  {sorted(k for k in lk if k is not None)}")
     print(f"  obs     {list(A.obs.columns)}")
     print(f"  obsm    {sorted(A.obsm)}")
     print(f"  labels  {dict(A.obs['cell_type'].value_counts())}")
