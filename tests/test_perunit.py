@@ -134,6 +134,19 @@ ck("per_unit with no unit key is announced", "per_unit and no unit key" in src.r
    or "declare per_unit" in src)
 ck("the README is written after the report", src.index("report.write_all") < src.index("_write_readme(out"))
 
+print("\nlayer_names knows what list(adata.layers) does not")
+from scprofile import manifest                                                 # noqa: E402
+class _L(dict):
+    pass
+class _Fake:
+    layers = _L({None: "X", "counts": 1, "spliced": 2})
+ck("the None alias for X is not a layer", manifest.layer_names(_Fake()) == ["counts", "spliced"],
+   str(manifest.layer_names(_Fake())))
+ck("an object with no layers gives []", manifest.layer_names(object()) == [])
+ck("nothing iterates layers raw any more",
+   not any("in A.layers if k" in Path(f).read_text() or "in adata.layers if k" in Path(f).read_text()
+           for f in Path("scprofile").glob("*.py")))
+
 print("\nthe smoke fixture is not a shipped plugin")
 from scprofile.kernels import discover                                         # noqa: E402
 import os as _os

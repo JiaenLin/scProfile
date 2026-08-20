@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from . import manifest
 
 #: Reads obs and var - which is where the failure is - without touching X.
 _PROBE = (
@@ -138,7 +139,7 @@ def write_compatible(adata, path, *, log=print):
         obs=adata.obs.copy(),
         var=adata.var.copy(),
         obsm={k: adata.obsm[k] for k in adata.obsm},
-        layers={k: adata.layers[k] for k in adata.layers if k is not None},
+        layers={k: adata.layers[k] for k in manifest.layer_names(adata)},
         uns=uns,
     )
     log(f"  writing a copy this kernel can read -> {p.name}")
@@ -151,7 +152,7 @@ def write_compatible(adata, path, *, log=print):
     with classic_string_encoding():
         B.write_h5ad(p)
     log(f"    {p.stat().st_size / 1e9:.2f} GB, {B.n_obs:,} x {B.n_vars:,}, "
-        f"layers {sorted(k for k in B.layers if k)}")
+        f"layers {manifest.layer_names(B)}")
     return p
 
 

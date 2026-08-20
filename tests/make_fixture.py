@@ -108,7 +108,7 @@ def main(argv):
     A.write_h5ad(out)
     print(f"wrote {out}")
     print(f"  {A.n_obs:,} cells x {A.n_vars:,} genes")
-    print(f"  layers  {sorted(k for k in A.layers if k)}")
+    print(f"  layers  {manifest.layer_names(A)}")
     print(f"  obs     {list(A.obs.columns)}")
     print(f"  obsm    {list(A.obsm)}")
     print(f"  labels  {dict(A.obs['cell_type'].value_counts())}")

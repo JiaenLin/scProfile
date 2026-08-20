@@ -133,7 +133,7 @@ def load(source, log=print):
     if source.kind == "loom":
         import anndata as ad
         A = ad.read_loom(str(source.path), sparse=True, validate=False)
-        have = {k for k in A.layers if k is not None}
+        have = set(manifest.layer_names(A))
         if not {"spliced", "unspliced"} <= have:
             return None
         return (list(map(str, A.obs_names)), list(map(str, A.var_names)),

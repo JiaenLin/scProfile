@@ -61,11 +61,15 @@ one instance divides correctly however many times you divide it.
 
 ## What the fixture is, and is not
 
-`make_fixture.py` generates every value from a seeded generator. Nothing in it is data and no
-number produced from it means anything. Two of its features are load-bearing rather than
-decorative: it carries **annotator sentinels** in the cell-type column, because a sentinel is not
-a cell type and must be handled as one thing and not the other; and it carries **several
-samples**, because a sample column is what turns a `per_unit` plugin into more than one instance.
+`tests/make_fixture.py` — one directory up, shared with the rest of the tests — generates every
+value from a seeded generator. Nothing in it is data and no number produced from it means
+anything.
 
-It also carries an upstream `constraint_on_use` in `uns`, so the host has one to find and carry
-into the report — the path that says what an embedding may and may not support.
+Several of its features are load-bearing rather than decorative. `X` is **lognormalised, not
+counts**, which is what an integrated object actually delivers and the thing that makes a second
+log transform possible. Its unspliced counts **lead** spliced along a latent axis, so a velocity
+fit has real signal to find rather than noise. It carries **annotator sentinels** in the label
+column, because a sentinel is not a cell type and must be handled as one thing and not the other.
+It carries **several samples**, because a sample column is what turns a `per_unit` plugin into
+more than one instance. And it carries an upstream `constraint_on_use` in `uns`, so the host has
+one to find and carry into the report.

@@ -127,6 +127,31 @@ def read_input(path):
 
 # ------------------------------------------------------------------------------ kernel -> host
 
+def layer_names(adata):
+    """The layer names an object actually HAS. Not `list(adata.layers)`, and here is why.
+
+    Measured on anndata 0.13.2 (PBS 672521), and the last line settles it:
+
+        bare AnnData, no layers assigned     list(adata.layers) == [None]
+        adata.layers[None]                   -> the X matrix itself, (n_obs, n_vars)
+        h5py /layers on disk                 exactly the real names. NO None, either from
+                                             anndata's own writer or from ours.
+
+    So `None` is anndata's in-memory alias for X - the same `layer=None` that scanpy functions
+    take to mean "use X" - and iterating the mapping now yields it. It is not persisted and it is
+    not something this project creates.
+
+    That makes it harmless and easy to get wrong twice. `sorted(adata.layers)` raises TypeError
+    the moment a real layer exists, and a plugin that iterates layers to decide what it was given
+    is told about a layer that is X under another name. The guard was already written EIGHT times
+    across five files with no comment in any of them, which is how the ninth copy comes to be the
+    one that forgets.
+
+    Lives in manifest.py because that is the only host module a kernel may import.
+    """
+    return sorted(str(k) for k in getattr(adata, "layers", ()) if k is not None)
+
+
 def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=None, layers=None,
                  tables=None, figures=None, objects=None, absent=None, caveats=None, headline="",
                  contract=CONTRACT_VERSION):

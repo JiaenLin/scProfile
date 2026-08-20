@@ -202,7 +202,7 @@ def _run(a):
 
     try:
         keys = inputs.detect_keys(
-            A.obs.columns, layers=[k for k in A.layers if k is not None], obsm=list(A.obsm),
+            A.obs.columns, layers=manifest.layer_names(A), obsm=list(A.obsm),
             overrides={"label": a.label_key, "sample": a.sample_key, "batch": a.batch_key,
                        "counts_layer": a.counts_layer, "compartment": a.compartment_key})
     except inputs.Refuse as e:
@@ -235,7 +235,7 @@ def _run(a):
     _km = {k2: v2 for k2, v2 in _km.items() if v2}
     have_obs = set(A.obs.columns)
     have_obsm = set(A.obsm)
-    have_layers = {k for k in A.layers if k is not None}
+    have_layers = set(manifest.layer_names(A))
     allowed = set(_split(a.allow or ""))
     ran, payloads, skipped = [], [], []
     #: {kernel: out_dir} for kernels that have already finished, handed to each later kernel so it
@@ -596,7 +596,7 @@ def _plan(a):
 
     try:
         keys = inputs.detect_keys(
-            A.obs.columns, layers=[k for k in A.layers if k is not None], obsm=list(A.obsm),
+            A.obs.columns, layers=manifest.layer_names(A), obsm=list(A.obsm),
             overrides={"label": a.label_key, "sample": a.sample_key, "batch": a.batch_key,
                        "counts_layer": a.counts_layer, "compartment": a.compartment_key})
     except inputs.Refuse as e:
@@ -701,7 +701,7 @@ def _plan(a):
                                       if e in A.obsm), None))
     _km = {k2: v2 for k2, v2 in _km.items() if v2}
     have_obs, have_obsm = set(A.obs.columns), set(A.obsm)
-    have_layers = {k for k in A.layers if k is not None}
+    have_layers = set(manifest.layer_names(A))
     import os
     prov = provenance.harvest(A)
     runnable, planned, todo = [], [], []

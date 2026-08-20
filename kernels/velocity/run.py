@@ -156,7 +156,7 @@ def main(argv):
     # them. But the aligner's output is usually still on disk, and the upstream tools recorded
     # where their own inputs were. So before refusing, LOOK: the host passes the chain it
     # harvested from uns, and this searches it.
-    have = {k for k in A.layers if k is not None}
+    have = set(manifest.layer_names(A))
     sourced_note = ""
     if not {"spliced", "unspliced"} <= have:
         print(f"spliced/unspliced are not on the object (layers: {sorted(have) or 'none'})")
@@ -199,7 +199,7 @@ def main(argv):
                 caveats=["Nothing was fitted."])
             print("REFUSED: no spliced/unspliced counts found")
             return 0
-        have = {k for k in A.layers if k is not None}
+        have = set(manifest.layer_names(A))
         print(f"sourced from beside the object: {sourced_note}")
 
     s_tot = float(A.layers["spliced"].sum())

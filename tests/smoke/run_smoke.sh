@@ -44,7 +44,12 @@ echo; echo "=== 2. every built plugin's selftest ==="
 $PY -m scprofile.cli selftest ${PREFIX:+--prefix "$PREFIX"} || exit 1
 
 echo; echo "=== 3. the fixture ==="
-$PY "$HERE/make_fixture.py" --out "$WORK/fixture.h5ad" || exit 1
+# tests/make_fixture.py, the one that was already here. It is the better fixture and it predates
+# this directory: X is LOGNORMALISED rather than counts, which is what an integrated object
+# actually delivers, and its unspliced counts LEAD spliced along a latent axis, so a velocity fit
+# has real signal to find instead of noise. A second fixture builder was written here before
+# looking for one, and deleted on finding this.
+$PY "$HERE/../make_fixture.py" "$WORK/fixture.h5ad" || exit 1
 
 echo; echo "=== 4. a duplicated --kernel must not race ==="
 # NOT filtered through grep. Filtering this hid a fatal write_h5ad error behind a pattern that

@@ -15,6 +15,7 @@ host that keys on `cell_type` works on exactly one cohort.
 from __future__ import annotations
 
 import re
+from . import manifest
 
 #: Labels an annotator uses to say "no call". Not cell types, and never treated as populations.
 #: These are scAnno's declared sentinels; overridable for an annotation that uses others.
@@ -166,7 +167,7 @@ def describe(adata, keys, organism, assay, constraint_src):
         "keys_why": {r: v[1] for r, v in keys.items()},
         "organism": organism[0] or "", "organism_why": organism[1],
         "assay": assay[0] or "", "assay_why": assay[1],
-        "layers": sorted(str(k) for k in adata.layers if k is not None),
+        "layers": manifest.layer_names(adata),
         "obsm": sorted(str(k) for k in adata.obsm),
         "upstream": sorted(k for k in ("scqc", "scanno_embed", "scintegrate") if k in adata.uns),
         "constraint_source": constraint_src or "ABSENT",
