@@ -12,6 +12,10 @@ entry: run.py
 # object at all, so a separate environment for a two-minute scoring step would be friction with
 # nothing behind it. Kernels that pin awkward dependencies declare needs_env: true instead.
 needs_env: false
+executor:
+  cost: trivial
+  cores: 1
+design_aware: true
 produces:
   - obs[phase]
   - obs[S_score]

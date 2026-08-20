@@ -293,6 +293,44 @@ def test_wrapping_plugins_record_upstream():
         check(f"{name}: links the upstream docs", "http" in s)
 
 
+def test_schedule():
+    """Waves come from the DEPENDENCY GRAPH, not from a wave index, and the budget is not exceeded.
+
+    A wave is not a barrier unless the graph says so: a plugin must wait only on what it declares
+    it needs. Waiting on whatever else happened to be scheduled beside it is the difference between
+    a plan and a queue.
+    """
+    print("\nschedule")
+    import types
+    from scprofile.kernels import schedule
+
+    def fake(name, cost="medium", cores=1, needs=(), unit=None):
+        return types.SimpleNamespace(
+            name=name, needs_kernels=list(needs), per_unit=unit,
+            executor={"cost": cost, "cores": cores, "memory_gb_per_100k": None})
+
+    ks = {"a": fake("a", "trivial", 1),
+          "b": fake("b", "high", 8),
+          "c": fake("c", "medium", 4, needs=["a"]),
+          "d": fake("d", "low", 2, unit="sample")}
+    plan = schedule(["a", "b", "c", "d"], ks, budget_cores=16, units=["s1", "s2", "s3"])
+
+    check("two waves, split by the one real dependency", len(plan) == 2, str(len(plan)))
+    w1 = [i["plugin"] for i in plan[0]]
+    check("c waits for a", "c" not in w1 and "c" in [i["plugin"] for i in plan[1]])
+    check("b, d do NOT wait for a", {"b", "d"} <= set(w1), str(w1))
+    check("longest pole first", w1[0] == "b", str(w1))
+    check("per_unit fans out over units", w1.count("d") == 3, str(w1))
+    for wave in plan:
+        used = sum(i["cores"] for i in wave)
+        check(f"budget respected ({used} <= 16)", used <= 16)
+        check("every instance gets at least one core", all(i["cores"] >= 1 for i in wave))
+
+    solo = schedule(["b"], {"b": fake("b", "high", 64)}, budget_cores=8)
+    check("a plugin wanting more than the budget runs alone at the budget",
+          solo[0][0]["cores"] == 8, str(solo))
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -306,6 +344,7 @@ def main():
     test_lock_is_read_not_delegated()
     test_unmet_names_the_fix()
     test_ordering()
+    test_schedule()
     test_wrapping_plugins_record_upstream()
     print()
     if FAILED:

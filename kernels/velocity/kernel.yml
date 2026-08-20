@@ -40,6 +40,11 @@ can_source_layers: true
 #   min_confidence     0.5     below this MEDIAN, the run reports `partial` and says the field is
 #                              unresolved rather than presenting it as a direction
 #   n_jobs             honours NCPUS / PBS_NCPUS / SLURM_CPUS_PER_TASK before the machine's count
+executor:
+  cost: high
+  cores: 8
+  memory_gb_per_100k: 12
+design_aware: true
 produces:
   - obs[velocity_confidence]
   - obs[velocity_length]

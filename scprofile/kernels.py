@@ -131,6 +131,44 @@ class Kernel:
         return self._list("needs_layers")
 
     @property
+    def executor(self):
+        """Scheduling hints: cost, cores, memory. Advisory — the executor plugin decides.
+
+        A plugin that declares nothing is read PESSIMISTICALLY: medium cost, one core. An
+        undeclared plugin is then under-served rather than allowed to swamp the node, which is the
+        safe direction for a default nobody thought about.
+        """
+        e = self.spec.get("executor")
+        e = dict(e) if isinstance(e, dict) else {}
+        return {"cost": e.get("cost", "medium"),
+                "cores": int(e.get("cores", 1) or 1),
+                "memory_gb_per_100k": e.get("memory_gb_per_100k")}
+
+    #: cost -> sort key. Longest pole first: a wave's wall-clock is its slowest member, and
+    #: starting that member last adds its whole duration to the total.
+    COST_ORDER = {"high": 0, "medium": 1, "low": 2, "trivial": 3}
+
+    @property
+    def per_unit(self):
+        """The design unit this plugin is run once per, or None for once over the cohort.
+
+        `per_unit: sample` is a CORRECTNESS declaration before it is a speed one. A communication
+        or network inference pooled over a cohort describes the average of the conditions, which
+        may describe neither — and the between-condition question needs one result per unit to
+        compare. That it is also embarrassingly parallel is a consequence, not the reason.
+        """
+        return self.spec.get("per_unit")
+
+    @property
+    def design_aware(self):
+        """True if it reports per arm without testing across the design.
+
+        Distinct from `needs_design`, which REFUSES without one. A design-aware plugin runs fine on
+        a cohort with no design and simply reports less.
+        """
+        return bool(self.spec.get("design_aware"))
+
+    @property
     def can_source_layers(self):
         """This kernel can FETCH a missing layer from files beside the object.
 
@@ -277,6 +315,60 @@ def order(names, available):
         out.append(n)
         done.add(n)
     return out
+
+
+def schedule(names, available, *, budget_cores=1, units=None):
+    """The run plan: waves of plugin instances, cost-ordered, with a core share for each.
+
+    A WAVE IS NOT A BARRIER UNLESS THE GRAPH SAYS SO. Waves are computed from `needs_kernels`, so
+    a plugin waits only on what it actually depends on — not on whatever else happened to be
+    scheduled beside it. `pseudotime` waits on `cellcycle` and must not wait on `scenic`.
+
+    Returns [[instance, ...], ...] where an instance is
+    {"plugin": name, "unit": <value or None>, "cores": int}.
+    """
+    remaining, done, waves = list(names), set(), []
+    guard = 0
+    while remaining:
+        guard += 1
+        if guard > len(names) + 2:
+            raise ValueError(f"cannot schedule {remaining}: a needs_kernels cycle")
+        ready = [n for n in remaining
+                 if all(d in done or d not in names
+                        for d in (available[n].needs_kernels if n in available else []))]
+        if not ready:
+            raise ValueError(f"cannot schedule {remaining}: a needs_kernels cycle")
+
+        # longest pole first, then by declared cores, then by name so a plan is reproducible
+        ready.sort(key=lambda n: (Kernel.COST_ORDER.get(available[n].executor["cost"], 1),
+                                  -available[n].executor["cores"], n))
+        wave = []
+        for n in ready:
+            k = available[n]
+            us = list(units or []) if k.per_unit else [None]
+            for u in (us or [None]):
+                wave.append({"plugin": n, "unit": u, "cores": k.executor["cores"]})
+        waves.append(_budget(wave, budget_cores))
+        done.update(ready)
+        remaining = [n for n in remaining if n not in done]
+    return waves
+
+
+def _budget(wave, budget):
+    """Divide the core budget across a wave's instances. No instance gets more than the budget.
+
+    A plugin reading `os.cpu_count()` inside itself is a bug: it reports the NODE, not its share,
+    and four concurrent plugins each doing it start four times the node's cores in threads. The
+    share is passed in `in.json` and the plugin is required to use it.
+    """
+    if not wave:
+        return wave
+    want = sum(i["cores"] for i in wave)
+    if want <= budget:
+        return wave
+    for i in wave:
+        i["cores"] = max(1, min(budget, int(i["cores"] * budget / want)))
+    return wave
 
 
 def unmet(kernel, *, obs=(), obsm=(), layers=(), ran=(), has_design=False):

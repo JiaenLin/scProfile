@@ -60,7 +60,7 @@ DEFAULT_SENTINELS = ("EXCLUDED", "UNRESOLVED")
 
 def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=None,
                 references=None, params=None, upstream=None, sentinels=DEFAULT_SENTINELS,
-                provenance=None, contract=CONTRACT_VERSION):
+                provenance=None, resources=None, unit=None, contract=CONTRACT_VERSION):
     """Write `in.json`. Every path is made ABSOLUTE first.
 
     A kernel runs with its own working directory - a different interpreter, sometimes a different
@@ -90,6 +90,11 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
         # that is not IN the object still needs to be told where to look. Plain JSON, so it
         # crosses every version boundary the object itself cannot.
         "provenance": dict(provenance or {}),
+        # THE CORE SHARE, not the machine's. A plugin calling os.cpu_count() reports the node
+        # rather than its share, so four concurrent plugins each start the node's worth of
+        # threads and the wave runs slower than serial. Plugins are required to use this.
+        "resources": dict(resources or {}),
+        "unit": unit,
     }
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -115,6 +120,8 @@ def read_input(path):
     d.setdefault("sentinels", list(DEFAULT_SENTINELS))
     d.setdefault("params", {})
     d.setdefault("provenance", {})
+    d.setdefault("resources", {})
+    d.setdefault("unit", None)
     return d
 
 
