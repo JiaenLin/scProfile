@@ -276,7 +276,6 @@ def test_wrapping_plugins_record_upstream():
     would have been found by reading the plugin.
     """
     print("\nwrapping plugins record upstream")
-    root = pathlib.Path(__file__).resolve().parents[1]
     for name, k in sorted(discover().items()):
         w = k.spec.get("wraps") or {}
         if not w:
