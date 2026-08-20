@@ -265,7 +265,15 @@ class Kernel:
         flat = _mini_yaml(f.read_text(encoding="utf-8"))
         out, cur = {}, None
         for k, v in flat.items():
-            if v is None:
+            # Two shapes, because `_mini_yaml` gained one level of nesting after this was written
+            # and silently stopped producing the older one. The regression was invisible: a
+            # references.yml that parsed to NOTHING gave a plugin zero declared references, and
+            # `resolve()` then found nothing missing and passed. A plugin would have run with no
+            # reference data at all and reported success.
+            if isinstance(v, dict):
+                out[k] = dict(v)
+                cur = None
+            elif v is None:
                 cur = k
                 out[cur] = {}
             elif cur:

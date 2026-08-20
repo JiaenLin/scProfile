@@ -402,7 +402,7 @@ def test_validate_catches_what_got_through():
     from scprofile.kernels import Kernel
 
     with tempfile.TemporaryDirectory() as td:
-        d = pathlib.Path(td) / "bad"
+        d = Path(td) / "bad"
         d.mkdir()
         (d / "kernel.yml").write_text(
             "name: bad\nsummary: a plugin with every defect\nstatus: built\n"
@@ -436,7 +436,7 @@ def test_validate_catches_what_got_through():
 
     # references
     with tempfile.TemporaryDirectory() as td:
-        d = pathlib.Path(td) / "refs"
+        d = Path(td) / "refs"
         d.mkdir()
         (d / "kernel.yml").write_text("name: refs\nsummary: s\ncannot_show:\n  - x\n")
         (d / "references.yml").write_text(
@@ -445,6 +445,15 @@ def test_validate_catches_what_got_through():
         got = {x.check for x in f}
         check("a bad checksum is caught", any("not a 64-char hex" in c for c in got), str(got))
         check("a missing size is caught", any("declares no size" in c for c in got), str(got))
+
+        # The regression that made this necessary: _mini_yaml gained nested mappings and
+        # references() silently stopped parsing anything. A references.yml that parses to NOTHING
+        # gives a plugin zero declared references — and resolve() then finds nothing missing and
+        # PASSES. The plugin runs with no reference data and reports success.
+        refs = Kernel(d).references()
+        check("references.yml actually parses", set(refs) == {"db"}, str(refs))
+        check("and its fields survive", refs.get("db", {}).get("url", "").startswith("https://"),
+              str(refs))
 
 
 def main():
