@@ -171,3 +171,54 @@ def describe(adata, keys, organism, assay, constraint_src):
         "upstream": sorted(k for k in ("scqc", "scanno_embed", "scintegrate") if k in adata.uns),
         "constraint_source": constraint_src or "ABSENT",
     }
+
+
+def read_design(path, samples=None, sample_col=None):
+    """The design table: a CSV keyed on the sample column. Returns (table, key, factors).
+
+    The factors a study is ABOUT are usually not in an annotated object - it carries the
+    annotation, not the animal metadata - so they arrive as a table keyed on the sample.
+
+    A sample present in the object with no row is REFUSED BY NAME. Nothing is derived by
+    pattern-matching a sample name: that bakes one project's naming into a tool every other
+    project then has to work around, and it fails silently on the first project that names things
+    differently.
+
+    Standard library only. A design table a reader cannot open without this package installed is
+    a design table nobody can check.
+    """
+    import csv
+    import os
+
+    if not os.path.exists(path):
+        raise Refuse(f"no design table at {path}")
+    with open(path, newline="", encoding="utf-8") as fh:
+        sample = fh.read(4096)
+        fh.seek(0)
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",\t;")
+        except csv.Error:
+            dialect = csv.excel
+        rows = list(csv.DictReader(fh, dialect=dialect))
+    if not rows:
+        raise Refuse(f"{path} has no rows")
+
+    cols = list(rows[0])
+    key = sample_col or next(
+        (c for c in cols if c.lower() in ("sample", "sample_id", "library", "batch", "donor")),
+        None)
+    if key is None:
+        raise Refuse(f"{path}: no sample column found among {cols}. Pass --design-sample-col.")
+
+    table = {str(r[key]): {c: r[c] for c in cols if c != key} for r in rows}
+    factors = [c for c in cols if c != key]
+
+    if samples:
+        missing = [s for s in samples if s not in table]
+        if missing:
+            raise Refuse(
+                f"{len(missing)} sample(s) in the object have no row in {path}: "
+                f"{missing[:8]}{' ...' if len(missing) > 8 else ''}. "
+                f"The table has {len(table)}: {sorted(table)[:8]}. "
+                f"Nothing is inferred from a sample name.")
+    return table, key, factors

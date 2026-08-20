@@ -415,7 +415,9 @@ def _plan(a):
         print("      a plugin whose claim this forbids must refuse and name the alternative")
     if a.design:
         try:
-            tab, key, factors = inputs.read_design(a.design, None)
+            samples_in_obj = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
+                              if keys["sample"][0] else [])
+            tab, key, factors = inputs.read_design(a.design, samples_in_obj)
             print(f"  design table                {a.design} - key {key!r}, "
                   f"factors {', '.join(factors)}")
             if keys["sample"][0]:
@@ -448,14 +450,16 @@ def _plan(a):
         k = ks[name]
         probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers,
                       ran=set(want), has_design=bool(a.design))
-        state, why = runner.env_state(k, a.prefix)
+        state, why, fix = runner.env_state(k, a.prefix)
         env_ok = state in ("installed", "override", "host")
         if probs:
             print(f"  NOT RUNNABLE  {name}")
             for pr in probs:
                 print(f"      {pr}")
         elif not env_ok:
-            print(f"  NO ENVIRONMENT {name}   {why[1] if isinstance(why, tuple) else why}")
+            print(f"  NO ENVIRONMENT {name}   {why}")
+            if fix:
+                print(f"      fix: {fix}")
         else:
             runnable.append(name)
             e = k.executor
