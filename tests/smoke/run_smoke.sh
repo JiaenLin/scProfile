@@ -61,8 +61,20 @@ echo "  dup exit $?"
     || { echo "  dup DID NOT write report.json"; exit 1; }
 
 echo; echo "=== 5. the run ==="
+# velocity ONLY IF AN ENVIRONMENT WAS NAMED. It needs its own, so a site without one would see a
+# refusal rather than a test - but skipping it silently would leave the only plugin that brings an
+# environment, writes a side-car object and needs a compatibility copy of the input outside the
+# only test that opens what a run wrote. Which of the two happened is printed, not implied.
+WANT=cellcycle,perunit
+if [ -n "$PREFIX" ] && [ -d "$PREFIX" ]; then
+    WANT=velocity,$WANT
+    echo "  including velocity: an environment prefix was given ($PREFIX)"
+else
+    echo "  NOT including velocity: no environment prefix given, so its own interpreter, its"
+    echo "  side-car object and the compatibility-copy path are NOT exercised by this run."
+fi
 $PY -m scprofile.cli run --h5ad "$WORK/fixture.h5ad" --out "$WORK/results" \
-    --kernel cellcycle,perunit ${PREFIX:+--prefix "$PREFIX"} \
+    --kernel "$WANT" ${PREFIX:+--prefix "$PREFIX"} \
     --cores 4 --timeout 1800
 echo "  run exit $?"
 
@@ -70,7 +82,7 @@ echo; echo "=== 6. what landed ==="
 ( cd "$WORK/results" && find . -type f | sort | sed 's/^/  /' )
 
 echo; echo "=== 7. the checks ==="
-$PY "$HERE/check.py" --out "$WORK/results" --units 4 --expect cellcycle,perunit --log "$LOG"
+$PY "$HERE/check.py" --out "$WORK/results" --units 4 --expect "$WANT" --log "$LOG"
 rc=$?
 echo; echo "finished $(date -u +%FT%TZ)"
 exit $rc
