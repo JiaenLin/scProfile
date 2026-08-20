@@ -318,6 +318,23 @@ def _run(a):
     return 0
 
 
+def _scaffold(a):
+    """Write a declared plugin's build skeleton. The judgement is still yours."""
+    from . import scaffold as SC
+    from .kernels import discover
+    ks = discover()
+    names = _split(a.name or "")
+    bad = [n for n in names if n not in ks]
+    if bad:
+        print(f"scprofile: unknown plugin(s) {bad}. Declare a kernel.yml first — the manifest "
+              f"comes before the implementation so a plugin can be judged against a real dataset "
+              f"with `scprofile plan` before anyone writes it.", file=sys.stderr)
+        return REFUSE
+    for n in names:
+        SC.scaffold(ks[n], force=a.force)
+    return 0
+
+
 def _plan(a):
     """What WOULD run, and what stops it. Reads the object; runs nothing.
 
@@ -625,6 +642,10 @@ def main(argv=None):
     f.add_argument("kernel")
     f.add_argument("--to", required=True)
     f.add_argument("--organism", default=None)
+    f.add_argument("--dry-run", action="store_true",
+                   help="report what would be downloaded, how much, and whether it fits. "
+                        "Reference databases are gigabytes; filling a filesystem halfway through "
+                        "is a worse failure than refusing at the start")
     f.set_defaults(fn=_fetch)
 
     r = sub.add_parser("run", help="run kernels, merge results, write the report")
@@ -673,6 +694,11 @@ def main(argv=None):
               "organism", "assay"):
         pl.add_argument(f"--{f}", default=None)
     pl.set_defaults(fn=_plan)
+
+    sc_ = sub.add_parser("scaffold", help="write a declared plugin's build skeleton")
+    sc_.add_argument("name", help="plugin name(s), comma-separated")
+    sc_.add_argument("--force", action="store_true", help="overwrite existing skeleton files")
+    sc_.set_defaults(fn=_scaffold)
 
     p = sub.add_parser("report", help="rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)

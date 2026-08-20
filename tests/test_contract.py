@@ -291,6 +291,12 @@ def test_wrapping_plugins_record_upstream():
         check(f"{name}: records what it does NOT use", "not used" in s.lower()
               or "under-use" in s.lower())
         check(f"{name}: links the upstream docs", "http" in s)
+        # A scaffolded template contains the required section headings and nothing in them, so
+        # every check above passes on a file that records no reading at all. A plugin that has
+        # graduated to `wraps:` is claiming the reading happened.
+        todos = s.count("TODO")
+        check(f"{name}: UPSTREAM.md is filled in, not the template", todos == 0,
+              f"{todos} TODO marker(s) remain")
 
 
 def test_schedule():
@@ -363,6 +369,26 @@ def test_key_map_is_resolved():
           " | ".join(got))
 
 
+def test_scaffold_cannot_produce_a_running_noop():
+    """A scaffold must refuse to run until its method call is written.
+
+    A scaffold that produced a runnable no-op would produce EMPTY RESULTS THAT LOOK LIKE REAL
+    ONES — a plugin reporting nothing found, merged into the object, rendered in the report, with
+    nothing anywhere saying it was never implemented. That is the failure this whole tool is
+    arranged against, arriving through the door marked convenience.
+    """
+    print("\nscaffold refuses")
+    from scprofile import scaffold as SC
+    check("run.py raises before writing output",
+          "raise SystemExit(" in SC.RUN_PY
+          and SC.RUN_PY.index("raise SystemExit(") < SC.RUN_PY.index("manifest.write_output"))
+    check("selftest fails until written", "return 1" in SC.SELFTEST)
+    check("lock has no versions to inherit", "==X.Y.Z" in SC.LOCK or "TODO" in SC.LOCK)
+    check("UPSTREAM template is not presented as complete", SC.UPSTREAM.count("TODO") >= 4)
+    check("references template warns against remembered URLs",
+          "from memory" in SC.REFERENCES)
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -378,6 +404,7 @@ def main():
     test_ordering()
     test_schedule()
     test_key_map_is_resolved()
+    test_scaffold_cannot_produce_a_running_noop()
     test_wrapping_plugins_record_upstream()
     print()
     if FAILED:
