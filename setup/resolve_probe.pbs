@@ -1,0 +1,111 @@
+#!/bin/bash
+#PBS -N scprofile_resolve
+#PBS -q workq
+#PBS -l select=1:ncpus=2:mem=8gb
+#PBS -l walltime=00:30:00
+#PBS -j oe
+#
+# Does a plugin's dependency need its own environment?
+#
+#   qsub -v PY=<host interpreter>,PKGS="pertpy pydeseq2",OUT=<dir> -o <dir>/resolve.log \
+#        setup/resolve_probe.pbs
+#
+# DRY RUN ONLY. Resolves and reports; installs nothing.
+#
+# The question this answers, before any plugin code is written:
+#
+#   0 packages change  -> the plugin can run in the HOST interpreter. No lock, no separate
+#                         environment, and no compatibility copy of the object, because host
+#                         and plugin share one anndata.
+#   n packages change  -> it needs its own pinned environment, and the lock is captured from
+#                         a resolve that WORKS rather than composed from declared bounds.
+#
+# It also prints what each package DECLARES, because a lower bound is not an upper bound: a tool
+# declaring `pandas>=1.1.1` is honest about what it was written against and silent about what it
+# still works with, and resolving that today can pull a major two releases past anything it was
+# tested on. The failure is not an exception - it is a call to a removed function returning
+# something plausible.
+
+set -uo pipefail
+: "${PY:?pass -v PY=<interpreter>}"
+: "${PKGS:?pass -v PKGS=\"pkg1 pkg2\"}"
+: "${OUT:?pass -v OUT=<dir>}"
+
+mkdir -p "${OUT}"
+exec > >(tee -a "${OUT}/resolve.out") 2>&1
+echo "host    $(hostname)"
+echo "python  ${PY}"
+"${PY}" -c "import sys; print('        ', sys.version.split()[0])"
+echo
+
+echo "=== current stack ==="
+"${PY}" -m pip list 2>/dev/null | grep -iE '^(numpy|scipy|pandas|anndata|scanpy|scikit-learn|numba|statsmodels|jax|torch) '
+echo
+
+for PKG in ${PKGS}; do
+  echo "=============================================================="
+  echo "  ${PKG}"
+  echo "=============================================================="
+  rep="${OUT}/report_${PKG}.json"
+  "${PY}" -m pip install --dry-run --quiet --report "${rep}" "${PKG}" 2>&1 | tail -12
+  if [ -s "${rep}" ]; then
+    "${PY}" - "${rep}" "${PKG}" <<'PYEOF'
+import json, os, sys
+import importlib.metadata as md
+rep, pkg = sys.argv[1], sys.argv[2]
+r = json.load(open(rep))
+rows, sdist = [], []
+for it in r.get("install", []):
+    m = it["metadata"]; n, v = m["name"], m["version"]
+    url = (it.get("download_info") or {}).get("url", "")
+    if url and not os.path.basename(url).endswith(".whl"):
+        sdist.append(n)
+    try:
+        cur = md.version(n)
+    except Exception:
+        cur = None
+    rows.append((n, cur, v))
+chg = [x for x in rows if x[1] is not None and x[1] != x[2]]
+new = [x for x in rows if x[1] is None]
+print(f"\n  {len(rows)} packages resolved: {len(new)} new, {len(chg)} CHANGED, "
+      f"{len(sdist)} need building")
+for n, c, v in sorted(chg):
+    print(f"    CHANGE  {n:<22} {c}  ->  {v}")
+if sdist:
+    print("    sdist:", ", ".join(sorted(sdist)))
+print()
+if not chg:
+    print(f"    ADDITIVE — {pkg} can run in the host interpreter.")
+    print("    needs_env: false. No lock, no separate environment, and no compatibility")
+    print("    copy of the object, because host and plugin share one anndata.")
+else:
+    print(f"    CONFLICTS — {pkg} needs its OWN environment, which is what plugins are for.")
+    print("    Capture the lock from a resolve that works; do not compose it from bounds.")
+print("\n  versions it wants:")
+for n, c, v in sorted(rows):
+    if n.lower() in (pkg.lower(), "numpy", "pandas", "scipy", "anndata", "scanpy",
+                     "scikit-learn", "statsmodels", "numba", "jax", "torch", "patsy",
+                     "arviz", "toytree", "ete4", "formulaic"):
+        print(f"    {n:<18} {v}")
+PYEOF
+    echo
+    echo "  --- what ${PKG} DECLARES (a lower bound is not an upper bound) ---"
+    "${PY}" - "${PKG}" <<'PYEOF'
+import json, sys, urllib.request
+pkg = sys.argv[1]
+try:
+    d = json.load(urllib.request.urlopen(f"https://pypi.org/pypi/{pkg}/json", timeout=20))
+except Exception as e:
+    print("    (could not reach PyPI:", e, ")"); raise SystemExit(0)
+for req in (d["info"].get("requires_dist") or []):
+    if "extra ==" in req:
+        continue
+    print("   ", req)
+PYEOF
+  else
+    echo "  RESOLUTION FAILED — that is itself the answer: ${PKG} cannot be installed"
+    echo "  alongside this stack and needs its own environment."
+  fi
+  echo
+done
+echo "finished $(date -u +%Y-%m-%dT%H:%M:%SZ)"
