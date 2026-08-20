@@ -179,8 +179,17 @@ def _schedule_block(payload):
     for i, w in enumerate(waves, 1):
         for inst in w:
             n = inst.get("plugin")
-            t = secs.get(n)
-            took = f"{sum(t):.0f}s over {len(t)} instance(s)" if t else "did not run"
+            # THIS INSTANCE'S OWN TIME. Reading `seconds[plugin]` put the plugin's whole runtime
+            # on every one of its unit rows - ten rows of "1000s over 10 instance(s)" for 1,000s
+            # of work - and gave that same time to rows for units that never ran at all.
+            if inst.get("seconds") is not None:
+                took = f"{inst['seconds']:.0f}s"
+                if inst.get("outcome") == "failed":
+                    took += " (failed)"
+            elif not inst.get("unit") and secs.get(n):
+                took = f"{sum(secs[n]):.0f}s"
+            else:
+                took = "did not run"
             rows.append(f"<tr><td>{i}</td><td><code>{_e(n)}</code></td>"
                         f"<td>{_e(inst.get('unit') or '—')}</td>"
                         f"<td>{_e(inst.get('cores'))}</td><td>{_e(took)}</td></tr>")

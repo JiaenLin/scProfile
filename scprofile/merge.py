@@ -71,11 +71,23 @@ def _require_unique_barcodes(adata):
 
 
 def merge_one(adata, out_dir, payload, *, log=print):
-    """Merge one kernel's declared cell-level outputs. Returns what was merged and what was not."""
+    """Merge one kernel's declared cell-level outputs. Returns what was merged and what was not.
+
+    ALL-OR-NOTHING. Everything is read and checked BEFORE anything is assigned, because this
+    function can refuse and its caller treats a refusal as "the plugin did not run".
+
+    It used to assign the obs columns in its first loop and raise from its second. `cli._run`
+    caught the MergeError, printed MERGE REFUSED, put the plugin in `skipped` and continued - so
+    the delivered object carried that plugin's obs column, mostly NaN, while `report.json`,
+    `uns['scprofile']`, the report page and the README all said the plugin had not run. A column
+    in an object that no document admits to is worse than a missing one: nothing about it looks
+    wrong, and there is nothing to check it against.
+    """
     out = Path(out_dir)
     _require_unique_barcodes(adata)
     merged = {"obs": [], "obsm": [], "layers": [], "tables": []}
     bc = adata.obs_names.astype(str)
+    pend_obs, pend_arr = [], []
 
     for col, rel in (payload.get("obs") or {}).items():
         s = _read_obs_column(out / rel)
@@ -88,8 +100,7 @@ def merge_one(adata, out_dir, payload, *, log=print):
                 f"  kernel: {list(s.index[:3])}\n  object: {list(bc[:3])}")
         if len(shared) < len(bc):
             log(f"    obs[{col}]: {len(shared):,} of {len(bc):,} cells covered; the rest are NaN")
-        adata.obs[col] = s.reindex(bc).values           # REINDEX: by barcode, never by position
-        merged["obs"].append(col)
+        pend_obs.append((col, s))
 
     for key, rel in (payload.get("obsm") or {}).items():
         arr = _read_array(out / rel)
@@ -98,9 +109,12 @@ def merge_one(adata, out_dir, payload, *, log=print):
                 f"{payload['kernel']} obsm[{key!r}] has {arr.shape[0]:,} rows for "
                 f"{adata.n_obs:,} cells. An array carries no barcodes, so it can only be merged "
                 f"when it covers every cell in order - and this one does not. The kernel must "
-                f"return every cell, or return a CSV keyed on barcode instead.")
-        adata.obsm[key] = arr
-        merged["obsm"].append(key)
+                f"return every cell, or return a CSV keyed on barcode instead."
+                + (f"\n  This plugin ran per unit ({payload['unit']!r}), so its array covers one "
+                   f"unit's cells by construction. Return it keyed on barcode, or declare it "
+                   f"under `objects` as a side-car."
+                   if payload.get("unit") else ""))
+        pend_arr.append(("obsm", key, arr))
 
     for key, rel in (payload.get("layers") or {}).items():
         arr = _read_array(out / rel)
@@ -108,8 +122,15 @@ def merge_one(adata, out_dir, payload, *, log=print):
             raise MergeError(
                 f"{payload['kernel']} layers[{key!r}] is {arr.shape} for an object of "
                 f"{adata.shape}")
-        adata.layers[key] = arr
-        merged["layers"].append(key)
+        pend_arr.append(("layers", key, arr))
+
+    # Nothing above touched `adata`. Past this line nothing can raise.
+    for col, s in pend_obs:
+        adata.obs[col] = s.reindex(bc).values           # REINDEX: by barcode, never by position
+        merged["obs"].append(col)
+    for slot, key, arr in pend_arr:
+        getattr(adata, slot)[key] = arr
+        merged[slot].append(key)
 
     return merged
 
@@ -126,7 +147,12 @@ def merge_many(adata, results, *, log=print):
     taking one of them would hide that.
     """
     import pandas as pd
-    if len(results) == 1:
+    # PER-UNIT IS A PROPERTY OF THE RESULT, NOT A COUNT OF THEM. This tested `len(results) == 1`,
+    # so a per-unit plugin down to its last surviving unit was routed into merge_one - whose obsm
+    # check requires an array covering EVERY cell, which a single unit's never does. Nine of ten
+    # units failing therefore turned the tenth's valid result into a refusal of the whole plugin,
+    # and the more units failed the more likely it became.
+    if len(results) == 1 and not results[0][1].get("unit"):
         return merge_one(adata, results[0][0], results[0][1], log=log)
 
     _require_unique_barcodes(adata)
@@ -203,6 +229,20 @@ def delivered_name(payload, rel):
     return stem
 
 
+def _check_collisions(payload, rels, slot):
+    """Refuse before delivering anything if two declared paths resolve to one delivered name."""
+    seen = {}
+    for rel in rels:
+        name = delivered_name(payload, rel)
+        if name in seen and seen[name] != rel:
+            raise MergeError(
+                f"{payload['kernel']}: {slot} {seen[name]!r} and {rel!r} both deliver as "
+                f"{name!r}. Only the basename is kept beside the object, so one would silently "
+                f"replace the other. Give them different FILENAMES rather than different "
+                f"directories.")
+        seen[name] = rel
+
+
 def copy_tables(out_dir, payload, dest, *, log=print):
     """Edge-level and gene-level results, copied beside the object under a kernel-prefixed name.
 
@@ -212,11 +252,15 @@ def copy_tables(out_dir, payload, dest, *, log=print):
     """
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
+    # COLLISIONS FIRST, BEFORE ANY COPY. `delivered_name` takes the BASENAME, so one plugin
+    # declaring `a/edges.csv` and `b/edges.csv` - a real shape, the same table computed two ways -
+    # resolves both to one file and the second copy silently replaces the first. Checked up front
+    # rather than mid-loop, so a refusal leaves nothing half-delivered.
+    _check_collisions(payload, payload.get("tables") or [], "tables")
     made = []
     for rel in (payload.get("tables") or []):
-        src = Path(out_dir) / rel
         tgt = dest / delivered_name(payload, rel)
-        shutil.copy2(src, tgt)
+        shutil.copy2(Path(out_dir) / rel, tgt)
         made.append(tgt.name)
     return made
 
@@ -231,6 +275,7 @@ def link_objects(out_dir, payload, dest, *, log=print):
     """
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
+    _check_collisions(payload, list((payload.get("objects") or {}).values()), "objects")
     made = []
     for key, rel in (payload.get("objects") or {}).items():
         src = Path(out_dir) / rel
@@ -246,7 +291,7 @@ def link_objects(out_dir, payload, dest, *, log=print):
     return made
 
 
-def fold_payloads(payloads):
+def fold_payloads(payloads, failed=None):
     """One entry per PLUGIN from a list with one entry per INSTANCE. Keyed by name, keeps units.
 
     The wave rewrite made a per-unit plugin produce N payloads, all carrying the same
@@ -296,19 +341,33 @@ def fold_payloads(payloads):
                           "absent": list(pl.get("absent") or []),
                           "dir": base, "n_figures": len(pl.get("figures") or [])})
 
+        # UNITS THAT FAILED HAVE NO PAYLOAD, so folding only what came back described a plugin
+        # that ran on seven samples of ten as plainly "ok" - in report.json, in the report page and
+        # in uns['scprofile'], while the merged column held NaN for the other three. A status
+        # computed from the survivors is a status computed from the good news.
+        gone = sorted({str(u) for u in (failed or {}).get(name, []) if u is not None})
         sts = {u["status"] for u in units}
         status = (group[0].get("status", "") if len(sts) == 1
                   else "partial" if sts & {"ok", "partial"} else sorted(sts)[0])
+        if gone or (failed or {}).get(name):
+            status = "partial"
         head = (group[0].get("headline", "") if not multi else
                 f"{len(units)} unit(s): " + " · ".join(
                     f"{u['unit']} {u['headline']}" for u in units[:3])
                 + (" …" if len(units) > 3 else ""))
+        if gone:
+            head += f" — {len(gone)} unit(s) FAILED and are not in this: {', '.join(gone)}"
+            cav.insert(0, f"Ran on {len(units)} of {len(units) + len(gone)} unit(s). "
+                          f"{', '.join(gone)} failed, and every cell of those units is NaN in "
+                          f"this plugin's merged column.")
+            absent.insert(0, {"what": f"{len(gone)} unit(s)",
+                              "why": f"{', '.join(gone)} failed; their cells carry no result."})
         out[name] = {"kernel": name, "version": group[0].get("version", ""),
                      "status": status, "headline": head,
                      "obs": slots["obs"], "obsm": slots["obsm"],
                      "layers": slots["layers"], "objects": slots["objects"],
                      "tables": tabs, "figures": figs, "caveats": cav, "absent": absent,
-                     "units": units, "per_unit": multi}
+                     "units": units, "failed_units": gone, "per_unit": multi}
     return out
 
 
@@ -384,6 +443,7 @@ def provenance(folded, describe, kernel_specs, merged=None):
                 # the h5ad write for every run in the tree.
                 "units": [str(u["unit"]) for u in (p.get("units") or [])
                           if u.get("unit") is not None],
+                "failed_units": list(p.get("failed_units") or []),
                 "produced_obs": sorted((merged or {}).get(name, {}).get("obs", [])),
                 "produced_obsm": sorted((merged or {}).get(name, {}).get("obsm", [])),
                 "produced_layers": sorted((merged or {}).get(name, {}).get("layers", [])),

@@ -111,9 +111,13 @@ Concurrency is then `min(budget / smallest_declared_cores, ready_plugins)`, floo
 declaring more cores than the whole budget runs alone, at the budget, rather than being refused.
 
 **The budget is divided over the instances that actually launch, at the start of each wave — not
-over the ones that were requested.** A wave is first filtered: declared-but-unbuilt plugins go, so
-do plugins whose prerequisites are unmet, so do the ones a guard refuses. Dividing before that
-filter gave shares to instances that were known, before the loop started, never to run. Measured:
+over the ones that were requested.** A wave is filtered by five things first, in order: the plugin
+is declared but not built; its prerequisites are unmet; a guard refuses it; a declared reference is
+missing; its interpreter cannot read the object even re-encoded. All five run before the division,
+which is why `in.json` — the file carrying the core share — is written after it and not with the
+rest of the preparation. *An earlier version of this paragraph claimed all five and the code did
+two; a review found the gap. The share is what a plugin is contractually required to use instead
+of `os.cpu_count()`, so a wrong one is a real misallocation, not a reporting detail.* Measured:
 `run --all --cores 8` on a ten-sample object built a wave of 35 instances declaring 301 cores,
 scaled every one of them to 1, and ran the single built plugin single-threaded on an eight-core
 allocation — while `plan --cores 8`, which filters first, printed `velocity(7c)` for the same

@@ -27,9 +27,10 @@ from pathlib import Path
 
 #: Bumped when the contract changes shape. A kernel built against an older major refuses rather
 #: than being read with the wrong expectations.
-#: 1.1 added `upstream`, `sentinels` and the `objects` slot. Only the MAJOR is compared, so a
+#: 1.2 added `upstream_units`. 1.1 added `upstream`, `sentinels` and the `objects` slot. Only the
+#: MAJOR is compared, so a
 #: kernel written against 1.0 still runs - it simply does not read the new fields.
-CONTRACT_VERSION = "1.1"
+CONTRACT_VERSION = "1.2"
 
 #: What a kernel may declare it produced. Anything else in `out.json` is ignored with a warning -
 #: silently accepting unknown keys is how two versions of a contract drift into three.
@@ -59,7 +60,8 @@ DEFAULT_SENTINELS = ("EXCLUDED", "UNRESOLVED")
 
 
 def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=None,
-                references=None, params=None, upstream=None, sentinels=DEFAULT_SENTINELS,
+                references=None, params=None, upstream=None, upstream_units=None,
+                sentinels=DEFAULT_SENTINELS,
                 provenance=None, resources=None, unit=None, contract=CONTRACT_VERSION):
     """Write `in.json`. Every path is made ABSOLUTE first.
 
@@ -72,6 +74,19 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
     mechanism behind `needs_kernels`. The alternative - merge after every kernel and hand the next
     one a rewritten object - would make each kernel's input depend on the order of everything
     before it, and a re-run of one kernel would no longer reproduce.
+
+    A PER-UNIT UPSTREAM HAS NO SINGLE out_dir, and pretending otherwise is how this went wrong: it
+    was written once per instance under the plugin's name, so a ten-unit upstream left ONE
+    directory - the last that succeeded, which changes between runs as different units fail - and
+    the downstream read one sample as the cohort's result with nothing recording which. So:
+
+      `upstream[name]`        set ONLY when the host can name one correct directory: the upstream
+                              ran once, or the reader is per-unit on the same key and gets its own
+                              unit's. ABSENT when neither holds - and a consumer indexing a
+                              missing key fails loudly, which is the point.
+      `upstream_units[name]`  {unit: out_dir} for every unit that succeeded, always. A method that
+                              genuinely needs all of them - the cross-sample comparisons this
+                              design exists for - reads this.
     """
     payload = {
         "contract": contract,
@@ -84,6 +99,8 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
         "references": {k: str(Path(v).resolve()) for k, v in (references or {}).items()},
         "params": dict(params or {}),
         "upstream": {k: str(Path(v).resolve()) for k, v in (upstream or {}).items()},
+        "upstream_units": {k: {str(u): str(Path(d).resolve()) for u, d in (v or {}).items()}
+                           for k, v in (upstream_units or {}).items()},
         "sentinels": list(sentinels or ()),
         # What the upstream tools recorded about where this object came from. Harvested by the
         # host because `uns` is dropped from the kernel copy, and because a kernel needing a file
@@ -117,6 +134,7 @@ def read_input(path):
     # Defaults for the 1.1 fields, so a kernel may read them unconditionally against a host that
     # has not been updated. Absent and empty mean the same thing for all three.
     d.setdefault("upstream", {})
+    d.setdefault("upstream_units", {})
     d.setdefault("sentinels", list(DEFAULT_SENTINELS))
     d.setdefault("params", {})
     d.setdefault("provenance", {})

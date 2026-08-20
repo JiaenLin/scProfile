@@ -117,6 +117,91 @@ with tempfile.TemporaryDirectory() as d:
     n = int(md.split("- ")[2].split(" files")[0])
     ck("the file count includes README.md itself", n == 3, f"counted {n} of 3")
 
+print("\nan adversarial review's eight findings")
+class _Obs(dict):
+    @property
+    def columns(self):
+        return list(self)
+class _AD:
+    def __init__(self, n=6):
+        self.obs_names = _Idx([f"c{i}" for i in range(n)])
+        self.obs, self.obsm, self.layers = _Obs(), {}, {}
+        self.n_obs = n
+class _Idx(list):
+    is_unique = True
+    def astype(self, _):
+        return self
+    def intersection(self, other):
+        return _Idx([x for x in self if x in set(other)])
+
+# merge_one must be ALL-OR-NOTHING: a refusal must leave the object untouched.
+import types                                                                   # noqa: E402
+_read_obs, _read_arr = merge._read_obs_column, merge._read_array
+class _S(dict):
+    def __init__(self, d):
+        super().__init__(d)
+        self.index = _Idx(list(d))
+    def reindex(self, bc):
+        return types.SimpleNamespace(values=[self.get(b) for b in bc])
+merge._read_obs_column = lambda p: _S({"c0": 1.0, "c1": 2.0})
+merge._read_array = lambda p: types.SimpleNamespace(shape=(2, 3))
+A_ = _AD()
+try:
+    merge.merge_one(A_, ".", {"kernel": "P", "unit": "s1",
+                              "obs": {"score": "o.csv"}, "obsm": {"X_p": "a.npy"}})
+    ck("a mismatched array is refused", False, "it was accepted")
+except merge.MergeError as e:
+    ck("a mismatched array is refused", True)
+    ck("and NOTHING was written to the object first", list(A_.obs) == [], str(list(A_.obs)))
+    ck("the refusal names the per-unit cause", "ran per unit" in str(e))
+
+# a single SURVIVING unit must not be routed through merge_one
+seen = {}
+merge.merge_one = lambda *a_, **k_: seen.setdefault("called", True)
+try:
+    merge.merge_many(_AD(), [(".", {"kernel": "P", "unit": "s4", "obs": {"score": "o.csv"}})])
+except Exception:                                                              # noqa: BLE001
+    pass
+ck("one surviving unit does NOT take the merge_one shortcut", "called" not in seen)
+merge.merge_one, merge._read_obs_column, merge._read_array = (
+    merge.__dict__["merge_one"], _read_obs, _read_arr)
+
+# a basename collision is refused rather than resolved by luck
+with tempfile.TemporaryDirectory() as _d:
+    _d = Path(_d)
+    for _r in ("a/edges.csv", "b/edges.csv"):
+        (_d / _r).parent.mkdir(parents=True, exist_ok=True)
+        (_d / _r).write_text(_r)
+    try:
+        merge.copy_tables(_d, {"kernel": "P", "unit": None,
+                               "tables": ["a/edges.csv", "b/edges.csv"]}, _d / "out")
+        ck("two tables with one basename are refused", False, "one silently replaced the other")
+    except merge.MergeError as e:
+        ck("two tables with one basename are refused", "both deliver as" in str(e))
+        ck("and nothing was delivered before the refusal",
+           not (_d / "out").exists() or not list((_d / "out").iterdir()))
+
+# a plugin whose units failed is PARTIAL everywhere
+fp = merge.fold_payloads(_payloads()[:2], failed={"liana": ["s3", "s4"]})
+ck("status is partial when units failed", fp["liana"]["status"] == "partial",
+   fp["liana"]["status"])
+ck("the failed units are named", fp["liana"]["failed_units"] == ["s3", "s4"])
+ck("the headline says so", "FAILED" in fp["liana"]["headline"])
+ck("a caveat says the cells are NaN", "NaN" in (fp["liana"]["caveats"] or [""])[0])
+pv = merge.provenance(fp, {}, {}, merged={})
+ck("uns carries the failed units", pv["kernels"]["liana"]["failed_units"] == ["s3", "s4"])
+ck("uns does not say ok", pv["kernels"]["liana"]["status"] == "partial")
+
+# the schedule table shows each instance's OWN time
+sched = {"schedule": [[{"plugin": "liana", "unit": "s1", "cores": 1, "seconds": 100.0},
+                       {"plugin": "liana", "unit": "s2", "cores": 1, "seconds": 100.0},
+                       {"plugin": "liana", "unit": "s3", "cores": 1}]],
+         "seconds": {"liana": [100.0, 100.0]}, "cores": 4}
+blk = report._schedule_block(sched)
+ck("a unit row shows its own seconds, not the plugin's total",
+   blk.count("100s") == 2 and "200s" not in blk, blk[-400:])
+ck("a unit that never ran says so", "did not run" in blk)
+
 print("\nsingle-instance plugins are unchanged in shape")
 one = merge.fold_payloads([{"kernel": "cellcycle", "unit": None, "dir": "kernels/cellcycle",
                             "status": "ok", "headline": "h", "obs": {"phase": "o.csv"},
@@ -129,7 +214,16 @@ print("\nthe live defects")
 ck("--dry-run reaches refs.fetch", "dry_run=" in inspect.getsource(cli._fetch))
 ck("--kernel a,a is deduplicated", cli._split("a,b,a") == ["a", "b"])
 src = inspect.getsource(cli._run)
-ck("the budget is redivided over what launches", "_budget(live, budget)" in src)
+ck("the budget is redivided over what launches",
+   "_budget([i for i, _k, _c in staged], budget)" in src)
+# The CALL SITE, not the def - which sits above _budget in the same function and would make this
+# pass by matching the wrong occurrence. A check that passes for its own reasons is the failure
+# mode three defects in this morning's harness already had.
+ck("in.json is written AFTER the budget, not with the rest of preparation",
+   src.index("_budget([i for i") < src.index("prepared = [(inst, _write_in("))
+ck("every filter that can refuse runs before the budget",
+   all(src.index(x) < src.index("_budget([i for i") for x in
+       ("guard refused:", "cannot read this object even re-encoded")))
 ck("per_unit with no unit key is announced", "per_unit and no unit key" in src.replace("\n", " ")
    or "declare per_unit" in src)
 ck("the README is written after the report", src.index("report.write_all") < src.index("_write_readme(out"))

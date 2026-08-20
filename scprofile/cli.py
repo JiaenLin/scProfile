@@ -281,21 +281,30 @@ def _run(a):
     merged_slots = {}     # plugin -> what merge ACTUALLY put in the object
     timings = {}
 
-    def _prepare(inst):
-        """Everything before the subprocess: guards, references, the readable copy, in.json."""
-        name, unit, cores = inst["plugin"], inst["unit"], inst["cores"]
+    def _stage(inst):
+        """EVERYTHING THAT CAN REFUSE - guards, references, the readable copy. Writes no in.json.
+
+        Split from the write because `in.json` carries the core share, and the share can only be
+        correct once the set of instances that will actually launch is known. Three of the filters
+        live here - a guard verdict, a missing reference, an object the plugin's interpreter
+        cannot read even re-encoded - and dividing the budget before them handed cores to
+        instances that were about to be dropped. docs/EXECUTION.md claimed the division happened
+        after all of them; it happened after two of the five.
+        """
+        name, unit = inst["plugin"], inst["unit"]
         k = ks[name]
         allow, why, escape = guard_verdict(
             k, describe=inputs.describe(A, keys, organism, assay, csrc),
             constraint=constraint, params={})
         if not allow and k.name not in allowed:
-            return None, [f"guard refused: {why}", f"override with {escape} (it is logged)"]
+            return None, None, [f"guard refused: {why}",
+                                f"override with {escape} (it is logged)"]
         if not allow:
             log_escape(out / "guard_overrides.jsonl", k.name, str(why))
         try:
             r = refs.resolve(k, a.references, organism[0]) if k.references(organism[0]) else {}
         except FileNotFoundError as e:
-            return None, [str(e)]
+            return None, None, [str(e)]
         kout = out / "kernels" / name / (str(unit) if unit else "")
         kout.mkdir(parents=True, exist_ok=True)
         exe, _src = runner.interpreter(k, a.prefix)
@@ -303,15 +312,33 @@ def _run(a):
         if exe:
             k_h5ad = compat.readable_input(A, a.h5ad, exe, out, cache=readable)
             if k_h5ad is None:
-                return None, [f"{name}'s interpreter cannot read this object even re-encoded"]
+                return None, None, [f"{name}'s interpreter cannot read this object even re-encoded"]
+        return kout, {"refs": r, "h5ad": k_h5ad}, None
+
+    def _write_in(inst, kout, ctx):
+        """The in.json, written only once the core share is final."""
+        name, unit, cores = inst["plugin"], inst["unit"], inst["cores"]
+        # ONE DIRECTORY ONLY WHEN ONE IS CORRECT. An upstream that ran once has a single output;
+        # a per-unit upstream has one per unit, and the only unambiguous choice is THIS instance's
+        # own unit. Where neither holds, `upstream[name]` is left out and the consumer meets a
+        # missing key rather than a plausible wrong directory - `upstream_units` carries all of
+        # them for a method that genuinely needs the set.
+        flat, per = {}, {}
+        for up_name, by_unit in upstream.items():
+            per[up_name] = {u: d for u, d in by_unit.items() if u is not None}
+            if list(by_unit) == [None]:
+                flat[up_name] = by_unit[None]
+            elif unit is not None and unit in by_unit:
+                flat[up_name] = by_unit[unit]
         manifest.write_input(
-            kout / "in.json", h5ad=k_h5ad, out_dir=kout,
+            kout / "in.json", h5ad=ctx["h5ad"], out_dir=kout,
             keys={r_: v[0] for r_, v in keys.items() if v[0]},
-            organism=organism[0], assay=assay[0], design=a.design, references=r,
+            organism=organism[0], assay=assay[0], design=a.design, references=ctx["refs"],
             params=json.loads(a.params) if a.params else {},
-            upstream=dict(upstream), sentinels=inputs.DEFAULT_SENTINELS,
+            upstream=flat, upstream_units={k_: v_ for k_, v_ in per.items() if v_},
+            sentinels=inputs.DEFAULT_SENTINELS,
             provenance=prov, resources={"cores": cores}, unit=unit)
-        return kout, None
+        return kout
 
     for wi, wave in enumerate(waves, 1):
         # Prerequisites are re-checked at the START OF EACH WAVE, not once up front: a plugin may
@@ -337,20 +364,17 @@ def _run(a):
         if not live:
             continue
 
-        # RE-DIVIDE THE BUDGET OVER WHAT WILL ACTUALLY RUN. `schedule` sizes a wave from every
-        # requested plugin, but the filters above have just removed the declared-but-unbuilt and
-        # the unmet ones - and they took a share of the cores with them. Measured before this
-        # line: `run --all --cores 8` on a 10-sample object built a wave of 35 instances declaring
-        # 301 cores, scaled EVERY instance to 1, and ran velocity single-threaded on an 8-core
-        # allocation - while `plan --cores 8`, which filters first, printed velocity(7c) for the
-        # same command. Two documents of the same run disagreeing is how this was found.
-        _budget(live, budget)
-        print(f"\n=== wave {wi} === " + ", ".join(
-            f"{x['plugin']}" + (f"[{x['unit']}]" if x["unit"] else "") + f"({x['cores']}c)"
-            for x in live), flush=True)
-        prepared = []
+        # STAGE FIRST, THEN BUDGET, THEN WRITE. `schedule` sizes a wave from every requested
+        # plugin; five filters then remove instances, and each takes a share of the cores with it.
+        # Measured before this was reordered: `run --all --cores 8` on a 10-sample object built a
+        # wave of 35 instances declaring 301 cores, scaled EVERY instance to 1, and ran velocity
+        # single-threaded on an 8-core allocation - while `plan --cores 8`, which filters first,
+        # printed velocity(7c) for the same command. Two documents of one run disagreeing is how
+        # it was found; then a review found the reorder had covered only two of the five filters,
+        # while the document it added claimed all of them.
+        staged = []
         for inst in live:
-            kout, why = _prepare(inst)
+            kout, ctx, why = _stage(inst)
             if kout is None:
                 lbl = inst["plugin"] + (f"[{inst['unit']}]" if inst["unit"] else "")
                 print(f"  NOT RUN {lbl}")
@@ -358,7 +382,14 @@ def _run(a):
                     print(f"      {w}")
                 skipped.append({"kernel": inst["plugin"], "unit": inst["unit"], "why": why})
                 continue
-            prepared.append((inst, kout))
+            staged.append((inst, kout, ctx))
+        if not staged:
+            continue
+        _budget([i for i, _k, _c in staged], budget)
+        print(f"\n=== wave {wi} === " + ", ".join(
+            f"{x['plugin']}" + (f"[{x['unit']}]" if x["unit"] else "") + f"({x['cores']}c)"
+            for x, _k, _c in staged), flush=True)
+        prepared = [(inst, _write_in(inst, kout, ctx)) for inst, kout, ctx in staged]
 
         # Instances in a wave are independent by construction, so they run CONCURRENTLY. The
         # plugins are subprocesses, so threads are the right shape - each blocks on its child and
@@ -389,6 +420,12 @@ def _run(a):
             name = inst["plugin"]
             lbl = name + (f"[{inst['unit']}]" if inst["unit"] else "")
             timings.setdefault(name, []).append(round(secs, 1))
+            # ALSO ON THE INSTANCE. `timings` is keyed by plugin, and the report's schedule table
+            # has one row per INSTANCE - so it rendered the plugin's whole runtime on every unit's
+            # row, reporting 10,000s of compute for 1,000s of work on a ten-unit plugin, and
+            # showing that time even on rows for units that never ran.
+            inst["seconds"] = round(secs, 1)
+            inst["outcome"] = "failed" if err else "ok"
             if err:
                 # One instance failing must not take the wave. A per-unit plugin failing on one
                 # unit reports that unit as absent and keeps the rest.
@@ -406,7 +443,11 @@ def _run(a):
             for c in pl.get("caveats", []):
                 print(f"      caveat: {c}")
             if pl.get("status") in ("ok", "partial"):
-                upstream[name] = kout
+                # BY UNIT. `upstream[name] = kout` wrote once per instance under the plugin's
+                # name, so a ten-unit upstream left ONE directory - the last that SUCCEEDED, which
+                # changes between runs as different units fail - and a downstream plugin read one
+                # sample as the cohort's result with nothing recording which.
+                upstream.setdefault(name, {})[inst["unit"]] = kout
             results.setdefault(name, []).append((kout, pl))
 
         # ---- merge, sequentially, once per plugin --------------------------------------------
@@ -436,7 +477,9 @@ def _run(a):
             payloads.extend(pl for _k, pl in got_list)
 
     describe = inputs.describe(A, keys, organism, assay, csrc)
-    folded = merge.fold_payloads(payloads)
+    folded = merge.fold_payloads(
+        payloads, failed={s["kernel"]: [x["unit"] for x in skipped if x["kernel"] == s["kernel"]]
+                          for s in skipped})
     A.uns["scprofile"] = merge.provenance(
         folded, describe, {n: ks[n].cannot_show for n in ran}, merged=merged_slots)
     (out / "objects").mkdir(parents=True, exist_ok=True)
@@ -883,9 +926,15 @@ def _write_readme(out, payload):
           "| file | is |", "|---|---|"]
     for k, v in sorted((payload.get("kernels") or {}).items()):
         L.append(f"| `report/{k}.html` | {k}: {v.get('headline', '')} |")
-        if v.get("per_unit"):
-            L.append(f"| `tables/{k}_*__<unit>.csv` | one per unit: "
-                     + ", ".join(str(u.get("unit")) for u in (v.get("units") or [])) + " |")
+        # THE FILES THAT ARE THERE, not the ones the flag implies. Asserting per-unit tables from
+        # `per_unit` alone described `tables/<k>_*__<unit>.csv` for a per-unit plugin that declares
+        # no tables at all - which is the exact failure this function's docstring says it avoids by
+        # inspecting the directory, committed inside the function that says it.
+        got = sorted(q.name for q in (out / "tables").glob(f"{k}_*")) if (out / "tables").is_dir() \
+            else []
+        if v.get("per_unit") and got:
+            L.append(f"| `tables/{k}_*` | {len(got)} file(s), one per unit: "
+                     + ", ".join(got[:4]) + (" …" if len(got) > 4 else "") + " |")
     L += ["| `objects/*.h5ad` | the input object with every merged cell-level result |",
           "| `tables/*.csv` | edge- and gene-level results, prefixed by plugin |",
           "| `report.json` | every number in the report, machine-readable |", ""]
