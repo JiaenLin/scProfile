@@ -20,7 +20,6 @@ import os
 import shutil
 from pathlib import Path
 
-import numpy as np
 
 
 class MergeError(Exception):
@@ -40,16 +39,41 @@ def _read_obs_column(path):
 def _read_array(path):
     p = Path(path)
     if p.suffix == ".npy":
+        import numpy as np
         return np.load(p, allow_pickle=False)
     if p.suffix == ".npz":
+        import numpy as np
         z = np.load(p, allow_pickle=False)
         return z[z.files[0]]
     raise MergeError(f"{p} is not .npy or .npz; the contract accepts those for arrays")
 
 
+def _require_unique_barcodes(adata):
+    """Every merge here is `reindex(obs_names)`, which needs the object's barcodes to be unique.
+
+    pandas raises `cannot reindex on an axis with duplicate labels` from deep inside the merge,
+    with a traceback naming neither the object nor the plugin - and by then several subprocesses
+    have finished and their results are about to be thrown away with the exception. Say it here,
+    where the cause is nameable and nothing has run yet.
+    """
+    if adata.obs_names.is_unique:
+        return
+    seen, dup = set(), []
+    for b in adata.obs_names.astype(str):       # plain python: a refusal must not need a stack
+        (dup.append(b) if b in seen else seen.add(b))
+    dup = sorted(set(dup))
+    raise MergeError(
+        f"the object's barcodes are not unique: {len(dup):,} value(s) repeat, e.g. "
+        f"{list(dup[:3])}. Every result here is merged BY BARCODE, so a repeated barcode has no "
+        f"single cell to merge onto. Make obs_names unique upstream - "
+        f"`adata.obs_names_make_unique()` if the duplicates are genuinely different cells, or "
+        f"fix the concatenation that produced them if they are not.")
+
+
 def merge_one(adata, out_dir, payload, *, log=print):
     """Merge one kernel's declared cell-level outputs. Returns what was merged and what was not."""
     out = Path(out_dir)
+    _require_unique_barcodes(adata)
     merged = {"obs": [], "obsm": [], "layers": [], "tables": []}
     bc = adata.obs_names.astype(str)
 
@@ -105,6 +129,7 @@ def merge_many(adata, results, *, log=print):
     if len(results) == 1:
         return merge_one(adata, results[0][0], results[0][1], log=log)
 
+    _require_unique_barcodes(adata)
     merged = {"obs": [], "obsm": [], "layers": [], "tables": []}
     bc = adata.obs_names.astype(str)
     cols = {}
@@ -137,11 +162,43 @@ def merge_many(adata, results, *, log=print):
         adata.obs[col] = full.reindex(bc).values
         merged["obs"].append(col)
 
+    # An array output that cannot cross units is an ABSENCE and has to survive as one. Logging it
+    # to stdout left the report free to go on printing "merged into the object by barcode" from
+    # the plugin's DECLARATION, so `uns` and the HTML both asserted a key the object did not have
+    # and the only trace was one line of a finished run's console. Note the asymmetry it fixes:
+    # `merge_one` REFUSES a mismatched array loudly; this path was discarding one silently.
     for _out_dir, payload in results:
-        if payload.get("obsm") or payload.get("layers"):
-            log(f"    note: unit {payload.get('unit')!r} returned an array output, which cannot "
-                f"be merged across units without barcodes. It stays in the run directory.")
+        for slot in ("obsm", "layers"):
+            for key in sorted(payload.get(slot) or {}):
+                why = (f"{slot}[{key!r}] was returned per unit and an array carries no barcodes, "
+                       f"so it cannot be concatenated across units. It is NOT in the merged "
+                       f"object; each unit's copy stays in its own run directory.")
+                log(f"    NOT MERGED: unit {payload.get('unit')!r} {why}")
+                payload.setdefault("absent", []).append(
+                    {"what": f"{slot}[{key}]", "why": why})
+                merged.setdefault("dropped", []).append(f"{slot}[{key}]")
     return merged
+
+
+def delivered_name(payload, rel):
+    """The filename a per-instance artifact is DELIVERED under, beside the merged object.
+
+    Two rules, and they have to be in ONE place. Kernel-prefixed, because `liana` and `cellchat`
+    both write `ccc_edges.csv` and running both is the point. Unit-suffixed, because otherwise
+    every unit of a per-unit plugin writes the SAME name and only the last survives - which then
+    looks exactly like a cohort-level result.
+
+    This function exists because the two rules were written twice and only one copy got the second
+    rule. `copy_tables` had the unit suffix and a comment naming the hazard; `link_objects`, on the
+    identical path 25 lines below, did not - so a per-unit plugin's side-car objects overwrote each
+    other and delivered one sample's file under a cohort-looking name.
+    """
+    name = Path(rel).name
+    stem = name if name.startswith(payload["kernel"]) else f"{payload['kernel']}_{name}"
+    if payload.get("unit"):
+        st = Path(stem)
+        stem = f"{st.stem}__{payload['unit']}{st.suffix}"
+    return stem
 
 
 def copy_tables(out_dir, payload, dest, *, log=print):
@@ -156,14 +213,7 @@ def copy_tables(out_dir, payload, dest, *, log=print):
     made = []
     for rel in (payload.get("tables") or []):
         src = Path(out_dir) / rel
-        name = Path(rel).name
-        stem = name if name.startswith(payload["kernel"]) else f"{payload['kernel']}_{name}"
-        if payload.get("unit"):
-            # Without this, every unit writes the SAME filename and only the last survives - which
-            # then looks exactly like a cohort-level result.
-            st = Path(stem)
-            stem = f"{st.stem}__{payload['unit']}{st.suffix}"
-        tgt = dest / stem
+        tgt = dest / delivered_name(payload, rel)
         shutil.copy2(src, tgt)
         made.append(tgt.name)
     return made
@@ -182,9 +232,7 @@ def link_objects(out_dir, payload, dest, *, log=print):
     made = []
     for key, rel in (payload.get("objects") or {}).items():
         src = Path(out_dir) / rel
-        name = Path(rel).name
-        tgt = dest / (name if name.startswith(payload["kernel"]) else
-                      f"{payload['kernel']}_{name}")
+        tgt = dest / delivered_name(payload, rel)
         if tgt.exists():
             tgt.unlink()
         try:
@@ -196,7 +244,73 @@ def link_objects(out_dir, payload, dest, *, log=print):
     return made
 
 
-def provenance(payloads, describe, kernel_specs):
+def fold_payloads(payloads):
+    """One entry per PLUGIN from a list with one entry per INSTANCE. Keyed by name, keeps units.
+
+    The wave rewrite made a per-unit plugin produce N payloads, all carrying the same
+    `payload["kernel"]`. Both consumers still built `{p["kernel"]: p for p in payloads}` - so nine
+    of ten units were dropped by a dict comprehension, and the survivor was rendered under the
+    bare plugin name as though it described the cohort. Nothing counted the loss and nothing could
+    recover it from `report.json`.
+
+    Folding also NORMALISES every path to be relative to the RUN directory rather than to the
+    instance directory. A run-level document whose paths are relative to somewhere else is a
+    document whose links do not resolve, and that is exactly how it failed: the report rendered
+    `../kernels/<name>/<fig>` for a file at `../kernels/<name>/<unit>/<fig>`.
+    """
+    by = {}
+    for pl in payloads:
+        by.setdefault(pl["kernel"], []).append(pl)
+
+    out = {}
+    for name, group in by.items():
+        multi = len(group) > 1 or any(g.get("unit") for g in group)
+        units, figs, tabs, cav, absent = [], [], [], [], []
+        slots = {"obs": {}, "obsm": {}, "layers": {}, "objects": {}}
+        for pl in sorted(group, key=lambda g: str(g.get("unit") or "")):
+            u = pl.get("unit")
+            base = pl.get("dir") or f"kernels/{name}"
+            tag = f"[{u}] " if (multi and u) else ""
+            for slot in slots:
+                for k, rel in (pl.get(slot) or {}).items():
+                    slots[slot].setdefault(k, []).append(f"{base}/{rel}")
+            for rel in (pl.get("tables") or []):
+                tabs.append("tables/" + delivered_name(pl, rel))
+            for f in (pl.get("figures") or []):
+                f = dict(f) if isinstance(f, dict) else {"path": f, "caption": ""}
+                for fld in ("path", "vector", "source"):
+                    if f.get(fld):
+                        f[fld] = f"{base}/{f[fld]}"
+                f["unit"] = u
+                if tag:
+                    f["caption"] = tag + (f.get("caption") or "")
+                figs.append(f)
+            cav += [tag + c for c in (pl.get("caveats") or [])]
+            absent += [{"what": tag + str(a.get("what", "?")), "why": a.get("why", "")}
+                       for a in (pl.get("absent") or [])]
+            units.append({"unit": u, "status": pl.get("status", ""),
+                          "headline": pl.get("headline", ""),
+                          "caveats": list(pl.get("caveats") or []),
+                          "absent": list(pl.get("absent") or []),
+                          "dir": base, "n_figures": len(pl.get("figures") or [])})
+
+        sts = {u["status"] for u in units}
+        status = (group[0].get("status", "") if len(sts) == 1
+                  else "partial" if sts & {"ok", "partial"} else sorted(sts)[0])
+        head = (group[0].get("headline", "") if not multi else
+                f"{len(units)} unit(s): " + " · ".join(
+                    f"{u['unit']} {u['headline']}" for u in units[:3])
+                + (" …" if len(units) > 3 else ""))
+        out[name] = {"kernel": name, "version": group[0].get("version", ""),
+                     "status": status, "headline": head,
+                     "obs": slots["obs"], "obsm": slots["obsm"],
+                     "layers": slots["layers"], "objects": slots["objects"],
+                     "tables": tabs, "figures": figs, "caveats": cav, "absent": absent,
+                     "units": units, "per_unit": multi}
+    return out
+
+
+def provenance(folded, describe, kernel_specs, merged=None):
     """`uns['scprofile']`: what ran, against what, and every caveat. PROVENANCE ONLY, no results.
 
     Results live in obs/obsm/layers and in the tables. A uns that also carries results is a uns
@@ -205,19 +319,24 @@ def provenance(payloads, describe, kernel_specs):
     return {
         "contract": "1.0",
         "input": dict(describe),
+        # `produced_*` is read from WHAT THE MERGE RETURNED, not from what the plugin declared.
+        # Written from the declaration, it asserted `obsm[X_regulon_auc]` was in the object for a
+        # per-unit plugin whose arrays merge_many had just refused to concatenate.
         "kernels": {
-            p["kernel"]: {
+            name: {
                 "version": p.get("version", ""),
                 "status": p.get("status", ""),
                 "headline": p.get("headline", ""),
-                "produced_obs": sorted((p.get("obs") or {}).keys()),
-                "produced_obsm": sorted((p.get("obsm") or {}).keys()),
-                "produced_layers": sorted((p.get("layers") or {}).keys()),
+                "units": [u.get("unit") for u in (p.get("units") or [])],
+                "produced_obs": sorted((merged or {}).get(name, {}).get("obs", [])),
+                "produced_obsm": sorted((merged or {}).get(name, {}).get("obsm", [])),
+                "produced_layers": sorted((merged or {}).get(name, {}).get("layers", [])),
+                "not_merged": sorted((merged or {}).get(name, {}).get("dropped", [])),
                 "tables": list(p.get("tables") or []),
                 "caveats": list(p.get("caveats") or []),
                 "absent": [f"{a.get('what', '?')}: {a.get('why', '')}"
                            for a in (p.get("absent") or [])],
-                "cannot_show": list(kernel_specs.get(p["kernel"], [])),
-            } for p in payloads
+                "cannot_show": list(kernel_specs.get(name, [])),
+            } for name, p in sorted((folded or {}).items())
         },
     }

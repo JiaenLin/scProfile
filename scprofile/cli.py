@@ -111,12 +111,29 @@ def _fetch(a):
             print(f"scprofile: no kernel {name!r}", file=sys.stderr)
             return REFUSE
         print(f"{name}:")
-        refs.fetch(ks[name], a.to, a.organism)
+        # By KEYWORD. The fourth positional of refs.fetch is `log`, and passing dry_run there
+        # silently downloaded - the flag whose entire help text is "filling a filesystem halfway
+        # through is a worse failure than refusing at the start" did the thing it exists to avoid.
+        refs.fetch(ks[name], a.to, a.organism, dry_run=bool(getattr(a, "dry_run", False)))
     return 0
 
 
 def _split(s):
-    return [x.strip() for x in str(s).split(",") if x.strip()]
+    """Comma-separated names, DEDUPLICATED, first occurrence wins.
+
+    Under the old serial loop a repeated `--kernel cellcycle,cellcycle` merely ran the plugin
+    twice and the second overwrote the first, harmlessly. Concurrency turned it into two
+    subprocesses writing one directory at once - and merge_many then took the multi-unit branch
+    and refused the result as "the units are not disjoint" for a run with no units, so a plugin
+    the user asked for TWICE produced nothing at all.
+    """
+    seen, out = set(), []
+    for x in str(s).split(","):
+        x = x.strip()
+        if x and x not in seen:
+            seen.add(x)
+            out.append(x)
+    return out
 
 
 # -------------------------------------------------------------------------------------- run
@@ -137,7 +154,7 @@ def _default_cores():
 
 def _run(a):
     from . import compat, inputs, manifest, merge, provenance, refs, report, runner
-    from .kernels import (discover, guard_verdict, log_escape, schedule,
+    from .kernels import (_budget, discover, guard_verdict, log_escape, schedule,
                           undeclared, unmet)
 
     try:
@@ -241,6 +258,15 @@ def _run(a):
     n_inst = sum(len(w) for w in waves)
     print(f"\nplan: {n_inst} instance(s) in {len(waves)} wave(s), {budget} core(s)"
           + (f", {len(units)} unit(s)" if units else ""))
+    # `per_unit` is a CORRECTNESS declaration before it is a speed one, so a plugin that declares
+    # it and then runs once over everything is not merely slower - it is answering a different
+    # question. With no sample key there is no alternative, but silence here would have delivered
+    # a pooled number under a per-unit plugin's name with nothing anywhere saying so.
+    pooled = [n for n in want if ks[n].per_unit and not units]
+    if pooled:
+        print(f"  WARNING: {', '.join(pooled)} declare per_unit and no unit key was found in "
+              f"this object, so each runs ONCE OVER ALL CELLS. An inference pooled over a cohort "
+              f"describes the average of its conditions and may describe none of them.")
     for i, wave in enumerate(waves, 1):
         print(f"  wave {i}: " + ", ".join(
             f"{x['plugin']}" + (f"[{x['unit']}]" if x["unit"] else "") + f"({x['cores']}c)"
@@ -252,6 +278,7 @@ def _run(a):
               "--timeout bounds it.")
 
     results = {}          # plugin -> [(out_dir, payload)]
+    merged_slots = {}     # plugin -> what merge ACTUALLY put in the object
     timings = {}
 
     def _prepare(inst):
@@ -310,7 +337,17 @@ def _run(a):
         if not live:
             continue
 
-        print(f"\n=== wave {wi} ===", flush=True)
+        # RE-DIVIDE THE BUDGET OVER WHAT WILL ACTUALLY RUN. `schedule` sizes a wave from every
+        # requested plugin, but the filters above have just removed the declared-but-unbuilt and
+        # the unmet ones - and they took a share of the cores with them. Measured before this
+        # line: `run --all --cores 8` on a 10-sample object built a wave of 35 instances declaring
+        # 301 cores, scaled EVERY instance to 1, and ran velocity single-threaded on an 8-core
+        # allocation - while `plan --cores 8`, which filters first, printed velocity(7c) for the
+        # same command. Two documents of the same run disagreeing is how this was found.
+        _budget(live, budget)
+        print(f"\n=== wave {wi} === " + ", ".join(
+            f"{x['plugin']}" + (f"[{x['unit']}]" if x["unit"] else "") + f"({x['cores']}c)"
+            for x in live), flush=True)
         prepared = []
         for inst in live:
             kout, why = _prepare(inst)
@@ -319,7 +356,7 @@ def _run(a):
                 print(f"  NOT RUN {lbl}")
                 for w in why:
                     print(f"      {w}")
-                skipped.append({"kernel": inst["plugin"], "why": why})
+                skipped.append({"kernel": inst["plugin"], "unit": inst["unit"], "why": why})
                 continue
             prepared.append((inst, kout))
 
@@ -338,6 +375,9 @@ def _run(a):
                                 prefix=a.prefix, log=lambda *_a, **_k: None,
                                 timeout=a.timeout)
                 pl["unit"] = inst["unit"]
+                # Run-relative, so a run-level document's links resolve. Without it the report
+                # built `../kernels/<name>/<fig>` for a file at `../kernels/<name>/<unit>/<fig>`.
+                pl["dir"] = str(kout.relative_to(out))
                 return inst, kout, pl, _time.perf_counter() - t0, None
             except Exception as e:                                        # noqa: BLE001
                 return inst, kout, None, _time.perf_counter() - t0, f"{lbl}: {e}"
@@ -354,7 +394,7 @@ def _run(a):
                 # unit reports that unit as absent and keeps the rest.
                 print(f"  FAILED {lbl}  ({secs:.0f}s)")
                 print(f"      {err}")
-                skipped.append({"kernel": name, "why": [err]})
+                skipped.append({"kernel": name, "unit": inst["unit"], "why": [err]})
                 continue
             print(f"  {lbl:<28} {pl['status']:<8} {secs:>6.0f}s  {pl.get('headline', '')}")
             extra = undeclared(ks[name], pl)
@@ -380,8 +420,9 @@ def _run(a):
                 got = merge.merge_many(A, got_list)
             except merge.MergeError as e:
                 print(f"  MERGE REFUSED {name}: {e}")
-                skipped.append({"kernel": name, "why": [str(e)]})
+                skipped.append({"kernel": name, "unit": None, "why": [str(e)]})
                 continue
+            merged_slots[name] = got
             for kout, pl in got_list:
                 merge.copy_tables(kout, pl, out / "tables")
                 merge.link_objects(kout, pl, out / "objects")
@@ -395,8 +436,9 @@ def _run(a):
             payloads.extend(pl for _k, pl in got_list)
 
     describe = inputs.describe(A, keys, organism, assay, csrc)
+    folded = merge.fold_payloads(payloads)
     A.uns["scprofile"] = merge.provenance(
-        payloads, describe, {n: ks[n].cannot_show for n in ran})
+        folded, describe, {n: ks[n].cannot_show for n in ran}, merged=merged_slots)
     (out / "objects").mkdir(parents=True, exist_ok=True)
     op = out / "objects" / a.object_name
     from .emit import write_h5ad
@@ -410,14 +452,23 @@ def _run(a):
                "schedule": [[{kk: vv for kk, vv in i.items()} for i in w] for w in waves],
                "seconds": timings, "cores": budget, "units": units,
                "timeout": a.timeout,
-               "kernels": {p["kernel"]: p for p in payloads},
+               "kernels": folded,
+               "merged": merged_slots,
+               "partial": sorted({s["kernel"] for s in skipped} & set(ran)),
                "cannot_show": {n: ks[n].cannot_show for n in sorted(ks)},
                "summaries": {n: ks[n].summary for n in sorted(ks)},
                "object": str(op)}
     (out / "report.json").write_text(json.dumps(payload, indent=1, default=str), encoding="utf-8")
-    _write_readme(out, payload)
     print(f"      {out}/report.json")
-    print(f"      {report.write_all(out, payload)}")
+    # THE README IS WRITTEN LAST, and it has to be. It describes the directory BY INSPECTING IT,
+    # which is the whole reason it can be trusted - and it was called two lines above
+    # `report.write_all`, the only thing that creates `report/`. So every run shipped a README
+    # whose layout section omitted the run's primary deliverable while section 3 of the same file
+    # linked the reader into it, with a file count short by 1 + 1 + n_kernels. Inspecting too
+    # early is the same failure as describing what was intended; it just fails the other way.
+    idx = report.write_all(out, payload)
+    print(f"      {idx}")
+    _write_readme(out, payload)
     return 0
 
 
@@ -748,14 +799,24 @@ def _write_readme(out, payload):
     """
     out = Path(out)
     d = payload.get("describe") or {}
-    ran, skipped = payload.get("ran") or [], payload.get("skipped") or []
+    ran = payload.get("ran") or []
+    # `skipped` holds one entry per INSTANCE; `ran` holds one per PLUGIN. Counting one against the
+    # other printed "0 plugin(s) ran, 10 did not" for ONE ten-unit plugin, and "1 ran, 1 did not"
+    # for a plugin that ran on nine samples of ten and is listed under both headings.
+    by_kernel = {}
+    for s in (payload.get("skipped") or []):
+        by_kernel.setdefault(s["kernel"], []).append(s)
+    partial = {k: v for k, v in by_kernel.items() if k in ran}
+    did_not = {k: v for k, v in by_kernel.items() if k not in ran}
+    (out / "README.md").touch()          # so the enumeration below counts this file too
     files = sorted(q for q in out.rglob("*") if q.is_file())
     by_dir = {}
     for q in files:
         by_dir.setdefault(str(q.parent.relative_to(out)) or ".", []).append(q.name)
 
     L = [f"# scProfile output", "",
-         f"- **{len(ran)}** plugin(s) ran, **{len(skipped)}** did not",
+         f"- **{len(ran)}** plugin(s) ran, **{len(did_not)}** did not"
+         + (f", **{len(partial)}** ran but not on every unit" if partial else ""),
          f"- {len(files)} files, {sum(q.stat().st_size for q in files) / 1e9:.2f} GB", ""]
 
     L += ["## 1. What is this, and where did it come from?", "",
@@ -776,6 +837,9 @@ def _write_readme(out, payload):
           "| file | is |", "|---|---|"]
     for k, v in sorted((payload.get("kernels") or {}).items()):
         L.append(f"| `report/{k}.html` | {k}: {v.get('headline', '')} |")
+        if v.get("per_unit"):
+            L.append(f"| `tables/{k}_*__<unit>.csv` | one per unit: "
+                     + ", ".join(str(u.get("unit")) for u in (v.get("units") or [])) + " |")
     L += ["| `objects/*.h5ad` | the input object with every merged cell-level result |",
           "| `tables/*.csv` | edge- and gene-level results, prefixed by plugin |",
           "| `report.json` | every number in the report, machine-readable |", ""]
@@ -794,10 +858,22 @@ def _write_readme(out, payload):
           f"kept for provenance, not for reading.", ""]
 
     L += ["## 6. What is missing, or cannot be done with this output?", ""]
-    if skipped:
-        L.append("**Did not run:**", )
-        for s in skipped:
-            L.append(f"- `{s['kernel']}` — {'; '.join(str(w) for w in (s.get('why') or []))[:300]}")
+    if did_not:
+        L.append("**Did not run:**")
+        for k, ss in sorted(did_not.items()):
+            why = "; ".join(str(w) for s in ss for w in (s.get("why") or []))[:300]
+            L.append(f"- `{k}` — {why}")
+        L.append("")
+    if partial:
+        # A plugin in both lists is the case both the README and the index used to render as a
+        # plain success. Its merged column holds NaN for every cell of every failed unit, and that
+        # is invisible in an object and in a headline alike.
+        L.append("**Ran, but not on every unit** — the merged column is NaN for the cells of the "
+                 "units named here, and no headline shows that:")
+        for k, ss in sorted(partial.items()):
+            us = ", ".join(str(s.get("unit")) for s in ss if s.get("unit") is not None) or "?"
+            why = "; ".join(str(w) for s in ss for w in (s.get("why") or []))[:200]
+            L.append(f"- `{k}` — {len(ss)} unit(s) failed ({us}): {why}")
         L.append("")
     L += ["Every plugin's own limits are on its report page and in "
           "`report.json` under `cannot_show`. They are not repeated here, because a limit "

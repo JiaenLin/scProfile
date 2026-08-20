@@ -110,6 +110,16 @@ it reports the node, not the share, and four plugins each reading it will each s
 Concurrency is then `min(budget / smallest_declared_cores, ready_plugins)`, floored at 1. A plugin
 declaring more cores than the whole budget runs alone, at the budget, rather than being refused.
 
+**The budget is divided over the instances that actually launch, at the start of each wave — not
+over the ones that were requested.** A wave is first filtered: declared-but-unbuilt plugins go, so
+do plugins whose prerequisites are unmet, so do the ones a guard refuses. Dividing before that
+filter gave shares to instances that were known, before the loop started, never to run. Measured:
+`run --all --cores 8` on a ten-sample object built a wave of 35 instances declaring 301 cores,
+scaled every one of them to 1, and ran the single built plugin single-threaded on an eight-core
+allocation — while `plan --cores 8`, which filters first, printed `velocity(7c)` for the same
+command. Two documents describing the same run disagreeing is how it was found, and it scales with
+how many declared-but-unbuilt plugins the roadmap holds.
+
 ---
 
 ## 5. Executors
@@ -140,7 +150,18 @@ One plugin failing must not take the wave with it.
 - a **per-unit** plugin that fails on one unit reports that unit as absent and keeps the rest —
   three of ten samples failing is a result about those three, not a dead run;
 - the report names every plugin that did not run and why, because a plugin missing from a report
-  looks identical to one that found nothing.
+  looks identical to one that found nothing;
+- **a plugin that ran on some units and failed on others is neither "ran" nor "not run", and gets
+  its own state.** It appears in both lists, and testing `ran` first rendered seven-of-ten samples
+  as a plain success carrying one sample's headline — while the merged column held NaN for the
+  other three, which is invisible in an object and in a headline alike. The index says `ran, N
+  unit(s) failed` and names the units; the README lists it under *Ran, but not on every unit*.
+
+Per-unit results are folded for reporting, never collapsed. One plugin gets one page and one
+`report.json` entry, and that entry carries **every** unit — status, headline, caveats, figures and
+the unit-suffixed table names actually on disk. Keying a per-instance list on the plugin's name
+discarded nine of ten units in a dict comprehension and presented the survivor under the cohort's
+name; nothing counted the loss and nothing could recover it afterwards.
 
 ---
 

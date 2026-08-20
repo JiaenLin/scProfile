@@ -71,7 +71,7 @@ def _limits(items):
             + "".join(f"<li>{_e(x)}</li>" for x in items) + "</ul></div>")
 
 
-def write_kernel(out_dir, name, payload, cannot_show, summary=""):
+def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None):
     """One kernel's own page. Ends in its own limits, not a shared block."""
     p = payload or {}
     caveats = p.get("caveats") or []
@@ -83,12 +83,20 @@ def write_kernel(out_dir, name, payload, cannot_show, summary=""):
     if caveats:
         body.append('<div class="warn"><b>Read these with the numbers, not after them</b><ul>'
                     + "".join(f"<li>{_e(c)}</li>" for c in caveats) + "</ul></div>")
+    # WHAT THE MERGE RETURNED, not what the plugin declared. Hard-coding "merged into the object
+    # by barcode" from the declaration made this table assert a key the object did not have: a
+    # per-unit plugin's arrays cannot be concatenated across units, merge_many drops them, and
+    # this row went on saying they were merged. A reader then looks for a key nobody wrote.
+    got = merged or {}
     rows = []
     for slot in ("obs", "obsm", "layers"):
-        for k in sorted((p.get(slot) or {})):
-            rows.append((slot, k, "merged into the object by barcode"))
+        declared = sorted((p.get(slot) or {}))
+        actually = set(got.get(slot) or [])
+        for k in declared:
+            rows.append((slot, k, "merged into the object by barcode" if k in actually or not got
+                         else "NOT in the object — see what it could not produce, below"))
     for t in (p.get("tables") or []):
-        rows.append(("table", Path(t).name, "beside the object, prefixed with the kernel name"))
+        rows.append(("table", Path(t).name, "beside the object, under this name"))
     if rows:
         body.append("<h2>What it produced</h2><div class='wrap'><table>"
                     "<tr><th>where</th><th>name</th><th>note</th></tr>"
@@ -101,19 +109,22 @@ def write_kernel(out_dir, name, payload, cannot_show, summary=""):
                               for a in absent) + "</ul></div>")
     figs = p.get("figures") or []
     if figs:
-        # The path in the manifest is relative to the KERNEL's output directory and usually has a
-        # subdirectory in it. Rendering only its basename produced a page of broken images that
-        # looked exactly like a page with no figures.
+        # Paths here are RELATIVE TO THE RUN DIRECTORY, normalised by merge.fold_payloads. They
+        # were relative to the kernel's own output directory and re-prefixed here with a guessed
+        # `../kernels/<name>/`, which was right until an instance directory gained a unit segment
+        # - and then every image, vector link and source link on a per-unit plugin's page 404'd.
+        # The comment this replaces recorded the SAME failure being fixed once already, one path
+        # segment lower down. A page of broken images is indistinguishable from a page of nothing.
         panels = []
         for i, f in enumerate(figs):
             if not isinstance(f, dict):
                 f = {"path": f, "caption": ""}
-            rel = f"../kernels/{name}/{f['path']}"
+            rel = f"../{f['path']}"
             extra = []
             if f.get("vector"):
-                extra.append(f'<a href="../kernels/{name}/{_e(f["vector"])}">vector (PDF)</a>')
+                extra.append(f'<a href="../{_e(f["vector"])}">vector (PDF)</a>')
             if f.get("source"):
-                extra.append(f'<a href="../kernels/{name}/{_e(f["source"])}">source data</a>')
+                extra.append(f'<a href="../{_e(f["source"])}">source data</a>')
             else:
                 extra.append('<span class="nosrc">no source data</span>')
             cap = _e(f.get("caption") or "")
@@ -126,6 +137,24 @@ def write_kernel(out_dir, name, payload, cannot_show, summary=""):
             "<p class='sub'>Every panel is written as a raster preview and as a vector PDF with "
             "live text, at journal column width. The source data link opens the table the panel "
             "was drawn from.</p>" + "".join(panels))
+    units = p.get("units") or []
+    if p.get("per_unit") and units:
+        # Nine of ten unit payloads used to be discarded by a dict comprehension keyed on the
+        # plugin name, and the survivor was rendered under that name as though it described the
+        # cohort. Every unit gets a row, including the ones that produced nothing.
+        body.append(
+            "<h2>Per unit</h2><p class='sub'>This plugin runs once per unit because pooling the "
+            "units would answer a different question. Each ran separately; the cell-level results "
+            "are one column in the object, assembled from all of them.</p>"
+            "<div class='wrap'><table><tr><th>unit</th><th>status</th><th>headline</th>"
+            "<th>figures</th><th>caveats</th></tr>"
+            + "".join(
+                f"<tr><td><code>{_e(u.get('unit'))}</code></td>"
+                f"<td>{_e(u.get('status', ''))}</td>"
+                f"<td class='sub'>{_e(u.get('headline', ''))}</td>"
+                f"<td>{_e(u.get('n_figures', 0))}</td>"
+                f"<td class='sub'>{_e('; '.join(u.get('caveats') or []) or '—')}</td></tr>"
+                for u in units) + "</table></div>")
     body.append(_limits(cannot_show))
     body.append('<p class="sub"><a href="index.html">&larr; back to the index</a></p>')
     d = Path(out_dir) / "report"
@@ -167,14 +196,36 @@ def _schedule_block(payload):
 def write_index(out_dir, payload):
     """The index: EVERY known kernel, with its state and what it cannot show."""
     ran = list(payload.get("ran") or [])
-    skipped = {s["kernel"]: s.get("why", []) for s in (payload.get("skipped") or [])}
+    # ACCUMULATE. Built as a dict comprehension this was last-wins, so a plugin that failed on
+    # every one of ten units showed exactly one reason and the `[:3]` slice below could never
+    # show more than that one.
+    skipped, sk_units = {}, {}
+    for s in (payload.get("skipped") or []):
+        skipped.setdefault(s["kernel"], []).extend(s.get("why", []))
+        if s.get("unit") is not None:
+            sk_units.setdefault(s["kernel"], []).append(str(s["unit"]))
     kern = payload.get("kernels") or {}
     known = sorted(set(payload.get("cannot_show") or {}) | set(ran) | set(skipped))
     d = payload.get("describe") or {}
 
     rows = []
     for n in known:
-        if n in ran:
+        if n in ran and n in skipped:
+            # THE FOURTH STATE, and the one that was missing. `ran` was tested first, so a plugin
+            # that succeeded on seven samples of ten rendered as a plain "ran / ok" carrying one
+            # sample's headline - while the merged column held NaN for the other three and the
+            # `elif` that would have named them was unreachable. A partial result presented as a
+            # whole one is worse than a missing one: nothing about it looks wrong.
+            p = kern.get(n, {})
+            us = sk_units.get(n) or []
+            state = ('<span class="pill warn">ran, ' + _e(len(skipped[n]))
+                     + ' unit(s) failed</span> ' + _e(p.get("status", "")))
+            head = (_e(p.get("headline", ""))
+                    + "<br><span class='sub'>NOT covered: "
+                    + (_e(", ".join(us)) if us else "see the page")
+                    + " — those cells are NaN in the merged column</span>")
+            link = f'<a href="{_e(n)}.html">{_e(n)}</a>'
+        elif n in ran:
             p = kern.get(n, {})
             state = f'<span class="pill">ran</span> {_e(p.get("status", ""))}'
             head = _e(p.get("headline", ""))
@@ -248,6 +299,8 @@ def write_all(out_dir, payload):
     """Every kernel page plus the index. Returns the index path."""
     cs = payload.get("cannot_show") or {}
     sm = payload.get("summaries") or {}
+    mg = payload.get("merged") or {}
     for name, p in (payload.get("kernels") or {}).items():
-        write_kernel(out_dir, name, p, cs.get(name, []), sm.get(name, ""))
+        write_kernel(out_dir, name, p, cs.get(name, []), sm.get(name, ""),
+                     merged=mg.get(name))
     return write_index(out_dir, payload)
