@@ -472,6 +472,52 @@ def _run(a):
     return 0
 
 
+def _selftest(a):
+    """Run each plugin's selftest with ITS OWN interpreter. Runs no analysis.
+
+    A selftest used to run only at install time, which answers "did this environment work on the
+    day it was built". Environments drift, and a plugin declaring `needs_env: false` has no
+    install step at all - so its selftest never ran automatically, and a keyword the wrapped
+    function forbids reached a real cohort before anything executed the call.
+    """
+    from . import runner
+    from .kernels import discover
+    ks = discover()
+    names = _split(a.name or "") or sorted(n for n in ks if ks[n].status == "built")
+    bad = [n for n in names if n not in ks]
+    if bad:
+        print(f"scprofile: unknown plugin(s) {bad}. Known: {', '.join(sorted(ks))}",
+              file=sys.stderr)
+        return REFUSE
+    ran, missing, failed, blocked = [], [], [], []
+    for n in names:
+        print(f"{n}:")
+        try:
+            if runner.selftest(ks[n], prefix=a.prefix, log=print, timeout=a.timeout):
+                ran.append(n)
+            else:
+                missing.append(n)
+                print("  NO SELFTEST. Nothing has proved this plugin's call is well-formed "
+                      "against the version installed; only a real run will.")
+        except RuntimeError as e:
+            # "no environment" is not the same as "the environment is broken", and collapsing them
+            # loses the only one that has a fix.
+            (blocked if "no interpreter to run" in str(e) else failed).append(n)
+            print(f"  {'COULD NOT RUN' if n in blocked else 'FAILED'}\n{e}", file=sys.stderr)
+        except Exception as e:                                            # noqa: BLE001
+            failed.append(n)
+            print(f"  FAILED\n{e}", file=sys.stderr)
+
+    print(f"\n{len(ran)} passed, {len(failed)} failed, {len(blocked)} could not run, "
+          f"{len(missing)} have no selftest")
+    for label, group in (("without a selftest", missing), ("could not run", blocked)):
+        if group:
+            print(f"  {label}: {', '.join(group)}")
+    # ANYTHING OTHER THAN "ran and passed" IS NOT SUCCESS. Returning 0 because nothing could run
+    # is a check that passes for its own reasons, which is worse than no check at all.
+    return 0 if (ran and not failed and not blocked and not missing) else REFUSE
+
+
 def _validate(a):
     """Static checks on plugins and their references. Runs nothing."""
     from . import validate as V
@@ -988,6 +1034,13 @@ def main(argv=None):
                          "before trusting them")
     va.add_argument("--organism", default=None)
     va.set_defaults(fn=_validate)
+
+    se = sub.add_parser("selftest", help="prove each plugin's environment still works")
+    se.add_argument("name", nargs="?", default=None,
+                    help="plugin name(s), comma-separated. Default: every built plugin")
+    se.add_argument("--prefix", default=None, help="where kernel environments live")
+    se.add_argument("--timeout", type=int, default=None, metavar="SEC")
+    se.set_defaults(fn=_selftest)
 
     sc_ = sub.add_parser("scaffold", help="write a declared plugin's build skeleton")
     sc_.add_argument("name", help="plugin name(s), comma-separated")

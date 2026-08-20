@@ -27,6 +27,22 @@ Four defects reached a tagged commit past a green unit-test suite, and every one
 | the core budget divided twice, compounding | visible only by comparing the printed plan against the printed wave **in the same log** |
 | a README describing a directory it was written before | the file count is only wrong on disk |
 
+## `scprofile selftest`
+
+Step 2 of the driver is `scprofile selftest`, which runs each plugin's selftest **with that
+plugin's own interpreter**. It replaced a shell loop over `kernels/*/selftest.py` that used the
+host python for all of them and died on `No module named scvelo` — reporting a missing dependency
+that is not missing anywhere it matters.
+
+The subcommand exists for a second reason. A selftest used to run only at *install* time, which
+answers "did this environment work on the day it was built". Environments drift, and a plugin
+declaring `needs_env: false` has no install step at all — so its selftest never ran automatically,
+and that is precisely how a keyword the wrapped function forbids reached a real cohort.
+
+It reports four outcomes and treats exactly one of them as success. *Passed*, *failed*, *could not
+run* (no environment — which has a fix, and is not the same as a broken environment) and *has no
+selftest*. Returning 0 because nothing could run would be a check that passes for its own reasons.
+
 ## The per-unit plugin
 
 `tests/smoke/perunit/` is a plugin that computes nothing. It exists because **nine of the ten

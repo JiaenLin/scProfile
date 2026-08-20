@@ -37,11 +37,11 @@ echo; echo "=== 1. the per-unit fixture plugin is discovered and valid ==="
 $PY -m scprofile.cli validate perunit || exit 1
 
 echo; echo "=== 2. every built plugin's selftest ==="
-for st in "$TOOL"/kernels/*/selftest.py; do
-    [ -e "$st" ] || continue
-    echo "--- $(basename "$(dirname "$st")")"
-    $PY "$st" || exit 1
-done
+# `scprofile selftest`, NOT a shell loop over selftest.py with the host interpreter. A plugin
+# that brings its own environment must have its selftest run BY THAT ENVIRONMENT; the loop this
+# replaces ran velocity's selftest under the host python and died on `No module named scvelo`,
+# reporting a missing dependency that is not missing anywhere it matters.
+$PY -m scprofile.cli selftest ${PREFIX:+--prefix "$PREFIX"} || exit 1
 
 echo; echo "=== 3. the fixture ==="
 $PY "$HERE/make_fixture.py" --out "$WORK/fixture.h5ad" || exit 1

@@ -208,22 +208,42 @@ def install(kernel, prefix, *, force=False, log=print):
             subprocess.run([str(pip), "install", "--no-input"] + spec["pip"], check=True)
         (p / ".scprofile_lock").write_text(lock_fingerprint(kernel), encoding="utf-8")
 
-    st = kernel.path / "selftest.py"
-    if st.exists():
-        exe, _ = interpreter(kernel, prefix)
-        log(f"  selftest: {st.name}")
-        r = subprocess.run([exe, str(st)], capture_output=True, text=True)
-        if r.returncode != 0:
-            raise RuntimeError(
-                f"{kernel.name}'s selftest FAILED, so the environment is not usable:\n"
-                + (r.stdout or "") + (r.stderr or ""))
-        # Print it on SUCCESS too. "selftest ok" tells you a check passed and not which versions
-        # it passed against, and the versions are the thing anyone debugging this later needs -
-        # a lock is a claim about an environment, and this is the receipt.
-        for line in (r.stdout or "").splitlines():
-            log(f"    {line}")
-        log("  selftest ok")
+    selftest(kernel, prefix=prefix, log=log)
     return p
+
+
+def selftest(kernel, *, prefix=None, log=print, timeout=None):
+    """Run a plugin's selftest with THAT PLUGIN'S OWN INTERPRETER. Raises if it fails.
+
+    Two reasons this is not just an install step. An environment DRIFTS - a shared conda prefix
+    gets updated, a system library moves - and the selftest is the only thing that would notice;
+    an install-time-only check answers "did it work in June". And a plugin with `needs_env: false`
+    has no install step at all, so its selftest would otherwise never run automatically, which is
+    exactly how a forbidden keyword reached a real cohort.
+
+    Returns True if it ran, False if the plugin ships no selftest.
+    """
+    st = kernel.path / "selftest.py"
+    if not st.exists():
+        st = kernel.path / "selftest.R"
+    if not st.exists():
+        return False
+    exe, why = interpreter(kernel, prefix)
+    if not exe:
+        raise RuntimeError(f"{kernel.name}: no interpreter to run its selftest with. {why}")
+    log(f"  selftest: {st.name}  ({why})")
+    r = subprocess.run([exe, str(st)], capture_output=True, text=True, timeout=timeout)
+    if r.returncode != 0:
+        raise RuntimeError(
+            f"{kernel.name}'s selftest FAILED, so the environment is not usable:\n"
+            + (r.stdout or "") + (r.stderr or ""))
+    # Print it on SUCCESS too. "selftest ok" tells you a check passed and not which versions it
+    # passed against, and the versions are the thing anyone debugging this later needs - a lock is
+    # a claim about an environment, and this is the receipt.
+    for line in (r.stdout or "").splitlines():
+        log(f"    {line}")
+    log("  selftest ok")
+    return True
 
 
 def run(kernel, *, inp, out_dir, prefix=None, log=print, timeout=None):
