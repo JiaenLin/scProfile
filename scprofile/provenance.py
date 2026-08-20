@@ -102,6 +102,80 @@ def _tool_records(uns):
     return out
 
 
+def ancestry_roots(path, up=4):
+    """Directories near the object, walking up from it.
+
+    The recorded chain is only as long as the tools that wrote it. Each records its IMMEDIATE
+    input, so a chain breaks wherever a step builds a fresh object — and a joint embedding two
+    stages down then points at the stage above it and no further, with the aligner's output
+    sitting four levels away and unreferenced.
+
+    Walking up from the object and looking at siblings is the generic recovery: it assumes only
+    that a project keeps its stages near each other, which is what a project is.
+    """
+    import os
+    out, d = [], os.path.dirname(os.path.abspath(str(path)))
+    for _ in range(up):
+        if not d or d == os.path.dirname(d):
+            break
+        out.append(d)
+        try:
+            for e in os.scandir(d):
+                if e.is_dir(follow_symlinks=False) and not e.name.startswith("."):
+                    out.append(e.path)
+        except OSError:
+            pass
+        d = os.path.dirname(d)
+    seen, uniq = set(), []
+    for r in out:
+        if r not in seen:
+            seen.add(r)
+            uniq.append(r)
+    return uniq
+
+
+#: The shapes the single-cell profile knows an aligner writes velocity counts in. Recognised by
+#: CONTENT — a filename convention is a guess about somebody else's pipeline.
+_SOURCE_SHAPES = (
+    ("mtx triplet", ("spliced.mtx", "unspliced.mtx", "barcodes.tsv")),
+    ("mtx triplet (gz)", ("spliced.mtx.gz", "unspliced.mtx.gz", "barcodes.tsv.gz")),
+)
+
+
+def find_layer_sources(roots, wanted=("spliced", "unspliced"), max_depth=8, cap=8000):
+    """Where the missing layers actually are. Returns [(kind, path), ...].
+
+    `plan` uses this to turn "this plugin will refuse" into "pass --search <this>". Reporting a
+    gap without the path is the difference between a plan and an excuse.
+    """
+    import os
+    found, visited = [], 0
+    for root in roots:
+        if not os.path.isdir(root):
+            continue
+        stack = [(root, 0)]
+        while stack and visited < cap:
+            d, depth = stack.pop()
+            visited += 1
+            try:
+                names = {e.name: e for e in os.scandir(d)}
+            except OSError:
+                continue
+            for kind, need in _SOURCE_SHAPES:
+                if all(n in names for n in need):
+                    found.append((kind, d))
+                    break
+            for e in names.values():
+                if e.is_dir(follow_symlinks=False) and depth < max_depth \
+                        and not e.name.startswith("."):
+                    stack.append((e.path, depth + 1))
+    find_layer_sources.visited = visited
+    return found
+
+
+find_layer_sources.visited = 0
+
+
 def harvest(adata, *, extra_roots=()):
     """Leads for a kernel that needs something the object does not contain.
 

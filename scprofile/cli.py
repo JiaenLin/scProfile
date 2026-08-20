@@ -455,7 +455,9 @@ def _plan(a):
     _km = {k2: v2 for k2, v2 in _km.items() if v2}
     have_obs, have_obsm = set(A.obs.columns), set(A.obsm)
     have_layers = {k for k in A.layers if k is not None}
-    runnable, planned = [], []
+    import os
+    prov = provenance.harvest(A)
+    runnable, planned, todo = [], [], []
     for name in sorted(want):
         k = ks[name]
         if k.status != "built":
@@ -471,8 +473,7 @@ def _plan(a):
                 print(f"      {pr}")
         elif not env_ok:
             print(f"  NO ENVIRONMENT {name}   {why}")
-            if fix:
-                print(f"      fix: {fix}")
+            todo.append(("env", name, fix or f"scprofile install {name} --prefix <dir>"))
         else:
             runnable.append(name)
             e = k.executor
@@ -482,12 +483,28 @@ def _plan(a):
             # declares can_source_layers is NOT blocked on a missing layer - it goes and looks -
             # so reporting it as plainly runnable overstates the case. Say what it will look for
             # and what happens if it does not find it.
-            miss = [c for c in k.needs_layers if c not in have_layers]
+            from .kernels import resolve_keys
+            miss = [c for c in resolve_keys(k.needs_layers, _km) if c not in have_layers]
             if miss and k.can_source_layers:
-                print(f"      WILL SEARCH for layers {', '.join(repr(m) for m in miss)}, which "
-                      f"are not on this object.")
-                print(f"      It will follow the provenance recorded upstream and refuse, naming "
-                      f"every directory it looked in, if they are not there.")
+                roots = (list((prov or {}).get("search_paths") or [])
+                         + provenance.ancestry_roots(a.h5ad))
+                hits = provenance.find_layer_sources(roots, tuple(miss))
+                if hits:
+                    common = os.path.commonpath([h[1] for h in hits]) if len(hits) > 1 \
+                        else hits[0][1]
+                    print(f"      layers {', '.join(miss)} are NOT on this object, but "
+                          f"{len(hits)} source(s) were FOUND:")
+                    for kind, d in hits[:3]:
+                        print(f"        {kind}  {d}")
+                    if len(hits) > 3:
+                        print(f"        ... and {len(hits) - 3} more")
+                    todo.append(("data", name, f"--search {common}"))
+                else:
+                    print(f"      layers {', '.join(miss)} are not on this object and no source "
+                          f"was found under {len(roots)} lead(s).")
+                    todo.append(("data", name,
+                                 f"# regenerate {', '.join(miss)} from the aligner, or "
+                                 f"--search <dir>"))
             if k.needs_design and not a.design:
                 print(f"      needs a design table")
 
@@ -503,6 +520,24 @@ def _plan(a):
             print(f"  {mark:<16} {name:<12} wraps {wraps}{unit}")
             for pr in probs:
                 print(f"      {pr}")
+            if not probs:
+                todo.append(("build", name,
+                             f"scprofile scaffold {name}   # manifest exists; lock, selftest, "
+                             f"run.py and UPSTREAM.md do not"))
+
+    # ---- what to do about it ------------------------------------------------------------------
+    #
+    # A gap reported without the command that closes it is an excuse. Everything above that
+    # stopped something is repeated here as an action, in the order it has to happen.
+    if todo:
+        print("\nto make this runnable")
+        order = {"data": 0, "env": 1, "build": 2}
+        for kind, name, cmd in sorted(todo, key=lambda x: (order.get(x[0], 9), x[1])):
+            print(f"  [{kind:<5}] {name:<12} {cmd}")
+        print("\n  `scprofile plan --fix` runs the env and reference steps. A [build] step needs "
+              "a person:")
+        print("  scaffold writes the skeleton from the manifest, and the method still has to be "
+              "wrapped correctly.")
 
     # ---- the schedule -------------------------------------------------------------------------
     if runnable:
