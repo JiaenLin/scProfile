@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -120,9 +121,24 @@ def _split(s):
 
 # -------------------------------------------------------------------------------------- run
 
+def _default_cores():
+    """The cores this process was ALLOCATED, preferring the scheduler over the machine.
+
+    A shared node reports every core it has, not the share this job was given, and taking the
+    machine's count is how a wave ends up slower than running the same work serially.
+    """
+    for var in ("NCPUS", "PBS_NCPUS", "SLURM_CPUS_PER_TASK"):
+        v = os.environ.get(var)
+        if v and v.isdigit() and int(v) > 0:
+            return int(v)
+    import multiprocessing
+    return max(1, min(8, multiprocessing.cpu_count()))
+
+
 def _run(a):
     from . import compat, inputs, manifest, merge, provenance, refs, report, runner
-    from .kernels import (discover, guard_verdict, log_escape, order, undeclared, unmet)
+    from .kernels import (discover, guard_verdict, log_escape, schedule,
+                          undeclared, unmet)
 
     try:
         import anndata as ad
@@ -140,6 +156,27 @@ def _run(a):
         print(f"scprofile: unknown kernel(s) {bad}. Known: {', '.join(sorted(ks))}",
               file=sys.stderr)
         return REFUSE
+
+    # ---- F9: a plugin is validated BEFORE it is run ------------------------------------------
+    # `validate` is cheap and static. Running a plugin whose UPSTREAM.md is still a template, or
+    # whose run.py is still a scaffold, produces a result nobody can interpret and a report that
+    # presents it as though somebody could.
+    if not getattr(a, "no_validate", False):
+        from . import validate as V
+        errs = 0
+        for n in [x for x in want if ks[x].status == "built"]:
+            f = V.validate_plugin(ks[n])
+            bad = [x for x in f if x.level == "ERROR"]
+            if bad:
+                errs += len(bad)
+                print(f"scprofile: {n} fails validation:", file=sys.stderr)
+                for x in bad:
+                    print(f"    {x.check}" + (f" — {x.detail}" if x.detail else ""),
+                          file=sys.stderr)
+        if errs:
+            print(f"scprofile: REFUSE - {errs} validation error(s). Fix them, or --no-validate "
+                  f"to run anyway (which is recorded in the report).", file=sys.stderr)
+            return REFUSE
 
     out = Path(a.out)
     print(f"reading {a.h5ad}")
@@ -192,109 +229,170 @@ def _run(a):
     #: pinned anndata may have no reader for the encoding a current one writes; see compat.py.
     readable = {}
 
-    for name in order(want, ks):
+    # ---- units, the second axis of parallelism -----------------------------------------------
+    #
+    # A per_unit plugin is run once per design unit and the results compared. That is a
+    # CORRECTNESS declaration before it is a speed one: an inference pooled over a cohort
+    # describes the average of its conditions and may describe neither.
+    sample_key = keys["sample"][0]
+    units = (sorted(set(A.obs[sample_key].astype(str))) if sample_key else None)
+    budget = int(getattr(a, "cores", 0) or _default_cores())
+    waves = schedule(want, ks, budget_cores=budget, units=units)
+    n_inst = sum(len(w) for w in waves)
+    print(f"\nplan: {n_inst} instance(s) in {len(waves)} wave(s), {budget} core(s)"
+          + (f", {len(units)} unit(s)" if units else ""))
+    for i, wave in enumerate(waves, 1):
+        print(f"  wave {i}: " + ", ".join(
+            f"{x['plugin']}" + (f"[{x['unit']}]" if x["unit"] else "") + f"({x['cores']}c)"
+            for x in wave))
+    if a.timeout:
+        print(f"  per-instance timeout {a.timeout}s")
+    else:
+        print("  NO per-instance timeout. A plugin that hangs will block the whole run; "
+              "--timeout bounds it.")
+
+    results = {}          # plugin -> [(out_dir, payload)]
+    timings = {}
+
+    def _prepare(inst):
+        """Everything before the subprocess: guards, references, the readable copy, in.json."""
+        name, unit, cores = inst["plugin"], inst["unit"], inst["cores"]
         k = ks[name]
-        print(f"\n=== {name} ===")
-        probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers, ran=ran,
-                      has_design=bool(a.design), keys=_km)
-        if probs and not a.force:
-            print(f"  NOT RUN - {len(probs)} prerequisite(s) unmet:")
-            for p in probs:
-                print(f"    {p}")
-            skipped.append({"kernel": name, "why": probs})
-            continue
         allow, why, escape = guard_verdict(
             k, describe=inputs.describe(A, keys, organism, assay, csrc),
             constraint=constraint, params={})
         if not allow and k.name not in allowed:
-            print(f"  NOT RUN - this kernel's own guard refused:")
-            for line in str(why).splitlines():
-                print(f"    {line}")
-            print(f"    Override with: {escape}   (it will be logged)")
-            skipped.append({"kernel": name, "why": [str(why)]})
-            continue
+            return None, [f"guard refused: {why}", f"override with {escape} (it is logged)"]
         if not allow:
-            print(f"  GUARD OVERRIDDEN with --allow {k.name}. Logged.")
-            for line in str(why).splitlines():
-                print(f"    {line}")
             log_escape(out / "guard_overrides.jsonl", k.name, str(why))
-        elif why:
-            print(f"  guard: {why}")
-
         try:
             r = refs.resolve(k, a.references, organism[0]) if k.references(organism[0]) else {}
         except FileNotFoundError as e:
-            print(f"  NOT RUN - {e}")
-            skipped.append({"kernel": name, "why": [str(e)]})
-            continue
-
-        kout = out / "kernels" / name
+            return None, [str(e)]
+        kout = out / "kernels" / name / (str(unit) if unit else "")
         kout.mkdir(parents=True, exist_ok=True)
-
-        # Ask the kernel's OWN interpreter whether it can read the object, before launching it.
-        # A version skew in anndata's IO registry otherwise surfaces as a traceback on the
-        # kernel's first line, about an IO registry, in a user who installed everything right.
         exe, _src = runner.interpreter(k, a.prefix)
         k_h5ad = a.h5ad
         if exe:
             k_h5ad = compat.readable_input(A, a.h5ad, exe, out, cache=readable)
             if k_h5ad is None:
-                why = (f"{name}'s interpreter cannot read this object, and re-writing it in the "
-                       f"classic string encoding did not help. The kernel environment's anndata "
-                       f"is too old for how this file is encoded.  Fix: rebuild the kernel with "
-                       f"a newer lock, or re-export the object from an older anndata.")
-                print(f"  NOT RUN - {why}")
-                skipped.append({"kernel": name, "why": [why]})
-                continue
-
+                return None, [f"{name}'s interpreter cannot read this object even re-encoded"]
         manifest.write_input(
             kout / "in.json", h5ad=k_h5ad, out_dir=kout,
             keys={r_: v[0] for r_, v in keys.items() if v[0]},
             organism=organism[0], assay=assay[0], design=a.design, references=r,
             params=json.loads(a.params) if a.params else {},
             upstream=dict(upstream), sentinels=inputs.DEFAULT_SENTINELS,
-            provenance=prov)
-        try:
-            payload = runner.run(k, inp=kout / "in.json", out_dir=kout, prefix=a.prefix)
-        except Exception as e:                                            # noqa: BLE001
-            print(f"  FAILED: {e}")
-            skipped.append({"kernel": name, "why": [str(e)]})
+            provenance=prov, resources={"cores": cores}, unit=unit)
+        return kout, None
+
+    for wi, wave in enumerate(waves, 1):
+        # Prerequisites are re-checked at the START OF EACH WAVE, not once up front: a plugin may
+        # become runnable because an earlier wave produced what it needed, and the graph only
+        # orders — it does not know what a plugin actually wrote.
+        live = []
+        for inst in wave:
+            name = inst["plugin"]
+            k = ks[name]
+            if k.status != "built":
+                if name not in {s["kernel"] for s in skipped}:
+                    skipped.append({"kernel": name, "why": [
+                        f"declared but not built. `scprofile scaffold {name}` writes the "
+                        f"skeleton; the method still has to be wrapped."]})
+                continue
+            probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers, ran=ran,
+                          has_design=bool(a.design), keys=_km)
+            if probs and not a.force:
+                if name not in {s["kernel"] for s in skipped}:
+                    skipped.append({"kernel": name, "why": probs})
+                continue
+            live.append(inst)
+        if not live:
             continue
-        # Only a kernel that actually produced something becomes available upstream. A `refused`
-        # status is a result, but it is not a result another kernel can read.
-        if payload.get("status") in ("ok", "partial"):
-            upstream[name] = kout
-        print(f"  status {payload['status']}   {payload.get('headline', '')}")
-        extra = undeclared(k, payload)
-        if extra:
-            # `produces` is a contract, not a comment - the harness holds a skill to its declared
-            # tools, and the same applies here. Not fatal, because a stale declaration is the
-            # author's oversight rather than the user's, but reported everywhere it will be seen.
-            print(f"  UNDECLARED OUTPUT: {', '.join(extra)}")
-            print(f"    {k.name}'s kernel.yml does not list these under `produces`, so no")
-            print(f"    `cannot_show` covers them and no documentation mentions them.")
-            payload.setdefault("caveats", []).append(
-                "Wrote " + ", ".join(extra) + " without declaring them in kernel.yml.")
-        for c in payload.get("caveats", []):
-            print(f"  caveat: {c}")
-        try:
-            got = merge.merge_one(A, kout, payload)
-        except merge.MergeError as e:
-            print(f"  MERGE REFUSED: {e}")
-            skipped.append({"kernel": name, "why": [str(e)]})
-            continue
-        tabs = merge.copy_tables(kout, payload, out / "tables")
-        merge.link_objects(kout, payload, out / "objects")
-        for slot, v in got.items():
-            if v:
-                print(f"  merged {slot}: {', '.join(v)}")
-        if tabs:
-            print(f"  tables: {', '.join(tabs)}")
-        have_obs |= set(got["obs"])
-        have_obsm |= set(got["obsm"])
-        have_layers |= set(got["layers"])
-        ran.append(name)
-        payloads.append(payload)
+
+        print(f"\n=== wave {wi} ===", flush=True)
+        prepared = []
+        for inst in live:
+            kout, why = _prepare(inst)
+            if kout is None:
+                lbl = inst["plugin"] + (f"[{inst['unit']}]" if inst["unit"] else "")
+                print(f"  NOT RUN {lbl}")
+                for w in why:
+                    print(f"      {w}")
+                skipped.append({"kernel": inst["plugin"], "why": why})
+                continue
+            prepared.append((inst, kout))
+
+        # Instances in a wave are independent by construction, so they run CONCURRENTLY. The
+        # plugins are subprocesses, so threads are the right shape - each blocks on its child and
+        # holds no lock. The merge afterwards is sequential because AnnData is not thread-safe.
+        import concurrent.futures as cf
+        import time as _time
+
+        def _go(item):
+            inst, kout = item
+            lbl = inst["plugin"] + (f"[{inst['unit']}]" if inst["unit"] else "")
+            t0 = _time.perf_counter()
+            try:
+                pl = runner.run(ks[inst["plugin"]], inp=kout / "in.json", out_dir=kout,
+                                prefix=a.prefix, log=lambda *_a, **_k: None,
+                                timeout=a.timeout)
+                pl["unit"] = inst["unit"]
+                return inst, kout, pl, _time.perf_counter() - t0, None
+            except Exception as e:                                        # noqa: BLE001
+                return inst, kout, None, _time.perf_counter() - t0, f"{lbl}: {e}"
+
+        with cf.ThreadPoolExecutor(max_workers=max(1, len(prepared))) as ex:
+            done = list(ex.map(_go, prepared))
+
+        for inst, kout, pl, secs, err in done:
+            name = inst["plugin"]
+            lbl = name + (f"[{inst['unit']}]" if inst["unit"] else "")
+            timings.setdefault(name, []).append(round(secs, 1))
+            if err:
+                # One instance failing must not take the wave. A per-unit plugin failing on one
+                # unit reports that unit as absent and keeps the rest.
+                print(f"  FAILED {lbl}  ({secs:.0f}s)")
+                print(f"      {err}")
+                skipped.append({"kernel": name, "why": [err]})
+                continue
+            print(f"  {lbl:<28} {pl['status']:<8} {secs:>6.0f}s  {pl.get('headline', '')}")
+            extra = undeclared(ks[name], pl)
+            if extra:
+                print(f"      UNDECLARED OUTPUT: {', '.join(extra)} - no `cannot_show` covers "
+                      f"them and no documentation mentions them")
+                pl.setdefault("caveats", []).append(
+                    "Wrote " + ", ".join(extra) + " without declaring them in kernel.yml.")
+            for c in pl.get("caveats", []):
+                print(f"      caveat: {c}")
+            if pl.get("status") in ("ok", "partial"):
+                upstream[name] = kout
+            results.setdefault(name, []).append((kout, pl))
+
+        # ---- merge, sequentially, once per plugin --------------------------------------------
+        for name in sorted({i["plugin"] for i, _k in prepared}):
+            got_list = results.get(name)
+            if not got_list:
+                continue
+            if name in ran:
+                continue
+            try:
+                got = merge.merge_many(A, got_list)
+            except merge.MergeError as e:
+                print(f"  MERGE REFUSED {name}: {e}")
+                skipped.append({"kernel": name, "why": [str(e)]})
+                continue
+            for kout, pl in got_list:
+                merge.copy_tables(kout, pl, out / "tables")
+                merge.link_objects(kout, pl, out / "objects")
+            for slot, v in got.items():
+                if v:
+                    print(f"  merged {slot}: {', '.join(v)}")
+            have_obs |= set(got["obs"])
+            have_obsm |= set(got["obsm"])
+            have_layers |= set(got["layers"])
+            ran.append(name)
+            payloads.extend(pl for _k, pl in got_list)
 
     describe = inputs.describe(A, keys, organism, assay, csrc)
     A.uns["scprofile"] = merge.provenance(
@@ -308,11 +406,16 @@ def _run(a):
     payload = {"version": _v(), "input": str(a.h5ad), "describe": describe,
                "constraint_on_use": constraint, "constraint_source": csrc,
                "ran": ran, "skipped": skipped,
+               "status": {n: ks[n].status for n in sorted(ks)},
+               "schedule": [[{kk: vv for kk, vv in i.items()} for i in w] for w in waves],
+               "seconds": timings, "cores": budget, "units": units,
+               "timeout": a.timeout,
                "kernels": {p["kernel"]: p for p in payloads},
                "cannot_show": {n: ks[n].cannot_show for n in sorted(ks)},
                "summaries": {n: ks[n].summary for n in sorted(ks)},
                "object": str(op)}
     (out / "report.json").write_text(json.dumps(payload, indent=1, default=str), encoding="utf-8")
+    _write_readme(out, payload)
     print(f"      {out}/report.json")
     print(f"      {report.write_all(out, payload)}")
     return 0
@@ -636,6 +739,73 @@ def _plan(a):
     return 0 if runnable and ok_all else REFUSE
 
 
+def _write_readme(out, payload):
+    """The six-question README, written by INSPECTING the directory.
+
+    By inspecting it, not from what the run intended: a README describing files that were not
+    written is the failure this project has hit in three other places, and it reads exactly like a
+    correct one.
+    """
+    out = Path(out)
+    d = payload.get("describe") or {}
+    ran, skipped = payload.get("ran") or [], payload.get("skipped") or []
+    files = sorted(q for q in out.rglob("*") if q.is_file())
+    by_dir = {}
+    for q in files:
+        by_dir.setdefault(str(q.parent.relative_to(out)) or ".", []).append(q.name)
+
+    L = [f"# scProfile output", "",
+         f"- **{len(ran)}** plugin(s) ran, **{len(skipped)}** did not",
+         f"- {len(files)} files, {sum(q.stat().st_size for q in files) / 1e9:.2f} GB", ""]
+
+    L += ["## 1. What is this, and where did it come from?", "",
+          f"Produced by scProfile {payload.get('version', '?')} from `{payload.get('input')}`.",
+          f"Plugins that ran: {', '.join(ran) or 'none'}.", ""]
+    if payload.get("constraint_on_use"):
+        L += ["The input carried a **constraint on use**, reproduced in the report. It applies to "
+              "everything here.", ""]
+
+    L += ["## 2. What is the layout?", ""]
+    for k in sorted(by_dir):
+        L.append(f"- `{k}/` — {len(by_dir[k])} file(s): "
+                 + ", ".join(sorted(by_dir[k])[:6])
+                 + (" …" if len(by_dir[k]) > 6 else ""))
+    L.append("")
+
+    L += ["## 3. What does each file contain?", "",
+          "| file | is |", "|---|---|"]
+    for k, v in sorted((payload.get("kernels") or {}).items()):
+        L.append(f"| `report/{k}.html` | {k}: {v.get('headline', '')} |")
+    L += ["| `objects/*.h5ad` | the input object with every merged cell-level result |",
+          "| `tables/*.csv` | edge- and gene-level results, prefixed by plugin |",
+          "| `report.json` | every number in the report, machine-readable |", ""]
+
+    L += ["## 4. What processing has already been applied?", "",
+          "Nothing here re-processes the input. Each plugin adds its own result; the object's "
+          "X, layers and existing obs are the input's.", ""]
+    for k, v in sorted((payload.get("kernels") or {}).items()):
+        for c in (v.get("caveats") or [])[:2]:
+            L.append(f"- **{k}**: {c}")
+    L.append("")
+
+    L += ["## 5. Which file is the intended input for the next step?", "",
+          f"`objects/{Path(str(payload.get('object', ''))).name}` — it carries every merged "
+          f"result. The per-plugin directories under `kernels/` are the raw run output and are "
+          f"kept for provenance, not for reading.", ""]
+
+    L += ["## 6. What is missing, or cannot be done with this output?", ""]
+    if skipped:
+        L.append("**Did not run:**", )
+        for s in skipped:
+            L.append(f"- `{s['kernel']}` — {'; '.join(str(w) for w in (s.get('why') or []))[:300]}")
+        L.append("")
+    L += ["Every plugin's own limits are on its report page and in "
+          "`report.json` under `cannot_show`. They are not repeated here, because a limit "
+          "restated away from the number it qualifies is a limit that goes stale.", ""]
+    (out / "README.md").write_text("\n".join(L), encoding="utf-8")
+    return out / "README.md"
+
+
 def _report(a):
     from . import report
     p = Path(a.out) / "report.json"
@@ -695,6 +865,15 @@ def main(argv=None):
     r.add_argument("--design", default=None, type=Path,
                    help="CSV keyed on the sample column, carrying the experimental factors")
     r.add_argument("--params", default=None, help="JSON passed through to every kernel")
+    r.add_argument("--cores", type=int, default=None, metavar="N",
+                   help="core budget divided across concurrently running plugins. Defaults to "
+                        "the scheduler's allocation, never the machine's core count")
+    r.add_argument("--timeout", type=int, default=None, metavar="SECONDS",
+                   help="per-instance limit. Without one, a plugin that hangs blocks the whole "
+                        "run and under a scheduler the walltime kills every plugin rather than "
+                        "the one at fault")
+    r.add_argument("--no-validate", action="store_true",
+                   help="run without the static checks. Recorded in the report")
     r.add_argument("--search", default=None, metavar="DIRS",
                    help="extra directories a kernel may look in for files that are NOT in the "
                         "object - spliced/unspliced counts, most often. Comma-separated. The "

@@ -90,6 +90,60 @@ def merge_one(adata, out_dir, payload, *, log=print):
     return merged
 
 
+def merge_many(adata, results, *, log=print):
+    """Merge one plugin's results from SEVERAL units — one run per sample, say — as one column.
+
+    A per-unit plugin returns a result covering only its own unit's cells. Merging each in turn
+    with `merge_one` would let the last unit's NaNs overwrite every earlier unit's values, and the
+    object would carry the final sample's result under a name implying the cohort's.
+
+    So the pieces are concatenated FIRST and assigned once. Overlap between units is an error, not
+    a merge: two units claiming the same cell means the units were not disjoint, and quietly
+    taking one of them would hide that.
+    """
+    import pandas as pd
+    if len(results) == 1:
+        return merge_one(adata, results[0][0], results[0][1], log=log)
+
+    merged = {"obs": [], "obsm": [], "layers": [], "tables": []}
+    bc = adata.obs_names.astype(str)
+    cols = {}
+    for out_dir, payload in results:
+        for col, rel in (payload.get("obs") or {}).items():
+            s = _read_obs_column(Path(out_dir) / rel)
+            s.index = s.index.astype(str)
+            cols.setdefault(col, []).append((payload.get("unit"), s))
+
+    for col, pieces in cols.items():
+        idx = pd.Index([])
+        for unit, s in pieces:
+            dup = idx.intersection(s.index)
+            if len(dup):
+                raise MergeError(
+                    f"obs[{col!r}]: unit {unit!r} claims {len(dup):,} cell(s) another unit "
+                    f"already returned, e.g. {list(dup[:3])}. The units are not disjoint, and "
+                    f"taking one of them would hide that.")
+            idx = idx.append(s.index)
+        full = pd.concat([s for _u, s in pieces])
+        shared = bc.intersection(full.index)
+        if len(shared) == 0:
+            raise MergeError(
+                f"obs[{col!r}]: none of {len(full):,} barcodes from {len(pieces)} unit(s) match "
+                f"the object's {len(bc):,}. These are not the same cells.\n"
+                f"  units: {list(full.index[:3])}\n  object: {list(bc[:3])}")
+        if len(shared) < len(bc):
+            log(f"    obs[{col}]: {len(shared):,} of {len(bc):,} cells covered across "
+                f"{len(pieces)} unit(s); the rest are NaN")
+        adata.obs[col] = full.reindex(bc).values
+        merged["obs"].append(col)
+
+    for _out_dir, payload in results:
+        if payload.get("obsm") or payload.get("layers"):
+            log(f"    note: unit {payload.get('unit')!r} returned an array output, which cannot "
+                f"be merged across units without barcodes. It stays in the run directory.")
+    return merged
+
+
 def copy_tables(out_dir, payload, dest, *, log=print):
     """Edge-level and gene-level results, copied beside the object under a kernel-prefixed name.
 
@@ -103,8 +157,13 @@ def copy_tables(out_dir, payload, dest, *, log=print):
     for rel in (payload.get("tables") or []):
         src = Path(out_dir) / rel
         name = Path(rel).name
-        tgt = dest / (name if name.startswith(payload["kernel"]) else
-                      f"{payload['kernel']}_{name}")
+        stem = name if name.startswith(payload["kernel"]) else f"{payload['kernel']}_{name}"
+        if payload.get("unit"):
+            # Without this, every unit writes the SAME filename and only the last survives - which
+            # then looks exactly like a cohort-level result.
+            st = Path(stem)
+            stem = f"{st.stem}__{payload['unit']}{st.suffix}"
+        tgt = dest / stem
         shutil.copy2(src, tgt)
         made.append(tgt.name)
     return made

@@ -44,6 +44,7 @@ figcaption{margin-top:.7rem;font-size:.86rem;line-height:1.5}
 figure{margin:1.6rem 0;padding:1rem;background:var(--card);border:1px solid var(--line);
 border-radius:8px}img{max-width:100%;height:auto;display:block;border-radius:4px;background:#fff}
 ul{margin:.4rem 0 .4rem 1.1rem;padding:0}li{margin:.25rem 0}
+.pill.warn{background:#fef3c7;color:#92400e}
 .pill{display:inline-block;padding:.1rem .45rem;border-radius:3px;background:var(--card);
 border:1px solid var(--line);font-size:.72rem;color:var(--mut)}
 """
@@ -134,6 +135,35 @@ def write_kernel(out_dir, name, payload, cannot_show, summary=""):
     return f
 
 
+def _schedule_block(payload):
+    """What ran, in what order, on how many cores, and how long it took.
+
+    Every other tool in this family records its own run cost. Without it the provenance cannot
+    answer how long, on what, or in what order - and a schedule that was printed but not recorded
+    is a claim nobody can check afterwards.
+    """
+    waves = payload.get("schedule") or []
+    if not waves:
+        return ""
+    secs = payload.get("seconds") or {}
+    rows = []
+    for i, w in enumerate(waves, 1):
+        for inst in w:
+            n = inst.get("plugin")
+            t = secs.get(n)
+            took = f"{sum(t):.0f}s over {len(t)} instance(s)" if t else "did not run"
+            rows.append(f"<tr><td>{i}</td><td><code>{_e(n)}</code></td>"
+                        f"<td>{_e(inst.get('unit') or '—')}</td>"
+                        f"<td>{_e(inst.get('cores'))}</td><td>{_e(took)}</td></tr>")
+    return ("<h2>How this ran</h2><p class='sub'>Instances in one wave are independent and run "
+            "concurrently; a wave waits only on what the dependency graph says it waits on. The "
+            f"core budget was {_e(payload.get('cores'))}"
+            + (f", per-instance timeout {_e(payload.get('timeout'))}s"
+               if payload.get("timeout") else ", with NO per-instance timeout")
+            + ".</p><div class='wrap'><table><tr><th>wave</th><th>plugin</th><th>unit</th>"
+              "<th>cores</th><th>time</th></tr>" + "".join(rows) + "</table></div>")
+
+
 def write_index(out_dir, payload):
     """The index: EVERY known kernel, with its state and what it cannot show."""
     ran = list(payload.get("ran") or [])
@@ -152,6 +182,15 @@ def write_index(out_dir, payload):
         elif n in skipped:
             state = '<span class="pill">not run</span>'
             head = "<br>".join(_e(w) for w in skipped[n][:3])
+            link = _e(n)
+        elif (payload.get("status") or {}).get(n) == "planned":
+            # NOT THE SAME AS "not requested", and the distinction is the one this whole design
+            # rests on: `this experiment cannot answer that` and `nobody has written this yet` are
+            # opposite facts with opposite remedies, and a reader must not have to guess which.
+            state = '<span class="pill warn">declared, not built</span>'
+            head = (_e((payload.get("summaries") or {}).get(n, ""))
+                    + "<br><span class='sub'>its prerequisites are declared and checkable; "
+                      "the implementation does not exist</span>")
             link = _e(n)
         else:
             state = '<span class="pill">not requested</span>'
@@ -200,6 +239,7 @@ def write_index(out_dir, payload):
     dd = Path(out_dir) / "report"
     dd.mkdir(parents=True, exist_ok=True)
     f = dd / "index.html"
+    body.append(_schedule_block(payload))
     f.write_text(_page("scProfile", "".join(body)), encoding="utf-8")
     return f
 
