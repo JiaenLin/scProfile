@@ -552,6 +552,82 @@ def test_every_lock_is_validated_whatever_the_status():
     check("and some of them are planned, which is the point", bool(planned), str(planned))
 
 
+def test_a_half_built_environment_is_not_a_built_one():
+    """`install` used to ask only whether the DIRECTORY exists. Two ways that is wrong.
+
+    Both were live on PBS 676357, where a conda step built 306 packages, the `r:` step failed, and
+    the directory left behind looked finished from the outside.
+    """
+    print("\nan environment that exists is not one that was finished")
+    from scprofile import runner
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        d = td / "k"
+        d.mkdir()
+        (d / "kernel.yml").write_text("name: k\nsummary: s\nneeds_env: true\n")
+        (d / "lock.yml").write_text("channels:\n  - conda-forge\ndependencies:\n  - python=3.11\n")
+        pref = td / "prefix"
+        env = runner.env_prefix("k", pref)
+        (env / "bin").mkdir(parents=True)
+        (env / "bin" / "python").write_text("#!/bin/sh\n")
+        (env / "left_by_the_previous_lock").write_text("x")
+
+        # No stamp: the build never reached its last act, so the environment is not the one the
+        # lock describes and must not be handed to a selftest as though it were.
+        try:
+            runner.install(Kernel(d), pref)
+            check("a stampless environment is refused", False, "install carried on")
+        except RuntimeError as e:
+            check("a stampless environment is refused", "exists but is stale" in str(e))
+            check("and the refusal names --force", "--force" in str(e))
+
+        # A stamp from a DIFFERENT lock is the same fact wearing a different hat.
+        (env / ".scprofile_lock").write_text("deadbeefcafe")
+        try:
+            runner.install(Kernel(d), pref)
+            check("an environment built from another lock is refused", False)
+        except RuntimeError as e:
+            check("an environment built from another lock is refused",
+                  "deadbeefcafe" in str(e) and "current lock is" in str(e))
+
+        # A matching stamp is the one case that may skip the build.
+        (env / ".scprofile_lock").write_text(runner.lock_fingerprint(Kernel(d)))
+        said = []
+        try:
+            runner.install(Kernel(d), pref, log=said.append)
+        except Exception:                                     # the selftest step, not this check
+            pass
+        check("a matching stamp still skips the rebuild",
+              any("matches the current lock" in x for x in said), str(said))
+
+        # --force must REMOVE first. Installing again into a populated prefix leaves every package
+        # the previous lock pulled and this one does not, in an environment whose fingerprint then
+        # claims it came from this lock.
+        said = []
+        try:
+            runner.install(Kernel(d), pref, force=True, log=said.append)
+        except Exception:
+            pass
+        check("--force removes the old prefix", any("removing" in x for x in said), str(said))
+        check("and nothing from the previous lock survives",
+              not (env / "left_by_the_previous_lock").exists())
+
+        # The removal is guarded by NAME, so a caller passing some other path cannot turn --force
+        # into an rmtree of it.
+        stray = td / "not-an-env"
+        stray.mkdir()
+        orig = runner.env_prefix
+        runner.env_prefix = lambda name, prefix: stray
+        try:
+            runner.install(Kernel(d), pref, force=True)
+            check("--force refuses a path it did not construct", False, "it removed it")
+        except RuntimeError as e:
+            check("--force refuses a path it did not construct", "refusing to remove" in str(e))
+        finally:
+            runner.env_prefix = orig
+        check("and that path is untouched", stray.exists())
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -565,6 +641,7 @@ def main():
     test_lock_is_read_not_delegated()
     test_r_lock_section()
     test_every_lock_is_validated_whatever_the_status()
+    test_a_half_built_environment_is_not_a_built_one()
     test_unmet_names_the_fix()
     test_ordering()
     test_schedule()

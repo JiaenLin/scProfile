@@ -395,8 +395,45 @@ def install(kernel, prefix, *, force=False, log=print):
     p = env_prefix(kernel.name, prefix)
     spec = lock_spec(kernel)
     if p.exists() and not force:
-        log(f"  {p} exists. Pass --force to rebuild.")
+        # AN ENVIRONMENT THAT EXISTS IS NOT AN ENVIRONMENT THAT WAS FINISHED. `.scprofile_lock` is
+        # written as the LAST act of a successful build, so its absence means a build got part of
+        # the way and stopped - conda succeeded, the pip or r: step did not - and the directory
+        # left behind looks exactly like a complete one from the outside.
+        #
+        # Measured on PBS 676357: the conda step built 306 packages, the r: step failed, no stamp
+        # was written, and `doctor` reported `stale - built from lock unknown`. `install` did not
+        # ask. Re-running it without --force would have printed "exists" and gone straight to a
+        # selftest against an environment with none of the plugin's own packages in it - and that
+        # selftest failure reads as a broken package rather than as a build that never finished.
+        # env_state knew and install did not; they now read the same stamp.
+        state, detail, fix = env_state(kernel, prefix)
+        if state != "installed":
+            raise RuntimeError(
+                f"{p} exists but is {state}: {detail}." + "\n"
+                "  It is not an environment this lock describes, so nothing here will treat it as "
+                "one. A partial build leaves a directory that looks finished from the outside, "
+                "which is why this refuses rather than carrying on to the selftest.\n"
+                f"  Fix: {fix or f'scprofile install {kernel.name} --prefix {prefix} --force'}")
+        log(f"  {p} exists and matches the current lock. Pass --force to rebuild.")
     else:
+        if p.exists():
+            # --force MEANS BUILD IT AGAIN, and building again into a populated prefix is not
+            # that: it would leave every package the PREVIOUS lock pulled and the current one does
+            # not. The environment would then hold more than the lock describes while carrying a
+            # fingerprint saying it came from that lock, which is the exact failure this file
+            # exists to prevent.
+            #
+            # The name is checked before anything is removed. `env_prefix` always produces it, so
+            # the check never fires today; it is here so a future caller passing some other path
+            # cannot turn --force into an rmtree of it.
+            expected = ENV_DIRNAME.format(kernel=kernel.name)
+            if p.name != expected or p.is_symlink() or not p.is_dir():
+                raise RuntimeError(
+                    f"refusing to remove {p} for a --force rebuild: it is not a directory named "
+                    f"{expected!r}. Remove it yourself if that is what you meant.")
+            log(f"  --force: removing {p} first, so the rebuild cannot inherit packages the "
+                f"current lock does not name")
+            shutil.rmtree(p)
         mgr = (shutil.which("micromamba") or shutil.which("mamba") or shutil.which("conda"))
         venv_py = _venv_python(spec["python"]) if not spec["conda"] else None
         if mgr:
