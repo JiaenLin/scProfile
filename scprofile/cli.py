@@ -218,12 +218,19 @@ def _run(a):
         keys = inputs.detect_keys(
             A.obs.columns, layers=manifest.layer_names(A), obsm=list(A.obsm),
             overrides={"label": a.label_key, "sample": a.sample_key, "batch": a.batch_key,
-                       "counts_layer": a.counts_layer, "compartment": a.compartment_key})
+                       "counts_layer": a.counts_layer, "compartment": a.compartment_key,
+                       "lognorm_layer": getattr(a, "lognorm_layer", None),
+                       "embedding": getattr(a, "embedding", None)})
     except inputs.Refuse as e:
         print(f"scprofile: REFUSE - {e}", file=sys.stderr)
         return REFUSE
     organism = inputs.detect_organism(list(A.var_names), a.organism)
     assay = inputs.detect_assay(A, a.assay)
+    # A DEFAULT, NOT A DEFINITION. `--sentinels` replaces them outright and `--sentinels ""` says
+    # this annotation has none - a tool that knows only one annotator's sentinels treats another's
+    # as a cell population, which is the same failure as not knowing about sentinels at all.
+    sentinels = (tuple(_split(a.sentinels)) if getattr(a, "sentinels", None) is not None
+                 else inputs.DEFAULT_SENTINELS)
     constraint, csrc = inputs.read_constraint(A)
 
     print("\nwhat this object is, and how each was decided:")
@@ -244,7 +251,9 @@ def _run(a):
     provenance.describe(prov, log=print)
 
     _km = {r_: v[0] for r_, v in keys.items() if v[0]}
-    _km.setdefault('lognorm', 'lognorm' if 'lognorm' in A.layers else None)
+    # From DETECTION, not from a literal. `{lognorm}` is a key a plugin names; which layer it
+    # resolves to is this object's business, and `--lognorm-layer` says so outright.
+    _km.setdefault('lognorm', _km.get('lognorm_layer'))
     _km.setdefault('counts', _km.get('counts_layer'))
     _km = {k2: v2 for k2, v2 in _km.items() if v2}
     have_obs = set(A.obs.columns)
@@ -316,7 +325,10 @@ def _run(a):
         if not allow:
             log_escape(out / "guard_overrides.jsonl", k.name, str(why))
         try:
-            r = refs.resolve(k, a.references, organism[0]) if k.references(organism[0]) else {}
+            # `k.reference_organisms()`, NOT `k.references(organism)`. The latter filters by
+            # organism, so a plugin with mouse and human references run on any other species
+            # returned {} - and the host read that as "needs none" and skipped the check entirely.
+            r = refs.resolve(k, a.references, organism[0]) if k.reference_organisms() else {}
         except FileNotFoundError as e:
             return None, None, [str(e)]
         kout = out / "kernels" / name / (str(unit) if unit else "")
@@ -350,7 +362,7 @@ def _run(a):
             organism=organism[0], assay=assay[0], design=a.design, references=ctx["refs"],
             params=json.loads(a.params) if a.params else {},
             upstream=flat, upstream_units={k_: v_ for k_, v_ in per.items() if v_},
-            sentinels=inputs.DEFAULT_SENTINELS,
+            sentinels=sentinels,
             provenance=prov, resources={"cores": cores}, unit=unit)
         return kout
 
@@ -655,12 +667,19 @@ def _plan(a):
         keys = inputs.detect_keys(
             A.obs.columns, layers=manifest.layer_names(A), obsm=list(A.obsm),
             overrides={"label": a.label_key, "sample": a.sample_key, "batch": a.batch_key,
-                       "counts_layer": a.counts_layer, "compartment": a.compartment_key})
+                       "counts_layer": a.counts_layer, "compartment": a.compartment_key,
+                       "lognorm_layer": getattr(a, "lognorm_layer", None),
+                       "embedding": getattr(a, "embedding", None)})
     except inputs.Refuse as e:
         print(f"scprofile: REFUSE - {e}", file=sys.stderr)
         return REFUSE
     organism = inputs.detect_organism(list(A.var_names), a.organism)
     assay = inputs.detect_assay(A, a.assay)
+    # A DEFAULT, NOT A DEFINITION. `--sentinels` replaces them outright and `--sentinels ""` says
+    # this annotation has none - a tool that knows only one annotator's sentinels treats another's
+    # as a cell population, which is the same failure as not knowing about sentinels at all.
+    sentinels = (tuple(_split(a.sentinels)) if getattr(a, "sentinels", None) is not None
+                 else inputs.DEFAULT_SENTINELS)
     constraint, csrc = inputs.read_constraint(A)
 
     print("what this object is, and how each was decided:")
@@ -682,9 +701,10 @@ def _plan(a):
     print(f"  label columns available     {len(labels)}: {', '.join(labels[:6])}"
           + (" ..." if len(labels) > 6 else ""))
 
-    sent = [s for s in inputs.DEFAULT_SENTINELS
+    sent = [s for s in sentinels
             if keys["label"][0] and s in set(A.obs[keys["label"][0]].astype(str))]
-    print(f"  annotator sentinels         {', '.join(sent) if sent else 'none present'}")
+    print(f"  annotator sentinels         {', '.join(sent) if sent else 'none present'}"
+          + (f"  (looking for {', '.join(sentinels)})" if sentinels and not sent else ""))
 
     cl = keys.get("counts_layer", (None,))[0]
     if cl:
@@ -752,10 +772,10 @@ def _plan(a):
     # ---- per plugin ---------------------------------------------------------------------------
     print("\nplugins")
     _km = {r_: v[0] for r_, v in keys.items() if v[0]}
-    _km.setdefault('lognorm', 'lognorm' if 'lognorm' in A.layers else None)
+    # From DETECTION, not from a literal. `{lognorm}` is a key a plugin names; which layer it
+    # resolves to is this object's business, and `--lognorm-layer` says so outright.
+    _km.setdefault('lognorm', _km.get('lognorm_layer'))
     _km.setdefault('counts', _km.get('counts_layer'))
-    _km.setdefault('embedding', next((e for e in ('X_scanvi', 'X_umap', 'X_pca')
-                                      if e in A.obsm), None))
     _km = {k2: v2 for k2, v2 in _km.items() if v2}
     have_obs, have_obsm = set(A.obs.columns), set(A.obsm)
     have_layers = set(manifest.layer_names(A))
@@ -1043,8 +1063,25 @@ def main(argv=None):
     r.add_argument("--sample-key", default=None)
     r.add_argument("--batch-key", default=None)
     r.add_argument("--counts-layer", default=None)
-    r.add_argument("--embedding", default=None)
-    r.add_argument("--organism", default=None, choices=[None, "mouse", "human"])
+    r.add_argument("--lognorm-layer", default=None, metavar="LAYER",
+                   help="the log-normalised layer. `lognorm` is what this tool family writes; "
+                        "Seurat converters write `data` and Bioconductor `logcounts`, and the "
+                        "host used to hard-code the first of those")
+    r.add_argument("--embedding", default=None, metavar="OBSM_KEY",
+                   help="obsm key to use as THE embedding. Detected otherwise, with the evidence "
+                        "printed. This flag was declared and never read - the embedding was "
+                        "picked inline from a fixed list headed by one integration tool's output")
+    r.add_argument("--sentinels", default=None, metavar="A,B",
+                   help="labels an annotator uses for 'no call', REPLACING the default "
+                        "EXCLUDED,UNRESOLVED. Pass an empty string if this annotation has none")
+    # NO `choices`. It was `[None, "mouse", "human"]`, which meant a user of any other species
+    # could not even DECLARE their organism - argparse refused the flag before the tool could
+    # refuse the analysis. Detection still only distinguishes mouse from human, by symbol casing,
+    # and says so; but what a user tells the tool is not the tool's to restrict, and a plugin that
+    # cannot serve a species should be the thing that says so, with a reason.
+    r.add_argument("--organism", default=None, metavar="NAME",
+                   help="the species. Detected from gene-symbol casing when it can be "
+                        "(mouse/human only); anything you pass is taken as declared")
     r.add_argument("--assay", default=None, choices=[None, "cell", "nucleus"],
                    help="does not change what is computed; changes what each kernel may claim")
     r.add_argument("--design", default=None, type=Path,
@@ -1082,8 +1119,10 @@ def main(argv=None):
     pl.add_argument("--prefix", default=None)
     pl.add_argument("--design", default=None)
     pl.add_argument("--cores", type=int, default=8)
+    # THE SAME OVERRIDES AS `run`. A plan computed with different keys from the run it predicts
+    # is a plan about a different object, and `plan` exists to be believed.
     for f in ("label-key", "sample-key", "batch-key", "counts-layer", "compartment-key",
-              "organism", "assay"):
+              "lognorm-layer", "embedding", "sentinels", "organism", "assay"):
         pl.add_argument(f"--{f}", default=None)
     pl.set_defaults(fn=_plan)
 

@@ -18,7 +18,10 @@ import re
 from . import manifest
 
 #: Labels an annotator uses to say "no call". Not cell types, and never treated as populations.
-#: These are scAnno's declared sentinels; overridable for an annotation that uses others.
+#: These are the ones scAnno writes, and they are a DEFAULT, not a definition - `--sentinels`
+#: replaces them outright, and `--sentinels ""` says this annotation has none. A tool that only
+#: knows one annotator's sentinels treats another's as a cell population, which is the same
+#: failure as not knowing about sentinels at all.
 DEFAULT_SENTINELS = ("EXCLUDED", "UNRESOLVED")
 
 #: Candidate names for each role, most specific first. A HINT for detection, never a requirement:
@@ -30,7 +33,26 @@ CANDIDATES = {
     "sample": ["sample", "sample_id", "library", "donor", "orig.ident", "batch"],
     "batch": ["batch", "sample", "library", "chemistry"],
     "counts_layer": ["counts", "raw", "raw_counts", "spliced"],
+    # LOG-NORMALISED VALUES ARE NOT ALWAYS IN A LAYER CALLED `lognorm`. That is what this tool
+    # family writes; Seurat's converters write `data`, Bioconductor's write `logcounts`, and a
+    # great many objects carry them in X with no layer at all. The host hard-coded the string, so
+    # every plugin declaring `layers: {lognorm}` - liana, cellchat, decoupler - reported an unmet
+    # prerequisite on an object that had the values under another name.
+    "lognorm_layer": ["lognorm", "logcounts", "log1p", "data", "normalized", "norm"],
+    # OBSM, and detected like everything else rather than picked inline. This was chosen by a
+    # `next((e for e in ('X_scanvi','X_umap','X_pca') if e in A.obsm), None)` buried in the run
+    # loop - the only key in the whole tool selected silently, with no evidence line, and headed
+    # by one particular integration tool's output name. A user whose object carries both an
+    # `X_scanvi` and the embedding they actually meant got scanvi and was never told.
+    "embedding": ["X_scanvi", "X_scvi", "X_harmony", "X_integrated", "X_pca_harmony",
+                  "X_umap", "X_pca"],
 }
+
+#: Which pool each role is looked for in. Anything not named here is an `obs` column.
+#: This was `role == "counts_layer"` inline, so a second layer role searched obs and found
+#: nothing - silently, because "not found" is a legitimate answer for an optional key.
+_LAYER_ROLES = ("counts_layer", "lognorm_layer")
+_OBSM_ROLES = ("embedding",)
 
 #: Genes present in essentially every mammalian dataset, used only to tell CASING apart.
 #: Not a marker panel and not biology - purely a test of whether symbols are Xxxx or XXXX.
@@ -51,7 +73,8 @@ def detect_keys(obs_columns, layers=(), obsm=(), overrides=None):
     cols = list(obs_columns)
     out = {}
     for role, cands in CANDIDATES.items():
-        pool = list(layers) if role == "counts_layer" else cols
+        pool = (list(layers) if role in _LAYER_ROLES
+                else list(obsm) if role in _OBSM_ROLES else cols)
         if role in over:
             name = over[role]
             if name not in pool:

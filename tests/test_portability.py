@@ -1,0 +1,116 @@
+"""Nothing here may assume one project's dataset, one lab's conventions or one species.
+
+scProfile is written against a cohort that came through scQC, scAnno and scIntegrate, and every
+convenience that made THAT cohort easy is a place where somebody else's object stops working. The
+failure is never loud: a key that is not found is a legitimate answer for an optional key, an
+organism with no reference data looks exactly like a plugin that needs none, and an annotator's
+sentinel that this tool does not know becomes a cell population.
+
+So the portability rules are asserted, not intended.
+
+Run: python tests/test_portability.py
+"""
+import inspect
+import re
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scprofile import cli, inputs, refs                                         # noqa: E402
+from scprofile.kernels import discover                                          # noqa: E402
+
+FAIL = []
+
+
+def ck(name, cond, detail=""):
+    print(f"  {'ok  ' if cond else 'FAIL'} {name}" + (f" — {detail}" if not cond else ""))
+    if not cond:
+        FAIL.append(name)
+
+
+print("\nno project, person, machine or cohort appears anywhere")
+BAD = re.compile(r"\bsambo\b|wangyb|duke-nus|hn-10-03|aging[_ ]?hfd|young[_ ]?hfd"
+                 r"|/data/wangyb|scratch/2026", re.I)
+#: Two exemptions, both narrow, because a check that fires on correct code is a check somebody
+#: switches off. A repository URL contains its owner's account name and is not a leak; and the
+#: OTHER leak guard has to contain the strings it looks for.
+OK_LINE = re.compile(r"github\.com/|re\.compile|re\.I\)")
+root = Path(__file__).resolve().parents[1]
+hits = []
+for f in list(root.rglob("*.py")) + list(root.rglob("*.yml")) + list(root.rglob("*.md")):
+    if ".git" in f.parts or f.name == Path(__file__).name:
+        continue
+    for i, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        if BAD.search(line) and not OK_LINE.search(line):
+            hits.append(f"{f.relative_to(root)}:{i}")
+ck("no project or host names in the tree", not hits, "; ".join(hits[:4]))
+
+print("\nevery role a user might name differently is DETECTED and OVERRIDABLE")
+for role in ("label", "sample", "batch", "compartment", "counts_layer", "lognorm_layer",
+             "embedding"):
+    ck(f"{role} has candidates", bool(inputs.CANDIDATES.get(role)))
+    got = inputs.detect_keys(["zzz"], layers=["zzz"], obsm=["zzz"],
+                             overrides={role: "zzz"})[role]
+    ck(f"{role} can be overridden", got[0] == "zzz" and "command line" in got[1], str(got))
+
+print("\nthe log-normalised layer is not assumed to be called `lognorm`")
+for lay, want in (("lognorm", "lognorm"), ("logcounts", "logcounts"), ("data", "data"),
+                  ("normalized", "normalized")):
+    got = inputs.detect_keys(["c"], layers=["counts", lay], obsm=[])["lognorm_layer"][0]
+    ck(f"a layer called {lay!r} is found", got == want, f"got {got!r}")
+src = inspect.getsource(cli)
+ck("the host no longer hard-codes the string",
+   "'lognorm' if 'lognorm' in A.layers" not in src)
+
+print("\nthe embedding is detected with evidence, not picked inline")
+ck("embedding is a declared role", "embedding" in inputs.CANDIDATES)
+ck("the inline pick is gone", "X_scanvi', 'X_umap', 'X_pca'" not in src)
+got = inputs.detect_keys(["c"], layers=[], obsm=["X_harmony"])["embedding"]
+ck("an object with no scanvi still gets one", got[0] == "X_harmony", str(got))
+ck("and the reason is recorded", bool(got[1]))
+
+print("\nno flag restricts the user's own declaration")
+p = cli.main.__globals__  # the parser is built inside main; check the source instead
+ck("--organism takes any species",
+   'choices=[None, "mouse", "human"]' not in src and '"--organism", default=None, metavar' in src)
+ck("--sentinels exists", '"--sentinels"' in src)
+ck("--embedding is read, not just declared", 'getattr(a, "embedding", None)' in src)
+
+print("\nannotator sentinels are a default, never a definition")
+ck("the default is documented as scAnno's", "scAnno" in inspect.getsource(inputs))
+ck("an empty override means none", cli._split("") == [])
+ck("a custom set parses", cli._split("Doublet,Unknown") == ["Doublet", "Unknown"])
+
+print("\na plugin with reference data refuses an organism it has none for")
+ks = discover()
+sc_ = ks["scenic"]
+ck("scenic declares its organisms", sc_.reference_organisms() == {"mouse", "human"},
+   str(sc_.reference_organisms()))
+for org in ("zebrafish", "drosophila", None):
+    try:
+        refs.require_supported(sc_, org)
+        ck(f"{org!r} is refused", False, "it was allowed to run with no reference data")
+    except refs.UnsupportedOrganism as e:
+        ck(f"{org!r} is refused", "declares none for" in str(e))
+        ck(f"and the refusal names what it does have ({org!r})", "mouse" in str(e))
+try:
+    refs.require_supported(sc_, "MOUSE")
+    ck("a supported organism still runs, case-insensitively", True)
+except refs.UnsupportedOrganism:
+    ck("a supported organism still runs, case-insensitively", False)
+refs.require_supported(ks["cellcycle"], "zebrafish")
+ck("a plugin that needs no references is not refused", True)
+ck("the host asks reference_organisms, not references(organism)",
+   "k.reference_organisms()" in src and "if k.references(organism[0]) else {}" not in src)
+
+print("\nplan and run agree on every override")
+run_flags = set(re.findall(r'r\.add_argument\("--([a-z-]+)"', src))
+plan_flags = set(re.findall(r'"([a-z-]+)"', src.split('for f in ("label-key"')[1].split(")")[0]))
+plan_flags.add("label-key")
+missing = {f for f in ("label-key", "sample-key", "batch-key", "counts-layer", "lognorm-layer",
+                       "compartment-key", "embedding", "sentinels", "organism", "assay")
+           if f not in plan_flags}
+ck("plan takes the same key overrides as run", not missing, str(sorted(missing)))
+
+print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
+sys.exit(1 if FAIL else 0)

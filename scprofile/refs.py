@@ -143,12 +143,38 @@ def plan_fetch(kernel, dest, organism=None):
             "fits": (total == 0) or (free > total * 1.1)}
 
 
+class UnsupportedOrganism(FileNotFoundError):
+    """The plugin declares reference data, but none for this organism."""
+
+
+def require_supported(kernel, organism):
+    """Refuse when a plugin needs reference data and has none declared for THIS organism.
+
+    Without this the check was skipped whenever `references(organism)` came back empty, and empty
+    had two meanings that could not be told apart: this plugin needs no reference data, and this
+    plugin's reference data has not been declared for your species. The second one ran.
+    """
+    have = kernel.reference_organisms()
+    if not have:
+        return                                   # genuinely needs none, for any organism
+    if organism and str(organism).lower() in have:
+        return
+    raise UnsupportedOrganism(
+        f"{kernel.name} needs reference data and declares none for "
+        f"{organism!r}. It has references for: {', '.join(sorted(have))}.\n"
+        f"  Running it anyway would not fail - it would return a result computed against no "
+        f"reference at all, which is the shape of a real answer and is not one.\n"
+        f"  Fix: add entries for {organism!r} to {kernel.path / 'references.yml'} and fetch them, "
+        f"or pass --organism for a species it already supports.")
+
+
 def resolve(kernel, dest, organism=None):
     """{name: path} for a run, or raise with EVERY missing reference and how to get them.
 
     Verifies by checksum: this is the call a run depends on, and a truncated database returns a
     smaller answer rather than an error.
     """
+    require_supported(kernel, organism)
     st = status(kernel, dest, organism, verify=True)
     bad = {k: v for k, v in st.items() if v[0] != "present"}
     if bad:

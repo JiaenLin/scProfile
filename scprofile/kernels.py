@@ -283,6 +283,23 @@ class Kernel:
                    if not v.get("organism") or str(v["organism"]).lower() == organism.lower()}
         return out
 
+    def reference_organisms(self):
+        """Every organism this plugin declares reference data for. Empty if it needs none.
+
+        The set matters because an organism ABSENT from it is not "a plugin that needs no
+        references" - it is a plugin whose references nobody has declared for that species, and
+        the two were indistinguishable. `references(organism)` filters by organism and returns {},
+        the host read that as "nothing required" and skipped the check, and the plugin ran with no
+        reference data at all. For scenic that means cisTarget prunes nothing and the regulons are
+        raw co-expression wearing a regulon's name: a full result file, and wrong.
+        """
+        out = set()
+        for spec in self.references(None).values():
+            o = spec.get("organism")
+            if o:
+                out.add(str(o).lower())
+        return out
+
     def __repr__(self):
         return f"<Kernel {self.name}>"
 
