@@ -16,11 +16,16 @@
 # An estimate in a comment is not checkable and drifts silently, which is why `size` is a field
 # `status()` compares against the file on disk rather than a sentence in a note.
 #
-# BUDGET TIME, NOT ONLY SPACE. This vendor served 33,232 B/s to one cluster, measured with curl
-# over a 20 MB range request (PBS 676356) - so the mouse set is about 3 hours and the human set
-# about 3.5, on a link that is not the limit. The download is resumable through HTTP Range and a
-# `.part` file, so a job killed at walltime loses nothing; size the walltime for the vendor's rate
-# rather than for the file.
+# BUDGET TIME, NOT ONLY SPACE. This vendor is SLOW, and it is worth knowing that before sizing a
+# walltime from the file size. Measured on PBS 676356 over the same 20 MB range request, from one
+# cluster: curl 33,232 B/s, and python's urllib with the 4 MiB chunk this module uses 47,280 B/s.
+# Two clients, same order of magnitude, one of them 42% faster than curl - so the limit is the
+# vendor or the link and not the downloader, which is the question worth settling before anyone
+# rewrites this module to be clever. At that rate the mouse set is roughly two hours and the human
+# set two and a half.
+#
+# The download is resumable through HTTP Range and a `.part` file, so a job killed at walltime
+# loses nothing - but only if somebody resubmits it. Size the walltime for the vendor's rate.
 #
 # Source: resources.aertslab.org, the SCENIC authors' own distribution.
 # Licence: the cisTarget databases are distributed by the Aerts lab for research use; the motif
