@@ -147,6 +147,36 @@ with _tf.TemporaryDirectory() as _d:
     except RuntimeError:
         ck("a lock from another host is not assumed dead", True)
 
+print("\nthe planner assumes no design shape and no cohort")
+from scprofile import planner as _P                                            # noqa: E402
+# CODE, NOT PROSE. The first version searched the whole source and fired on the docstring
+# sentence "not 2x2, not paired, not a time course" - a DISCLAIMER that the planner assumes no
+# shape. A check that fires on correct code is a check somebody switches off, so comments and
+# docstrings are stripped and only executable text is searched.
+import ast as _a2                                                              # noqa: E402
+_tree = _a2.parse(inspect.getsource(_P))
+for _n in _a2.walk(_tree):
+    if isinstance(_n, (_a2.Module, _a2.FunctionDef, _a2.AsyncFunctionDef, _a2.ClassDef)):
+        if (_n.body and isinstance(_n.body[0], _a2.Expr)
+                and isinstance(getattr(_n.body[0], "value", None), _a2.Constant)
+                and isinstance(_n.body[0].value.value, str)):
+            _n.body.pop(0)
+_psrc = _a2.unparse(_tree)
+for lit in ("2x2", "young", "aged", "chow", "HFD", "cell_type", "sample_id",
+            "mouse", "human", "nucleus"):
+    ck(f"the planner's CODE does not mention {lit!r}", lit not in _psrc)
+ck("no minimum sample count is hard-coded except the statistical one",
+   _psrc.count("min_replicates") >= 1 and "n_units > 3" not in _psrc)
+# One sample, no design, nothing found: a short, correct, honest plan - not an error.
+_f = _P.design_facts(None, [], None, ["only"])
+class _K:
+    name, needs_design, per_unit, needs_kernels = "x", False, None, []
+_v = _P.plan_kernel(_K(), present={"x": {}}, facts=_f, searched=["obj"], ran=set())
+ck("a one-sample, design-less project still yields a verdict", _v.verdict == _P.RUN, _v.verdict)
+_fnd = _P.audit([_v], ["x"], _f)
+ck("and that plan passes its own audit",
+   not [x for x in _fnd if x.level == "ERROR"], str(_fnd))
+
 print("\nplan and run agree on every override")
 run_flags = set(re.findall(r'r\.add_argument\("--([a-z-]+)"', src))
 plan_flags = set(re.findall(r'"([a-z-]+)"', src.split('for f in ("label-key"')[1].split(")")[0]))

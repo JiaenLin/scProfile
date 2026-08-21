@@ -121,6 +121,25 @@ whose vendor publishes none so it can be declared. A kernel whose references are
 **refuses to run**: a missing motif database does not fail, it returns a smaller answer that looks
 like a real one.
 
+## Planning a run
+
+```
+scprofile plan --h5ad object.h5ad --design design.csv --all --audit
+```
+
+`plan` runs nothing. It gives every plugin one of four verdicts — **RUN** (with the capacity rung
+it will run at, and why not a higher one), **SKIP** (the *design* cannot support it, citing the
+factor and its arm sizes), **BLOCKED** (the *data* is absent, naming every place it looked), or
+**UNRESOLVED** (the scan could not determine — which is a defect in the plan, never a skip).
+
+`--audit` then checks the plan by rules that do not repeat its reasoning: that every plugin is
+accounted for exactly once, that no verdict is UNRESOLVED, that every SKIP cites a design fact the
+design table actually supports, that every BLOCKED searched somewhere, and that no plugin was left
+at a lower rung than the project would support.
+
+**[`docs/RUN_PLAN.md`](docs/RUN_PLAN.md) is the guideline** the plan follows, and the reasoning
+behind the four verdicts.
+
 **[`docs/REFERENCES.md`](docs/REFERENCES.md) is the register** — every reference every kernel
 uses, who published it, under what terms, and which of them this tool can actually verify. Not all
 of them can be: a database bundled inside a package version is pinned by that version and by
