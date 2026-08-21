@@ -105,7 +105,12 @@ cc <- createCellChat(object = X, meta = meta, group.by = "labels")
 cc@DB <- db_human
 cc <- subsetData(cc)
 cc <- identifyOverExpressedGenes(cc)
-vf <- unique(unlist(cc@var.features, use.names = FALSE))
+# `@var.features` is a LIST, and only some of its elements are feature names - CellChat also
+# stores a statistics table there. `unlist()` over the whole thing coerces that table's columns to
+# character too, so the count would be non-zero whatever happened and the check would pass for its
+# own reasons. Keep the character elements only.
+vf <- cc@var.features
+vf <- unique(unlist(Filter(is.character, if (is.list(vf)) vf else list(vf)), use.names = FALSE))
 vf <- vf[!is.na(vf) & nzchar(vf)]
 cat(sprintf("  over-expressed features: %d\n", length(vf)))
 if (length(vf) == 0) stop("identifyOverExpressedGenes found nothing on a fixture with a +4 shift")
@@ -138,8 +143,11 @@ if (!any(net$prob > 0))        stop("every communication probability is zero")
 if (!all(net$pval >= 0 & net$pval <= 1)) stop("p-values fall outside [0, 1]")
 
 top <- net[order(-net$prob), ][1, ]
+# as.character on every one: `source` and `target` come back as FACTORS, and sprintf("%s", f)
+# prints the integer level code. The line would read "1 -> 2" and look like a shape problem.
 cat(sprintf("  strongest: %s -> %s  %s:%s  prob %.3g  p %.3g\n",
-            top$source, top$target, top$ligand, top$receptor, top$prob, top$pval))
+            as.character(top$source), as.character(top$target), as.character(top$ligand),
+            as.character(top$receptor), top$prob, top$pval))
 found <- as.character(net$interaction_name)
 cat(sprintf("  planted pair %s recovered: %s\n", planted, planted %in% found))
 if (!(planted %in% found)) {
