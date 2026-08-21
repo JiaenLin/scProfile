@@ -223,3 +223,61 @@ across the design must use.
 
 The last row is the one worth failing on. A schedule that is fast and reads its inputs wrongly is
 worse than a slow one, because the speed is visible and the wrongness is not.
+
+---
+
+## 9. Locking a plugin whose method is not packaged
+
+A lock exists so that the same specification builds the same environment on a machine nobody has
+seen. `lock.yml` is a conda environment YAML, which expresses conda packages and pip packages —
+and, until 2026-08-21, nothing else. That is enough for every python plugin here and it was not
+enough for one plugin, which is worth writing down because the gap is not obvious until a method
+falls into it.
+
+**CellChat is distributed only from GitHub.** Measured rather than assumed — PBS 676308 asked the
+channels — it is on neither conda-forge nor bioconda. The two personal channels that carry it are
+a two-year-old linux-64 build and a macOS-arm64 one; pinning a tool to a personal channel with one
+platform and no maintenance is not something another site can reproduce, so neither is a lock.
+
+That left three options and only one of them is honest.
+
+| | |
+|---|---|
+| pin a personal channel | reproducible on one platform, until the channel is deleted |
+| a shell step in the installer | the lock stops being the specification, and nothing validates a shell script |
+| **express it in the format** | what was done |
+
+`lock.yml` now takes an `r:` section:
+
+```yaml
+r:
+  - owner/repo@0123456789abcdef0123456789abcdef01234567
+```
+
+applied by ONE `remotes::install_github(...)` call with `upgrade = "never"` and
+`dependencies = FALSE`. Four rules, and each is the R spelling of something the pip path already
+does for the same measured reason:
+
+- **A commit, never a tag or a branch.** A branch moves and a tag can be re-pointed at a different
+  commit with no version changing anywhere. The parser refuses anything that is not 40 hex
+  characters, and so does `validate`.
+- **One call, all pins together.** Installed one at a time, a later package re-resolves an earlier
+  one and the environment stops matching the lock its fingerprint claims it was built from.
+- **`dependencies = FALSE`, and this is the load-bearing one.** Every dependency comes from the
+  pinned conda section, so nothing in the environment is chosen at install time. Letting `remotes`
+  fetch a missing dependency installs an unpinned package that nothing recorded — and it *works*,
+  which is what makes it dangerous. A dependency that was forgotten instead fails to load in the
+  selftest, by name, which is a line to add to the lock.
+- **The install is verified by reading `RemoteSha` back out.** `install_github` reports success for
+  a build that produced no loadable package often enough to be worth checking.
+
+An `r:` lock pins `r-base=`, not `python=`. Demanding a python pin from an R lock was the format
+asserting an assumption; `r-base` is the line that decides which binaries every `r-*` package
+resolves against, exactly as the python minor version decides which wheels are built.
+
+**What the format still cannot express**, so that the next person meets it as a known limit rather
+than as a surprise: a package from a non-git source that is not on any channel (a tarball behind a
+registration form, a Bioconductor version older than the one the channel carries); a build flag
+that has to be set at compile time; and a system library that is not a conda package. All three
+would be the same kind of extension, and none of them has come up yet — the point of writing this
+down is that the next one should extend the format too, rather than reach for a shell step.
