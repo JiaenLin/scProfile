@@ -104,6 +104,28 @@ directories for data that moved.
 
 A kernel that finds nothing refuses with the list of every directory it looked in.
 
+## Reference data
+
+Some kernels consult data that did not come from your object — a motif ranking, a
+ligand–receptor database, a regulatory prior. Those decide answers as much as the algorithm does.
+
+```
+scprofile fetch scenic --to <dir> --organism mouse --dry-run   # size, and whether it fits
+scprofile fetch scenic --to <dir> --organism mouse             # resumable, verified
+scprofile validate scenic --references <dir> --deep            # hashes what is on disk
+```
+
+`fetch` reports the total and checks free space before downloading anything, resumes a killed
+download from its `.part`, takes one writer per directory, and prints the `sha256` of any file
+whose vendor publishes none so it can be declared. A kernel whose references are unusable
+**refuses to run**: a missing motif database does not fail, it returns a smaller answer that looks
+like a real one.
+
+**[`docs/REFERENCES.md`](docs/REFERENCES.md) is the register** — every reference every kernel
+uses, who published it, under what terms, and which of them this tool can actually verify. Not all
+of them can be: a database bundled inside a package version is pinned by that version and by
+nothing else.
+
 ## Output
 
 ```
