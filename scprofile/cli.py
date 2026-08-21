@@ -664,7 +664,7 @@ def _plan(a):
     produced here in seconds, and the schedule is printed so the shape of the work is visible
     before any of it is spent.
     """
-    from . import compat, inputs, provenance, refs, runner
+    from . import compat, inputs, manifest, provenance, refs, runner
     from .kernels import discover, guard_verdict, schedule, unmet
 
     try:

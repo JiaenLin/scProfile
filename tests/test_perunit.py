@@ -263,24 +263,74 @@ for _f in list(Path("scprofile").rglob("*.py")) + list(Path("tests").rglob("*.py
         + list(Path("kernels").rglob("*.py")):
     src = _f.read_text()
     tree = _ast.parse(src)
-    bound = set()
-    for node in _ast.walk(tree):
-        if isinstance(node, _ast.Import):
-            bound |= {(a.asname or a.name).split(".")[0] for a in node.names}
-        elif isinstance(node, _ast.ImportFrom):
-            bound |= {(a.asname or a.name) for a in node.names}
-        elif isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
-            bound.add(node.name)
-        elif isinstance(node, _ast.Name) and isinstance(node.ctx, _ast.Store):
-            bound.add(node.id)
+
+    # PER SCOPE, NOT PER FILE. The first version collected every import anywhere in the file, so a
+    # module imported inside one function and used inside ANOTHER passed - which is exactly how
+    # `manifest.layer_names` reached `_plan`, a function that does not import it, and died with a
+    # NameError on a 3.2 GB object after the read. A check that cannot see scope cannot catch the
+    # bug it was written for.
+    def _binds(node, *, deep):
+        out = set()
+        stack = list(getattr(node, "body", []))
+        while stack:
+            n = stack.pop()
+            if isinstance(n, _ast.Import):
+                out |= {(a.asname or a.name).split(".")[0] for a in n.names}
+            elif isinstance(n, _ast.ImportFrom):
+                out |= {(a.asname or a.name) for a in n.names}
+            elif isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef, _ast.ClassDef)):
+                out.add(n.name)
+                if deep:
+                    stack.extend(n.body)
+                continue
+            elif isinstance(n, _ast.Name) and isinstance(n.ctx, _ast.Store):
+                out.add(n.id)
+            elif isinstance(n, _ast.arg):
+                out.add(n.arg)
+            stack.extend(_ast.iter_child_nodes(n))
+        return out
+
+    # LEXICAL, so a nested def sees its ENCLOSING function's imports. Walking every FunctionDef
+    # against module scope alone reported `_stage()` - defined inside `_run`, which imports what
+    # it uses - as three defects. A guard that fires on correct code is a guard somebody deletes,
+    # and this one had just been written to catch a real bug.
+    _mod_level = _binds(tree, deep=False)
+    _scopes = []
+
+    def _walk_scopes(node, visible):
+        _scopes.append((node, visible))
+        for child in _ast.iter_child_nodes(node):
+            _descend(child, visible)
+
+    def _descend(node, visible):
+        if isinstance(node, (_ast.FunctionDef, _ast.AsyncFunctionDef)):
+            inner = visible | _binds(node, deep=True) | {
+                a.arg for a in node.args.args + node.args.kwonlyargs}
+            _walk_scopes(node, inner)
+        else:
+            for child in _ast.iter_child_nodes(node):
+                _descend(child, visible)
+
+    _walk_scopes(tree, _mod_level)
+    bound = _mod_level
     # ATTRIBUTE ACCESS IN THE AST, not a substring. A substring search matched the word
     # "manifest." in a docstring and "the report." in a comment, and a check that fires on correct
     # code is a check somebody switches off.
-    used = {n.value.id for n in _ast.walk(tree)
-            if isinstance(n, _ast.Attribute) and isinstance(n.value, _ast.Name)}
-    for mod in ("manifest", "merge", "report", "runner", "refs", "compat", "inputs", "figure"):
-        if mod in used and mod not in bound:
-            _bad.append(f"{_f}: uses {mod}. without importing it")
+    _MODS = ("manifest", "merge", "report", "runner", "refs", "compat", "inputs", "figure",
+             "planner", "provenance", "scaffold")
+    for _scope, _visible in _scopes:
+        # A nested def sees its enclosing function's imports, so attribute accesses inside one are
+        # not attributed to this scope.
+        _inner = {id(x) for f2 in _ast.walk(_scope)
+                  if isinstance(f2, (_ast.FunctionDef, _ast.AsyncFunctionDef)) and f2 is not _scope
+                  for x in _ast.walk(f2)}
+        used = {n.value.id for n in _ast.walk(_scope)
+                if isinstance(n, _ast.Attribute) and isinstance(n.value, _ast.Name)
+                and id(n) not in _inner}
+        _where = getattr(_scope, "name", "<module>")
+        for mod in _MODS:
+            if mod in used and mod not in _visible:
+                _bad.append(f"{_f}:{_where}() uses {mod}. without importing it")
 ck("no file uses a module it did not import", not _bad, "; ".join(_bad[:3]))
 
 print("\nlayer_names knows what list(adata.layers) does not")
