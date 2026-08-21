@@ -205,19 +205,38 @@ build. The manifest comes first precisely so a tool can be evaluated against a r
 |---|---|---|
 | `velocity` | nothing — inputs found beside the object | S |
 | `de` | nothing — its dependency is already installed | S |
-| `liana` | its own environment | M |
-| `cellchat` | **the R bridge** | M |
+| `liana` | ~~its own environment~~ — built, selftest passes | M |
+| `cellchat` | ~~**the R bridge**~~ — built, selftest passes | M |
 | `abundance` | its own environment | M |
 | `decoupler` | a dependency resolve | S |
-| `pseudotime` | its own environment; consumes velocity | M |
-| `scenic` | **a multi-GB reference fetch**, untested at that scale | L |
+| `pseudotime` | ~~its own environment~~ — built, selftest passes; consumes velocity | M |
+| `scenic` | ~~**a multi-GB reference fetch**, untested at that scale~~ — built, selftest passes; mouse references fetched and verified | L |
+
+Four of those blockers are cleared. **Every one of the five remaining blockers is now a `run.py`
+or `run.R`, not an environment.** That is a different kind of work and it is what `status:
+planned` still means for each of them.
 
 ### Two of these are infrastructure wearing a plugin's name
 
-**`cellchat` is the R bridge.** The contract already allows `run.R` and `manifest.py` is
-stdlib-only so an R shim can read it. What is missing is a lock that builds R reproducibly and a
-selftest that proves it. Building it for one plugin unlocks every R tool behind it —
-`tradeseq`, `nichenet`, `hdWGCNA` — so its cost is amortised across four, not one.
+**`cellchat` is the R bridge, and the bridge is now built.** The contract already allowed `run.R`
+and `manifest.py` is stdlib-only so an R shim can read it; what was missing was a lock that builds
+R reproducibly and a selftest that proves it. Both exist.
+
+The lock format had to grow for it, because a conda environment YAML expresses conda packages and
+pip packages and nothing else, while CellChat is distributed only from GitHub and needs an NMF
+newer than any conda channel carries. `lock.yml` now takes an `r:` section of exact pins — a git
+commit or a CRAN version — applied in one process with `dependencies = FALSE` so nothing in the
+environment is chosen at install time. See `docs/EXECUTION.md` §9 for what was rejected and why,
+and for the three things the format still cannot express.
+
+**What the selftest caught that a dependency reading could not.** `identifyOverExpressedGenes`
+defaults to `do.fast = TRUE`, which hard-requires `presto` — a package CellChat lists under
+*Suggests*, and which is not on CRAN. It does not fall back; it stops. A lock built from Depends +
+Imports + LinkingTo, the disciplined reading of a DESCRIPTION, was not enough, and only running
+the real call showed it.
+
+What is still missing for `cellchat` is `run.R`. Building the bridge unlocks every R tool behind
+it — `tradeseq`, `nichenet`, `hdWGCNA` — so its cost was amortised across four, not one.
 
 It is also **half of a pair**. Running one communication method alone contradicts the reason the
 pair exists: agreement between two is evidence, disagreement is a finding about the databases as

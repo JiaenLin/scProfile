@@ -177,14 +177,21 @@ two command lines.
 
 Three pieces of harness, each blocking several kernels:
 
-1. **The R bridge.** `cellchat` is the pilot; `tradeseq`, `nichenet`, `hdwgcna`, `miloR` and
-   `scenic_plus` follow. The contract already allows `run.R` and `manifest.py` is stdlib-only so an
-   R shim can read it — what is missing is a lock that builds R reproducibly and a selftest that
-   proves it.
+1. **The R bridge — BUILT.** `cellchat` was the pilot; `tradeseq`, `nichenet`, `hdwgcna`, `miloR`
+   and `scenic_plus` follow, and they now inherit a route rather than a plan. The contract already
+   allowed `run.R` and `manifest.py` is stdlib-only so an R shim can read it; the lock that builds
+   R reproducibly and the selftest that proves it both exist. The lock format grew an `r:` section
+   of exact pins — a git commit or a CRAN version — because a conda environment YAML cannot
+   express either, and CellChat is distributed only from GitHub. `docs/EXECUTION.md` §9.
+   What `cellchat` still lacks is `run.R`.
 2. **A design table contract.** `abundance`, `de`, `augur` and `cellchat_multi` all need one, and
    all need the same guard against a factor confounded with batch. Write it once.
-3. **Reference data handling at scale.** `fetch` exists; cisTarget databases are the first
-   reference big enough to test whether it is real.
+3. **Reference data handling at scale — TESTED.** cisTarget was the first reference big enough to
+   find out whether `fetch` is real, and it found four things that kilobyte-scale never would: a
+   declared URL that 404s, two size notes wrong by a factor of five, a short read that renamed a
+   truncated file to the name of a complete one, and a free-space check that measured the wrong
+   filesystem. All four are fixed. The mouse set is fetched and `validate --deep` verifies it; the
+   human set is declared, unfetched, and honestly reported as such.
 
 ---
 
