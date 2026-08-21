@@ -137,9 +137,15 @@ def plan_fetch(kernel, dest, organism=None):
     todo = {k: v for k, v in st.items() if v[0] != "present"}
     refs = kernel.references(organism)
     total = sum(_declared_bytes(refs[k]) for k in todo)
-    free = shutil.disk_usage(Path(dest).expanduser().parent
-                             if Path(dest).expanduser().exists()
-                             else Path.cwd()).free
+    # The free space of the FILESYSTEM THE FILES WILL LAND ON. The previous version fell back to
+    # the current working directory whenever `dest` did not exist yet - which is the normal case
+    # for a first fetch - and cwd is routinely a different mount from a reference directory on
+    # shared storage. It then reported the wrong filesystem's free space and `fits` was an answer
+    # about somewhere else. Walk up to the nearest ancestor that exists instead.
+    d = Path(dest).expanduser().resolve()
+    while not d.exists() and d != d.parent:
+        d = d.parent
+    free = shutil.disk_usage(d).free
     return {"missing": todo, "bytes": total, "free": free,
             "fits": (total == 0) or (free > total * 1.1)}
 
