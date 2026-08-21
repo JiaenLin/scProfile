@@ -110,6 +110,42 @@ v = P.plan_kernel(K("liana", per_unit="sample"), present={"liana": {"lognorm": T
                   facts=fm, searched=["obj"], ran=set())
 ck("full rung with 40 units", v.verdict == P.RUN and v.rung == "full", f"{v.verdict}/{v.rung}")
 
+print("\na build defect is a fact about the installation, never about the project")
+class KB:
+    def __init__(self, name, status="built", needs_env=True):
+        self.name, self.status, self.needs_env = name, status, needs_env
+        self.needs_design, self.per_unit, self.needs_kernels = False, None, []
+for state, kind, fixable in (("missing", "env_missing", True),
+                             ("stale", "env_stale", True),
+                             (None, "env_unknown", False)):
+    v = P.build_verdict(KB("x"), state, prefix="/env")
+    ck(f"{state!r} -> BLOCKED", v.verdict == P.BLOCKED, str(v.verdict))
+    ck(f"{state!r} is never a SKIP", v.verdict != P.SKIP)
+    ck(f"{state!r} names the defect kind", v.evidence["build_defect"]["kind"] == kind)
+    ck(f"{state!r} says it is about the installation",
+       any("not about the project" in w for w in v.why))
+    ck(f"{state!r} fixable={fixable}", v.evidence["build_defect"]["fixable"] is fixable)
+v = P.build_verdict(KB("x", status="planned"), "installed", prefix="/env")
+ck("no wrapper -> BLOCKED, not fixable by building",
+   v.verdict == P.BLOCKED and not v.evidence["build_defect"]["fixable"])
+ck("and it points at scaffold", "scaffold" in v.evidence["build_defect"]["fix"])
+for good in ("installed", "host", "override"):
+    ck(f"{good!r} is not a defect", P.build_verdict(KB("x"), good, prefix="/e") is None)
+ck("a host-interpreter plugin with no prefix is fine",
+   P.build_verdict(KB("x", needs_env=False), None, prefix=None) is None)
+
+print("\nonly build defects are offered for repair")
+vs = [P.build_verdict(KB("a"), "missing", prefix="/e"),
+      P.build_verdict(KB("b"), "stale", prefix="/e"),
+      P.build_verdict(KB("c", status="planned"), "host", prefix="/e"),
+      P.Verdict("d", P.BLOCKED, ["no design table was given"]),
+      P.Verdict("e", P.RUN, ["ok"], rung="full")]
+fx = [n for n, _d in P.fixable_builds(vs)]
+ck("the two environment defects are offered", fx == ["a", "b"], str(fx))
+ck("a missing wrapper is NOT auto-built", "c" not in fx)
+ck("a missing design table is NOT installed away", "d" not in fx)
+ck("a healthy plugin is left alone", "e" not in fx)
+
 print("\nthe audit refuses a plan that cannot justify itself")
 known = ["a", "b", "c"]
 good = [P.Verdict("a", P.RUN, ["ok"], rung="full"),

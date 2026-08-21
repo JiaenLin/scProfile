@@ -89,6 +89,68 @@ def design_facts(design, factors, sample_key, units):
     return f
 
 
+#: A build defect is a fact about THIS INSTALLATION, not about the project - and unlike a missing
+#: design table or absent spliced counts, it is fixable by running something. Each kind carries
+#: whether `plan --build` can repair it, and the command that does.
+BUILD_DEFECTS = {
+    "no_wrapper":  {"fixable": False,
+                    "why": "declared but not built - no wrapper exists yet",
+                    "fix": "scprofile scaffold {name}   # then the method still has to be wrapped"},
+    "env_missing": {"fixable": True,
+                    "why": "its environment is not installed",
+                    "fix": "scprofile install {name} --prefix {prefix}"},
+    "env_stale":   {"fixable": True,
+                    "why": "its environment was built from a DIFFERENT lock than the one in the "
+                           "tree, so what is installed is not what the lock describes",
+                    "fix": "scprofile install {name} --prefix {prefix} --force"},
+    "env_unknown": {"fixable": False,
+                    "why": "no --prefix was given, so nowhere was checked for its environment",
+                    "fix": "pass --prefix <dir>"},
+}
+
+
+def build_verdict(k, state, *, prefix=None):
+    """BLOCKED-with-a-build-defect, or None if the build is fine. Never SKIP.
+
+    An environment that is missing is not a property of somebody's experiment and must never be
+    reported as one. It is also the one class of blocker the tool can repair itself, which is why
+    it is separated from every other reason a plugin cannot run.
+    """
+    kind = None
+    if getattr(k, "status", "built") != "built":
+        kind = "no_wrapper"
+    elif not getattr(k, "needs_env", True):
+        # A PLUGIN THAT BRINGS NO ENVIRONMENT CANNOT HAVE A BROKEN ONE. This guard lived only in
+        # the caller, so calling this function directly reported `env_unknown` for a host-
+        # interpreter plugin whenever no --prefix was given - a build defect invented out of a
+        # flag the plugin does not use.
+        return None
+    elif state == "missing":
+        kind = "env_missing"
+    elif state == "stale":
+        kind = "env_stale"
+    elif state is None:
+        kind = "env_unknown"
+    if not kind:
+        return None
+    d = BUILD_DEFECTS[kind]
+    fix = d["fix"].format(name=k.name, prefix=prefix or "<dir>")
+    v = Verdict(k.name, BLOCKED,
+                [f"BUILD DEFECT ({kind}): {d['why']}.",
+                 f"This is a fact about this installation, not about the project.",
+                 f"Fix: {fix}" + ("   `plan --build` runs this for you."
+                                  if d["fixable"] else "")])
+    v.evidence["build_defect"] = {"kind": kind, "fixable": d["fixable"], "fix": fix}
+    return v
+
+
+def fixable_builds(verdicts):
+    """The plugins `--build` can repair, in plan order. Nothing else is ever triggered."""
+    return [(v.plugin, v.evidence["build_defect"])
+            for v in verdicts
+            if v.evidence.get("build_defect", {}).get("fixable")]
+
+
 def plan_kernel(k, *, present, facts, searched, ran, constraint=""):
     """One plugin's verdict. `present` is what the scan FOUND; `searched` where it looked.
 

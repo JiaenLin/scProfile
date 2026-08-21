@@ -981,18 +981,29 @@ def _plan(a):
                     need[f"layers[{c}]"] = None
         present[name] = need
 
-    will_run = {n for n in sorted(want) if ks[n].status == "built"}
-    verdicts = [PL.plan_kernel(ks[n], present=present, facts=facts, searched=roots,
-                               ran=will_run, constraint=constraint) for n in sorted(want)]
-    # A plugin with no wrapper cannot run whatever the data says, and that is a fact about the
-    # BUILD, not about the project - so it is stated as its own reason rather than dressed up as
-    # one of the four.
-    for v in verdicts:
-        if ks[v.plugin].status != "built":
-            v.verdict, v.rung, v.why_not_higher = PL.BLOCKED, None, None
-            v.why = [f"declared but not built - no wrapper exists yet. "
-                     f"`scprofile scaffold {v.plugin}` writes the skeleton."]
-            v.searched = roots
+    def _build_state(k):
+        """installed / host / override -> ready; missing / stale -> a defect; None -> unchecked."""
+        if not k.needs_env:
+            return "host"
+        if not a.prefix:
+            return None                    # nowhere was checked, and that is not "fine"
+        st, _why, _fix = runner.env_state(k, a.prefix)
+        return st
+
+    def _make_plan():
+        will = {n for n in sorted(want) if ks[n].status == "built"}
+        out = []
+        for n in sorted(want):
+            k = ks[n]
+            # THE BUILD IS CHECKED FIRST. A plugin whose environment is missing cannot run
+            # whatever the data says, and reporting it as a data or design problem would send
+            # somebody to look at their experiment for a defect in this installation.
+            bv = PL.build_verdict(k, _build_state(k), prefix=a.prefix)
+            out.append(bv or PL.plan_kernel(k, present=present, facts=facts, searched=roots,
+                                            ran=will, constraint=constraint))
+        return out
+
+    verdicts = _make_plan()
 
     print("\nRUN PLAN")
     print(f"  {len(units)} unit(s) on {keys['sample'][0]!r}" if units
@@ -1016,6 +1027,38 @@ def _plan(a):
             print(f"      NOT FULL: {v.why_not_higher}")
         if v.units:
             print(f"      over {len(v.units)} unit(s)")
+
+    # ---- --build: repair what the plan found, then plan again ---------------------------------
+    fixable = PL.fixable_builds(verdicts)
+    if fixable and not getattr(a, "build", False):
+        print(f"\n  {len(fixable)} build defect(s) are REPAIRABLE: "
+              + ", ".join(n for n, _d in fixable))
+        print("  `plan --build` runs the installs and re-plans. Nothing is built without it.")
+    elif fixable:
+        print(f"\n=== --build: repairing {len(fixable)} build defect(s) ===")
+        print("  ONLY build defects trigger this. A missing design table or an absent layer is a")
+        print("  fact about the project and is never something this tool installs its way out of.")
+        repaired, failed = [], []
+        for name, d in fixable:
+            print(f"\n  {name}: {d['kind']}")
+            print(f"    {d['fix']}")
+            try:
+                runner.install(ks[name], a.prefix, force=(d["kind"] == "env_stale"), log=print)
+                repaired.append(name)
+            except Exception as e:                                        # noqa: BLE001
+                failed.append((name, e))
+                print(f"    BUILD FAILED: {e}")
+        print(f"\n  repaired {len(repaired)}, failed {len(failed)}")
+        if repaired:
+            # RE-PLAN, do not patch the verdicts. A plan edited after the fact is a plan whose
+            # verdicts were not all produced by the same procedure.
+            print("\nRUN PLAN, re-derived after the repairs")
+            verdicts = _make_plan()
+            for v in sorted(verdicts, key=lambda x: (x.verdict != PL.RUN, x.plugin)):
+                head = v.verdict + (f" ({v.rung})" if v.rung else "")
+                print(f"  {head:<16} {v.plugin}")
+        if failed:
+            ok_all = False
 
     if getattr(a, "audit", False):
         print("\nAUDIT OF THIS PLAN")
@@ -1275,6 +1318,11 @@ def main(argv=None):
                          "as runnable - then the run refuses")
     pl.add_argument("--search", default=None, metavar="DIR,DIR",
                     help="extra directories to search for inputs not on the object")
+    pl.add_argument("--build", action="store_true",
+                    help="repair the build defects the plan finds - install a missing "
+                         "environment, rebuild a stale one - then re-derive the plan. ONLY build "
+                         "defects; a missing design table or an absent layer is a fact about the "
+                         "project and is never installed away")
     pl.add_argument("--audit", action="store_true",
                     help="check the plan by rules that do not repeat its reasoning: every plugin "
                          "accounted for once, no UNRESOLVED, every SKIP citing a design fact the "
