@@ -1,0 +1,124 @@
+# cellchat's environment. Built with:  scprofile install cellchat --prefix <dir>
+#
+# THIS IS THE ONLY R LOCK HERE, AND IT IS THE ONE THE FORMAT HAD TO GROW FOR.
+#
+# CellChat is distributed only from GitHub. Measured rather than assumed - PBS 676308 and 676350
+# asked the channels - it is on neither conda-forge nor bioconda; the two personal channels that
+# carry it are a two-year-old linux-64 build and a macOS-arm64 one, which is not something another
+# site can reproduce. A conda environment YAML expresses conda packages and pip packages and
+# nothing else, so before the `r:` section below existed this plugin could not be locked at all.
+# docs/EXECUTION.md §9 records what was rejected and why.
+#
+# NMF IS THE SECOND HALF OF THE SAME PROBLEM, and it is why `r:` also takes a CRAN version.
+# CellChat requires `NMF (>= 0.23.0)`; conda-forge's r-nmf tops out at 0.21.0 - every build it has
+# is 0.20.6 or 0.21.0, checked on PBS 676353 - and `R CMD INSTALL` refuses on the version
+# requirement, so an environment built from conda alone cannot install CellChat. The git form
+# cannot fix it either: renozao/NMF's GitHub tags are an unreleased 2020 devel line numbered
+# 0.30.x, while the live source is CRAN. NMF 0.28 is the current CRAN release (1,678,046 bytes at
+# src/contrib, verified reachable in the same job).
+#
+# EVERY VERSION BELOW CAME FROM A RESOLVE THAT SUCCEEDED, not from memory: `conda create --dry-run
+# --json` over the whole set at once, PBS 676353, 306 packages solved, none of the 52 named specs
+# absent. That is the discipline scaffold.py states and it matters more here than anywhere else,
+# because an R dependency that is merely missing surfaces as a compile failure four minutes into a
+# build rather than as a resolver error.
+#
+# WHY THE DEPENDENCY LIST IS SO LONG. The `r:` section installs with `dependencies = FALSE`, so
+# nothing in this environment is chosen at install time - every one of CellChat's Depends, Imports
+# and LinkingTo, and every one of NMF's, is a pinned line here. That is the point: a dependency
+# that was forgotten fails to LOAD in the selftest, by name, which is a line to add. A dependency
+# that remotes was allowed to fetch would be an unpinned package that nothing recorded, and it
+# would work.
+#
+# If you already have a working CellChat installation, do not build this one:
+#     export SCPROFILE_CELLCHAT_RSCRIPT=/path/to/that/R/bin/Rscript
+# `doctor` reports which route the kernel took, so the answer is never ambiguous.
+
+name: scprofile-cellchat
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  # The interpreter. An r-* package is built against one R minor version, so this is the line that
+  # decides what every other line below resolves to - the same job the python pin does in the
+  # other locks.
+  - r-base=4.3.3
+
+  # remotes drives the `r:` section. It is a conda pin rather than something that step installs
+  # for itself, because a step whose job is "install nothing that was not pinned" must not begin
+  # by installing something that was not pinned.
+  - r-remotes=2.5.0
+
+  # The toolchain. CellChat has LinkingTo: Rcpp, RcppEigen and NMF has C sources, so both COMPILE
+  # during the r: step. A conda R's Makeconf points at the compilers from these packages; without
+  # them the build fails with a missing cc rather than anything about R.
+  - c-compiler=2.0.0
+  - cxx-compiler=2.0.0
+  - make=4.4.1
+
+  # CellChat 2.2.0.9001 - Depends
+  - r-dplyr=1.1.4
+  - r-igraph=2.1.4
+  - r-ggplot2=3.5.2
+
+  # CellChat 2.2.0.9001 - Imports
+  - r-future=1.67.0
+  - r-future.apply=1.20.0
+  - r-pbapply=1.7_4
+  - r-irlba=2.3.5.1
+  - r-ggalluvial=0.12.5
+  - r-stringr=1.5.2
+  - r-svglite=2.2.1
+  - r-matrix=1.6_5
+  - r-ggrepel=0.9.6
+  - r-circlize=0.4.16
+  - r-rcolorbrewer=1.1_3
+  - r-cowplot=1.2.0
+  - r-rspectra=0.16_2
+  - r-reticulate=1.43.0
+  - r-scales=1.4.0
+  - r-sna=2.8
+  - r-reshape2=1.4.4
+  - r-fnn=1.1.4.1
+  - r-shape=1.4.6.1
+  - r-magrittr=2.0.3
+  - r-patchwork=1.3.2
+  - r-colorspace=2.1_1
+  - r-plyr=1.8.9
+  - r-ggpubr=0.6.1
+  - r-ggnetwork=0.5.14
+  - r-plotly=4.11.0
+  - r-shiny=1.11.1
+  - r-bslib=0.9.0
+  - r-collapse=2.1.3
+  - bioconductor-complexheatmap=2.18.0
+  - bioconductor-biocgenerics=0.48.1
+  - bioconductor-biocneighbors=1.20.0
+
+  # CellChat 2.2.0.9001 - LinkingTo
+  - r-rcpp=1.1.0
+  - r-rcppeigen=0.3.4.0.2
+
+  # NMF 0.28 - its own Depends and Imports, pinned here because the r: step installs NMF with
+  # dependencies = FALSE. Everything from `r-registry` down exists only to satisfy NMF.
+  - r-registry=0.5_1
+  - r-rngtools=1.5.2
+  - r-cluster=2.1.8.1
+  - r-digest=0.6.37
+  - r-gridbase=0.4_7
+  - r-foreach=1.5.2
+  - r-doparallel=1.0.17
+  - r-codetools=0.2_20
+  - r-biocmanager=1.30.26
+  - bioconductor-biobase=2.62.0
+
+# Applied after the conda step, in one process, nothing resolved. CRAN entries first: they exist
+# to satisfy version requirements that the git package is checked against WHILE it installs.
+r:
+  # conda-forge's ceiling is 0.21.0 and CellChat needs >= 0.23.0. Current CRAN release.
+  - NMF==0.28
+  # jinworks/CellChat, DESCRIPTION Version 2.2.0.9001. This commit and not the branch: `main`
+  # moves, and the two commits before it deleted src/CellChat.so and src/CellChat_Rcpp.o from the
+  # repository "to avoid installation errors on different platforms" - so a commit earlier than
+  # those carries prebuilt objects for someone else's machine.
+  - jinworks/CellChat@75253cd0c9e68410e6e721a6d3a0419a1d7e358f

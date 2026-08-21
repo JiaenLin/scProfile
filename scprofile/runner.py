@@ -370,7 +370,13 @@ def install(kernel, prefix, *, force=False, log=print):
         venv_py = _venv_python(spec["python"]) if not spec["conda"] else None
         if mgr:
             # `create`, never `env create`: it takes -y on every conda anyone still runs.
-            cmd = [mgr, "create", "-y", "-p", str(p)]
+            # --override-channels: the lock NAMES its channels, so whatever is in the user's
+            # ~/.condarc must not join the solve. Without it the same lock can build differently
+            # on two machines depending on which channels each had configured, which is the one
+            # thing a lock exists to stop. It matters most for the R lock, where `defaults`
+            # carries its own r-base and a mixed solve is how an r-* package ends up built
+            # against a different R than the one pinned.
+            cmd = [mgr, "create", "-y", "--override-channels", "-p", str(p)]
             for c in (spec["channels"] or ["conda-forge"]):
                 cmd += ["-c", c]
             # An R lock need not pin python at all, and asking conda for `python=None pip` would

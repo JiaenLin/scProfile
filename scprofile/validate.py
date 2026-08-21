@@ -87,11 +87,19 @@ def validate_plugin(kernel):
             f.append(Finding("WARN", "run.py never mentions sentinels",
                              "a sentinel is not a cell type and must not be dropped"))
 
-    if spec.get("needs_env", True) and built:
+    if spec.get("needs_env", True):
         lock = d / "lock.yml"
         if not lock.exists():
-            f.append(Finding("ERROR", "needs_env but no lock.yml"))
+            # Only a BUILT plugin is required to have one; a planned plugin legitimately has not
+            # been locked yet.
+            if built:
+                f.append(Finding("ERROR", "needs_env but no lock.yml"))
         else:
+            # A LOCK THAT EXISTS IS CHECKED, built or not. These checks used to run only for a
+            # built plugin, and four of the five locks in this tree belong to plugins that are
+            # `status: planned` - environments that are installed, proved by their own selftests,
+            # and were being validated by nothing at all. A plugin's status is about its run.py;
+            # its lock is about its environment, and the two arrive in either order.
             # A lock has three kinds of `- ` line and only one is a dependency: channel
             # names, the bare `pip` that enables the pip section, and actual packages. Counting
             # all three reported `- conda-forge` as unpinned, which is noise that trains a reader
@@ -132,7 +140,7 @@ def validate_plugin(kernel):
                 f.append(Finding("ERROR", "lock.yml installs R packages but pins no r-base",
                                  "every r-* package is built against one R minor version, so "
                                  "without that pin the same lock resolves differently later"))
-        if not (d / "selftest.py").exists() and not (d / "selftest.R").exists():
+        if built and not (d / "selftest.py").exists() and not (d / "selftest.R").exists():
             f.append(Finding("ERROR", "needs_env but no selftest",
                              "an environment nothing proved is one that fails inside a run"))
 
