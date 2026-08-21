@@ -1048,6 +1048,20 @@ def _report(a):
 # ------------------------------------------------------------------------------------- main
 
 def main(argv=None):
+    # LINE-BUFFER OUR OWN OUTPUT. Every long command here interleaves this process's `print` with
+    # the UNBUFFERED output of subprocesses it launched - conda, pip, Rscript - on the same
+    # descriptor. Redirected to a file or a pipe, which is every batch job, python block-buffers
+    # while the children do not, so the log reads in an order the run did not happen in.
+    #
+    # Measured on PBS 676422: `--force: removing <prefix>` was still sitting in the buffer while
+    # conda's solve scrolled past it, so the only evidence that a 3 GB directory had been deleted
+    # arrived after the thing that followed it - and the first reading of that log was that the
+    # removal had not happened. Four call sites had already been patched with `flush=True` one at
+    # a time; this is the general form of the same fix.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except (AttributeError, ValueError):
+        pass                       # a stdout that cannot be reconfigured is one to leave alone
     ap = argparse.ArgumentParser(prog="scprofile", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--version", action="version", version=f"scprofile {_v()}")
