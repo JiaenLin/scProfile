@@ -47,7 +47,7 @@ Full declaration, with URLs, digests and sizes: [`kernels/scenic/references.yml`
 
 | entry | organism | what it is | why the run needs it |
 |---|---|---|---|
-| `mm10_rankings_10kb` / `hg38_rankings_10kb` | mouse / human | genes × motifs ranking, 10 kb up and down of the full transcript | the `ctx` step ranks each co-expression module against these; without them nothing is pruned |
+| `mm10_rankings_10kb` / `hg38_rankings_10kb` | mouse / human | genes × motifs ranking, 10 kb up and down of the full transcript — mm10 is 5,032 × 24,131, hg38 is 5,876 × 27,091 | the `ctx` step ranks each co-expression module against these; without them nothing is pruned |
 | `mm10_motif2tf` / `hg38_motif2tf` | mouse / human | motif → gene mapping for `v10nr_clust` | turns an enriched motif back into the TF that binds it |
 | `mm_tfs` / `hs_tfs` | mouse / human | the TF list | GRNBoost2 restricts its regulators to these |
 
@@ -68,6 +68,16 @@ afterwards.
 > downloaded would be worse than none, because everything downstream would then verify against it
 > and pass.
 
+**All six are declared, and were verified three ways** (PBS 676454): every digest reproduced by
+`sha256sum`, a second implementation reading the same bytes; both rankings carry the Arrow magic
+at **both** ends, so neither is a truncated file wearing a finished name; and 93% of the mouse TF
+list are columns of the mouse ranking — the cross-check that matters, because a mouse ranking
+beside a human TF list returns a full, empty result rather than an error.
+
+One URL in this declaration was a **404**, found only by fetching it: the vendor names the TF list
+after the *assembly*, `allTFs_hg38.txt`, not the species. A URL is tested by fetching it and by
+nothing else.
+
 ---
 
 ## Bundled references — real, pinned, and invisible to this tool
@@ -82,6 +92,15 @@ They are pinned by the git commit in [`kernels/cellchat/lock.yml`](../kernels/ce
 **Source:** <https://github.com/jinworks/CellChat> · **Cite:** Jin *et al.*, *Nature
 Communications* 2021.
 
+Measured in the built environment (PBS 676454), since nothing else records it:
+
+| | interactions | columns | pathways |
+|---|---|---|---|
+| `CellChatDB.human` | 3,233 | 28 | 290 |
+| `CellChatDB.mouse` | 3,379 | 28 | 293 |
+
+alongside CellChat 2.2.0.9001, presto 1.0.0 and NMF 0.28.
+
 This plugin's own `cannot_show` already warns that *"its database is its own… disagreement is a
 finding about the databases as much as about the cells"*. What is missing is the version: nothing
 in a result records which CellChatDB produced it.
@@ -93,6 +112,9 @@ in a result records which CellChatDB produced it.
 
 **Source:** <https://github.com/saezlab/liana-py> · **Cite:** Dimitrov *et al.*, *Nature
 Communications* 2022 (LIANA); Türei *et al.*, *Molecular Systems Biology* 2021 (OmniPath).
+
+Measured in the built environment (PBS 676454): `consensus` 4,624 interactions, `mouseconsensus`
+3,989. Both load with no network access, which is what lets this plugin run in a batch job.
 
 The plugin's selftest loads both offline and measures their symbol casing, because *"the default
 resource is HUMAN, and a human resource on non-human symbols does not error; it returns a small

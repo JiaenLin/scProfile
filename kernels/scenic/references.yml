@@ -16,24 +16,40 @@
 # An estimate in a comment is not checkable and drifts silently, which is why `size` is a field
 # `status()` compares against the file on disk rather than a sentence in a note.
 #
-# BUDGET TIME, NOT ONLY SPACE. This vendor is SLOW, and it is worth knowing that before sizing a
-# walltime from the file size. Measured on PBS 676356 over the same 20 MB range request, from one
-# cluster: curl 33,232 B/s, and python's urllib with the 4 MiB chunk this module uses 47,280 B/s.
-# Two clients, same order of magnitude, one of them 42% faster than curl - so the limit is the
-# vendor or the link and not the downloader, which is the question worth settling before anyone
-# rewrites this module to be clever. At that rate the mouse set is roughly two hours and the human
-# set two and a half.
+# BUDGET TIME, NOT ONLY SPACE - AND DO NOT BUDGET IT FROM ONE MEASUREMENT.
 #
-# The download is resumable through HTTP Range and a `.part` file, so a job killed at walltime
-# loses nothing - but only if somebody resubmits it. Size the walltime for the vendor's rate.
+# PBS 676356 measured this vendor at 47,280 B/s from a compute node (curl got 33,232 B/s over the
+# same 20 MB range request, so the limit was not the client), and this comment used to conclude
+# from that "roughly two hours" for the mouse set and "two and a half" for the human one.
 #
-# WHICH DIGESTS ARE DECLARED, AND WHICH ARE NOT. The vendor publishes no checksums, so the only
-# place a digest can come from is a download that completed. The three MOUSE entries carry one,
-# computed by `fetch` on PBS 676356 and pasted here by hand - the machine that downloads is not
-# the machine that authors. The three HUMAN entries do not, because nobody has fetched them: an
-# undeclared digest is an honest gap, and a digest invented for a file this project has never
-# seen would be worse than none. `validate` will keep refusing scenic until they are declared,
-# which is the correct state and not a bug to work around.
+# PBS 676454 then fetched the ENTIRE human set - 391 MB, three files - in 27 SECONDS. About
+# 14 MB/s, some three hundred times the earlier figure, on the same cluster against the same host.
+#
+# Both numbers are real. The vendor's rate varies by orders of magnitude and a walltime sized from
+# either one is sized from a sample of one. Ask for hours and let the job finish early: the
+# download is resumable through HTTP Range and a `.part` file, so a job killed at walltime loses
+# only the time, and only if nobody resubmits it.
+#
+# The general form of this is worth keeping. A measurement is true of the moment it was taken, and
+# a comment stating it as a property of the world is a comment that will be wrong later without
+# anything noticing - which is what happened here, in a file whose whole purpose is recording
+# things that are checkable.
+#
+# WHERE EVERY DIGEST CAME FROM. The vendor publishes no checksums, so the only place one can come
+# from is a download that completed. The MOUSE three were computed by `fetch` on PBS 676356, the
+# HUMAN three on PBS 676454, and all six were pasted here by hand on a workstation - the machine
+# that downloads is not the machine that authors.
+#
+# Each was then confirmed by a SECOND, INDEPENDENT implementation reading the same bytes:
+# `sha256sum` on PBS 676454 agrees with all six. A digest agreeing with the code that produced it
+# is not evidence.
+#
+# The content was checked too, not just the bytes. Both rankings carry the Arrow magic at BOTH
+# ends - a truncated file that got renamed to the finished name passes a leading-magic check and
+# fails a trailing one - and their axes are what the filenames claim: hg38 is 5,876 motifs x
+# 27,091 upper-case gene symbols, mm10 is 5,032 x 24,131 Title-case ones. 93% of the mouse TF list
+# are columns of the mouse ranking, which is the cross-check that matters: a mouse ranking beside
+# a human TF list returns a full, empty result rather than an error.
 #
 # Every declared `size` was arrived at TWICE and independently: the vendor's Content-Length from a
 # HEAD request, and the bytes on disk after the download finished. All three agree exactly, which
@@ -71,12 +87,14 @@ mm_tfs:
 hg38_rankings_10kb:
   organism: human
   url: https://resources.aertslab.org/cistarget/databases/homo_sapiens/hg38/refseq_r80/mc_v10_clust/gene_based/hg38_10kbp_up_10kbp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather
+  sha256: 9c4026a3a8e25fe07cf96749644e2ca028b787410829b30b9932574dc6e78bdb
   size: 311298530
   note: hg38, 10 kb up and 10 kb down of the full transcript, mc_v10_clust. 297 MiB.
 
 hg38_motif2tf:
   organism: human
   url: https://resources.aertslab.org/cistarget/motif2tf/motifs-v10nr_clust-nr.hgnc-m0.001-o0.0.tbl
+  sha256: 81eb754118e27e854974301b1400fcf519489f8be5249239671fb288cb501c31
   size: 98718421
   note: motif to human-gene mapping for the v10nr_clust collection. 94 MiB.
 
@@ -87,5 +105,6 @@ hs_tfs:
   # tested by fetching it, and nobody had fetched the human set. Measured, both of them: 404 for
   # allTFs_hs.txt and allTFs_human.txt, 200 and 11,690 bytes for this one.
   url: https://resources.aertslab.org/cistarget/tf_lists/allTFs_hg38.txt
+  sha256: 3953034f84112c60d3d8ef15b0e0c8ac5fce0b40d2c7c0824c2945c70cee2523
   size: 11690
   note: the human TF list GRNBoost2 restricts its regulators to. 11.4 KiB.
