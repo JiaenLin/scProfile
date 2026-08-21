@@ -456,6 +456,102 @@ def test_validate_catches_what_got_through():
               str(refs))
 
 
+def test_r_lock_section():
+    """An R plugin's method may be distributed only from git, and the lock has to say so exactly.
+
+    Every check here is a way the section could look pinned while not being pinned - which is the
+    failure mode a lock exists to prevent, and the one that leaves no trace in the environment it
+    produced.
+    """
+    print("\nthe r: section of a lock")
+    from scprofile.runner import install, lock_spec, r_pin_kind
+    root = Path(__file__).resolve().parents[1]
+    k = Kernel(root / "kernels" / "cellchat")
+    s = lock_spec(k)
+    check("cellchat's lock parses", len(s["conda"]) > 40, f"{len(s['conda'])} conda pins")
+    check("every conda line is pinned", all("=" in x for x in s["conda"]),
+          str([x for x in s["conda"] if "=" not in x]))
+    check("both r: forms are read", len(s["r"]) == 2, str(s["r"]))
+    check("one is a CRAN version", any(r_pin_kind(x) == "cran" for x in s["r"]))
+    check("one is a git commit", any(r_pin_kind(x) == "git" for x in s["r"]))
+    # An R lock pins r-base and NOT python. Demanding a python pin from an R lock is the format
+    # asserting an assumption; r-base decides which binaries every r-* package resolves against.
+    check("an r lock needs no python pin", s["python"] is None, str(s["python"]))
+    check("and does pin r-base", any(x.startswith("r-base=") for x in s["conda"]))
+
+    check("a branch is not a pin", r_pin_kind("owner/repo@main") is None)
+    check("a tag is not a pin", r_pin_kind("owner/repo@v2.2.0") is None)
+    check("a short sha is not a pin", r_pin_kind("owner/repo@75253cd") is None)
+    check("a version range is not a pin", r_pin_kind("NMF>=0.23.0") is None)
+
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td) / "rk"
+        d.mkdir()
+        (d / "kernel.yml").write_text("name: rk\nsummary: s\nlanguage: r\nentry: run.R\n"
+                                      "needs_env: true\n")
+        # A SECTION THE INSTALLER DOES NOT APPLY MUST RAISE. Before this, an `r:` section was read
+        # and silently skipped: the fingerprint would then say the environment was built from a
+        # lock whose R packages it does not contain.
+        (d / "lock.yml").write_text("dependencies:\n  - r-base=4.3.3\nweird:\n  - x\n")
+        try:
+            lock_spec(Kernel(d))
+            check("an unknown section raises", False, "it was skipped")
+        except ValueError as e:
+            check("an unknown section raises", "not a section this installer applies" in str(e))
+
+        (d / "lock.yml").write_text("dependencies:\n  - r-base=4.3.3\nr:\n  - owner/repo@main\n")
+        try:
+            lock_spec(Kernel(d))
+            check("a branch in r: raises", False, "it was accepted as a pin")
+        except ValueError as e:
+            check("a branch in r: raises", "40-char commit" in str(e))
+
+        (d / "lock.yml").write_text("dependencies:\n  - r-dplyr=1.1.4\n")
+        try:
+            lock_spec(Kernel(d))
+            check("an r lock with no r-base raises", False)
+        except ValueError as e:
+            check("an r lock with no r-base raises", "r-base" in str(e))
+
+        # `install` must tell a plugin that CANNOT have an environment apart from one that has not
+        # been given one yet. "no lock.yml" was true of both and explained neither.
+        (d / "kernel.yml").write_text("name: rk\nsummary: s\nneeds_env: false\n")
+        try:
+            install(Kernel(d), Path(td) / "prefix")
+            check("install refuses a needs_env:false plugin", False, "it tried to build one")
+        except RuntimeError as e:
+            check("install refuses a needs_env:false plugin", "needs_env: false" in str(e))
+            check("and points at selftest instead", "scprofile selftest" in str(e))
+        (d / "kernel.yml").write_text("name: rk\nsummary: s\nneeds_env: true\nstatus: planned\n")
+        (d / "lock.yml").unlink()
+        try:
+            install(Kernel(d), Path(td) / "prefix")
+            check("install refuses a plugin with no lock", False)
+        except FileNotFoundError as e:
+            check("install refuses a plugin with no lock", "lock.yml" in str(e))
+            check("and says which state it is in", "status: planned" in str(e))
+
+
+def test_every_lock_is_validated_whatever_the_status():
+    """A lock is about an ENVIRONMENT; a status is about a run.py. They arrive in either order.
+
+    These checks used to run only for a plugin whose status is `built`, so four of the five locks
+    in this tree - installed environments, proved by their own selftests - were validated by
+    nothing at all.
+    """
+    print("\nevery lock in the tree is checked, built or not")
+    from scprofile import validate as V
+    for name, k in sorted(discover().items()):
+        if not (k.path / "lock.yml").exists():
+            continue
+        errs = [f for f in V.validate_plugin(k)
+                if f.level == "ERROR" and "lock.yml" in f.check]
+        check(f"{name}: lock has no pin errors ({k.status})", not errs, str(errs))
+    locked = [n for n, k in discover().items() if (k.path / "lock.yml").exists()]
+    planned = [n for n in locked if discover()[n].status != "built"]
+    check("and some of them are planned, which is the point", bool(planned), str(planned))
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -467,6 +563,8 @@ def main():
     test_figure_conventions()
     test_velocity_declaration()
     test_lock_is_read_not_delegated()
+    test_r_lock_section()
+    test_every_lock_is_validated_whatever_the_status()
     test_unmet_names_the_fix()
     test_ordering()
     test_schedule()
