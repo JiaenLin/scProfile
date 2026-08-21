@@ -210,6 +210,34 @@ ck("no per-unit section", not one["cellcycle"]["per_unit"])
 ck("headline is the plugin's own", one["cellcycle"]["headline"] == "h")
 ck("path is still run-relative", one["cellcycle"]["figures"][0]["path"] == "kernels/cellcycle/f.png")
 
+print("\nthe builders report their own state honestly")
+import io as _io, contextlib as _ctx, argparse as _ap                          # noqa: E402
+_buf = _io.StringIO()
+with _ctx.redirect_stdout(_buf):
+    cli._doctor(_ap.Namespace(prefix=None, references=None, organism=None))
+_doc = _buf.getvalue()
+for _n in ("de", "decoupler", "abundance", "liana", "scenic", "cellchat", "pseudotime"):
+    _line = next((l for l in _doc.splitlines() if f" {_n} " in l or f" {_n}  " in l), "")
+    ck(f"doctor does not call {_n} ok", not _line.strip().startswith("ok"), _line.strip()[:90])
+ck("doctor marks unbuilt plugins TODO", _doc.count("TODO") >= 7)
+ck("doctor still calls a built host plugin ok",
+   any(l.strip().startswith("ok") and "cellcycle" in l for l in _doc.splitlines()))
+ck("doctor says how many are unbuilt", "DECLARED BUT NOT BUILT" in _doc)
+
+from scprofile import refs as _refs                                            # noqa: E402
+from scprofile.kernels import discover as _disc                                # noqa: E402
+_ks = _disc()
+_out = []
+_refs.fetch(_ks["cellcycle"], "/tmp/__noref", log=_out.append, dry_run=True)
+ck("a plugin with no references is not called 'all present'",
+   any("declares no reference data" in x for x in _out), "; ".join(_out))
+ck("and does not claim anything is present",
+   not any("present" in x for x in _out), "; ".join(_out))
+
+_src = inspect.getsource(cli)
+ck("every per-plugin label is flushed before its work",
+   'print(f"{name}:")' not in _src and 'print(f"{n}:")' not in _src)
+
 print("\nthe live defects")
 ck("--dry-run reaches refs.fetch", "dry_run=" in inspect.getsource(cli._fetch))
 ck("--kernel a,a is deduplicated", cli._split("a,b,a") == ["a", "b"])

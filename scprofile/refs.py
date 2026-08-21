@@ -167,8 +167,15 @@ def fetch(kernel, dest, organism=None, log=print, dry_run=False):
     import urllib.request
 
     pf = plan_fetch(kernel, dest, organism)
+    if not kernel.references(organism):
+        # ZERO OF ZERO IS NOT "PRESENT". Every plugin with no references.yml reported
+        # "all reference(s) present" - a success message for a question nobody asked, and one that
+        # reads identically to a plugin whose references really are all on disk. A check that
+        # passes for its own reasons is worse than no check.
+        log(f"  {kernel.name}: declares no reference data, so there is nothing to fetch")
+        return {}
     if not pf["missing"]:
-        log(f"  {kernel.name}: all reference(s) present")
+        log(f"  {kernel.name}: all {len(kernel.references(organism))} reference(s) present")
         return status(kernel, dest, organism)
     log(f"  {kernel.name}: {len(pf['missing'])} missing, {_human(pf['bytes'])} to download, "
         f"{_human(pf['free'])} free")

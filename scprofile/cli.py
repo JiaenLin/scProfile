@@ -39,10 +39,19 @@ def _doctor(a):
     worst = 0
     for name, k in sorted(ks.items()):
         state, detail, fix = runner.env_state(k, a.prefix)
-        mark = {"installed": "ok  ", "host": "ok  ", "override": "ok  ",
-                "missing": "MISS", "stale": "STALE"}[state]
-        print(f"  {mark}  {name:<{width}}  {state:<9} {detail}")
-        if fix:
+        # THE ENVIRONMENT BEING FINE IS NOT THE PLUGIN EXISTING, and reading only the environment
+        # made `doctor` print `ok  de  host  runs in the host interpreter` for a plugin that is
+        # `status: planned` and has no run.py at all. Nothing to run, reported as ready - the
+        # plausible wrong answer this tool's own validator banner warns about.
+        built = k.status == "built"
+        mark = ({"installed": "ok  ", "host": "ok  ", "override": "ok  ",
+                 "missing": "MISS", "stale": "STALE"}[state] if built else "TODO")
+        state_s = state if built else "planned"
+        print(f"  {mark}  {name:<{width}}  {state_s:<9} "
+              + (detail if built else
+                 "declared, not built - no run.py. `scprofile scaffold " + name
+                 + "` writes the skeleton; the method still has to be wrapped."))
+        if fix and built:
             print(f"        fix: {fix}")
             worst = max(worst, 1)
         r = k.references(a.organism)
@@ -72,6 +81,11 @@ def _doctor(a):
         print("        A site kernel overriding a shipped one is legitimate; doing it without")
         print("        saying so would mean a run used code from a directory nobody mentioned.")
     print("")
+    n_todo = sum(1 for k in ks.values() if k.status != "built")
+    if n_todo:
+        print(f"{n_todo} kernel(s) are DECLARED BUT NOT BUILT. Their prerequisites are real and "
+              f"checkable;\nthe implementation does not exist. That is a different fact from "
+              f"MISSING, which means\nthe code is here and its environment is not.")
     print("A kernel that is MISSING is not a failure - it is a kernel you have not installed.")
     print("Its absence is named in the report rather than leaving a gap.")
     print("Point `run --h5ad` at an object to see which kernels are RELEVANT to it.")
@@ -93,7 +107,7 @@ def _install(a):
             print(f"scprofile: no kernel {name!r}. Known: {', '.join(sorted(ks))}",
                   file=sys.stderr)
             return REFUSE
-        print(f"{name}:")
+        print(f"{name}:", flush=True)
         try:
             p = runner.install(ks[name], a.prefix, force=a.force)
             print(f"  installed at {p}")
@@ -110,7 +124,7 @@ def _fetch(a):
         if name not in ks:
             print(f"scprofile: no kernel {name!r}", file=sys.stderr)
             return REFUSE
-        print(f"{name}:")
+        print(f"{name}:", flush=True)
         # By KEYWORD. The fourth positional of refs.fetch is `log`, and passing dry_run there
         # silently downloaded - the flag whose entire help text is "filling a filesystem halfway
         # through is a worse failure than refusing at the start" did the thing it exists to avoid.
@@ -534,7 +548,7 @@ def _selftest(a):
         return REFUSE
     ran, missing, failed, blocked = [], [], [], []
     for n in names:
-        print(f"{n}:")
+        print(f"{n}:", flush=True)
         try:
             if runner.selftest(ks[n], prefix=a.prefix, log=print, timeout=a.timeout):
                 ran.append(n)
