@@ -13,6 +13,7 @@ why a missing `out.json` and an empty one mean different things.
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -103,8 +104,18 @@ def env_state(kernel, prefix=None):
     return ("installed", str(p), "")
 
 
+#: Sections `lock.yml` may carry at indent 0. Anything else RAISES rather than being skipped: a
+#: lock is a claim about an environment, and a section the installer read and ignored is a pin the
+#: environment does not have while its fingerprint says it does. `r:` was added for cellchat.
+LOCK_SECTIONS = ("name", "channels", "dependencies", "r")
+
+#: An `r:` entry is `owner/repo@<commit>`. A tag or a branch is not a pin - a branch moves and a
+#: tag can be re-pointed - so the commit is required and checked here rather than hoped for.
+R_PIN = re.compile(r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$")
+
+
 def lock_spec(kernel):
-    """Read `lock.yml` into {python, channels, conda, pip}. Stdlib only, like everything here.
+    """Read `lock.yml` into {python, channels, conda, pip, r}. Stdlib only, like everything here.
 
     The file is a conda environment YAML because that is the format people recognise, but it is
     NOT handed to `conda env create`. Two reasons, both measured:
@@ -118,11 +129,29 @@ def lock_spec(kernel):
 
     So the two steps are taken explicitly: conda builds the interpreter, pip applies the pins in
     ONE resolve. Anything the parser does not understand raises, rather than being skipped.
+
+    THE `r:` SECTION, AND WHY IT HAD TO EXIST
+
+    A conda environment YAML expresses conda packages and pip packages, and nothing else. It has no
+    way to say "install this R package from a git commit" - so an R plugin whose method is
+    distributed only on GitHub could not be locked at all. CellChat is exactly that, measured
+    rather than assumed: PBS 676308 asked the channels, and it is on neither conda-forge nor
+    bioconda. The two personal channels carrying it are a two-year-old linux-64 build and a
+    macOS-arm64 one, which is not something another site could reproduce.
+
+    `r:` is therefore a list of `owner/repo@<40-char commit>`, applied by ONE
+    `remotes::install_github` call with `upgrade = "never"` and `dependencies = FALSE`. The
+    discipline is the pip path's and so is the reason: installed one at a time, a later package
+    re-resolves an earlier one and the environment stops matching the lock its fingerprint claims.
+    `dependencies = FALSE` is the load-bearing half - every dependency comes from the pinned conda
+    section, so NOTHING in the environment is chosen at install time. A dependency that was
+    forgotten then surfaces in the selftest as a package that will not load, by name, which is a
+    line to add to the lock rather than an unpinned install nobody sees.
     """
     f = kernel.path / "lock.yml"
     if not f.exists():
         raise FileNotFoundError(f"{kernel.name} has no lock.yml; it cannot be installed")
-    spec = {"python": None, "channels": [], "conda": [], "pip": []}
+    spec = {"python": None, "channels": [], "conda": [], "pip": [], "r": []}
     section, in_pip, pip_indent = None, False, None
     for raw in f.read_text(encoding="utf-8").splitlines():
         line = raw.split("#", 1)[0].rstrip()
@@ -132,12 +161,24 @@ def lock_spec(kernel):
         body = line.strip()
         if indent == 0:
             section, in_pip = body.split(":", 1)[0].strip(), False
+            if section not in LOCK_SECTIONS:
+                raise ValueError(
+                    f"{f}: `{section}:` is not a section this installer applies. It knows "
+                    f"{', '.join(LOCK_SECTIONS)}. A section that is read and skipped is a pin the "
+                    f"environment does not have while its fingerprint says it does.")
             continue
         if not body.startswith("- "):
             raise ValueError(f"{f}: cannot read {raw!r}")
         item = body[2:].strip()
         if section == "channels":
             spec["channels"].append(item)
+        elif section == "r":
+            if not R_PIN.match(item):
+                raise ValueError(
+                    f"{f}: r entry {item!r} is not `owner/repo@<40-char commit>`. A tag or a "
+                    f"branch is not a pin - a branch moves and a tag can be re-pointed - and the "
+                    f"whole point of this section is that the same lock builds the same package.")
+            spec["r"].append(item)
         elif section == "dependencies":
             if in_pip and pip_indent is not None and indent > pip_indent:
                 spec["pip"].append(item)
@@ -149,7 +190,17 @@ def lock_spec(kernel):
                 spec["python"] = item.split("=", 1)[1]
             elif item != "pip":
                 spec["conda"].append(item)
-    if not spec["python"]:
+    # A LOCK MUST PIN ITS OWN INTERPRETER, and for an R kernel that is not python. Demanding
+    # `python=` from an R lock would be the format asserting an assumption rather than checking
+    # one; `r-base=` is the line that decides which binaries every `r-*` package resolves against,
+    # exactly as the python minor version decides which wheels are built.
+    if kernel.language == "r":
+        if not any(c.split("=", 1)[0].strip() == "r-base" for c in spec["conda"]):
+            raise ValueError(
+                f"{f}: no `r-base=<version>` in dependencies. This kernel declares `language: r`, "
+                f"so R is the interpreter the lock has to pin - r-* packages are built against a "
+                f"given R minor version and resolve differently without it.")
+    elif not spec["python"]:
         raise ValueError(f"{f}: no `python=<version>` in dependencies. A lock that does not pin "
                          f"the interpreter is not a lock - wheels are built per minor version.")
     return spec
@@ -161,13 +212,86 @@ def _venv_python(want):
     return exe if exe else None
 
 
+def _install_r(p, entries, log=print):
+    """Apply the lock's `r:` section: ONE install_github call, every pin together.
+
+    Three things here are deliberate and each is the R spelling of something the pip path already
+    does.
+
+    `upgrade = "never"`  - remotes' default is to offer to update every dependency it finds out of
+                           date, which on a conda-built library means silently replacing packages
+                           the conda section pinned. The lock would then describe an environment
+                           that no longer exists.
+    `dependencies=FALSE` - every dependency comes from the pinned conda section. Letting remotes
+                           fetch a missing one installs an UNPINNED package that nothing recorded,
+                           and it would work, which is what makes it dangerous. A dependency that
+                           was forgotten instead fails to load in the selftest, by name.
+    one call             - installed one at a time, a later package re-resolves an earlier one.
+
+    `withr`-free on purpose: `.libPaths()` inside a conda prefix's own Rscript already points at
+    that prefix's library, so nothing here needs to redirect it. The install is verified by asking
+    R for the installed commit back, because `install_github` reports success for a build that
+    produced no loadable package often enough to be worth checking.
+    """
+    rscript = p / "bin" / "Rscript"
+    if not rscript.exists():
+        raise RuntimeError(
+            f"the lock has an `r:` section but there is no Rscript at {rscript}. Add `r-base=` to "
+            f"its dependencies - the conda step builds the interpreter that this step then uses.")
+    repos = ", ".join(f'"{e}"' for e in entries)
+    log(f"  applying {len(entries)} pinned R package(s) from git, in one resolve")
+    for e in entries:
+        log(f"    {e}")
+    script = (
+        'if (!requireNamespace("remotes", quietly = TRUE)) '
+        'stop("remotes is not installed. Add r-remotes= to the conda dependencies: this step '
+        'needs it, and installing it here would be an unpinned package the lock never declared.")\n'
+        f'remotes::install_github(c({repos}), upgrade = "never", dependencies = FALSE, '
+        'force = TRUE, quiet = FALSE)\n'
+        # The receipt. A package directory with no DESCRIPTION, or one whose RemoteSha is not the
+        # commit that was asked for, is an install that reported success and did not happen.
+        f'for (spec in c({repos})) {{\n'
+        '  pkg <- sub("@.*", "", sub(".*/", "", spec)); want <- sub(".*@", "", spec)\n'
+        '  if (!requireNamespace(pkg, quietly = TRUE)) stop(sprintf('
+        '"%s installed without error and cannot be loaded", pkg))\n'
+        '  got <- utils::packageDescription(pkg)$RemoteSha\n'
+        '  if (is.null(got) || substr(got, 1, 40) != want) stop(sprintf('
+        '"%s is at %s, the lock asked for %s", pkg, got, want))\n'
+        '  cat(sprintf("    %s %s @ %s\\n", pkg, utils::packageVersion(pkg), substr(want, 1, 7)))\n'
+        '}\n')
+    subprocess.run([str(rscript), "-e", script], check=True)
+
+
 def install(kernel, prefix, *, force=False, log=print):
     """Build a kernel's environment from its lock, then prove it with its own selftest.
 
     A selftest that runs at INSTALL time is the difference between finding out now and finding out
     after the models have trained. It is the kernel's own file, because only the kernel knows what
     importing successfully means for it.
+
+    Two kinds of plugin have nothing to install and are refused HERE rather than allowed to fall
+    through to a message about a missing file. "no lock.yml" is true of both and explains neither,
+    and a user reading it cannot tell "I should write one" from "there is nothing to write".
     """
+    if not kernel.needs_env:
+        raise RuntimeError(
+            f"{kernel.name} declares `needs_env: false`: it runs in the HOST interpreter, so "
+            f"there is nothing to install and no lock to build.\n"
+            f"  Its selftest still matters and still runs - a host-interpreter plugin is a "
+            f"wrapper too, and only a selftest proves its call is well-formed against the version "
+            f"actually installed:  scprofile selftest {kernel.name}\n"
+            f"  If it should have its own pinned environment, set `needs_env: true` in "
+            f"{kernel.path / 'kernel.yml'} and write {kernel.path / 'lock.yml'}.")
+    if not (kernel.path / "lock.yml").exists():
+        raise FileNotFoundError(
+            f"{kernel.name} needs an environment and has no {kernel.path / 'lock.yml'}, so there "
+            f"is nothing to build from. It is `status: {kernel.status}`.\n"
+            + ("  A planned plugin is a DECLARATION - its prerequisites are real and checkable "
+               "and its implementation does not exist. `scprofile scaffold " + kernel.name
+               + "` writes the skeleton, including the lock.\n"
+               if kernel.status != "built" else "")
+            + f"  A lock is captured from a resolve that WORKS, every line pinned; do not write "
+              f"one from memory.")
     p = env_prefix(kernel.name, prefix)
     spec = lock_spec(kernel)
     if p.exists() and not force:
@@ -180,8 +304,13 @@ def install(kernel, prefix, *, force=False, log=print):
             cmd = [mgr, "create", "-y", "-p", str(p)]
             for c in (spec["channels"] or ["conda-forge"]):
                 cmd += ["-c", c]
-            cmd += [f"python={spec['python']}", "pip"] + spec["conda"]
-            log(f"  interpreter: {mgr} -> python {spec['python']}"
+            # An R lock need not pin python at all, and asking conda for `python=None pip` would
+            # be this installer inventing a dependency the lock does not declare.
+            if spec["python"]:
+                cmd += [f"python={spec['python']}", "pip"]
+            cmd += spec["conda"]
+            log(f"  interpreter: {mgr} -> "
+                + (f"python {spec['python']}" if spec["python"] else "no python pin (r lock)")
                 + (f" + {len(spec['conda'])} conda package(s)" if spec["conda"] else ""))
             subprocess.run(cmd, check=True)
         elif venv_py:
@@ -206,6 +335,8 @@ def install(kernel, prefix, *, force=False, log=print):
             # that the fingerprint says it was built from.
             log(f"  applying {len(spec['pip'])} pinned package(s) in one resolve")
             subprocess.run([str(pip), "install", "--no-input"] + spec["pip"], check=True)
+        if spec["r"]:
+            _install_r(p, spec["r"], log=log)
         (p / ".scprofile_lock").write_text(lock_fingerprint(kernel), encoding="utf-8")
 
     selftest(kernel, prefix=prefix, log=log)

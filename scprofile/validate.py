@@ -96,9 +96,9 @@ def validate_plugin(kernel):
             # names, the bare `pip` that enables the pip section, and actual packages. Counting
             # all three reported `- conda-forge` as unpinned, which is noise that trains a reader
             # to ignore the check.
-            pins, section = [], None
+            pins, r_pins, section = [], [], None
             for raw in lock.read_text().splitlines():
-                s = raw.strip()
+                s = raw.split("#", 1)[0].strip()
                 if s.endswith(":") and not s.startswith("- "):
                     section = s[:-1]
                     continue
@@ -108,6 +108,9 @@ def validate_plugin(kernel):
                 if not s.startswith("- ") or section == "channels":
                     continue
                 dep = s[2:].strip()
+                if section == "r":
+                    r_pins.append(dep)
+                    continue
                 if dep in ("pip", "python") or dep.startswith("python="):
                     continue
                 pins.append(dep)
@@ -115,6 +118,19 @@ def validate_plugin(kernel):
             if loose:
                 f.append(Finding("ERROR", "lock.yml has unpinned dependencies",
                                  ", ".join(loose[:5]) + " — a lock with ranges is not a lock"))
+            # An `r:` entry is a GIT source, so `==` means nothing there and the pin is a commit.
+            # A tag or a branch reads as pinned and is not: a branch moves, and a tag can be
+            # re-pointed at a different commit with no version changing anywhere.
+            from .runner import R_PIN
+            loose_r = [x for x in r_pins if not R_PIN.match(x)]
+            if loose_r:
+                f.append(Finding("ERROR", "lock.yml has r: entries that are not commit-pinned",
+                                 ", ".join(loose_r[:5]) + " — each must be "
+                                 "owner/repo@<40-char commit>; a branch or a tag is not a pin"))
+            if r_pins and not any(x.split("=", 1)[0].strip() == "r-base" for x in pins):
+                f.append(Finding("ERROR", "lock.yml installs R packages but pins no r-base",
+                                 "every r-* package is built against one R minor version, so "
+                                 "without that pin the same lock resolves differently later"))
         if not (d / "selftest.py").exists() and not (d / "selftest.R").exists():
             f.append(Finding("ERROR", "needs_env but no selftest",
                              "an environment nothing proved is one that fails inside a run"))
