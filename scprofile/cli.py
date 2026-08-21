@@ -664,7 +664,7 @@ def _plan(a):
     produced here in seconds, and the schedule is printed so the shape of the work is visible
     before any of it is spent.
     """
-    from . import compat, inputs, provenance, runner
+    from . import compat, inputs, provenance, refs, runner
     from .kernels import discover, guard_verdict, schedule, unmet
 
     try:
@@ -949,6 +949,22 @@ def _plan(a):
             need[f"obs[{c}]"] = c in have_obs
         for c in _rk(k.needs_obsm, _km):
             need[f"obsm[{c}]"] = c in have_obsm
+        # REFERENCE DATA IS AN INPUT LIKE ANY OTHER, and the plan ignored it entirely. A plugin
+        # whose motif database has not been fetched was reported runnable and refused at run time
+        # - the plan's whole job is to find that out before a queue slot is spent.
+        if k.reference_organisms():
+            org = organism[0]
+            if org and str(org).lower() not in k.reference_organisms():
+                need["reference data"] = False        # a species it cannot serve: BLOCKED
+            elif not a.references:
+                need["reference data"] = None         # NOT DETERMINED - nowhere was checked
+            else:
+                try:
+                    st = refs.status(k, a.references, org)
+                    need["reference data"] = bool(st) and all(v[0] == "present"
+                                                              for v in st.values())
+                except Exception:                                         # noqa: BLE001
+                    need["reference data"] = None
         for c in _rk(k.needs_layers, _km):
             if c in have_layers:
                 need[f"layers[{c}]"] = True
@@ -1253,6 +1269,10 @@ def main(argv=None):
     for f in ("label-key", "sample-key", "batch-key", "counts-layer", "compartment-key",
               "lognorm-layer", "embedding", "sentinels", "organism", "assay"):
         pl.add_argument(f"--{f}", default=None)
+    pl.add_argument("--references", default=None, metavar="DIR",
+                    help="where reference data lives. WITHOUT IT the plan cannot tell a plugin "
+                         "whose references are on disk from one whose are not, and reports both "
+                         "as runnable - then the run refuses")
     pl.add_argument("--search", default=None, metavar="DIR,DIR",
                     help="extra directories to search for inputs not on the object")
     pl.add_argument("--audit", action="store_true",
