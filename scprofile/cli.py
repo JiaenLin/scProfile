@@ -54,6 +54,13 @@ def _doctor(a):
         if fix and built:
             print(f"        fix: {fix}")
             worst = max(worst, 1)
+        if not built and state in ("installed", "override", "stale"):
+            # THE OTHER HALF OF THE SAME DISTINCTION. Reading only the environment reported a
+            # plugin with no run.py as ready, which is the comment above. Reading only the status
+            # hides the environment completely: three locks were built and proved here, and
+            # `doctor` said `TODO ... declared, not built` for all three with no sign that
+            # anything exists on disk. Both facts are real and neither substitutes for the other.
+            print(f"        environment: {state} - {detail}")
         r = k.references(a.organism)
         if r:
             st = refs.status(k, a.references, a.organism) if a.references else {}
