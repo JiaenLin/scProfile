@@ -240,6 +240,17 @@ def _venv_python(want):
 R_INSTALL_SCRIPT = r'''
 # Written by scprofile from lock.yml. Do not edit: it is regenerated on every install, and the
 # lock is the thing to change.
+
+# INSTALL INTO THIS ENVIRONMENT, EXPLICITLY. `.Library` is the environment's own library whatever
+# its layout, and it is named here rather than left to `.libPaths()[1]` because that is whatever
+# R_LIBS_USER happens to say. Measured on PBS 676357: with R_LIBS_USER set, NMF and CellChat were
+# installed into a scratch directory OUTSIDE the environment, `install_github` reported a warning
+# rather than an error, and the environment `doctor` would then have called installed contained
+# neither package. The caller also scrubs R_LIBS* from this process's environment; this is the
+# second lock on the same door, because the failure is silent on both sides.
+lib <- .Library
+.libPaths(lib)
+
 if (!requireNamespace("remotes", quietly = TRUE)) {
   stop("remotes is not installed. Add `r-remotes=` to the conda dependencies - this step needs ",
        "it, and installing it here would put an unpinned package in an environment whose whole ",
@@ -262,12 +273,12 @@ for (s in cran) {
   pkg <- sub("==.*", "", s); ver <- sub(".*==", "", s)
   cat(sprintf("    CRAN  %s %s\n", pkg, ver))
   remotes::install_version(pkg, version = ver, repos = repos, upgrade = "never",
-                           dependencies = FALSE, quiet = FALSE)
+                           dependencies = FALSE, quiet = FALSE, lib = lib)
 }
 if (length(git)) {
   for (s in git) cat(sprintf("    git   %s\n", s))
   remotes::install_github(git, upgrade = "never", dependencies = FALSE, force = TRUE,
-                          quiet = FALSE)
+                          quiet = FALSE, lib = lib)
 }
 
 # THE RECEIPT. Both installers report success for a build that produced no loadable package often
@@ -275,25 +286,26 @@ if (length(git)) {
 # section exists to prevent.
 for (s in cran) {
   pkg <- sub("==.*", "", s); ver <- sub(".*==", "", s)
-  if (!requireNamespace(pkg, quietly = TRUE)) {
-    stop(sprintf("%s installed without error and cannot be loaded", pkg))
+  if (!requireNamespace(pkg, lib.loc = lib, quietly = TRUE)) {
+    stop(sprintf("%s installed without error and cannot be loaded from %s", pkg, lib))
   }
-  got <- as.character(utils::packageVersion(pkg))
+  got <- as.character(utils::packageVersion(pkg, lib.loc = lib))
   if (got != ver) stop(sprintf("%s is at %s; the lock asked for %s", pkg, got, ver))
   cat(sprintf("    ok    %s %s  (CRAN)\n", pkg, got))
 }
 for (s in git) {
   pkg <- sub("@.*", "", sub(".*/", "", s)); want <- sub(".*@", "", s)
-  if (!requireNamespace(pkg, quietly = TRUE)) {
-    stop(sprintf(paste("%s installed without error and cannot be loaded. If the repository",
-                       "name and the package name differ, this is what that looks like."), pkg))
+  if (!requireNamespace(pkg, lib.loc = lib, quietly = TRUE)) {
+    stop(sprintf(paste("%s installed without error and cannot be loaded from %s. If the",
+                       "repository name and the package name differ, this is what that looks",
+                       "like."), pkg, lib))
   }
-  got <- utils::packageDescription(pkg)$RemoteSha
+  got <- utils::packageDescription(pkg, lib.loc = lib)$RemoteSha
   if (is.null(got) || substr(got, 1, 40) != want) {
     stop(sprintf("%s reports commit %s; the lock asked for %s", pkg,
                  if (is.null(got)) "none" else got, want))
   }
-  cat(sprintf("    ok    %s %s @ %s  (git)\n", pkg, utils::packageVersion(pkg),
+  cat(sprintf("    ok    %s %s @ %s  (git)\n", pkg, utils::packageVersion(pkg, lib.loc = lib),
               substr(want, 1, 7)))
 }
 '''
@@ -317,8 +329,21 @@ def _install_r(p, entries, log=print):
     CRAN before git      - see the script; the git package's install-time version checks are what
                            the CRAN entries exist to satisfy.
 
-    `withr`-free on purpose: `.libPaths()` inside a conda prefix's own Rscript already points at
-    that prefix's library, so nothing here needs to redirect it.
+    TWO THINGS ABOUT THE SUBPROCESS ENVIRONMENT, both measured on PBS 676357 and both silent.
+
+    `<prefix>/bin` MUST BE ON PATH. A conda R's `Makeconf` names its compilers by bare name -
+    `CC = x86_64-conda-linux-gnu-cc` - and those binaries live in the environment's own `bin`.
+    Running `<prefix>/bin/Rscript` by absolute path does not put that directory on PATH, so every
+    package with compiled code failed with `x86_64-conda-linux-gnu-cc: command not found` while
+    the compilers sat pinned and installed a few directories away. This is what `conda activate`
+    would have done; the installer does it for the one subprocess that needs it.
+
+    `R_LIBS_USER` and friends ARE SCRUBBED. R installs into `.libPaths()[1]`, which those
+    variables control, so a site setting sends the packages somewhere outside the environment -
+    where they install successfully, are reported as installed, and are not in the environment
+    that `doctor` then calls ready. An earlier version of this docstring claimed `.libPaths()`
+    inside a conda prefix's Rscript already points at that prefix's library; it does when nothing
+    overrides it, and the whole risk is the case where something does.
     """
     rscript = p / "bin" / "Rscript"
     if not rscript.exists():
@@ -330,7 +355,11 @@ def _install_r(p, entries, log=print):
     specs = "c(" + ", ".join(f'"{e}"' for e in entries) + ")"
     f = p / ".scprofile_r_install.R"
     f.write_text(R_INSTALL_SCRIPT.replace("SPECS", specs), encoding="utf-8")
-    subprocess.run([str(rscript), str(f)], check=True)
+    env = dict(os.environ)
+    env["PATH"] = f"{p / 'bin'}{os.pathsep}{env.get('PATH', '')}"
+    for var in ("R_LIBS_USER", "R_LIBS_SITE", "R_LIBS"):
+        env.pop(var, None)
+    subprocess.run([str(rscript), str(f)], check=True, env=env)
 
 
 def install(kernel, prefix, *, force=False, log=print):
