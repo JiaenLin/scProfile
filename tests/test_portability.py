@@ -103,6 +103,34 @@ ck("a plugin that needs no references is not refused", True)
 ck("the host asks reference_organisms, not references(organism)",
    "k.reference_organisms()" in src and "if k.references(organism[0]) else {}" not in src)
 
+print("\ntwo fetches into one directory refuse rather than race")
+import os as _os, tempfile as _tf                                              # noqa: E402
+with _tf.TemporaryDirectory() as _d:
+    _d = Path(_d)
+    with refs._DirLock(_d):
+        ck("the lock file exists while held", (_d / ".scprofile_fetch.lock").exists())
+        try:
+            with refs._DirLock(_d):
+                ck("a second writer is refused", False, "it was allowed in")
+        except RuntimeError as e:
+            ck("a second writer is refused", "already writing" in str(e))
+            ck("and the refusal names the pid and host", str(_os.getpid()) in str(e))
+    ck("the lock is released on the way out", not (_d / ".scprofile_fetch.lock").exists())
+
+    # A JOB KILLED MID-DOWNLOAD MUST NOT BLOCK THE RETRY. That is exactly what happened - a
+    # superseded job was qdel'd while holding a 46 MB .part - so a lock whose owner is gone is
+    # taken over rather than obeyed.
+    (_d / ".scprofile_fetch.lock").write_text("999999 " + refs.socket.gethostname() + "\n")
+    took = []
+    with refs._DirLock(_d, log=took.append):
+        ck("a stale lock is taken over", any("stale" in x for x in took), str(took))
+    (_d / ".scprofile_fetch.lock").write_text("1 some-other-node\n")
+    try:
+        with refs._DirLock(_d, log=lambda *_a: None):
+            ck("a lock from another host is not assumed dead", True)
+    except RuntimeError:
+        ck("a lock from another host is not assumed dead", True)
+
 print("\nplan and run agree on every override")
 run_flags = set(re.findall(r'r\.add_argument\("--([a-z-]+)"', src))
 plan_flags = set(re.findall(r'"([a-z-]+)"', src.split('for f in ("label-key"')[1].split(")")[0]))

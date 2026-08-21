@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import os
 import shutil
+import socket
 from pathlib import Path
 
 CHUNK = 1 << 22          # 4 MiB — large enough that a multi-GB file is not a syscall storm
@@ -187,6 +188,58 @@ def resolve(kernel, dest, organism=None):
     return {k: v[1] for k, v in st.items()}
 
 
+class _DirLock:
+    """One writer per reference directory. A second fetch REFUSES rather than racing.
+
+    Two fetches of the same reference into the same directory both append to the same `.part`
+    through resumable Range requests, and the result is a file that is the wrong length or the
+    right length with interleaved bytes. Nothing downstream would catch it: a declared sha256
+    would - but the case where this matters most is the FIRST download, when there is no declared
+    digest, and the digest computed afterwards would then be a digest of the corruption, printed
+    as the value to paste in. A blessed wrong checksum is worse than no checksum.
+
+    Held for the whole fetch, released on the way out, and stale-tolerant: a lock whose owning
+    process is gone is taken over, because a job killed mid-download must not block the retry.
+    """
+
+    def __init__(self, d, log=print):
+        self.path, self.log, self.held = Path(d) / ".scprofile_fetch.lock", log, False
+
+    def __enter__(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            fd = os.open(str(self.path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, f"{os.getpid()} {socket.gethostname()}\n".encode())
+            os.close(fd)
+            self.held = True
+        except FileExistsError:
+            who = self.path.read_text(encoding="utf-8", errors="replace").strip()
+            pid = who.split()[0] if who else ""
+            host = who.split()[1] if len(who.split()) > 1 else ""
+            mine = host == socket.gethostname()
+            alive = False
+            if mine and pid.isdigit():
+                try:
+                    os.kill(int(pid), 0)
+                    alive = True
+                except (OSError, ProcessLookupError):
+                    alive = False
+            if alive:
+                raise RuntimeError(
+                    f"another fetch is already writing to {self.path.parent} (pid {pid} on "
+                    f"{host}). Two writers share one .part file and produce a file that is "
+                    f"neither download - wait for it, or fetch to a different --to.")
+            self.log(f"  taking over a stale fetch lock from {who or 'an unknown process'}")
+            self.path.write_text(f"{os.getpid()} {socket.gethostname()}\n", encoding="utf-8")
+            self.held = True
+        return self
+
+    def __exit__(self, *_exc):
+        if self.held:
+            self.path.unlink(missing_ok=True)
+        return False
+
+
 def fetch(kernel, dest, organism=None, log=print, dry_run=False):
     """Download what is missing, resumably, and verify it."""
     import urllib.error
@@ -216,6 +269,20 @@ def fetch(kernel, dest, organism=None, log=print, dry_run=False):
         return status(kernel, dest, organism)
 
     refs = kernel.references(organism)
+    # ONE WRITER. Everything below appends to `.part` files; a second fetch into the same
+    # directory produces a file that is neither download, and on a FIRST fetch - where there is
+    # no declared digest to catch it - the digest printed afterwards would be the corruption's.
+    with _DirLock(Path(dest) / kernel.name, log=log):
+        recorded += _download(refs, pf, log)
+    _report_digests(recorded, log)
+    return status(kernel, dest, organism)
+
+
+def _download(refs, pf, log):
+    """The download loop itself, so the lock above wraps all of it and nothing else."""
+    import urllib.error
+    import urllib.request
+    recorded = []
     for name, (state, path, _d) in pf["missing"].items():
         spec = refs[name]
         url, p = spec.get("url"), Path(path)
@@ -268,6 +335,10 @@ def fetch(kernel, dest, organism=None, log=print, dry_run=False):
             # is not the machine that authors, and a file edited by whichever host ran a fetch is
             # a file with no single origin.
             recorded.append((name, got, p.stat().st_size))
+    return recorded
+
+
+def _report_digests(recorded, log):
     if recorded:
         log("")
         log("  These files declared NO sha256, so nothing verified them. They are on disk and")
@@ -278,4 +349,3 @@ def fetch(kernel, dest, organism=None, log=print, dry_run=False):
             log(f"    {name}:")
             log(f"      sha256: {got}")
             log(f"      size: {size}")
-    return status(kernel, dest, organism)
