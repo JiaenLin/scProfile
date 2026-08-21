@@ -7,8 +7,20 @@
 # checked by digest rather than by presence.
 #
 # The rankings are large and organism-specific. `plan_fetch` reports the total and the free space
-# before anything downloads, because filling a filesystem halfway through a 2 GB file is a worse
-# failure than refusing at the start.
+# before anything downloads, because filling a filesystem halfway through a 226 MiB file is a
+# worse failure than refusing at the start.
+#
+# EVERY `size` BELOW IS THE VENDOR'S OWN Content-Length, from a HEAD request on 2026-08-21, and
+# they are here because two of the notes were wrong by a factor of five. This file said the mm10
+# rankings were "About 1.1 GB" and the hg38 rankings "About 1.4 GB"; they are 226 MiB and 297 MiB.
+# An estimate in a comment is not checkable and drifts silently, which is why `size` is a field
+# `status()` compares against the file on disk rather than a sentence in a note.
+#
+# BUDGET TIME, NOT ONLY SPACE. This vendor served 33,232 B/s to one cluster, measured with curl
+# over a 20 MB range request (PBS 676356) - so the mouse set is about 3 hours and the human set
+# about 3.5, on a link that is not the limit. The download is resumable through HTTP Range and a
+# `.part` file, so a job killed at walltime loses nothing; size the walltime for the vendor's rate
+# rather than for the file.
 #
 # Source: resources.aertslab.org, the SCENIC authors' own distribution.
 # Licence: the cisTarget databases are distributed by the Aerts lab for research use; the motif
@@ -21,29 +33,39 @@
 mm10_rankings_10kb:
   organism: mouse
   url: https://resources.aertslab.org/cistarget/databases/mus_musculus/mm10/refseq_r80/mc_v10_clust/gene_based/mm10_10kbp_up_10kbp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather
-  note: mm10, 10 kb up and 10 kb down of the full transcript, mc_v10_clust. About 1.1 GB.
+  size: 237172098
+  note: mm10, 10 kb up and 10 kb down of the full transcript, mc_v10_clust. 226 MiB.
 
 mm10_motif2tf:
   organism: mouse
   url: https://resources.aertslab.org/cistarget/motif2tf/motifs-v10nr_clust-nr.mgi-m0.001-o0.0.tbl
-  note: motif to mouse-gene mapping for the v10nr_clust collection.
+  size: 113107706
+  note: motif to mouse-gene mapping for the v10nr_clust collection. 108 MiB.
 
 mm_tfs:
   organism: mouse
   url: https://resources.aertslab.org/cistarget/tf_lists/allTFs_mm.txt
-  note: the mouse TF list GRNBoost2 restricts its regulators to.
+  size: 11726
+  note: the mouse TF list GRNBoost2 restricts its regulators to. 11.5 KiB.
 
 hg38_rankings_10kb:
   organism: human
   url: https://resources.aertslab.org/cistarget/databases/homo_sapiens/hg38/refseq_r80/mc_v10_clust/gene_based/hg38_10kbp_up_10kbp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather
-  note: hg38, 10 kb up and 10 kb down of the full transcript, mc_v10_clust. About 1.4 GB.
+  size: 311298530
+  note: hg38, 10 kb up and 10 kb down of the full transcript, mc_v10_clust. 297 MiB.
 
 hg38_motif2tf:
   organism: human
   url: https://resources.aertslab.org/cistarget/motif2tf/motifs-v10nr_clust-nr.hgnc-m0.001-o0.0.tbl
-  note: motif to human-gene mapping for the v10nr_clust collection.
+  size: 98718421
+  note: motif to human-gene mapping for the v10nr_clust collection. 94 MiB.
 
 hs_tfs:
   organism: human
-  url: https://resources.aertslab.org/cistarget/tf_lists/allTFs_hs.txt
-  note: the human TF list GRNBoost2 restricts its regulators to.
+  # allTFs_hs.txt, which this entry named until 2026-08-21, is a 404. The vendor's file is named
+  # after the ASSEMBLY, not the species, and nothing here would have caught it: a URL is only
+  # tested by fetching it, and nobody had fetched the human set. Measured, both of them: 404 for
+  # allTFs_hs.txt and allTFs_human.txt, 200 and 11,690 bytes for this one.
+  url: https://resources.aertslab.org/cistarget/tf_lists/allTFs_hg38.txt
+  size: 11690
+  note: the human TF list GRNBoost2 restricts its regulators to. 11.4 KiB.
