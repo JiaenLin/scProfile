@@ -153,7 +153,9 @@ def lock_spec(kernel):
     A conda environment YAML expresses conda packages and pip packages, and nothing else. It has no
     way to say "install this R package from a git commit" - so an R plugin whose method is
     distributed only on GitHub could not be locked at all. CellChat is exactly that, measured
-    rather than assumed: PBS 676308 asked the channels, and it is on neither conda-forge nor
+    rather than assumed: PBS 676350 asked the channels - `conda search r-cellchat` and
+    `bioconductor-cellchat` over conda-forge and bioconda both returned "No match found" - so it
+    is on neither conda-forge nor
     bioconda. The two personal channels carrying it are a two-year-old linux-64 build and a
     macOS-arm64 one, which is not something another site could reproduce.
 

@@ -2,20 +2,22 @@
 #
 # THIS IS THE ONLY R LOCK HERE, AND IT IS THE ONE THE FORMAT HAD TO GROW FOR.
 #
-# CellChat is distributed only from GitHub. Measured rather than assumed - PBS 676308 and 676350
-# asked the channels - it is on neither conda-forge nor bioconda; the two personal channels that
-# carry it are a two-year-old linux-64 build and a macOS-arm64 one, which is not something another
-# site can reproduce. A conda environment YAML expresses conda packages and pip packages and
+# CellChat is distributed only from GitHub. Measured rather than assumed - on PBS 676350
+# `conda search` over conda-forge and bioconda returned "No match found" for BOTH `r-cellchat`
+# and `bioconductor-cellchat`. The two personal channels that carry it are a two-year-old
+# linux-64 build and a macOS-arm64 one, which is not something another site can reproduce. A
+# conda environment YAML expresses conda packages and pip packages and
 # nothing else, so before the `r:` section below existed this plugin could not be locked at all.
 # docs/EXECUTION.md §9 records what was rejected and why.
 #
 # NMF IS THE SECOND HALF OF THE SAME PROBLEM, and it is why `r:` also takes a CRAN version.
-# CellChat requires `NMF (>= 0.23.0)`; conda-forge's r-nmf tops out at 0.21.0 - every build it has
-# is 0.20.6 or 0.21.0, checked on PBS 676353 - and `R CMD INSTALL` refuses on the version
-# requirement, so an environment built from conda alone cannot install CellChat. The git form
-# cannot fix it either: renozao/NMF's GitHub tags are an unreleased 2020 devel line numbered
-# 0.30.x, while the live source is CRAN. NMF 0.28 is the current CRAN release (1,678,046 bytes at
-# src/contrib, verified reachable in the same job).
+# CellChat requires `NMF (>= 0.23.0)` and conda-forge's r-nmf tops out at 0.21.0: `conda search
+# r-nmf` over conda-forge and bioconda returned six builds and every one of them is 0.21.0 (PBS
+# 676350 and 676353). `R CMD INSTALL` refuses on the version requirement, so an environment built
+# from conda alone cannot install CellChat at all. The git form cannot fix it either -
+# renozao/NMF's GitHub tags are an unreleased 2020 devel line numbered 0.30.x, while the live
+# source is CRAN. NMF 0.28 is the CURRENT CRAN release, not an archived one: a HEAD request on
+# PBS 676353 got 404 from src/contrib/Archive/NMF/ and 200, 1,678,046 bytes, from src/contrib/.
 #
 # EVERY VERSION BELOW CAME FROM A RESOLVE THAT SUCCEEDED, not from memory: `conda create --dry-run
 # --json` over the whole set at once, PBS 676353, 306 packages solved, none of the 52 named specs

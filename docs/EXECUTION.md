@@ -234,8 +234,9 @@ and, until 2026-08-21, nothing else. That is enough for every python plugin here
 enough for one plugin, which is worth writing down because the gap is not obvious until a method
 falls into it.
 
-**CellChat is distributed only from GitHub.** Measured rather than assumed — PBS 676308 asked the
-channels — it is on neither conda-forge nor bioconda. The two personal channels that carry it are
+**CellChat is distributed only from GitHub.** Measured rather than assumed — on PBS 676350
+`conda search` over conda-forge and bioconda returned "No match found" for both `r-cellchat` and
+`bioconductor-cellchat`. The two personal channels that carry it are
 a two-year-old linux-64 build and a macOS-arm64 one; pinning a tool to a personal channel with one
 platform and no maintenance is not something another site can reproduce, so neither is a lock.
 
