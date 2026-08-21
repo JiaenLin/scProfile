@@ -52,12 +52,19 @@ def main():
     assert hcase > 0.8 and mcase < 0.5, "the two resources are not in the casings expected"
 
     # ---- a real scoring run ------------------------------------------------------------------
+    # THE FIXTURE MUST COVER THE RESOURCE. liana refuses when more than 98% of the resource's
+    # genes are absent from var_names - correctly, because that is the signature of a resource
+    # for the wrong organism, which is the failure this plugin's own cannot_show warns about. A
+    # 62-gene fixture triggers exactly that refusal (PBS 676307), so the object is built FROM the
+    # resource: every gene it names, plus the planted pair made strong.
     pair = res_m.iloc[0]
     lig, rec = str(pair["ligand"]), str(pair["receptor"])
-    genes = [lig, rec] + [f"Gene{i:03d}" for i in range(60)]
-    genes = list(dict.fromkeys(genes))
+    genes = sorted(set(res_m["ligand"].astype(str)) | set(res_m["receptor"].astype(str)))
+    genes = [g for g in genes if "_" not in g]          # complexes are written A_B; skip them
+    genes = list(dict.fromkeys([lig, rec] + genes))
+    print(f"  fixture covers {len(genes):,} of the resource's genes")
     rng = np.random.default_rng(0)
-    n = 240
+    n = 200
     labels = np.array(["Alpha"] * (n // 2) + ["Beta"] * (n - n // 2))
     X = rng.poisson(1.0, size=(n, len(genes))).astype("float32")
     # The ligand high in Alpha, the receptor high in Beta, so there is something to find.

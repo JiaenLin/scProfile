@@ -19,6 +19,17 @@ channels:
 dependencies:
   - python=3.11
   - pip
+  # FROM CONDA, NOT PIP, and this is the whole reason the lock has a conda section. petsc4py and
+  # slepc4py ship no wheels: pip builds them from source, needs an MPI toolchain and Cython >= 3,
+  # and on this cluster failed with `unsatisfied build requirement 'Cython >= 3.0.0'` (PBS
+  # 676307). conda-forge has them built against its own MPI.
+  #
+  # They are OPTIONAL to cellrank and load-bearing in practice. Without them GPCCA falls back to a
+  # DENSE eigensolver - correct, and on a cohort of any size not finishable. A fallback that is
+  # right and takes a week is not a fallback, so they are pinned rather than left to chance, and
+  # the selftest prints which route it got.
+  - petsc4py=3.20
+  - slepc4py=3.20
   - pip:
       - numpy==1.26.4
       - scipy==1.13.1
@@ -36,6 +47,4 @@ dependencies:
       - leidenalg==0.10.2
       - loompy==3.0.7
       - scvelo==0.3.4
-      - petsc4py==3.20.5
-      - slepc4py==3.20.2
       - cellrank==2.0.6

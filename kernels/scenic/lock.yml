@@ -24,6 +24,12 @@ dependencies:
   - python=3.10
   - pip
   - pip:
+      # setuptools IS A PIN HERE, not an accident of resolution. ctxcore 0.2.0 does
+      # `from pkg_resources import ...` at import time, and setuptools removed pkg_resources in
+      # 81. A fresh environment therefore gets a setuptools that pyscenic's own dependency cannot
+      # import - `ModuleNotFoundError: No module named 'pkg_resources'` from a package that
+      # installed cleanly. Measured on this cluster, PBS 676307.
+      - setuptools==75.8.2
       - numpy==1.23.5
       - scipy==1.10.1
       - pandas==1.5.3
