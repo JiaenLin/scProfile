@@ -548,11 +548,28 @@ def _selftest(a):
     day it was built". Environments drift, and a plugin declaring `needs_env: false` has no
     install step at all - so its selftest never ran automatically, and a keyword the wrapped
     function forbids reached a real cohort before anything executed the call.
+
+    WHAT THE DEFAULT SET IS, AND WHAT IT USED TO BE
+
+    Every plugin that SHIPS a selftest. It used to be every plugin whose `status` is `built`, and
+    those are different sets in the direction that matters: a status is about a plugin's run.py, a
+    selftest is about its ENVIRONMENT. Four environments were built and proved at install time,
+    and `scprofile selftest` then skipped all four because none of them has a wrapper yet -
+    printing `2 passed` and exiting 0, which reads exactly like a clean sweep of everything
+    installed. A check that silently narrows its own scope is worse than one that fails.
     """
     from . import runner
     from .kernels import discover
     ks = discover()
-    names = _split(a.name or "") or sorted(n for n in ks if ks[n].status == "built")
+    shipped = [n for n in sorted(ks)
+               if (ks[n].path / "selftest.py").exists() or (ks[n].path / "selftest.R").exists()]
+    names = _split(a.name or "") or shipped
+    if not a.name:
+        absent = [n for n in sorted(ks) if n not in shipped]
+        if absent:
+            # NAMED, not counted. A plugin missing from a list of results looks identical to one
+            # that was checked and found fine.
+            print(f"not considered - these ship no selftest: {', '.join(absent)}\n")
     bad = [n for n in names if n not in ks]
     if bad:
         print(f"scprofile: unknown plugin(s) {bad}. Known: {', '.join(sorted(ks))}",
