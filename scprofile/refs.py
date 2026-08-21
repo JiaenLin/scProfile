@@ -316,12 +316,37 @@ def _download(refs, pf, log):
             log(f"      sha256 : {spec.get('sha256', '(none declared)')}")
             log(f"      save to: {p}")
             continue
+        # A SHORT READ IS NOT AN ERROR, and that is the whole problem. When a server closes the
+        # connection cleanly part-way through, `read()` returns b"" and this loop exits exactly as
+        # it does on a complete file - nothing raises, so the `except` above never sees it. Before
+        # this check the truncated `.part` was RENAMED to the real name, which did two bad things
+        # at once: it destroyed the resume (the `.part` is what Range picks up from), and on a
+        # first fetch, where there is no declared digest, it left a short database sitting under
+        # the name of a complete one. That is precisely the failure this module's header warns
+        # about - a truncated database returns a smaller answer rather than an error.
+        #
+        # The size is checked FIRST because it is the check that still works when no digest has
+        # been declared, which is the case that matters most.
+        want_bytes = _declared_bytes(spec)
+        got_bytes = part.stat().st_size if part.exists() else 0
+        if want_bytes and got_bytes != want_bytes:
+            log(f"    INCOMPLETE — {_human(got_bytes)} of {_human(want_bytes)}. The connection "
+                f"ended without an error, which is how a truncated file gets the name of a whole "
+                f"one. Kept as .part; run the fetch again and it resumes from here.")
+            continue
         want = str(spec.get("sha256") or "")
         got = _sha256(part)
         if want and got != want:
             part.unlink(missing_ok=True)
             log(f"    CHECKSUM MISMATCH — deleted. Got {got[:12]}…, expected {want[:12]}…")
             continue
+        if not want_bytes:
+            # Neither a size nor a digest was declared, so nothing here can tell a complete
+            # download from an interrupted one. Say so at the moment it happens rather than
+            # leaving it to be inferred from a `validate` warning later.
+            log("    NOTE: this entry declares neither size nor sha256, so completeness was not "
+                "checked. Declare `size` from the server's Content-Length as well as the digest "
+                "printed below.")
         part.rename(p)                              # only now is it a real file
         log(f"    ok -> {p} ({_human(p.stat().st_size)})")
         if not want:
