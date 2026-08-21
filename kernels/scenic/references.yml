@@ -27,6 +27,18 @@
 # The download is resumable through HTTP Range and a `.part` file, so a job killed at walltime
 # loses nothing - but only if somebody resubmits it. Size the walltime for the vendor's rate.
 #
+# WHICH DIGESTS ARE DECLARED, AND WHICH ARE NOT. The vendor publishes no checksums, so the only
+# place a digest can come from is a download that completed. The three MOUSE entries carry one,
+# computed by `fetch` on PBS 676356 and pasted here by hand - the machine that downloads is not
+# the machine that authors. The three HUMAN entries do not, because nobody has fetched them: an
+# undeclared digest is an honest gap, and a digest invented for a file this project has never
+# seen would be worse than none. `validate` will keep refusing scenic until they are declared,
+# which is the correct state and not a bug to work around.
+#
+# Every declared `size` was arrived at TWICE and independently: the vendor's Content-Length from a
+# HEAD request, and the bytes on disk after the download finished. All three agree exactly, which
+# is also what says the downloads are complete rather than truncated.
+#
 # Source: resources.aertslab.org, the SCENIC authors' own distribution.
 # Licence: the cisTarget databases are distributed by the Aerts lab for research use; the motif
 # collection is derived from JASPAR, HOCOMOCO, SwissRegulon and others - see their site.
@@ -38,18 +50,21 @@
 mm10_rankings_10kb:
   organism: mouse
   url: https://resources.aertslab.org/cistarget/databases/mus_musculus/mm10/refseq_r80/mc_v10_clust/gene_based/mm10_10kbp_up_10kbp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather
+  sha256: 8fc014f1879355a5e94b155f8b55511e3b47842cceed9d3e17235f60afb85ebc
   size: 237172098
   note: mm10, 10 kb up and 10 kb down of the full transcript, mc_v10_clust. 226 MiB.
 
 mm10_motif2tf:
   organism: mouse
   url: https://resources.aertslab.org/cistarget/motif2tf/motifs-v10nr_clust-nr.mgi-m0.001-o0.0.tbl
+  sha256: 5b64aad9df9804d50c50484c92d5192bdd5d2056cb105bdd343c0af2f94cce83
   size: 113107706
   note: motif to mouse-gene mapping for the v10nr_clust collection. 108 MiB.
 
 mm_tfs:
   organism: mouse
   url: https://resources.aertslab.org/cistarget/tf_lists/allTFs_mm.txt
+  sha256: 17a95e142147fb7dc063d7b9e84262746b0b64f622793b3cc5df0eddf2f1194c
   size: 11726
   note: the mouse TF list GRNBoost2 restricts its regulators to. 11.5 KiB.
 
