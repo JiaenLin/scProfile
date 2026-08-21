@@ -40,22 +40,38 @@ def main():
         print("  is correct and much slower; on a real cohort that is hours, not minutes.")
 
     rng = np.random.default_rng(0)
-    n, g = 300, 50
-    t = np.sort(rng.uniform(0, 1, size=n))              # the planted progression
-    base = np.exp(1.0 + 2.0 * np.outer(t, rng.uniform(0.2, 1.0, size=g)))
-    spliced = rng.poisson(base).astype("float32")
-    unspliced = rng.poisson(base * 1.4).astype("float32")   # unspliced LEADS spliced
+    n, g = 600, 300
 
-    A = ad.AnnData(sp.csr_matrix(spliced + unspliced),
+    # The fixture velocity's selftest uses, at the same size and for the same reason: a stochastic
+    # fit needs enough genes to survive scvelo's own velocity-gene filter, and a decomposition
+    # needs enough cells to have something to decompose. Too small a fixture yields an empty
+    # graph, which reads as a broken environment rather than as a fixture that was never going to
+    # work.
+    t = np.linspace(0, 1, n)                            # the planted progression
+    base = rng.uniform(0.5, 4.0, g)
+    prog = np.outer(t, rng.normal(0, 1.5, g))
+    spliced = rng.poisson(np.clip(np.exp(base + prog), 0.05, 300)).astype("float32")
+    # unspliced LEADS spliced; that lead is what velocity reads as direction
+    unspliced = rng.poisson(np.clip(np.exp(base + prog + 0.35), 0.05, 300) * 0.4).astype("float32")
+
+    A = ad.AnnData(sp.csr_matrix(spliced),
                    obs=pd.DataFrame({"t": t}, index=[f"c{i}" for i in range(n)]),
-                   var=pd.DataFrame(index=[f"Gene{i:02d}" for i in range(g)]))
+                   var=pd.DataFrame(index=[f"Gene{i:03d}" for i in range(g)]))
     A.layers["spliced"] = sp.csr_matrix(spliced)
     A.layers["unspliced"] = sp.csr_matrix(unspliced)
 
-    scv.pp.filter_and_normalize(A, min_shared_counts=0, log=True)
-    sc.pp.pca(A, n_comps=10)
-    sc.pp.neighbors(A, n_neighbors=15)
-    scv.pp.moments(A, n_pcs=10, n_neighbors=15)
+    # THE 0.3.x SEQUENCE, which is not the one filter_and_normalize's own docstring describes.
+    # scvelo 0.3 removed gene selection AND the log transform from that function - it is
+    # filter_genes plus normalize_per_cell and nothing else - while still documenting `log`.
+    # Anything extra is forwarded into normalize_per_cell through **kwargs and raises there.
+    # Measured on PBS 676308: `normalize_per_cell() got an unexpected keyword argument 'log'`,
+    # against a pip resolve that had installed correctly and a petsc/slepc pair that was present.
+    # velocity's kernel already carried this fix and this file did not, so the drift this selftest
+    # exists to catch is the drift that broke it.
+    scv.pp.filter_and_normalize(A, min_shared_counts=5)
+    sc.pp.log1p(A)
+    sc.pp.highly_variable_genes(A, n_top_genes=min(200, A.n_vars), subset=True)
+    scv.pp.moments(A, n_pcs=15, n_neighbors=15)
     scv.tl.velocity(A, mode="stochastic")
     scv.tl.velocity_graph(A, n_jobs=1)
 
