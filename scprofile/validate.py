@@ -118,15 +118,16 @@ def validate_plugin(kernel):
             if loose:
                 f.append(Finding("ERROR", "lock.yml has unpinned dependencies",
                                  ", ".join(loose[:5]) + " — a lock with ranges is not a lock"))
-            # An `r:` entry is a GIT source, so `==` means nothing there and the pin is a commit.
-            # A tag or a branch reads as pinned and is not: a branch moves, and a tag can be
-            # re-pointed at a different commit with no version changing anywhere.
-            from .runner import R_PIN
-            loose_r = [x for x in r_pins if not R_PIN.match(x)]
+            # An `r:` entry is either a git commit or a CRAN version, and a tag or a branch is
+            # neither: a branch moves, and a tag can be re-pointed at a different commit with no
+            # version changing anywhere, so both read as pinned while neither is.
+            from .runner import r_pin_kind
+            loose_r = [x for x in r_pins if r_pin_kind(x) is None]
             if loose_r:
-                f.append(Finding("ERROR", "lock.yml has r: entries that are not commit-pinned",
+                f.append(Finding("ERROR", "lock.yml has r: entries that are not pinned exactly",
                                  ", ".join(loose_r[:5]) + " — each must be "
-                                 "owner/repo@<40-char commit>; a branch or a tag is not a pin"))
+                                 "owner/repo@<40-char commit> or Package==<version>; a branch or "
+                                 "a tag is not a pin"))
             if r_pins and not any(x.split("=", 1)[0].strip() == "r-base" for x in pins):
                 f.append(Finding("ERROR", "lock.yml installs R packages but pins no r-base",
                                  "every r-* package is built against one R minor version, so "

@@ -247,29 +247,35 @@ That left three options and only one of them is honest.
 | a shell step in the installer | the lock stops being the specification, and nothing validates a shell script |
 | **express it in the format** | what was done |
 
-`lock.yml` now takes an `r:` section:
+`lock.yml` now takes an `r:` section, whose entries are exact in one of two ways:
 
 ```yaml
 r:
-  - owner/repo@0123456789abcdef0123456789abcdef01234567
+  - NMF==0.28                                              # a CRAN release, current or archived
+  - owner/repo@0123456789abcdef0123456789abcdef01234567    # a git commit
 ```
 
-applied by ONE `remotes::install_github(...)` call with `upgrade = "never"` and
-`dependencies = FALSE`. Four rules, and each is the R spelling of something the pip path already
-does for the same measured reason:
+applied by `remotes::install_version` and `remotes::install_github`, both with `upgrade = "never"`
+and `dependencies = FALSE`. Five rules, and each is the R spelling of something the pip path
+already does for the same measured reason:
 
 - **A commit, never a tag or a branch.** A branch moves and a tag can be re-pointed at a different
-  commit with no version changing anywhere. The parser refuses anything that is not 40 hex
-  characters, and so does `validate`.
-- **One call, all pins together.** Installed one at a time, a later package re-resolves an earlier
-  one and the environment stops matching the lock its fingerprint claims it was built from.
+  commit with no version changing anywhere, so both read as pinned while neither is. The parser
+  refuses anything that is not 40 hex characters or an exact version, and so does `validate`.
+- **One process, all pins together.** Applied one at a time in separate runs, a later entry can
+  re-resolve an earlier one and the environment stops matching the lock its fingerprint claims.
 - **`dependencies = FALSE`, and this is the load-bearing one.** Every dependency comes from the
   pinned conda section, so nothing in the environment is chosen at install time. Letting `remotes`
   fetch a missing dependency installs an unpinned package that nothing recorded — and it *works*,
   which is what makes it dangerous. A dependency that was forgotten instead fails to load in the
   selftest, by name, which is a line to add to the lock.
-- **The install is verified by reading `RemoteSha` back out.** `install_github` reports success for
-  a build that produced no loadable package often enough to be worth checking.
+- **CRAN entries before git ones.** The CRAN form exists because a conda channel's ceiling is not
+  the package's: conda-forge's `r-nmf` stops at 0.21.0 and CellChat requires `NMF (>= 0.23.0)`, so
+  an environment built from conda alone cannot install CellChat at all — `R CMD INSTALL` refuses on
+  the version requirement. An entry applied after the git package would be applied after the thing
+  it exists to satisfy had already refused.
+- **The install is verified by reading the version and `RemoteSha` back out.** Both installers
+  report success for a build that produced no loadable package often enough to be worth checking.
 
 An `r:` lock pins `r-base=`, not `python=`. Demanding a python pin from an R lock was the format
 asserting an assumption; `r-base` is the line that decides which binaries every `r-*` package

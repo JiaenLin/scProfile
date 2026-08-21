@@ -109,9 +109,27 @@ def env_state(kernel, prefix=None):
 #: environment does not have while its fingerprint says it does. `r:` was added for cellchat.
 LOCK_SECTIONS = ("name", "channels", "dependencies", "r")
 
-#: An `r:` entry is `owner/repo@<commit>`. A tag or a branch is not a pin - a branch moves and a
-#: tag can be re-pointed - so the commit is required and checked here rather than hoped for.
-R_PIN = re.compile(r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$")
+#: An `r:` entry is one of two things, and both are exact.
+#:
+#:   owner/repo@<40-hex>   a git commit. A tag or a branch is NOT a pin - a branch moves and a tag
+#:                         can be re-pointed at a different commit with nothing else changing.
+#:   Package==<version>    a CRAN release, current or archived. Spelled like the pip pins in the
+#:                         same file on purpose: it means the same thing.
+#:
+#: The CRAN form exists because a conda channel's ceiling is not the package's. conda-forge's
+#: r-nmf stops at 0.21.0 and CellChat requires NMF >= 0.23.0, so an environment built from conda
+#: alone cannot install CellChat at all - `R CMD INSTALL` refuses on the version requirement.
+R_GIT_PIN = re.compile(r"^[\w.-]+/[\w.-]+@[0-9a-f]{40}$")
+R_CRAN_PIN = re.compile(r"^([A-Za-z][\w.]*)==([0-9][\w.-]*)$")
+
+
+def r_pin_kind(item):
+    """`git`, `cran`, or None if it is neither - which is the only case a lock may not contain."""
+    if R_GIT_PIN.match(item):
+        return "git"
+    if R_CRAN_PIN.match(item):
+        return "cran"
+    return None
 
 
 def lock_spec(kernel):
@@ -139,8 +157,9 @@ def lock_spec(kernel):
     bioconda. The two personal channels carrying it are a two-year-old linux-64 build and a
     macOS-arm64 one, which is not something another site could reproduce.
 
-    `r:` is therefore a list of `owner/repo@<40-char commit>`, applied by ONE
-    `remotes::install_github` call with `upgrade = "never"` and `dependencies = FALSE`. The
+    `r:` is therefore a list of exact pins - `owner/repo@<40-char commit>` for a git source, and
+    `Package==<version>` for a CRAN release - applied by `remotes::install_github` and
+    `remotes::install_version`, both with `upgrade = "never"` and `dependencies = FALSE`. The
     discipline is the pip path's and so is the reason: installed one at a time, a later package
     re-resolves an earlier one and the environment stops matching the lock its fingerprint claims.
     `dependencies = FALSE` is the load-bearing half - every dependency comes from the pinned conda
@@ -173,11 +192,12 @@ def lock_spec(kernel):
         if section == "channels":
             spec["channels"].append(item)
         elif section == "r":
-            if not R_PIN.match(item):
+            if r_pin_kind(item) is None:
                 raise ValueError(
-                    f"{f}: r entry {item!r} is not `owner/repo@<40-char commit>`. A tag or a "
-                    f"branch is not a pin - a branch moves and a tag can be re-pointed - and the "
-                    f"whole point of this section is that the same lock builds the same package.")
+                    f"{f}: r entry {item!r} is neither `owner/repo@<40-char commit>` nor "
+                    f"`Package==<version>`. A tag or a branch is not a pin - a branch moves and a "
+                    f"tag can be re-pointed - and the whole point of this section is that the "
+                    f"same lock builds the same package on a machine nobody has seen.")
             spec["r"].append(item)
         elif section == "dependencies":
             if in_pip and pip_indent is not None and indent > pip_indent:
@@ -212,54 +232,103 @@ def _venv_python(want):
     return exe if exe else None
 
 
-def _install_r(p, entries, log=print):
-    """Apply the lock's `r:` section: ONE install_github call, every pin together.
+#: The R half of the installer. Written to the environment as a file rather than passed with
+#: `-e`, so that what ran is on disk beside what it built - an install nobody can read afterwards
+#: is an install nobody can check.
+R_INSTALL_SCRIPT = r'''
+# Written by scprofile from lock.yml. Do not edit: it is regenerated on every install, and the
+# lock is the thing to change.
+if (!requireNamespace("remotes", quietly = TRUE)) {
+  stop("remotes is not installed. Add `r-remotes=` to the conda dependencies - this step needs ",
+       "it, and installing it here would put an unpinned package in an environment whose whole ",
+       "claim is that nothing in it was chosen at install time.")
+}
+repos <- getOption("repos")
+if (is.null(repos) || !nzchar(repos[[1]]) || repos[[1]] == "@CRAN@") {
+  repos <- c(CRAN = "https://cloud.r-project.org")
+}
 
-    Three things here are deliberate and each is the R spelling of something the pip path already
-    does.
+specs <- SPECS
+cran  <- specs[grepl("==", specs, fixed = TRUE)]
+git   <- specs[!grepl("==", specs, fixed = TRUE)]
+
+# CRAN ENTRIES FIRST, and the order is not arbitrary. They are here because a conda channel's
+# ceiling was below what a git package requires, and `R CMD INSTALL` checks those version
+# requirements while installing the git package - so an entry applied afterwards would be applied
+# after the thing it exists to satisfy had already refused.
+for (s in cran) {
+  pkg <- sub("==.*", "", s); ver <- sub(".*==", "", s)
+  cat(sprintf("    CRAN  %s %s\n", pkg, ver))
+  remotes::install_version(pkg, version = ver, repos = repos, upgrade = "never",
+                           dependencies = FALSE, quiet = FALSE)
+}
+if (length(git)) {
+  for (s in git) cat(sprintf("    git   %s\n", s))
+  remotes::install_github(git, upgrade = "never", dependencies = FALSE, force = TRUE,
+                          quiet = FALSE)
+}
+
+# THE RECEIPT. Both installers report success for a build that produced no loadable package often
+# enough to be worth checking, and a package at the wrong version is the failure this whole
+# section exists to prevent.
+for (s in cran) {
+  pkg <- sub("==.*", "", s); ver <- sub(".*==", "", s)
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    stop(sprintf("%s installed without error and cannot be loaded", pkg))
+  }
+  got <- as.character(utils::packageVersion(pkg))
+  if (got != ver) stop(sprintf("%s is at %s; the lock asked for %s", pkg, got, ver))
+  cat(sprintf("    ok    %s %s  (CRAN)\n", pkg, got))
+}
+for (s in git) {
+  pkg <- sub("@.*", "", sub(".*/", "", s)); want <- sub(".*@", "", s)
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    stop(sprintf(paste("%s installed without error and cannot be loaded. If the repository",
+                       "name and the package name differ, this is what that looks like."), pkg))
+  }
+  got <- utils::packageDescription(pkg)$RemoteSha
+  if (is.null(got) || substr(got, 1, 40) != want) {
+    stop(sprintf("%s reports commit %s; the lock asked for %s", pkg,
+                 if (is.null(got)) "none" else got, want))
+  }
+  cat(sprintf("    ok    %s %s @ %s  (git)\n", pkg, utils::packageVersion(pkg),
+              substr(want, 1, 7)))
+}
+'''
+
+
+def _install_r(p, entries, log=print):
+    """Apply the lock's `r:` section. Nothing in it is resolved; every version is in the lock.
+
+    Four things are deliberate and each is the R spelling of something the pip path already does
+    for a reason that was measured.
 
     `upgrade = "never"`  - remotes' default is to offer to update every dependency it finds out of
-                           date, which on a conda-built library means silently replacing packages
-                           the conda section pinned. The lock would then describe an environment
-                           that no longer exists.
+                           date, which against a conda-built library means replacing packages the
+                           conda section pinned. The lock would then describe an environment that
+                           no longer exists.
     `dependencies=FALSE` - every dependency comes from the pinned conda section. Letting remotes
                            fetch a missing one installs an UNPINNED package that nothing recorded,
-                           and it would work, which is what makes it dangerous. A dependency that
-                           was forgotten instead fails to load in the selftest, by name.
-    one call             - installed one at a time, a later package re-resolves an earlier one.
+                           and it works, which is what makes it dangerous. A dependency that was
+                           forgotten instead fails to load in the selftest, by name.
+    one process          - all pins applied together, so no entry can re-resolve an earlier one.
+    CRAN before git      - see the script; the git package's install-time version checks are what
+                           the CRAN entries exist to satisfy.
 
     `withr`-free on purpose: `.libPaths()` inside a conda prefix's own Rscript already points at
-    that prefix's library, so nothing here needs to redirect it. The install is verified by asking
-    R for the installed commit back, because `install_github` reports success for a build that
-    produced no loadable package often enough to be worth checking.
+    that prefix's library, so nothing here needs to redirect it.
     """
     rscript = p / "bin" / "Rscript"
     if not rscript.exists():
         raise RuntimeError(
             f"the lock has an `r:` section but there is no Rscript at {rscript}. Add `r-base=` to "
             f"its dependencies - the conda step builds the interpreter that this step then uses.")
-    repos = ", ".join(f'"{e}"' for e in entries)
-    log(f"  applying {len(entries)} pinned R package(s) from git, in one resolve")
-    for e in entries:
-        log(f"    {e}")
-    script = (
-        'if (!requireNamespace("remotes", quietly = TRUE)) '
-        'stop("remotes is not installed. Add r-remotes= to the conda dependencies: this step '
-        'needs it, and installing it here would be an unpinned package the lock never declared.")\n'
-        f'remotes::install_github(c({repos}), upgrade = "never", dependencies = FALSE, '
-        'force = TRUE, quiet = FALSE)\n'
-        # The receipt. A package directory with no DESCRIPTION, or one whose RemoteSha is not the
-        # commit that was asked for, is an install that reported success and did not happen.
-        f'for (spec in c({repos})) {{\n'
-        '  pkg <- sub("@.*", "", sub(".*/", "", spec)); want <- sub(".*@", "", spec)\n'
-        '  if (!requireNamespace(pkg, quietly = TRUE)) stop(sprintf('
-        '"%s installed without error and cannot be loaded", pkg))\n'
-        '  got <- utils::packageDescription(pkg)$RemoteSha\n'
-        '  if (is.null(got) || substr(got, 1, 40) != want) stop(sprintf('
-        '"%s is at %s, the lock asked for %s", pkg, got, want))\n'
-        '  cat(sprintf("    %s %s @ %s\\n", pkg, utils::packageVersion(pkg), substr(want, 1, 7)))\n'
-        '}\n')
-    subprocess.run([str(rscript), "-e", script], check=True)
+    kinds = [f"{e} ({r_pin_kind(e)})" for e in entries]
+    log(f"  applying {len(entries)} pinned R package(s), nothing resolved: {', '.join(kinds)}")
+    specs = "c(" + ", ".join(f'"{e}"' for e in entries) + ")"
+    f = p / ".scprofile_r_install.R"
+    f.write_text(R_INSTALL_SCRIPT.replace("SPECS", specs), encoding="utf-8")
+    subprocess.run([str(rscript), str(f)], check=True)
 
 
 def install(kernel, prefix, *, force=False, log=print):
