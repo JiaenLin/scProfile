@@ -36,14 +36,30 @@ BAD = re.compile(r"\bsambo\b|wangyb|duke-nus|hn-10-03|aging[_ ]?hfd|young[_ ]?hf
 #: OTHER leak guard has to contain the strings it looks for.
 OK_LINE = re.compile(r"github\.com/|re\.compile|re\.I\)")
 root = Path(__file__).resolve().parents[1]
-hits = []
-for f in list(root.rglob("*.py")) + list(root.rglob("*.yml")) + list(root.rglob("*.md")):
-    if ".git" in f.parts or f.name == Path(__file__).name:
+
+#: SCAN EVERYTHING THAT IS NOT BINARY, rather than listing the languages to scan. The list
+#: version read `*.py`, `*.yml`, `*.md` - and by the time anyone looked, the tree also held three
+#: `.pbs` templates, a `selftest.R` and a shell script, none of which this check had ever opened.
+#: A `.pbs` is the single most likely place for an absolute cluster path to appear, so the guard
+#: had a hole exactly where the risk is highest. Inverting it means a kernel written in a new
+#: language is covered on the day it lands instead of the day somebody remembers.
+BINARY = {".png", ".jpg", ".jpeg", ".pdf", ".svg", ".ico", ".gz", ".zip", ".h5", ".h5ad",
+          ".feather", ".npy", ".npz", ".parquet", ".so", ".pyc", ".whl"}
+hits, scanned = [], 0
+for f in sorted(root.rglob("*")):
+    if not f.is_file() or ".git" in f.parts or f.name == Path(__file__).name:
         continue
+    if f.suffix.lower() in BINARY:
+        continue
+    scanned += 1
     for i, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
         if BAD.search(line) and not OK_LINE.search(line):
             hits.append(f"{f.relative_to(root)}:{i}")
-ck("no project or host names in the tree", not hits, "; ".join(hits[:4]))
+ck(f"no project or host names in the tree ({scanned} files scanned)", not hits,
+   "; ".join(hits[:4]))
+# The count is asserted, not merely printed: a glob that silently starts matching nothing reports
+# a clean tree, and a clean report from a check that ran on zero files is the worst kind.
+ck("and the scan actually opened the tree", scanned >= 40, f"only {scanned} files")
 
 print("\nevery role a user might name differently is DETECTED and OVERRIDABLE")
 for role in ("label", "sample", "batch", "compartment", "counts_layer", "lognorm_layer",
