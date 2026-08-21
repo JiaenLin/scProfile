@@ -471,9 +471,13 @@ def test_r_lock_section():
     check("cellchat's lock parses", len(s["conda"]) > 40, f"{len(s['conda'])} conda pins")
     check("every conda line is pinned", all("=" in x for x in s["conda"]),
           str([x for x in s["conda"] if "=" not in x]))
-    check("both r: forms are read", len(s["r"]) == 2, str(s["r"]))
-    check("one is a CRAN version", any(r_pin_kind(x) == "cran" for x in s["r"]))
-    check("one is a git commit", any(r_pin_kind(x) == "git" for x in s["r"]))
+    # Both FORMS must appear, and every entry must classify as one of them. Asserting a COUNT
+    # here made the suite fail the moment a third pin was added for a real reason - a test that
+    # breaks on correct change teaches people to edit tests rather than read them.
+    kinds = [r_pin_kind(x) for x in s["r"]]
+    check("every r: entry is one of the two exact forms", all(kinds), str(list(zip(s["r"], kinds))))
+    check("at least one is a CRAN version", "cran" in kinds, str(kinds))
+    check("at least one is a git commit", "git" in kinds, str(kinds))
     # An R lock pins r-base and NOT python. Demanding a python pin from an R lock is the format
     # asserting an assumption; r-base decides which binaries every r-* package resolves against.
     check("an r lock needs no python pin", s["python"] is None, str(s["python"]))
