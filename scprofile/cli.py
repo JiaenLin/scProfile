@@ -921,10 +921,101 @@ def _plan(a):
         print("  NONE of these is a reason to skip a plugin. A missing build is a finding about "
               "the tooling, not about the data.")
 
+    # ---- THE RUN PLAN: one verdict per plugin, and why -----------------------------------------
+    # docs/RUN_PLAN.md. The section above reports prerequisites; this one commits to a verdict and
+    # has to justify it. The two are separate because a prerequisite list is a set of observations
+    # and a plan is a decision, and only the decision can be audited.
+    from . import planner as PL
+    from .kernels import resolve_keys as _rk
+
+    units = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
+             if keys["sample"][0] else [])
+    dtab, dfactors = None, []
+    if a.design:
+        try:
+            dtab, _dkey, dfactors = inputs.read_design(a.design, units)
+        except Exception:                                                 # noqa: BLE001
+            dtab, dfactors = None, []          # already reported above, as a refusal
+    facts = PL.design_facts(dtab, dfactors, keys["sample"][0], units)
+    facts["units"] = units
+
+    roots = sorted(set(list((prov or {}).get("search_paths") or [])
+                       + provenance.ancestry_roots(a.h5ad)
+                       + _split(getattr(a, "search", "") or "")))
+    present = {}
+    for name in sorted(want):
+        k, need = ks[name], {}
+        for c in _rk(k.needs_obs, _km):
+            need[f"obs[{c}]"] = c in have_obs
+        for c in _rk(k.needs_obsm, _km):
+            need[f"obsm[{c}]"] = c in have_obsm
+        for c in _rk(k.needs_layers, _km):
+            if c in have_layers:
+                need[f"layers[{c}]"] = True
+            elif not k.can_source_layers:
+                need[f"layers[{c}]"] = False
+            else:
+                # THE THREE-STATE ANSWER. A plugin that goes looking has not been answered until
+                # the search has actually run: True found, False searched-and-absent, and None
+                # NOT DETERMINED - which is UNRESOLVED and must never become a skip.
+                try:
+                    hits = provenance.find_layer_sources(roots, (c,)) if roots else []
+                    need[f"layers[{c}]"] = bool(hits) if roots else None
+                except Exception:                                         # noqa: BLE001
+                    need[f"layers[{c}]"] = None
+        present[name] = need
+
+    will_run = {n for n in sorted(want) if ks[n].status == "built"}
+    verdicts = [PL.plan_kernel(ks[n], present=present, facts=facts, searched=roots,
+                               ran=will_run, constraint=constraint) for n in sorted(want)]
+    # A plugin with no wrapper cannot run whatever the data says, and that is a fact about the
+    # BUILD, not about the project - so it is stated as its own reason rather than dressed up as
+    # one of the four.
+    for v in verdicts:
+        if ks[v.plugin].status != "built":
+            v.verdict, v.rung, v.why_not_higher = PL.BLOCKED, None, None
+            v.why = [f"declared but not built - no wrapper exists yet. "
+                     f"`scprofile scaffold {v.plugin}` writes the skeleton."]
+            v.searched = roots
+
+    print("\nRUN PLAN")
+    print(f"  {len(units)} unit(s) on {keys['sample'][0]!r}" if units
+          else "  no unit key found on this object")
+    if facts.get("has_design"):
+        for fn, fv in sorted(facts["factors"].items()):
+            print(f"  {fn:<12} {fv['n_levels']} level(s), smallest arm n={fv['min_replicates']}: "
+                  + ", ".join(f"{k2}={len(v2)}" for k2, v2 in sorted(fv["levels"].items())))
+        print(f"  testable: {', '.join(facts['testable']) or 'none'}"
+              + (f"   crossed: {facts['crossed_pairs']}" if facts["crossed_pairs"] else ""))
+    else:
+        print("  no design table given")
+    print(f"  searched {len(roots)} location(s) for inputs not on the object")
+    print()
+    for v in sorted(verdicts, key=lambda x: (x.verdict != PL.RUN, x.plugin)):
+        head = v.verdict + (f" ({v.rung})" if v.rung else "")
+        print(f"  {head:<16} {v.plugin}")
+        for w in v.why:
+            print(f"      {w}")
+        if v.why_not_higher:
+            print(f"      NOT FULL: {v.why_not_higher}")
+        if v.units:
+            print(f"      over {len(v.units)} unit(s)")
+
+    if getattr(a, "audit", False):
+        print("\nAUDIT OF THIS PLAN")
+        found = PL.audit(verdicts, sorted(ks), facts, present=present, log=print)
+        errs = [x for x in found if x.level == "ERROR"]
+        for x in found:
+            print(f"  {x.level}  {x.check}")
+            if x.detail:
+                print(f"      {x.detail}")
+        print(f"\n  {len(errs)} error(s), {len(found) - len(errs)} warning(s)")
+        if errs:
+            print("  THIS PLAN IS NOT USABLE. Each error is a claim the plan cannot support.")
+            ok_all = False
+
     # ---- the schedule -------------------------------------------------------------------------
     if runnable:
-        units = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
-                 if keys["sample"][0] else None)
         print(f"\nschedule ({a.cores} cores"
               + (f", {len(units)} units" if units else "") + ")")
         for i, wave in enumerate(schedule(runnable, ks, budget_cores=a.cores, units=units), 1):
@@ -1162,6 +1253,13 @@ def main(argv=None):
     for f in ("label-key", "sample-key", "batch-key", "counts-layer", "compartment-key",
               "lognorm-layer", "embedding", "sentinels", "organism", "assay"):
         pl.add_argument(f"--{f}", default=None)
+    pl.add_argument("--search", default=None, metavar="DIR,DIR",
+                    help="extra directories to search for inputs not on the object")
+    pl.add_argument("--audit", action="store_true",
+                    help="check the plan by rules that do not repeat its reasoning: every plugin "
+                         "accounted for once, no UNRESOLVED, every SKIP citing a design fact the "
+                         "table supports, every BLOCKED naming where it looked, and no plugin "
+                         "left below a rung the project would support")
     pl.set_defaults(fn=_plan)
 
     va = sub.add_parser("validate", help="static checks on plugins and their references")
