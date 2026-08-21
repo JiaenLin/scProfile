@@ -1,0 +1,41 @@
+# liana's environment. Built with:  scprofile install liana --prefix <dir>
+#
+# WHY A SEPARATE ENVIRONMENT AND NOT THE HOST'S
+#
+# liana-py pulls decoupler, plotnine, mudata and omnipath, and its scoring methods are sensitive
+# to the pandas groupby semantics that changed across the 2.x line. The host here runs pandas 3
+# and anndata 0.13; liana 1.4.0 was released against the 2.x/0.10 stack and its lower bounds say
+# nothing about an upper one. An upper bound nobody wrote is not an upper bound that does not
+# exist - the phrasing is velocity's, and the reason is the same.
+#
+# THE BASE IS DELIBERATELY THE SAME AS velocity's. numpy 1.26.4 / pandas 2.2.3 / scanpy 1.10.4 /
+# anndata 0.10.9 is a stack this cluster has already built and run a full fit on, so a failure
+# here is liana's and not the base's. That is worth more than each plugin picking its own.
+#
+# If you already have a working liana environment, do not build this one:
+#     export SCPROFILE_LIANA_PYTHON=/path/to/that/env/bin/python
+
+name: scprofile-liana
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - numpy==1.26.4
+      - scipy==1.13.1
+      - pandas==2.2.3
+      - numba==0.60.0
+      - llvmlite==0.43.0
+      - scikit-learn==1.5.2
+      - matplotlib==3.9.2
+      - h5py==3.12.1
+      - anndata==0.10.9
+      - scanpy==1.10.4
+      - mudata==0.3.1
+      - decoupler==1.8.0
+      - plotnine==0.13.6
+      - omnipath==1.0.8
+      - tqdm==4.67.1
+      - docrep==0.3.2
+      - liana==1.4.0

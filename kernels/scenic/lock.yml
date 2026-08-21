@@ -1,0 +1,43 @@
+# scenic's environment. Built with:  scprofile install scenic --prefix <dir>
+#
+# THIS ONE DOES NOT SHARE THE BASE, AND CANNOT.
+#
+# Every other plugin here builds on numpy 1.26 / pandas 2.2 / python 3.11 because a shared base
+# makes a failure the new package's fault rather than the stack's. pySCENIC 0.12.1 will not run on
+# it. It is built around dask's distributed scheduler and arboreto, and the dask releases it was
+# written against predate the pandas 2 copy-on-write changes; its own CI pins python 3.10 with
+# numpy 1.23 and pandas 1.5. Resolved loose, pip takes the newest dask, arboreto's
+# `client.scatter` path changes shape underneath it, and GRNBoost2 returns an EMPTY adjacency
+# table rather than failing - a network with no edges, which downstream reads as "no regulons
+# found" and is a result-shaped hole, not an error.
+#
+# So this is an older, self-consistent island, pinned deliberately, and the selftest runs a real
+# GRNBoost2 inference over a small matrix before any cohort is spent on it.
+#
+# If you already have a working pySCENIC environment, do not build this one:
+#     export SCPROFILE_SCENIC_PYTHON=/path/to/that/env/bin/python
+
+name: scprofile-scenic
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - numpy==1.23.5
+      - scipy==1.10.1
+      - pandas==1.5.3
+      - numba==0.57.1
+      - llvmlite==0.40.1
+      - scikit-learn==1.2.2
+      - matplotlib==3.7.3
+      - h5py==3.9.0
+      - pyarrow==11.0.0
+      - dask==2023.5.0
+      - distributed==2023.5.0
+      - arboreto==0.1.6
+      - ctxcore==0.2.0
+      - loompy==3.0.7
+      - anndata==0.9.2
+      - scanpy==1.9.8
+      - pyscenic==0.12.1

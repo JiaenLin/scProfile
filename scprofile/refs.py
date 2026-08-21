@@ -183,6 +183,7 @@ def fetch(kernel, dest, organism=None, log=print, dry_run=False):
         log(f"  REFUSING: {_human(pf['bytes'])} will not fit in {_human(pf['free'])} with margin. "
             f"Filling a filesystem halfway through is worse than stopping here.")
         return status(kernel, dest, organism)
+    recorded = []
     if dry_run:
         for k, v in pf["missing"].items():
             log(f"    would fetch {k}: {v[2]}")
@@ -223,12 +224,32 @@ def fetch(kernel, dest, organism=None, log=print, dry_run=False):
             log(f"      save to: {p}")
             continue
         want = str(spec.get("sha256") or "")
-        if want:
-            got = _sha256(part)
-            if got != want:
-                part.unlink(missing_ok=True)
-                log(f"    CHECKSUM MISMATCH — deleted. Got {got[:12]}…, expected {want[:12]}…")
-                continue
+        got = _sha256(part)
+        if want and got != want:
+            part.unlink(missing_ok=True)
+            log(f"    CHECKSUM MISMATCH — deleted. Got {got[:12]}…, expected {want[:12]}…")
+            continue
         part.rename(p)                              # only now is it a real file
         log(f"    ok -> {p} ({_human(p.stat().st_size)})")
+        if not want:
+            # THE FIRST DOWNLOAD IS THE ONLY PLACE A DIGEST CAN COME FROM. A vendor who publishes
+            # no checksum leaves the author with nothing to declare, and `validate` refuses an
+            # undeclared digest - correctly, because a truncated database returns a smaller answer
+            # rather than an error. So the digest is computed here and printed as the exact lines
+            # to paste, and the file is left unverified until somebody does.
+            #
+            # Printed, NOT written back. references.yml is tool source; the machine that downloads
+            # is not the machine that authors, and a file edited by whichever host ran a fetch is
+            # a file with no single origin.
+            recorded.append((name, got, p.stat().st_size))
+    if recorded:
+        log("")
+        log("  These files declared NO sha256, so nothing verified them. They are on disk and")
+        log("  `validate` will keep refusing this plugin until the digests are declared. Paste")
+        log("  into references.yml, at the matching entry, having satisfied yourself the source")
+        log("  is the one you meant:")
+        for name, got, size in recorded:
+            log(f"    {name}:")
+            log(f"      sha256: {got}")
+            log(f"      size: {size}")
     return status(kernel, dest, organism)

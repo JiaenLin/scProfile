@@ -1,0 +1,49 @@
+# Reference data for scenic. Fetched with:  scprofile fetch scenic --to <dir>
+#
+# pySCENIC's second and third steps are not inference - they are a LOOKUP against cisTarget motif
+# rankings and a motif-to-TF table. Without them `ctx` prunes nothing, every co-expression module
+# survives, and the regulons returned are GRNBoost2's raw output wearing a regulon's name. That
+# failure produces a full result file, which is why these are declared as a hard requirement and
+# checked by digest rather than by presence.
+#
+# The rankings are large and organism-specific. `plan_fetch` reports the total and the free space
+# before anything downloads, because filling a filesystem halfway through a 2 GB file is a worse
+# failure than refusing at the start.
+#
+# Source: resources.aertslab.org, the SCENIC authors' own distribution.
+# Licence: the cisTarget databases are distributed by the Aerts lab for research use; the motif
+# collection is derived from JASPAR, HOCOMOCO, SwissRegulon and others - see their site.
+
+# The shape is FLAT - one entry per reference, with `organism` as a FIELD. It is not nested by
+# organism; that was tried first and `references()` read it as two references called "mouse" and
+# "human" with no url, which is the shape being asserted rather than measured.
+
+mm10_rankings_10kb:
+  organism: mouse
+  url: https://resources.aertslab.org/cistarget/databases/mus_musculus/mm10/refseq_r80/mc_v10_clust/gene_based/mm10_10kbp_up_10kbp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather
+  note: mm10, 10 kb up and 10 kb down of the full transcript, mc_v10_clust. About 1.1 GB.
+
+mm10_motif2tf:
+  organism: mouse
+  url: https://resources.aertslab.org/cistarget/motif2tf/motifs-v10nr_clust-nr.mgi-m0.001-o0.0.tbl
+  note: motif to mouse-gene mapping for the v10nr_clust collection.
+
+mm_tfs:
+  organism: mouse
+  url: https://resources.aertslab.org/cistarget/tf_lists/allTFs_mm.txt
+  note: the mouse TF list GRNBoost2 restricts its regulators to.
+
+hg38_rankings_10kb:
+  organism: human
+  url: https://resources.aertslab.org/cistarget/databases/homo_sapiens/hg38/refseq_r80/mc_v10_clust/gene_based/hg38_10kbp_up_10kbp_down_full_tx_v10_clust.genes_vs_motifs.rankings.feather
+  note: hg38, 10 kb up and 10 kb down of the full transcript, mc_v10_clust. About 1.4 GB.
+
+hg38_motif2tf:
+  organism: human
+  url: https://resources.aertslab.org/cistarget/motif2tf/motifs-v10nr_clust-nr.hgnc-m0.001-o0.0.tbl
+  note: motif to human-gene mapping for the v10nr_clust collection.
+
+hs_tfs:
+  organism: human
+  url: https://resources.aertslab.org/cistarget/tf_lists/allTFs_hs.txt
+  note: the human TF list GRNBoost2 restricts its regulators to.

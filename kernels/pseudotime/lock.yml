@@ -1,0 +1,41 @@
+# pseudotime's environment. Built with:  scprofile install pseudotime --prefix <dir>
+#
+# CellRank 2 is a framework over KERNELS of its own - a velocity kernel, a connectivity kernel, a
+# pseudotime kernel - and which one is used decides the answer. It needs scvelo present even when
+# the velocity kernel is not chosen, because its VelocityKernel imports from it.
+#
+# The base is velocity's, unchanged, for two reasons. This plugin declares `needs_kernels:
+# [cellcycle]` and reads velocity's side-car object, so it must be able to OPEN what velocity
+# wrote - an anndata written by 0.10.9 and read by 0.13 has already cost this project a
+# compatibility copy. And a stack the cluster has built once is a stack whose failures are the
+# new package's.
+#
+# If you already have a working cellrank environment, do not build this one:
+#     export SCPROFILE_PSEUDOTIME_PYTHON=/path/to/that/env/bin/python
+
+name: scprofile-pseudotime
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - numpy==1.26.4
+      - scipy==1.13.1
+      - pandas==2.2.3
+      - numba==0.60.0
+      - llvmlite==0.43.0
+      - scikit-learn==1.5.2
+      - matplotlib==3.9.2
+      - h5py==3.12.1
+      - anndata==0.10.9
+      - scanpy==1.10.4
+      - umap-learn==0.5.7
+      - pynndescent==0.5.13
+      - igraph==0.11.8
+      - leidenalg==0.10.2
+      - loompy==3.0.7
+      - scvelo==0.3.4
+      - petsc4py==3.20.5
+      - slepc4py==3.20.2
+      - cellrank==2.0.6
