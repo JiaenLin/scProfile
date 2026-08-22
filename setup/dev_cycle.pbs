@@ -103,11 +103,20 @@ run)
   say "2. SELFTEST — every environment, against what is installed HERE"
   $PY -m scprofile.cli selftest --prefix "$PREFIX" || echo "  selftest exit $?"
 
-  say "3. PLAN, AUDITED, WITH ITS REPORT"
+  say "3. PLAN, AUDITED, WITH ITS REPORT — over EVERY plugin"
   $PY -m scprofile.cli plan --h5ad "$OBJ" ${DES:+--design "$DES"} \
       ${ORGANISM:+--organism "$ORGANISM"} ${ASSAY:+--assay "$ASSAY"} \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
-      --kernel "$KERNELS" --audit --report "$OUT" || echo "  plan exit $?"
+      --audit --report "$OUT" || echo "  plan exit $?"
+
+  say "3b. THE SAME PLAN, RESTRICTED — the audit is over what was ASKED FOR"
+  # `plan --kernel a,b --audit` used to report an ERROR for every plugin left out, so a restricted
+  # plan could not be audited at all. No --report here: the artifact is the full plan above.
+  $PY -m scprofile.cli plan --h5ad "$OBJ" ${DES:+--design "$DES"} \
+      ${ORGANISM:+--organism "$ORGANISM"} ${ASSAY:+--assay "$ASSAY"} \
+      --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
+      --kernel "$KERNELS" --audit 2>&1 | grep -E "AUDIT|checked:|ERROR|WARN|audit" \
+      || echo "  plan(restricted) exit $?"
 
   say "4. RUN"
   $PY -m scprofile.cli run --h5ad "$OBJ" --out "$OUT" \
