@@ -256,13 +256,14 @@ def main(argv):
     n_top = min(int(P["n_top_genes"]), A.n_vars)
     sc.pp.highly_variable_genes(A, n_top_genes=n_top, subset=True)
     g1 = A.n_vars
-    # The host merges obsm BY POSITION, so a step that dropped cells would misalign every arrow
-    # against every barcode and nothing downstream would notice. filter_and_normalize selects
-    # genes, not cells - this asserts that rather than trusting it.
+    # filter_and_normalize selects genes, not cells - this asserts that rather than trusting it.
+    # The host now merges this array BY BARCODE, so a dropped cell would be reported as coverage
+    # rather than misaligned; it is still not something this step is allowed to do silently,
+    # because every obs column written below is aligned to the same names.
     if A.n_obs != n0:
         raise SystemExit(
-            f"velocity: gene selection changed the CELL count, {n0:,} -> {A.n_obs:,}. The host "
-            f"merges obsm by position and this would silently misalign it. Refusing.")
+            f"velocity: gene selection changed the CELL count, {n0:,} -> {A.n_obs:,}. Gene "
+            f"selection must not drop cells. Refusing.")
     print(f"fitted on {g1:,} of {g0:,} genes "
           f"(min_shared_counts={P['min_shared_counts']}, n_top_genes={n_top})")
     if g1 < 50:
@@ -446,8 +447,12 @@ def main(argv):
 
     f_emb = out / "obsm" / f"velocity_{basis}.npy"
     np.save(f_emb, np.asarray(A.obsm[f"velocity_{basis}"], dtype="float32"))
-    f_bc = out / "obsm" / "barcodes.txt"
-    f_bc.write_text("\n".join(map(str, A.obs_names)), encoding="utf-8")
+    # THE HOST'S CONVENTION, not this plugin's. This wrote `obsm/barcodes.txt` - one file for the
+    # directory, a name nothing in the host has ever looked for - so the barcodes existed and the
+    # merge went on aligning by POSITION anyway. The host reads `<array>.barcodes.txt` beside the
+    # array; `ctx.emit_obsm` writes exactly that for one-file plugins.
+    f_bc = out / "obsm" / f"velocity_{basis}.barcodes.txt"
+    f_bc.write_text("\n".join(map(str, A.obs_names)) + "\n", encoding="utf-8")
 
     # The fitted object, with its selected genes, its Ms/Mu/velocity layers and its velocity
     # graph. This is what `pseudotime` reads to orient itself, and what a user opens to plot a
