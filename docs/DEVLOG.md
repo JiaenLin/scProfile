@@ -99,3 +99,68 @@ open:   a run that produces nothing still leaves its 3.14 GB compatibility copy
         so it is recorded here rather than deleted on a guess.
 
 clean:  6 suites, validate 0 errors.
+
+## 2026-08-22 — cycle 4 (PBS 677258 build, 677295 run)
+
+Split into phases as separate jobs, one at a time against one `--prefix`. `setup/dev_cycle.pbs`
+runs them and names no project.
+
+tested: resolve + install of a SHARED environment / selftest of all 8 / plan --audit --report over
+        every plugin and over a restricted one / run(decoupler, silhouette) merging into one object
+
+**SHARED ENVIRONMENT BUILT AND USED, for the first time** (677258): `shared by: decoupler, liana,
+        pseudotime, velocity` -> one conda create + one pip resolve of 24 pins ->
+        `proved for 4 of 4 member(s)` -> `installed at .../scprofile-env-3cd799b82e`. 11m38s.
+        Afterwards `doctor` reports all four as `installed ... shared with ...`, and 677295's
+        selftest ran each of them out of that one directory.
+
+**A ONE-FILE PLUGIN WITH ITS OWN ENVIRONMENT RAN THROUGH `_entry.py`** (677295): `decoupler ok
+        281s  674 regulators scored per cell`, `prior: 39,961 edges, 1,114 regulators for mouse`,
+        `merged obsm: X_tf_activity`. Two plugins into one 3.48 GB object, one report, one README.
+
+found:  [host] `install` read the named plugin's own `lock.yml`. Resolution decided the DIRECTORY
+              and the lock decided the CONTENT, so an environment shared by four was built from
+              one of them and the other three would have found a finished-looking directory with
+              a current stamp and none of their packages. A `requires`-shaped plugin has no lock
+              at all and could not be installed by any path -> e2c5b0a
+        [host] a requirement could express only python and pip. An R plugin pinning `r-base` and
+              60 conda packages resolved to NOTHING: absent from the environment count, handed a
+              private path nobody planned. Five fields now, and conda specs are carried verbatim
+              because `petsc4py=3.20` is a prefix match and `==3.20` is a version that does not
+              exist -> e2c5b0a
+        [host] NOT CLASHING IS NOT BEING COMPATIBLE. That same R requirement contradicts nothing,
+              so greedy first-fit put it in the python group: one 6 GB environment holding two
+              language stacks, on an absence of evidence. Sharing now needs an overlap -> e2c5b0a
+        [host] `env_state` looked only at the per-plugin path, so a built, stamped, proved shared
+              environment read as `missing` to doctor, plan and install. And the search is not the
+              same question as "is THIS directory finished": a half-built group directory made the
+              search walk past it and report the old environment as current -> e2c5b0a
+        [host] `inject` gated the run and was invisible to the plan. `declare.available` is now the
+              one answer both ask -> e2c5b0a
+        [host] `plan --kernel a,b --audit` reported an ERROR for every plugin left out, because the
+              completeness rule was stated over every plugin on disk. An audit that cannot be run
+              clean on a legitimate invocation is one people learn to silence -> 8ea8c2c
+        [host] **"an array carries no barcodes" was a gap, stated as a fact about arrays.** The
+              host excludes NaN-embedding cells from every plugin, so decoupler was handed 98,627
+              of 100,713 cells, returned 98,627 rows, and the merge refused it for not covering
+              100,713 - refused a plugin for returning exactly the cells it was given. `emit_obsm`
+              writes the barcodes; the merge aligns by them, and a per-unit plugin's arrays can
+              cross units for the same reason -> 16aaf4b. Log: `decoupler obsm['X_tf_activity']:
+              98,627 of 100,713 cells covered; the rest are NaN`
+        [host] the 3 GB `input_for_kernels.h5ad` was called "a reusable cached working file" and
+              was neither: nothing read it again and nothing named it. A receipt makes it reusable
+              and `report.json`/`README` name it as what the plugins ACTUALLY read -> ba9ec53
+        [declaration] decoupler reported the annotator sentinel `UNRESOLVED` as a group in
+              `activity_by_label.csv`, over 2,139 cells. The host's own check caught it. That is
+              the SECOND of two plugins to make this exact mistake, which is a statement about the
+              affordance: `ctx.populations()` now answers it once and attaches the caveat -> fd5d664
+        [docs] README, PLUGIN_DESIGN, MAINTAINING_PLUGINS and plugin.py's own docstring still
+              described `PLUGIN["env"]` and one pinned environment per kernel -> 55579de, bf436b1
+
+clean:  7 suites, validate 0 errors. plan --audit over all 10 plugins: `0 error(s), 0 warning(s)`,
+        `wrote .../out/run_plan.html`. Restricted: `checked: all 2 known plugin(s) appear exactly
+        once`, which was impossible before 8ea8c2c.
+
+format: nothing in the plugin format had to change to accommodate anything. The third-party
+        plugin ran unchanged (`silhouette ok 161s`); decoupler needed a builder that could read
+        the format's own `requires` block, which is a host defect and not a format one.
