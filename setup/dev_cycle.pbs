@@ -49,6 +49,10 @@ export MPLCONFIGDIR="$PWD/.mpl"
 export SCPROFILE_KERNELS="${EXTRA_KERNELS:-$TOOL/tests/smoke/plugins}"
 # --------------------------------------------------------------------------
 
+# UNBUFFERED, or the live log below is a 0-byte file for the whole run. python block-buffers its
+# stdout when it is not a terminal, so a job that is working looks exactly like a job that is hung.
+export PYTHONUNBUFFERED=1
+
 export OMP_NUM_THREADS="${NCPUS:-1}"
 export MKL_NUM_THREADS="${NCPUS:-1}"
 
