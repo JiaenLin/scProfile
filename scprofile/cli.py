@@ -706,6 +706,7 @@ def _plan(a):
                  else inputs.DEFAULT_SENTINELS)
     constraint, csrc = inputs.read_constraint(A)
 
+    describe_p = {"n_obs": int(A.n_obs), "n_vars": int(A.n_vars)}
     print("what this object is, and how each was decided:")
     for role, (name, why) in keys.items():
         print(f"  {role:<14} {str(name or '(none)'):<30} {why}")
@@ -1152,9 +1153,10 @@ def _plan(a):
         if failed:
             ok_all = False
 
+    audit_found = []
     if getattr(a, "audit", False):
         print("\nAUDIT OF THIS PLAN")
-        found = PL.audit(verdicts, sorted(ks), facts, present=present, log=print)
+        found = audit_found = PL.audit(verdicts, sorted(ks), facts, present=present, log=print)
         errs = [x for x in found if x.level == "ERROR"]
         for x in found:
             print(f"  {x.level}  {x.check}")
@@ -1164,6 +1166,26 @@ def _plan(a):
         if errs:
             print("  THIS PLAN IS NOT USABLE. Each error is a claim the plan cannot support.")
             ok_all = False
+
+    # ---- the report --------------------------------------------------------------------------
+    if getattr(a, "report", None):
+        from . import plan_report
+        payload = {
+            "version": _v(), "h5ad": str(a.h5ad), "describe": describe_p,
+            "facts": facts, "waves": waves, "roots": roots,
+            "search_incomplete": bool(provenance.find_layer_sources.exhausted),
+            "constraint_on_use": constraint, "constraint_source": csrc,
+            "verdicts": [v.as_dict() for v in verdicts],
+            "audit": [{"level": x.level, "check": x.check, "detail": x.detail}
+                      for x in (audit_found or [])],
+        }
+        import json as _json
+        outp = Path(a.report)
+        outp.mkdir(parents=True, exist_ok=True)
+        (outp / "run_plan.json").write_text(_json.dumps(payload, indent=1, default=str),
+                                            encoding="utf-8")
+        print(f"\nwrote {plan_report.write(outp, payload)}")
+        print(f"      {outp}/run_plan.json")
 
     # ---- the schedule -------------------------------------------------------------------------
     if runnable:
@@ -1410,6 +1432,10 @@ def main(argv=None):
                          "as runnable - then the run refuses")
     pl.add_argument("--search", default=None, metavar="DIR,DIR",
                     help="extra directories to search for inputs not on the object")
+    pl.add_argument("--report", default=None, metavar="DIR",
+                    help="write the plan as an HTML page a person can read before committing a "
+                         "cluster to it: what can run, what you get from each result, in what "
+                         "order, with what settings, and what you must not conclude")
     pl.add_argument("--build", action="store_true",
                     help="repair the build defects the plan finds - install a missing "
                          "environment, rebuild a stale one - then re-derive the plan. ONLY build "

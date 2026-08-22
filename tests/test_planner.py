@@ -283,5 +283,70 @@ a1 = [v.as_dict() for v in [P.plan_kernel(K("de", needs_design=True),
                                           searched=["obj"], ran=set()) for _ in range(3)]]
 ck("three identical calls agree", a1[0] == a1[1] == a1[2])
 
-print("\n" + ("the planner holds on every shape" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
+print("\nthe report answers the user's questions, in the user's order")
+import tempfile as _tf                                                          # noqa: E402
+from scprofile import plan_report as PR                                         # noqa: E402
+# A FRESH design, not `d` - which an earlier section rebinds. A test that silently reads a name
+# some other block redefined is testing whatever ran last.
+_rd = {f"s{i}": {"age": a, "diet": t2} for i, (a, t2) in enumerate(
+    [(a, t2) for a in ("young", "old") for t2 in ("chow", "hf") for _ in range(3)])}
+_plan = {
+    "version": "0.1.0", "h5ad": "/x/o.h5ad",
+    "describe": {"n_obs": 100713, "n_vars": 34290},
+    "facts": P.design_facts(_rd, ["age", "diet"], "sample", list(_rd)),
+    "waves": [["cellcycle", "liana"], ["pseudotime"]],
+    "roots": ["/a", "/b"], "search_incomplete": False,
+    "constraint_on_use": "must not carry a composition claim across batch",
+    "constraint_source": "uns['scintegrate']",
+    "verdicts": [
+        dict(P.Verdict("cellcycle", P.RUN, ["ok"], rung="full").as_dict(),
+             settings={"label": "cell_type", "cores": 1}),
+        dict(P.Verdict("liana", P.RUN, ["ok"], rung="reduced").as_dict(),
+             settings={"per_unit": {"key": "sample", "n": 10, "mode": "per unit",
+                                    "units": []}},
+             readiness={"kind": "no_wrapper", "fixable": False,
+                        "why": "declared but not built", "fix": "scprofile scaffold liana"},
+             caveats=["'age' and 'chemistry' are COMPLETELY confounded"],
+             why_not_higher="only 1 unit"),
+        dict(P.Verdict("pseudotime", P.RUN, ["ok"], rung="full").as_dict(), settings={}),
+        dict(P.Verdict("de", P.SKIP, ["no factor can express a contrast at all"]).as_dict()),
+        dict(P.Verdict("velocity", P.BLOCKED, ["layers[spliced] is absent"],
+                       searched=["/a", "/b", "/c"]).as_dict()),
+    ],
+    "audit": [{"level": "INFO", "check": "checked: all plugins appear once", "detail": ""}],
+}
+with _tf.TemporaryDirectory() as _d:
+    f = PR.write(_d, _plan)
+    html = Path(f).read_text()
+    ck("it says nothing has run, first", "Nothing here has run yet" in html)
+    ck("that warning precedes the plugin list",
+       html.index("Nothing here has run") < html.index("What you can run"))
+    ck("'what you can run' comes before 'what will not run'",
+       html.index("What you can run") < html.index("What will not run"))
+    ck("'what you get' precedes the settings",
+       html.index("What you get out of it") < html.index("in what order, with what settings"))
+    # ON A PLUGIN THAT WILL ACTUALLY RUN. The first version asserted velocity's text, and
+    # velocity is BLOCKED in this fixture - the table covers what you GET, so a blocked plugin is
+    # correctly absent from it. The test was wrong, not the page.
+    ck("each running plugin says what it yields", "phase call and two scores" in html)
+    ck("and what it cannot tell you", "cycling population is not a proliferating one" in html)
+    ck("a blocked plugin is NOT in the what-you-get table",
+       "direction of change per cell" not in html)
+    ck("the design table is shown with arm sizes", "smallest arm" in html)
+    ck("the crossed pair is named", "interaction is estimable" in html)
+    ck("waves are rendered", "Wave 1" in html and "Wave 2" in html)
+    ck("settings are shown per plugin", "cell_type" in html)
+    ck("a confound appears as a caveat, not a refusal",
+       "Carry this with the result" in html and "confounded" in html)
+    ck("an unbuilt plugin is not presented as a data problem",
+       "not your data" in html or "not about this installation" in html
+       or "not your\ndata" in html or "about this installation, not your" in html)
+    ck("a SKIP explains a caveat could not save it", "carried as a caveat instead" in html)
+    ck("a BLOCKED says how many places were searched", "3 location(s)" in html)
+    ck("the upstream constraint is reproduced", "composition claim across batch" in html)
+    ck("the audit result is shown", "check(s)" in html)
+    ck("it is a standalone page", "<style>" in html and "<title>" in html)
+    ck("no external resource is referenced", "http://" not in html and "src=" not in html)
+
+print("\n" + ("the report holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
