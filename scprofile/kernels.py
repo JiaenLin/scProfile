@@ -131,6 +131,19 @@ class Kernel:
         return self._list("needs_layers")
 
     @property
+    def sees(self):
+        """What was SHOWN to this plugin - the honest list of inputs it reads.
+
+        Distinct from `needs_*`, which is what it REFUSES without: a plugin may read a layer it
+        can also do without, and the plan still has to tell the user that it will touch it.
+
+        Exposed here because it was declared in manifests and reachable from no code at all -
+        `getattr(kernel, "sees", None)` returned None for every plugin, so the plan reported that
+        cellcycle, which scores from a lognorm layer, consumed nothing.
+        """
+        return self._list("sees")
+
+    @property
     def status(self):
         """`built` or `planned`. A planned plugin is a DECLARATION with no implementation.
 

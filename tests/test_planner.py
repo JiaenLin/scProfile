@@ -329,7 +329,10 @@ _plan = {
         dict(P.Verdict("velocity", P.BLOCKED, ["layers[spliced] is absent"],
                        searched=["/a", "/b", "/c"]).as_dict()),
     ],
-    "audit": [{"level": "INFO", "check": "checked: all plugins appear once", "detail": ""}],
+    "audited": True,
+    "audit_checks": ["checked: all 9 known plugin(s) appear exactly once",
+                     "checked: no plugin is UNRESOLVED"],
+    "audit": [],
 }
 with _tf.TemporaryDirectory() as _d:
     f = PR.write(_d, _plan)
@@ -360,7 +363,15 @@ with _tf.TemporaryDirectory() as _d:
     ck("a SKIP explains a caveat could not save it", "carried as a caveat instead" in html)
     ck("a BLOCKED says how many places were searched", "3 location(s)" in html)
     ck("the upstream constraint is reproduced", "composition claim across batch" in html)
-    ck("the audit result is shown", "check(s)" in html)
+    # A PASSING AUDIT MUST BE VISIBLE. Keyed on findings alone, a clean audit rendered nothing
+    # and was indistinguishable from an audit that never ran.
+    ck("a PASSING audit is still shown", "Was this plan checked" in html)
+    ck("it says every check passed", "Every check passed" in html)
+    ck("and lists what was checked", "appear exactly once" in html)
+    _noaudit = dict(_plan); _noaudit["audited"] = False
+    with _tf.TemporaryDirectory() as _d2:
+        h2 = Path(PR.write(_d2, _noaudit)).read_text()
+        ck("an UNAUDITED plan says so plainly", "was not audited" in h2)
     ck("it is a standalone page", "<style>" in html and "<title>" in html)
     ck("no external resource is referenced", "http://" not in html and "src=" not in html)
 

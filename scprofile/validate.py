@@ -61,6 +61,15 @@ def validate_plugin(kernel):
                          "authoritative as one whose limits were thought about"))
     if spec.get("layer") not in (None, "stack", "checkpoint"):
         f.append(Finding("ERROR", "layer must be stack or checkpoint", str(spec.get("layer"))))
+    # EVERY BUILT PLUGIN, not only the ones being compared. The plan tells a user which of their
+    # columns and layers each plugin will touch, and it can only do that from `sees` - so an
+    # under-declared manifest makes a plugin look like it reads nothing at all. cellcycle scored
+    # from a lognorm layer it never declared, and the plan dutifully reported no inputs.
+    if spec.get("sees") is None and built:
+        f.append(Finding("WARN", "sees is not declared",
+                         "the plan reports which of a user's columns and layers each plugin will "
+                         "read, and it reads that from here; without it the plugin appears to "
+                         "consume nothing"))
     if spec.get("sees") is None and (kernel.needs_design or spec.get("per_unit")):
         f.append(Finding("WARN", "sees is not declared",
                          "any plugin that will be compared against others must declare what it "

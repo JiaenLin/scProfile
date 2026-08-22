@@ -16,6 +16,16 @@ executor:
   cost: trivial
   cores: 1
 design_aware: true
+# WHAT IT READS, DECLARED. run.py takes `keys['lognorm']` and scores from that layer when it is
+# present, falling back to X - so the layer is an input, and until 2026-08-22 nothing said so.
+# The plan reads these declarations to tell the user which of their columns and layers each
+# plugin will actually touch, and an under-declared manifest makes a plugin look like it reads
+# nothing. `sees` is the honest list: what was shown to it, which is what another plugin's result
+# has to be compared against.
+sees:
+  - X
+  - layers[{lognorm}]
+  - var_names
 produces:
   - obs[phase]
   - obs[S_score]

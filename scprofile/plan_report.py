@@ -222,13 +222,30 @@ def write(out_dir, plan, *, filename="run_plan.html"):
              'results, not here &mdash; a limit restated away from the number it qualifies is a '
              'limit that goes stale.</p>')
 
-    if plan.get("audit"):
-        n_err = sum(1 for x in plan["audit"] if x.get("level") == "ERROR")
+    # RENDERED WHENEVER THE AUDIT RAN, not whenever it found something. A clean audit returns no
+    # findings, so keying this section on findings made a passing audit and an audit that was
+    # never run look the same - which is the failure the audit rule itself names.
+    if plan.get("audited"):
+        found = plan.get("audit") or []
+        n_err = sum(1 for x in found if x.get("level") == "ERROR")
+        checks = plan.get("audit_checks") or []
         B.append("<h2>Was this plan checked?</h2>")
-        B.append(_card(f"{len(plan['audit'])} check(s), {n_err} error(s)",
-                       "<br>".join(f"{_e(x['level'])} &mdash; {_e(x['check'])}"
-                                   for x in plan["audit"]) or "every check passed",
+        body = ("<br>".join(f"{_e(x['level'])} &mdash; {_e(x['check'])}" for x in found)
+                if found else
+                "Every check passed. This plan can justify each of its own verdicts.")
+        if checks:
+            body += ("<br><br><span class='sub'>What was checked:<br>"
+                     + "<br>".join(_e(c) for c in checks) + "</span>")
+        B.append(_card(f"{len(checks) or len(found)} check(s), {n_err} error(s)", body,
                        "bad" if n_err else "good"))
+    else:
+        B.append("<h2>Was this plan checked?</h2>")
+        B.append(_card("No. This plan was not audited.",
+                       "Re-run with <code>--audit</code> and the plan will be checked by rules "
+                       "that do not repeat its own reasoning &mdash; that every plugin is "
+                       "accounted for once, that nothing is left unresolved, that every skip "
+                       "cites a design fact the table supports, and that nothing runs below a "
+                       "capacity your project would support.", "warn"))
 
     B.append(f'<p class="sub">Object: <code>{_e(plan.get("h5ad", ""))}</code><br>'
              f'Searched {len(plan.get("roots") or [])} location(s) for inputs not on the object'

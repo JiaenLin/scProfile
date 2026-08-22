@@ -45,6 +45,14 @@ executor:
   cores: 8
   memory_gb_per_100k: 12
 design_aware: true
+# WHAT IT READS. Declared so the plan can tell a user which of their layers and columns this
+# plugin will touch. An under-declared manifest makes a plugin look like it consumes nothing.
+sees:
+  - layers[spliced]
+  - layers[unspliced]
+  - layers[{counts}]
+  - obsm[{embedding}]
+  - obs[{label}]
 produces:
   - obs[velocity_confidence]
   - obs[velocity_length]

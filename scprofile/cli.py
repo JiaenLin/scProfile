@@ -1159,10 +1159,15 @@ def _plan(a):
         if failed:
             ok_all = False
 
-    audit_found = []
+    audit_found, audit_checks, audited = [], [], False
     if getattr(a, "audit", False):
+        audited = True
         print("\nAUDIT OF THIS PLAN")
-        found = audit_found = PL.audit(verdicts, sorted(ks), facts, present=present, log=print)
+
+        def _alog(line):
+            audit_checks.append(str(line).strip())
+            print(line)
+        found = audit_found = PL.audit(verdicts, sorted(ks), facts, present=present, log=_alog)
         errs = [x for x in found if x.level == "ERROR"]
         for x in found:
             print(f"  {x.level}  {x.check}")
@@ -1182,6 +1187,10 @@ def _plan(a):
             "search_incomplete": bool(provenance.find_layer_sources.exhausted),
             "constraint_on_use": constraint, "constraint_source": csrc,
             "verdicts": [v.as_dict() for v in verdicts],
+            # BOTH: what was CHECKED and what was FOUND. A clean audit returns an empty finding
+            # list, so a report keyed on findings alone rendered a passing audit and an audit that
+            # never ran identically - the exact failure this project's own audit rule names.
+            "audited": audited, "audit_checks": audit_checks,
             "audit": [{"level": x.level, "check": x.check, "detail": x.detail}
                       for x in (audit_found or [])],
         }
