@@ -484,3 +484,49 @@ format: the plugin FORMAT had to change twice, and both changes are the same les
         change was needed by a plugin somebody else wrote; both were found by moving two plugins
         the project already had into the shape the project already preferred, which is the
         cheapest possible test of a format and had never been run.
+
+clean:  7 suites and `validate` green on the workstation AND on the cluster, at every commit of
+        this cycle. `plan --audit --report` over all ten plugins: `checked: all 10 known plugin(s)
+        appear exactly once`, `0 error(s), 0 warning(s)`, `wrote .../run_plan.html`.
+
+## 2026-08-23 — cycle 6 closed by PBS 679143: ten of ten, every one with a result
+
+The run the whole cycle was for, at `bc4a356`, over 100,713 cells and ten samples:
+
+    ran : ['abundance', 'cellchat', 'cellcycle', 'de', 'decoupler', 'liana',
+           'pseudotime', 'scenic', 'silhouette', 'velocity']
+    10 plugin(s) ran, 0 did not          <- out/README.md
+    [4 at a time of 37]                  <- the allocator, admitting by CORES
+    wrote .../out/objects/cohort_profiled.h5ad  (3.50 GB)
+
+Every plugin, including the third-party one, produced a result:
+
+    scenic[Young1]   ok  3149s  111 regulon(s) over 10,837 cells, inferred from this unit  [x10]
+    de               ok   609s  779 gene-population-term results below padj 0.05 across 10
+                                population(s), formula ~ age + batch + diet
+    velocity         partial 530s  velocity fitted on 2,000 genes (stochastic); median
+                                confidence 0.42; unspliced 23.9% of counts
+    cellchat[...]    ok         1,654 interactions over 9 populations, CellChatDB.mouse  [x10]
+    liana[...]       ok        27,002 interactions over 9 populations  [x10]
+    abundance        ok    61s  2 credible compositional effect(s) at fdr 0.05
+    cellcycle        ok    89s  45.5% of cells score S or G2M
+    decoupler        ok    69s  674 regulators scored per cell
+    pseudotime       ok    70s  3 terminal state(s) over 96,488 cells
+    silhouette       ok    26s  median silhouette 0.265 over 13 population(s)
+
+`velocity`'s `partial` is its DECLARED behaviour below `min_confidence` 0.5, not a failure - the
+field is reported as unresolved rather than presented as a direction.
+
+And the one thing that did NOT reach the object was refused for a reason worth reading:
+
+    NOT MERGED: unit 'Aging1' obsm['X_regulon_auc'] came back with different widths across
+    units ([37, 42, 48, 57, 65, 73, 88, 111]), so the columns are not the same quantity and
+    stacking them would invent one.
+
+Ten GRN inferences over ten samples find different numbers of regulons; column 12 of one sample's
+matrix is not column 12 of another's. The merge says so, keeps each unit's copy in its own
+directory, and records the absence in the object's provenance rather than in a line of console
+output nobody keeps.
+
+clean:  7 suites green on the cluster, `validate` 0 errors over all ten plugins, 10 selftests
+        passed, audit 0/0.
