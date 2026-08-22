@@ -10,7 +10,20 @@ module on its path; it reads `in.json`, applies the whole contract, imports the 
 `run(ctx)`, and writes `out.json`. Nothing is generated and nothing is copied between plugins, so
 a fix to the contract is a fix for every plugin including ones this project did not write.
 
-    <plugin's python> -m scprofile._entry <plugin module path> <in.json>
+    <plugin's python> <this file, by path> <plugin module path> <in.json>
+    <plugin's python> <this file, by path> --selftest <plugin module path>
+
+BY PATH, NOT AS `-m`. The interpreter is the PLUGIN'S, in the plugin's own pinned environment,
+where the host is not installed and must not have to be - `-m scprofile._entry` would not resolve
+there. This file puts the host on its own `sys.path` as its first act, and everything it imports
+from the host is stdlib-only, so it loads in any environment a plugin can be built in.
+
+WHO CONSTRUCTS THAT COMMAND: the KERNEL, through `FileKernel.argv`. The runner asks a kernel how
+it is launched and knows nothing about shapes. The runner used to build the command itself, which
+is right for the directory shape and silently wrong for this one: a one-file plugin handed
+straight to an interpreter defines two names, exits 0 and writes nothing, and exit 0 with no
+`out.json` is the single failure the host cannot tell from a plugin that finished with no
+results.
 """
 from __future__ import annotations
 
