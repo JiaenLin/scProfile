@@ -54,6 +54,13 @@ mkdir -p logs
 # A conda-family manager has to be on PATH for the builder to have a route at all; `machine()`
 # reports which one it found, and refuses with the alternatives if it found none.
 module load "${CONDA_MODULE:-anaconda3/3.0.0}" 2>/dev/null || true
+# A FASTER SOLVER IF THE SITE HAS ONE. `machine()` prefers micromamba, then mamba, then conda,
+# and reports which it found - but it can only find what is on PATH, and a site whose only module
+# is a classic anaconda3 has the slowest of the three. Point MANAGER_PATH at a directory holding
+# micromamba or mamba and it is used instead; nothing else changes, because all three build the
+# same prefix. A 50-package conda-forge + bioconda solve is minutes with one and can be hours
+# with the other.
+[ -n "${MANAGER_PATH:-}" ] && export PATH="${MANAGER_PATH}:$PATH"
 export PYTHONPATH="$TOOL"
 export MPLCONFIGDIR="$PWD/.mpl"
 # A plugin supplied from OUTSIDE the shipped set, to test the FORMAT rather than the tool.
