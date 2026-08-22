@@ -60,7 +60,16 @@ PLUGIN = {
 
     "requires": {
         "python": ">=3.10,<3.13",
-        "packages": {"pertpy": ">=0.9,<2", "pandas": ">=2.0,<3", "numpy": ">=1.24,<3"},
+        "packages": {
+            "pertpy": ">=0.9,<2", "pandas": ">=2.0,<3", "numpy": ">=1.24,<3",
+            # PERTPY IMPORTS THIS AND DOES NOT DECLARE IT. `pertpy/data/_dataloader.py` does
+            # `from filelock import FileLock` at module scope, and `pertpy/__init__.py` imports
+            # `data`, so `import pertpy` raises ModuleNotFoundError in an environment resolved
+            # from pertpy's own metadata. Measured on PBS 677555. A dependency a wrapped tool
+            # forgot is still a dependency this plugin needs, and naming it here is the only
+            # place it can be said.
+            "filelock": ">=3",
+        },
     },
 
     "cost": "medium", "cores": 4,

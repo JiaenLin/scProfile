@@ -72,11 +72,11 @@ PLUGIN = {
         "docs": "https://scanpy.readthedocs.io",
         "read": "2026-08-22",
         "defaults_changed": [
-            "use_raw=False, and the layer is named. scanpy's default `use_raw=None` means USE "
-            ".raw IF PRESENT - so the same plugin, on two objects differing only in whether an "
-            "upstream step left a .raw behind, scores DIFFERENT values, and nothing in the output "
-            "says which was used. An object whose .raw holds counts rather than log-normalised "
-            "values gets a score computed on counts.",
+            "use_raw=False, and the values are ASSIGNED rather than named with `layer=`. "
+            "scanpy's default `use_raw=None` means USE .raw IF PRESENT - so the same plugin, on "
+            "two objects differing only in whether an upstream step left a .raw behind, scores "
+            "DIFFERENT values, and nothing in the output says which was used. An object whose "
+            ".raw holds counts rather than log-normalised values gets a score computed on counts.",
             "n_bins=25 and random_state=0 are scanpy's own defaults, kept and RECORDED. Changing "
             "either changes every score, so they belong in the caveats rather than in the code "
             "alone.",
@@ -102,6 +102,12 @@ PLUGIN = {
             "set drawn from matched expression bins, and that subtraction is what makes zero a "
             "meaningful reference - a naive panel mean is dominated by how abundant its genes "
             "happen to be.",
+            "`score_genes` IN THE PINNED SCANPY TAKES NO `layer` ARGUMENT. It was added later, "
+            "so `layer=` passed through `score_genes_cell_cycle`'s **kwargs raises `got an "
+            "unexpected keyword argument`. An earlier version of this record quoted a signature "
+            "that HAD it - read from whatever scanpy the host interpreter happened to carry, "
+            "which is exactly the reading a plugin with no declared environment can make. The "
+            "values are assigned to X instead, which works on every version.",
         ],
     },
 
@@ -179,15 +185,23 @@ def run(ctx):
 
     # use_raw=None - scanpy's default - means USE .raw IF PRESENT. Named explicitly; see
     # upstream.defaults_changed.
+    #
+    # AND THE LAYER IS ASSIGNED, NOT PASSED. `score_genes` in the scanpy this plugin declares
+    # takes no `layer` argument at all - it was added later - so `layer=` reaches it through
+    # `score_genes_cell_cycle`'s **kwargs and raises `got an unexpected keyword argument`. That
+    # is the whole reason a plugin running in the host interpreter was moved to a declared
+    # environment: the call was well-formed against whatever scanpy the host happened to have and
+    # is not against the one this plugin says it needs. `ctx.X` is the host's answer to "the
+    # values this plugin should work on" and needs no keyword.
     lognorm = ctx.keys.get("lognorm")
     layer = lognorm if lognorm and lognorm in A.layers else None
     scored_from = f"layers[{layer!r}]" if layer else "X"
+    A.X = ctx.X
     ctx.log(f"scoring from {scored_from} (use_raw=False, explicitly)")
     # ctrl_size is NOT passable here; see upstream.gotchas. The control set is sized by the
     # PANELS that matched this object, not by score_genes' own default of 50.
     ctrl = min(len(s), len(g2m))
-    sc.tl.score_genes_cell_cycle(A, s_genes=s, g2m_genes=g2m,
-                                 use_raw=False, layer=layer,
+    sc.tl.score_genes_cell_cycle(A, s_genes=s, g2m_genes=g2m, use_raw=False,
                                  n_bins=N_BINS, random_state=SEED)
 
     ph = A.obs["phase"].astype(str)
@@ -268,9 +282,10 @@ def run(ctx):
         ctx.emit_obs(col, A.obs[col].values)
 
     ctx.caveat(
-        f"Scored from {scored_from} with use_raw=False, named explicitly: scanpy's default would "
+        f"Scored from {scored_from} with use_raw=False, stated explicitly: scanpy's default would "
         f"have used .raw where present, so an object that had one would have been scored on "
-        f"different values with nothing in the output saying so.")
+        f"different values with nothing in the output saying so. Those values were assigned to X "
+        f"before scoring, because the pinned scanpy's `score_genes` has no `layer` argument.")
     ctx.caveat(
         f"The score is the panel mean minus the mean of a control set drawn from matched "
         f"expression bins (ctrl_size={ctrl}, sized by the matched panels because scanpy computes "
@@ -324,21 +339,24 @@ def selftest(ctx):
     genes = list(S_GENES) + list(G2M_GENES) + [f"FILLER{i}" for i in range(400)]
     A = ctx.fixture(n_cells=n, genes=genes)
 
-    for layer in (None, "lognorm"):
-        # EXACTLY the call `run` makes, both ways it can make it. A selftest that calls the
-        # function differently from the plugin proves something about the selftest.
+    counts_X = A.X.copy()
+    for source in ("X", "lognorm"):
+        # EXACTLY the call `run` makes, both ways it can make it - INCLUDING the assignment,
+        # because `layer=` is what the pinned scanpy refuses and a selftest that called the
+        # function differently from the plugin would have proved something about the selftest.
+        A.X = counts_X if source == "X" else A.layers["lognorm"]
         sc.tl.score_genes_cell_cycle(A, s_genes=list(S_GENES), g2m_genes=list(G2M_GENES),
-                                     use_raw=False, layer=layer,
+                                     use_raw=False,
                                      n_bins=N_BINS, random_state=SEED)
         for col in ("S_score", "G2M_score", "phase"):
-            assert col in A.obs, f"layer={layer}: scanpy did not write obs[{col!r}]"
+            assert col in A.obs, f"{source}: scanpy did not write obs[{col!r}]"
         for col in ("S_score", "G2M_score"):
             v = np.asarray(A.obs[col], dtype=float)
             assert v.shape == (n,), f"{col} is {v.shape}, expected ({n},)"
             assert np.isfinite(v).all(), f"{col} contains non-finite values"
         ph = set(A.obs["phase"].astype(str))
         assert ph <= {"G1", "S", "G2M"}, f"unexpected phase labels {ph}"
-        ctx.log(f"  scored from {'layers[lognorm]' if layer else 'X'}: "
+        ctx.log(f"  scored from {'layers[lognorm]' if source == 'lognorm' else 'X'}: "
                 f"{dict(A.obs['phase'].astype(str).value_counts())}")
 
     # The panel is HUMAN symbols and a mouse object is indexed by mouse ones. `_match` is what
