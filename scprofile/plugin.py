@@ -231,9 +231,25 @@ class Context:
         return p
 
     def emit_layer(self, name, array):
+        """A per-cell, per-gene result, written with the barcodes its ROWS belong to.
+
+        The same gap `emit_obsm` had, one slot over: a plugin handed fewer cells than the object
+        returns fewer rows, and a merge that can only check `shape == adata.shape` refuses it.
+        The gene axis needs no index because the host never subsets `var` - a plugin sees every
+        gene of the object it was given - so the column count is asserted instead.
+        """
         import numpy as np
+        arr = np.asarray(array, dtype="float32")
         p = self.out / "arrays" / f"layer_{name}.npy"
-        np.save(p, np.asarray(array, dtype="float32"))
+        if self.adata is not None:
+            if arr.shape != (self.adata.n_obs, self.adata.n_vars):
+                raise ValueError(
+                    f"emit_layer({name!r}): {arr.shape} for the "
+                    f"({self.adata.n_obs:,}, {self.adata.n_vars:,}) object this plugin was "
+                    f"given. A layer is per cell AND per gene of that object.")
+            (self.out / "arrays" / f"layer_{name}.barcodes.txt").write_text(
+                "\n".join(self.adata.obs_names.astype(str)) + "\n", encoding="utf-8")
+        np.save(p, arr)
         self._layers[name] = p
         return p
 

@@ -166,8 +166,9 @@ be dropped with the sentence "an array carries no barcodes, so it cannot be conc
 units" — which was never a property of arrays. `ctx.emit_obsm` writes the barcodes beside the
 `.npy`, so the pieces concatenate under the same disjointness check the obs columns already had:
 two units claiming one cell is refused, differing widths are refused, and a cell no unit covered
-is NaN. A **layer** still cannot cross units, and the reason is now stated: the barcodes name its
-rows and nothing names its columns, so two units' gene axes can differ without saying so.
+is NaN. A **layer** still does not cross units, and the reason is memory rather than alignment: the
+barcodes would align it, but the result would be a dense cells-by-genes matrix for the whole
+cohort that no one unit's result implies. Emit a table or a side-car object instead.
 
 Per-unit results are folded for reporting, never collapsed. One plugin gets one page and one
 `report.json` entry, and that entry carries **every** unit — status, headline, caveats, figures and

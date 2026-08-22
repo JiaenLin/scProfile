@@ -1009,6 +1009,31 @@ def test_an_array_carries_its_barcodes():
         except merge.MergeError as e:
             check("barcodes from another object are refused", "not the same cells" in str(e),
                   str(e))
+        # THE SAME GAP ONE SLOT OVER. A layer from a plugin handed fewer cells is refused by a
+        # shape check for exactly the reason obsm was; the GENE axis still has to match, because
+        # nothing beside the array names its columns and the host never subsets var.
+        np.save(td / "arrays" / "layer_L.npy", np.arange(6, dtype="float32").reshape(3, 2))
+        (td / "arrays" / "layer_L.barcodes.txt").write_text("c0\nc2\nc3\n")
+
+        class _AD2(_AD):
+            def __init__(self, bcs, n_vars):
+                super().__init__(bcs)
+                self.n_vars = n_vars
+                self.shape = (len(bcs), n_vars)
+
+        A = _AD2(["c0", "c1", "c2", "c3"], 2)
+        got = merge.merge_one(A, td, {"kernel": "P", "layers": {"L": "arrays/layer_L.npy"}})
+        check("a layer merges by barcode too", got["layers"] == ["L"], str(got))
+        check("with NaN for the cell the plugin never saw",
+              bool(np.isnan(A.layers["L"][1]).all()), str(A.layers["L"]))
+        try:
+            merge.merge_one(_AD2(["c0", "c1", "c2", "c3"], 5), td,
+                            {"kernel": "P", "layers": {"L": "arrays/layer_L.npy"}})
+            check("a layer with the wrong GENE axis is refused", False)
+        except merge.MergeError as e:
+            check("a layer with the wrong GENE axis is refused", "gene axis" in str(e), str(e))
+        (td / "arrays" / "layer_L.barcodes.txt").unlink()
+
         # An index that disagrees with its own array says nothing about any cell.
         (td / "arrays" / "X_a.barcodes.txt").write_text("c0\nc1\n")
         try:

@@ -172,10 +172,26 @@ def merge_one(adata, out_dir, payload, *, log=print):
 
     for key, rel in (payload.get("layers") or {}).items():
         arr = _read_array(out / rel)
+        idx = _array_barcodes(out / rel)
+        if arr.ndim != 2 or arr.shape[1] != adata.n_vars:
+            raise MergeError(
+                f"{payload['kernel']} layers[{key!r}] is {arr.shape} for an object of "
+                f"{adata.shape}. The gene axis has to match exactly - nothing beside the array "
+                f"names its columns, and the host never subsets genes, so a different width is a "
+                f"different object.")
+        if idx is not None:
+            # ROWS BY BARCODE, exactly as for obsm. A plugin handed fewer cells than the object -
+            # which the host itself does, whenever a computed embedding has NaN rows - returns
+            # fewer rows, and a shape check alone refuses it for that.
+            pend_arr.append(("layers", key,
+                             _align_rows(arr, idx, bc,
+                                         what=f"{payload['kernel']} layers[{key!r}]", log=log)))
+            continue
         if arr.shape != adata.shape:
             raise MergeError(
                 f"{payload['kernel']} layers[{key!r}] is {arr.shape} for an object of "
-                f"{adata.shape}")
+                f"{adata.shape}, and carries no barcodes beside it. Emit it with "
+                f"`ctx.emit_layer`, which writes them.")
         pend_arr.append(("layers", key, arr))
 
     # Nothing above touched `adata`. Past this line nothing can raise.
@@ -290,14 +306,18 @@ def merge_many(adata, results, *, log=print):
         adata.obsm[key] = _align_rows(full, index, bc, what=f"obsm[{key!r}]", log=log)
         merged["obsm"].append(key)
 
-    # A LAYER STILL CANNOT CROSS UNITS: the barcodes name the rows and nothing names the columns,
-    # and two units' layers can differ on the gene axis without saying so.
+    # A LAYER STILL DOES NOT CROSS UNITS, and the reason is memory rather than alignment: the
+    # barcodes would align it, but the result would be a DENSE cohort-wide matrix - cells by
+    # genes, float32 - that no single unit's result implies and that this host will not allocate
+    # on a plugin's behalf. A per-unit plugin whose result is per gene should emit a table, or a
+    # side-car object under `objects`.
     for _out_dir, payload in results:
         for key in sorted(payload.get("layers") or {}):
             _record_absent(merged, payload, "layers", key, log,
-                           "was returned per unit. The barcodes beside an array name its ROWS; "
-                           "nothing names its columns, and two units' gene axes can differ "
-                           "without saying so. It is not concatenated.")
+                           "was returned per unit. Concatenating a per-unit layer means "
+                           "allocating a dense cells-by-genes matrix for the whole cohort, which "
+                           "no one unit's result implies; emit a table or a side-car object "
+                           "instead.")
     return merged
 
 
@@ -308,8 +328,8 @@ def _record_absent(merged, payload, slot, key, log, why):
     barcode" from the plugin's DECLARATION, so `uns` and the HTML both asserted a key the object
     did not have and the only trace was one line of a finished run's console.
     """
-    text = f"{slot}[{key!r}] {why} It is NOT in the merged object; each unit's copy stays in its "\
-           f"own run directory."
+    text = (f"{slot}[{key!r}] {why} It is NOT in the merged object; each unit's copy stays in "
+            f"its own run directory.")
     log(f"    NOT MERGED: unit {payload.get('unit')!r} {text}")
     payload.setdefault("absent", []).append({"what": f"{slot}[{key}]", "why": text})
     d = merged.setdefault("dropped", [])
