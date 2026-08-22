@@ -278,7 +278,29 @@ found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two wa
         [host] an aligner writes the same counts twice - `Velocyto/filtered/` beside
               `Velocyto/raw/` - and `attach` read both: 22 GB of MatrixMarket text parsed and
               discarded for identical cells. Cheapest first, from the size the walk already had,
-              and stop when every cell is covered → 5412b66
+              and a source whose scope is already covered is skipped BEFORE it is opened, which
+              is decidable from its path → 5412b66, af1553c
+        [host] **A PLUGIN COULD NOT REACH THE BINARIES ITS OWN ENVIRONMENT PROVIDES.** cellchat's
+              method is R: it runs `Rscript`, found through PATH. Launching `<env>/bin/python` by
+              absolute path does not put `<env>/bin` on PATH - that is what `conda activate` does
+              - so the plugin searched the system's PATH and the failure read as
+              `no Rscript on PATH - this plugin's environment did not provide R`, about an
+              environment containing R 4.3 and a complete CellChat. `_install_r` learned exactly
+              this at PBS 676357 and fixed it for the one subprocess IT launches; the runner,
+              which launches every plugin and every selftest, did not → 9e20155
+        [host] **A SELFTEST WITH A CAPTURED PIPE AND NO TIMEOUT IS A BUILD THAT HANGS.** Watched
+              live on PBS 677555: decoupler's fetches a published prior over the network,
+              `capture_output=True` held every byte until exit, and there was no limit - so
+              `install` sat with no output, having proved nothing, and would have until the job's
+              sixteen-hour walltime. `run` learned this already and streams to a named log;
+              `selftest` had not. Named file, 30-minute default, reported as stuck rather than
+              slow → 87f89bf
+        [host] `sources.attach` had never executed on anything - velocity refused for want of
+              counts in every previous cycle - and could not have survived a real object: a
+              `lil_matrix((100_713, 34_290))` per layer is a Python list per row, filled through
+              scipy's Python-level fancy-index assignment, one source at a time. Row/column/value
+              arrays concatenated once instead; int32 indices, float32 values. The SEARCH half,
+              which is the part that was proven, is untouched → 523b934
 
         [declaration] **abundance, liana and cellchat each destructured `ctx.populations()`
               wrongly** and would have crashed → 5584e3c. abundance was found by reading, cellchat
@@ -298,6 +320,34 @@ found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two wa
               annotator's refusal to call a cell type appeared as a population with a cycling
               fraction. velocity's per-population table did the same, marked with an
               `is_sentinel` column and sorted last. Both use `ctx.populations()` now → 5182ec6
+
+**AND THEN THE SELFTESTS RAN — for the first time, all eight members of one environment, only
+because a failed build now runs them anyway** (PBS 677555, `proved for 4 of 8 member(s): de,
+liana, pseudotime, velocity`). Four failures, in three layers, none of which would have been seen
+this cycle: the previous attempt's R step failed and `install` raised before any selftest ran.
+
+        [declaration] **cellcycle: `TypeError: score_genes() got an unexpected keyword argument
+              'layer'`** on scanpy 1.10.4. `score_genes` in the scanpy this plugin DECLARES takes
+              no `layer` argument - it was added later - so `layer=` reaches it through
+              `score_genes_cell_cycle`'s **kwargs and raises. Its UPSTREAM record quoted a
+              signature that HAD it, read from whatever scanpy the host interpreter happened to
+              carry. **This is the plugin that ran a whole cohort in cycle 1 with
+              `needs_env: false`**, and giving it a declared environment is what exposed that its
+              call was well-formed against nothing in particular → 01c93db
+        [declaration] **abundance: `ModuleNotFoundError: No module named 'filelock'`.** pertpy
+              imports it at module scope and does not declare it → 01c93db
+        [declaration] **decoupler: `ModuleNotFoundError: No module named 'omnipath'`**, from
+              INSIDE `get_collectri` - imported lazily, so nothing about installing or importing
+              decoupler notices, and it surfaces on the one call this plugin exists to make
+              → 7234fec
+        [declaration] **cellchat named five R packages and CellChat needs about forty-five**, and
+              the install receipt named the first twelve itself. Fixed in the declaration; the
+              `no Rscript on PATH` half of the same plugin's failure was the HOST defect above.
+
+        Three of those four are the same shape: **a dependency the wrapped tool needs and its own
+        metadata does not declare.** filelock behind pertpy, omnipath behind decoupler,
+        forty-four R packages behind CellChat. All three surfaced in a selftest rather than in
+        somebody's run, which is what the selftest is for.
 
         [method] nothing yet.
 
