@@ -88,6 +88,18 @@ def _doctor(a):
         print("        A site kernel overriding a shipped one is legitimate; doing it without")
         print("        saying so would mean a run used code from a directory nobody mentioned.")
     print("")
+    # WHAT THE BUILDER RESOLVED. A shared environment is a decision the user should be able to
+    # see and disagree with, and the count is the difference between one 1.5 GB build and four.
+    from . import resolve as RS
+    groups = RS.group_by_compatibility(list(ks.values()))
+    if groups:
+        RS.report(groups)
+        n_env = len(groups)
+        n_mem = sum(len(g.members) for g in groups)
+        if n_mem > n_env:
+            print(f"  {n_mem - n_env} fewer environment(s) than plugins, because their declared "
+                  f"requirements are mutually satisfiable.")
+
     n_todo = sum(1 for k in ks.values() if k.status != "built")
     if n_todo:
         print(f"{n_todo} kernel(s) are DECLARED BUT NOT BUILT. Their prerequisites are real and "

@@ -26,7 +26,27 @@ ENV_DIRNAME = "scprofile-{kernel}"
 
 
 def env_prefix(kernel_name, prefix):
+    """The PER-PLUGIN environment path. Kept, and kept at this signature.
+
+    Resolution happens in `resolved_prefix` below rather than here, because this function is
+    called and stubbed by other code: widening its signature broke a test that legitimately
+    replaces it, and a change that forces every caller to be edited is a change in the wrong
+    place.
+    """
     return Path(prefix).expanduser() / ENV_DIRNAME.format(kernel=kernel_name)
+
+
+def resolved_prefix(kernel, prefix, *, group=None):
+    """Where this plugin's environment actually lives, after resolution.
+
+    The group's content-addressed directory when one was resolved; the per-plugin path otherwise
+    - which is also the path an installation built before resolution existed already uses.
+    Resolution must not invalidate an environment somebody already has for a reason they did not
+    cause.
+    """
+    if group is not None:
+        return Path(prefix).expanduser() / group.name
+    return env_prefix(kernel.name, prefix)
 
 
 def config_override(kernel_name):
@@ -58,6 +78,16 @@ def interpreter(kernel, prefix=None):
         import sys
         return sys.executable, "the host interpreter (this kernel declares needs_env: false)"
     if prefix:
+        # THE RESOLVED ENVIRONMENT FIRST. A plugin sharing one with others finds it here; a
+        # plugin whose own older per-plugin environment exists still finds that, because
+        # resolution must not invalidate an installation somebody already has.
+        grp, gpath = env_for(kernel, prefix)
+        if gpath is not None and gpath.exists():
+            exe = gpath / "bin" / ("Rscript" if kernel.language == "r" else "python")
+            if exe.exists():
+                shared = [m for m in grp.members if m != kernel.name]
+                return str(exe), ("installed at " + str(gpath)
+                                  + (f", shared with {', '.join(shared)}" if shared else ""))
         p = env_prefix(kernel.name, prefix)
         exe = p / "bin" / ("Rscript" if kernel.language == "r" else "python")
         if exe.exists():
@@ -362,6 +392,22 @@ def _install_r(p, entries, log=print):
     subprocess.run([str(rscript), str(f)], check=True, env=env)
 
 
+def env_for(kernel, prefix, *, all_kernels=None):
+    """The environment THIS plugin resolves to - which may be shared with others.
+
+    A plugin no longer owns an environment; it owns a REQUIREMENT, and the builder decides how
+    few environments satisfy them all. Named for its CONTENT, so two plugins wanting the same
+    stack land in the same directory and the second one costs nothing.
+    """
+    from . import resolve as RS
+    from .kernels import discover
+    ks = all_kernels if all_kernels is not None else discover().values()
+    for g in RS.group_by_compatibility(list(ks)):
+        if kernel.name in g.members:
+            return g, Path(prefix) / g.name if prefix else None
+    return None, None
+
+
 def machine(log=None):
     """What THIS machine can build with. Probed once, reported, never assumed.
 
@@ -425,7 +471,11 @@ def install(kernel, prefix, *, force=False, log=print):
                if kernel.status != "built" else "")
             + f"  A lock is captured from a resolve that WORKS, every line pinned; do not write "
               f"one from memory.")
-    p = env_prefix(kernel.name, prefix)
+    grp, _gp = env_for(kernel, prefix)
+    p = resolved_prefix(kernel, prefix, group=grp)
+    if grp and len(grp.members) > 1:
+        log(f"  environment {grp.name} is shared with "
+            f"{', '.join(m for m in grp.members if m != kernel.name)}")
     spec = lock_spec(kernel)
     if p.exists() and not force:
         # AN ENVIRONMENT THAT EXISTS IS NOT AN ENVIRONMENT THAT WAS FINISHED. `.scprofile_lock` is

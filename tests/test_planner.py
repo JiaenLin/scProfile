@@ -400,12 +400,17 @@ _spec = _iu.spec_from_file_location("dcp", _pp)
 _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
 # `needs` became `inject` when capabilities replaced free-text prerequisites: a plugin now says
 # what it must be GIVEN, and the host resolves it rather than the plugin checking.
+# `env` became `requires` when environment resolution moved to the builder: a plugin states what
+# it NEEDS, and the builder decides how few environments satisfy every plugin's needs together.
 ck("it declares everything the builder needs",
-   {"api", "env", "inject", "produces", "cannot_show", "upstream"} <= set(_mod.PLUGIN),
+   {"api", "requires", "inject", "produces", "cannot_show", "upstream"} <= set(_mod.PLUGIN),
    str(sorted(set(_mod.PLUGIN))))
+ck("and its requirement is constraints, not a private lock",
+   "packages" in _mod.PLUGIN["requires"] and "python" in _mod.PLUGIN["requires"])
 ck("it has a run(ctx)", callable(getattr(_mod, "run", None)))
 ck("it has a selftest(ctx) in the same file", callable(getattr(_mod, "selftest", None)))
-ck("its env pins a python version", bool(_mod.PLUGIN["env"].get("python")))
+ck("its requirement constrains the interpreter",
+   bool(_mod.PLUGIN["requires"].get("python")))
 ck("its upstream record names defaults it changed",
    bool(_mod.PLUGIN["upstream"].get("defaults_changed")))
 # THE RULE APPLIES TO run(), NOT TO selftest(). `run` is handed a stranger's object and may

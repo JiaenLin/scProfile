@@ -36,10 +36,24 @@ PLUGIN = {
     "per_unit": None,
     "cost": "medium", "cores": 4,
 
-    # The host builds this. Omit `env` entirely and the plugin runs in the host's interpreter.
-    "env": {"python": "3.11",
-            "pip": ["numpy==1.26.4", "pandas==2.2.3", "scanpy==1.10.4", "anndata==0.10.9",
-                    "decoupler==1.8.0"]},
+    # WHAT IT NEEDS, NOT WHAT TO BUILD. A plugin cannot know what else is installed, so it must
+    # not decide its own environment: three plugins wanting this same stack used to get three
+    # 1.5 GB copies of it. The BUILDER resolves these constraints across every plugin and builds
+    # as few environments as satisfy them all. Omit `requires` and the plugin runs in the host's.
+    #
+    # Constraints, not pins, wherever the tool genuinely tolerates a range - a pin is a claim
+    # that only THIS version works, and claiming it where it is untrue is what forces an
+    # environment nobody can share.
+    "requires": {
+        "python": ">=3.10,<3.13",
+        "packages": {
+            "decoupler": "==1.8.0",      # the API this plugin calls is 1.8's
+            "scanpy": ">=1.10,<1.11",
+            "anndata": ">=0.10,<0.12",
+            "numpy": ">=1.24,<2",        # decoupler 1.8 predates the numpy 2 ABI
+            "pandas": ">=2.0,<3",
+        },
+    },
 
     # WHAT THE WRAPPED TOOL'S OWN DOCUMENTATION SAYS, and which of its defaults are wrong for
     # this contract. In the directory shape this was a separate UPSTREAM.md that had to be kept

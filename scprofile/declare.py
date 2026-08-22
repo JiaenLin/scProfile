@@ -114,6 +114,34 @@ def check(spec, name="<plugin>"):
             out.append(("WARN", f"config {key!r} has no help. A parameter nobody can explain is "
                                 f"a parameter nobody should set."))
 
+    req = spec.get("requires")
+    if req is not None:
+        if not isinstance(req, dict):
+            out.append(("ERROR", "`requires` must be {'python': ..., 'packages': {...}}"))
+        else:
+            from . import resolve as _RS
+            for label, s in ([("python", req.get("python"))]
+                             + sorted((req.get("packages") or {}).items())):
+                if not s:
+                    continue
+                try:
+                    _RS.parse(s)
+                except ValueError as e:
+                    out.append(("ERROR", f"requires.{label}: {e}"))
+            if not req.get("packages"):
+                out.append(("WARN", "`requires` names no packages, so it constrains only the "
+                                    "interpreter"))
+            for name, s in sorted((req.get("packages") or {}).items()):
+                if str(s).startswith("==") and "," not in str(s):
+                    out.append(("WARN", f"requires {name} {s} exactly. A pin says only THAT "
+                                        f"version works, and where that is not true it forces an "
+                                        f"environment nobody can share - see whether a range "
+                                        f"holds."))
+    if spec.get("env") is not None and req is not None:
+        out.append(("ERROR", "declares both `requires` and `env`. `env` is the older, "
+                             "fully-pinned shape; keep one, and `requires` is the one the builder "
+                             "can resolve against other plugins."))
+
     env = spec.get("env")
     if env is not None:
         if not isinstance(env, dict) or not env.get("python"):

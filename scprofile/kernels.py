@@ -379,8 +379,12 @@ class FileKernel(Kernel):
                 self.spec[f"needs_{role}"] = needs[role]
         if needs.get("design"):
             self.spec["needs_design"] = True
-        env = self.spec.get("env")
-        self.spec.setdefault("needs_env", bool(env))
+        # EITHER SHAPE MEANS IT NEEDS AN ENVIRONMENT. This read `env` alone, so the moment a
+        # plugin moved to the resolvable `requires` shape the host decided it needed no
+        # environment at all and reported it as running in the host interpreter - a plugin
+        # pinned to numpy 1.26 declared ready on a host running numpy 2.
+        self.spec.setdefault("needs_env",
+                             bool(self.spec.get("env") or self.spec.get("requires")))
         self.spec.setdefault("language", "python")
         self.spec.setdefault("status", "built" if self.spec else "planned")
         self.spec.setdefault("executor", {"cost": self.spec.get("cost", "medium"),

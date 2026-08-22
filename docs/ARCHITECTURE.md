@@ -43,6 +43,45 @@ A plugin directory is **self-describing**. The builder does not go looking; it r
 sample. Those arrive at run time through `keys` and `organism`. The compiler refuses a recipe that
 hard-codes one, because a plugin that names one project's vocabulary works on one project.
 
+## 1a. A plugin declares a REQUIREMENT, never an environment
+
+This is the line between the first two layers, and it was in the wrong place.
+
+A plugin used to declare a private, fully-pinned environment and the builder built one per
+plugin. That put a **resolution decision inside the plugin, where it cannot be made**: a plugin
+cannot know what else is installed, so every plugin assumed it was alone. Four shipped plugins
+wanted the same numpy/pandas/scanpy stack and got four copies of it.
+
+```python
+"requires": {"python": ">=3.10,<3.13",
+             "packages": {"decoupler": "==1.8.0", "scanpy": ">=1.10,<1.11"}},
+```
+
+**Constraints, not pins, wherever the tool genuinely tolerates a range.** A pin says only *that*
+version works; claiming it where it is untrue forces an environment nobody can share, and
+`validate` warns on every bare `==`.
+
+The builder then resolves every plugin's constraints together:
+
+```
+2 environment(s) will satisfy 5 plugin(s):
+  scprofile-env-1bc98148e9   shared by: decoupler, liana, pseudotime, velocity
+  scprofile-env-f56ccb478c   shared by: scenic
+      ALONE because decoupler: python pinned to 3.11 and 3.10
+```
+
+Three properties that make this safe to trust:
+
+- **When in doubt, isolate.** A wrongly *shared* environment runs a plugin against versions
+  nobody tested it on — the failure that returns a plausible number rather than an error. A
+  wrongly *isolated* one costs disk. Those are not comparable, so anything the resolver cannot
+  **prove** compatible gets its own environment.
+- **An isolated plugin is told why**, naming the package and the two constraints that clash —
+  never just "incompatible".
+- **The environment is named for its CONTENT**, not for a plugin. An environment called
+  `scprofile-velocity` that three plugins share is a lie the moment the second joins, and the
+  first plugin removed takes its name with it.
+
 ## 2. The builder makes it runnable, and does not discover
 
 `scprofile install <name>` takes a declared plugin all the way:
