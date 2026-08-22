@@ -585,17 +585,30 @@ def _run(a):
     # artifact a reader opens to see what the run produced, and it looks identical whether the
     # run produced everything or nothing. The absence is NAMED here and `report.json` carries a
     # null `object`, so a consumer can tell "no object" from "an object I have not looked at".
+    #
+    # `merged_slots` IS NOT THE TEST, and using it as one was the first version of this. A plugin
+    # that ran and refused still gets an entry - {'obs': [], 'obsm': [], 'layers': []} - which is
+    # a truthy dict describing nothing. PBS 676944 wrote 3.21 GB on the strength of it: velocity
+    # recovered from its environment failure, then refused for want of spliced counts, and the
+    # run reported an object it had contributed nothing to. What matters is whether anything
+    # LANDED - cell-level data merged into it, or tables and side-car objects written beside it
+    # that a reader will want the provenance for.
     op = None
-    if merged_slots:
+    merged_anything = any(v for got in merged_slots.values() for v in got.values())
+    beside_it = any((pl.get("tables") or pl.get("objects")) for pl in payloads)
+    if merged_anything or beside_it:
         (out / "objects").mkdir(parents=True, exist_ok=True)
         op = out / "objects" / a.object_name
         from .emit import write_h5ad
         write_h5ad(A, op)
         print(f"\nwrote {op}  ({op.stat().st_size / 1e9:.2f} GB)")
     else:
-        print(f"\nNO OBJECT WRITTEN: no plugin contributed anything to merge, so the only object "
-              f"this run could write is a copy of\n  {a.h5ad}\nunder a name that says it was "
-              f"profiled. The reports below still describe what happened and why.")
+        why = ("no plugin ran" if not ran else
+               "the plugin(s) that ran - " + ", ".join(ran) +
+               " - produced nothing to merge and nothing to place beside it")
+        print(f"\nNO OBJECT WRITTEN: {why}, so the only object this run could write is a copy "
+              f"of\n  {a.h5ad}\nunder a name that says it was profiled. The reports below still "
+              f"describe what happened and why.")
 
     payload = {"version": _v(), "input": str(a.h5ad), "describe": describe,
                "constraint_on_use": constraint, "constraint_source": csrc,

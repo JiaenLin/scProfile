@@ -135,6 +135,20 @@ _top = [n for n in _fn.body
 ck("the output directory is created by the function, not by one of its branches", bool(_top),
    "every writer below assumes it exists; a conditional mkdir makes that true only sometimes")
 
+# A PLUGIN THAT RAN AND REFUSED STILL GETS A MERGE ENTRY - {'obs': [], 'obsm': [], 'layers': []} -
+# and that dict is truthy. Testing `if merged_slots:` therefore answered "did anything attempt a
+# merge", not "did anything land", and PBS 676944 wrote 3.21 GB on the strength of it: velocity
+# recovered from a broken environment, refused for want of spliced counts, and the run announced
+# an object it had contributed nothing to. The emptiness has to be looked INTO.
+_empty_entry = {"velocity": {"obs": [], "obsm": [], "layers": []}}
+_landed = {"velocity": {"obs": ["velocity_length"], "obsm": [], "layers": []}}
+ck("a merge entry that merged nothing is not evidence of an object",
+   not any(v for got in _empty_entry.values() for v in got.values()))
+ck("and one that merged something is", any(v for got in _landed.values() for v in got.values()))
+ck("the writer tests what LANDED, not that a merge was attempted",
+   "merged_anything" in _src and "if merged_slots:" not in _src,
+   "a refusal produces an entry describing nothing, and the entry is truthy")
+
 with tempfile.TemporaryDirectory() as d:
     d = Path(d)
     empty = dict(pay, version="0.1", input="x.h5ad", object=None, ran=[], kernels={})
