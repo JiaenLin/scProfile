@@ -17,16 +17,18 @@
 # the same leads or the plan can name a directory the run never looks in.
 #
 # `INSTALL` may name several plugins; each builds the ENVIRONMENT IT RESOLVES TO, so one name per
-# ncpus/mem are the `long` queue's ceiling (50 cores, 200 GB). They are requested in full because
-# the budget is what the allocator divides: asking for half the queue caps every plugin's share at
-# half, and the expensive ones are exactly the ones that scale. Measured on PBS 677891 - a 24-core
-# request with a 12-core budget ran ten GRNBoost2 fits on one core each.
-#
 # resolved group is enough and naming every plugin is harmless. `CORES` sets the budget
 # independently of `NCPUS`: the budget decides how many instances run AT ONCE as well as the share
 # each is given, and a wave of 35 instances on a big node is bounded by memory, not by cores.
 # Override the resource request at submit time - `qsub -l select=... -l walltime=...` - rather than
 # editing this file for one cycle.
+#
+# THE DEFAULTS ARE THE `long` QUEUE'S CEILING (50 cores, 200 GB) AND THAT IS DELIBERATE. The budget
+# is what the allocator divides, so requesting half the queue caps every plugin's share at half -
+# and the expensive plugins are exactly the ones that scale. Leave `CORES` unset unless you mean to
+# run below the allocation: it defaults to `NCPUS`, and a budget smaller than the request is the
+# one mistake here that looks like nothing. Measured on PBS 677891 - a 24-core request carrying a
+# 12-core budget ran ten GRNBoost2 fits, each declaring 16 cores, on one core each.
 #
 # NOTHING HERE NAMES A PROJECT. Every path, kernel, organism and assay arrives through -v, because
 # a job script in this repository that hard-coded one dataset would be the same overfitting the
