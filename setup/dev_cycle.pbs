@@ -34,10 +34,12 @@
 # a job script in this repository that hard-coded one dataset would be the same overfitting the
 # portability test exists to stop - and the next person's cluster is not this one.
 #
-# THREE PHASES, RUN AS SEPARATE JOBS.
+# FOUR PHASES, RUN AS SEPARATE JOBS.
 #
 #   build    doctor -> install --dry-run -> install.  Builds the RESOLVED environment, which may
 #            be shared, and proves it with every member's selftest.
+#   plan     plan --audit --report and nothing else. Reads the object, runs no plugin and
+#            touches no environment - for "what WOULD run, and how".
 #   run      validate -> selftest -> plan --audit --report -> run.  Touches no environment.
 #   repair   breaks an environment on purpose and watches the run -> build edge close.
 #
@@ -52,7 +54,7 @@ set -euo pipefail
 cd "$PBS_O_WORKDIR"
 mkdir -p logs
 
-: "${PHASE:?pass -v PHASE=build|run|repair}"
+: "${PHASE:?pass -v PHASE=build|plan|run|repair}"
 : "${TOOL:?pass -v TOOL=<path to the scProfile checkout>}"
 : "${PY:?pass -v PY=<host interpreter, one with anndata>}"
 : "${PREFIX:?pass -v PREFIX=<dir the environments are built in>}"
@@ -126,6 +128,20 @@ build)
 
   say "4. WHERE EACH PLUGIN'S INTERPRETER NOW IS"
   $PY -m scprofile.cli doctor --prefix "$PREFIX" || echo "  doctor exit $?"
+  ;;
+
+plan)
+  # PLAN ONLY. Reads the object, runs nothing, touches no environment - the phase to use when the
+  # question is "what WOULD run and how", which is a question people ask far more often than they
+  # run a profile. It is still a PBS job and not a login-node command, because it reads a matrix.
+  : "${OBJ:?pass -v OBJ=<h5ad>}"
+  OUT="${OUT:-$PWD/out}"
+  mkdir -p "$OUT"
+  say "PLAN, AUDITED, WITH ITS REPORT — over EVERY plugin"
+  $PY -m scprofile.cli plan --h5ad "$OBJ" ${DES:+--design "$DES"} \
+      ${ORGANISM:+--organism "$ORGANISM"} ${ASSAY:+--assay "$ASSAY"} \
+      --prefix "$PREFIX" ${REFS:+--references "$REFS"} ${SEARCH:+--search "$SEARCH"} \
+      --audit --report "$OUT" || echo "  plan exit $?"
   ;;
 
 run)
@@ -242,7 +258,7 @@ for x in (d.get('diagnoses') or []): print('    [%s] %s'%(x['layer'],x['why'][:2
   ;;
 
 *)
-  echo "unknown PHASE ${PHASE}; one of build, run, repair" >&2
+  echo "unknown PHASE ${PHASE}; one of build, plan, run, repair" >&2
   exit 2
   ;;
 esac
