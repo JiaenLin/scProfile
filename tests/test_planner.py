@@ -60,9 +60,67 @@ ck("the singleton arm is named", f1["factors"]["g"]["singleton_levels"] == ["tre
    str(f1["factors"]["g"]["singleton_levels"]))
 v = P.plan_kernel(K("de", needs_design=True), present={"de": {"counts": True}}, facts=f1,
                   searched=["obj"], ran=set())
-ck("de is SKIPPED, not blocked", v.verdict == P.SKIP, v.verdict)
-ck("and the skip shows the arm sizes", any("smallest arm n=1" in w for w in v.why),
-   "; ".join(v.why))
+# A SINGLETON ARM IS A CAVEAT, NOT A SKIP. ctrl has two samples, so a contrast can be phrased;
+# that the treat arm has one is something to tell the reader, not a reason to withhold the run.
+# This test asserted a SKIP until 2026-08-22, which is the behaviour that told a user with a real
+# slightly-imbalanced experiment that their data could not be analysed.
+ck("an imbalanced design RUNS", v.verdict == P.RUN, v.verdict)
+ck("and the singleton arm is a caveat", any("singleton arm" in c for c in v.caveats),
+   "; ".join(v.caveats))
+ck("naming which arm", any("treat" in c for c in v.caveats), "; ".join(v.caveats))
+
+print("\nonly a design that cannot phrase the question at all is skipped")
+for label, rows in (("every arm n=1", {"a": {"g": "x"}, "b": {"g": "y"}, "c": {"g": "z"}}),
+                    ("one level", {f"s{i}": {"g": "only"} for i in range(8)})):
+    ff = P.design_facts(design(rows), ["g"], "sample", list(rows))
+    vv = P.plan_kernel(K("de", needs_design=True), present={"de": {"counts": True}}, facts=ff,
+                       searched=["obj"], ran=set())
+    ck(f"{label} -> SKIP", vv.verdict == P.SKIP, vv.verdict)
+    ck(f"{label} explains that a caveat could not save it",
+       any("carried as a caveat" in w for w in vv.why), "; ".join(vv.why))
+
+print("\nconfounding is a caveat and the run proceeds")
+dc = {f"s{i}": {"age": ("old" if i < 4 else "young"),
+                "chem": ("V2" if i < 4 else "V3"),
+                "diet": ("hf" if i % 2 else "chow")} for i in range(8)}
+fc = P.design_facts(design(dc), ["age", "chem", "diet"], "sample", list(dc))
+cf = P.confounding(fc)
+ck("a complete confound is found", any(c["agreement"] == 1.0 for c in cf), str(cf)[:120])
+ck("and it names both factors",
+   any("age" in c["note"] and "chem" in c["note"] for c in cf))
+vv = P.plan_kernel(K("de", needs_design=True), present={"de": {"counts": True}}, facts=fc,
+                   searched=["obj"], ran=set())
+ck("the plugin still RUNS", vv.verdict == P.RUN, vv.verdict)
+ck("with the confound as a caveat", any("confounded" in c for c in vv.caveats),
+   "; ".join(vv.caveats))
+ck("telling the reader to attribute carefully",
+   any("attribute" in c.lower() for c in vv.caveats), "; ".join(vv.caveats))
+
+print("\nsettings are prescribed at maximum capacity")
+st = P.settings_for(K("de", needs_design=True),
+                    keys={"label": "cell_type", "sample": "sample", "counts_layer": "counts"},
+                    facts=f, references=None, cores=8)
+ck("an interaction is chosen when the design is crossed",
+   st["contrast"]["kind"] == "interaction", str(st.get("contrast")))
+ck("with a formula a user can read", ":" in st["contrast"]["formula"], str(st["contrast"]))
+ck("the detected keys are carried", st["label"] == "cell_type" and st["sample"] == "sample")
+st2 = P.settings_for(K("liana", per_unit="sample"), keys={"label": "ct"},
+                     facts={"units": ["a", "b", "c"]}, references=None, cores=None)
+ck("a per-unit plugin is told its units", st2["per_unit"]["n"] == 3, str(st2["per_unit"]))
+st3 = P.settings_for(K("liana", per_unit="sample"), keys={}, facts={"units": []},
+                     references=None, cores=None)
+ck("and pooling is named when there are none", "POOLED" in st3["per_unit"]["mode"])
+
+print("\nthe order of runs honours needs_kernels")
+class KO:
+    def __init__(self, name, needs):
+        self.name, self.needs_kernels = name, needs
+avail = {"a": KO("a", []), "b": KO("b", ["a"]), "c": KO("c", ["b"]), "d": KO("d", [])}
+w = P.order_of_runs(["a", "b", "c", "d"], avail)
+ck("dependents come after what they need", w == [["a", "d"], ["b"], ["c"]], str(w))
+ck("independents share a wave", "d" in w[0])
+cyc = {"x": KO("x", ["y"]), "y": KO("y", ["x"])}
+ck("a cycle is reported, not looped on", bool(P.order_of_runs(["x", "y"], cyc)))
 
 print("\none level is a design fact; a missing table is not")
 d0 = design({f"s{i}": {"diet": "hf"} for i in range(10)})

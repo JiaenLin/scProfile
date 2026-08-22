@@ -142,20 +142,68 @@ Three rules govern the ladder:
 
 ---
 
-## 4. What legitimately justifies a SKIP
+## 4. What legitimately justifies a SKIP — and it is very little
 
-Only a statement about the experiment. In practice:
+**The default answer is RUN.** A skip means the design cannot phrase the question *at all*, and
+there are only two ways that happens:
 
-- **A factor has one level.** No contrast exists on it.
-- **No replication within the groups being compared.** A differential test with n=1 per arm
-  produces a p-value and no evidence; the plan must say which arms and their sizes.
-- **The contrast is not identifiable.** It is nested inside, or perfectly confounded with, a factor
-  the upstream constraint says the object cannot support. Where an upstream tool has written a
-  `constraint_on_use`, the plan reads it and honours it.
-- **The unit of analysis does not exist.** A between-sample comparison on a one-sample project.
+- **A factor has one level.** There is no contrast; the question cannot be written down.
+- **No level has two samples in it.** A differential test over singletons has no within-group
+  variance to estimate, so the number it returns is not an estimate of anything.
 
-Each of these is checkable against the design table and the object, and the plan must show the
-numbers, not the conclusion. **"It probably will not work" is not a design fact.**
+**Everything else runs, with a caveat.** In particular, none of these is a skip:
+
+| situation | what the plan does |
+|---|---|
+| one arm of several is a singleton | RUN, and say which arm contributes no within-group variance |
+| two factors are confounded, wholly or partly | RUN, and say the effect is real while its *attribution* is ambiguous |
+| the groups are unbalanced | RUN, and report the sizes |
+| no two factors are crossed | RUN at main effects, and say the interaction is not estimable |
+| an upstream `constraint_on_use` applies | RUN, and reproduce the constraint — a claim it forbids is refused by the *plugin*, not withheld by the plan |
+
+This line is drawn deliberately, and the alternative was measured. A planner that skips on every
+imperfection tells a user with a real, slightly imbalanced experiment that their data cannot be
+analysed. That is both wrong and the opposite of what they installed the tool for: **a confound
+weakens an attribution, it does not make a number unworthy of being computed.**
+
+---
+
+## 4a. The plan prescribes, it does not merely permit
+
+A verdict of RUN is not a plan. For every plugin that runs, the plan states:
+
+- **the settings** — which label column, which layer, which embedding, how many cores, which
+  reference set. A plan that says *"run liana"* leaves the user to work out every flag, and a
+  plugin run with a default it should not have used produces a result nobody can distinguish from
+  a correct one;
+- **the contrast, at the richest the design permits** — an interaction where two factors are
+  crossed with replication in every cell, because that is usually the question the study was
+  designed to ask; main effects otherwise, and it says which;
+- **the units** — a `per_unit` plugin is told the key and every unit it will fan out over;
+- **the order** — waves derived from `needs_kernels`, so a plugin that reads another's output runs
+  after it. A plan that lists both without saying so leaves the ordering to be discovered from a
+  failure.
+
+---
+
+## 4b. Readiness is repaired, never reported as a refusal
+
+If a plugin is not built in this installation, **that is the plan's problem to solve, not the
+user's problem to be told about.** The plan still gives it a full verdict against the project —
+"on your data this would run at full, over 10 samples, testing the age×diet interaction" — and
+lists the preparation separately, marked by who does it:
+
+```
+PREPARATION: 7 plugin(s) are not ready in this installation.
+None of this is a limitation of your project.
+  [auto] liana        scprofile install liana --prefix <dir>
+  [ you] scenic       scprofile scaffold scenic
+```
+
+`--build` then performs every `[auto]` step and **troubleshoots what fails**: no conda on PATH, a
+selftest that failed after a clean resolve, a package that tried to build from source, a full
+disk, a network that could not be reached — each has a different remedy, and printing a traceback
+leaves the user to work out which one they hit.
 
 ---
 

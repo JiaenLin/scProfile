@@ -22,6 +22,28 @@ from __future__ import annotations
 
 RUN, SKIP, BLOCKED, UNRESOLVED = "RUN", "SKIP", "BLOCKED", "UNRESOLVED"
 
+#: HOW BADLY A DESIGN HAS TO FAIL BEFORE A PLUGIN IS DROPPED.
+#:
+#: A plan's default answer is RUN. Skipping is reserved for a design that CANNOT express the
+#: question at all, and everything short of that runs with a caveat attached. The line is drawn
+#: here because the alternative was measured and it was useless: a planner that skips on every
+#: imperfection tells a user with a real, slightly-imbalanced experiment that their data cannot be
+#: analysed, which is both wrong and the opposite of what they installed the tool for.
+#:
+#: TRULY UNSUPPORTED - skip, because no analysis exists:
+#:   - the factor has ONE level. There is no contrast; the question cannot be phrased.
+#:   - every arm has n=1. A differential test over singletons has no within-group variance to
+#:     estimate, so the number it returns is not an estimate of anything.
+#:
+#: A CAVEAT, NOT A SKIP - run, and say so in the result:
+#:   - one arm of several is a singleton while others are replicated.
+#:   - two factors are confounded, wholly or partly. The effect is real and its ATTRIBUTION is
+#:     ambiguous, which is a statement to carry with the result, not a reason to withhold it.
+#:   - the groups are unbalanced.
+#:   - an upstream constraint limits what the embedding may support.
+MIN_LEVELS_FOR_A_CONTRAST = 2
+MIN_REPLICATES_SOMEWHERE = 2
+
 #: The rungs, worst to best. `full` means the richest question the plugin can answer.
 RUNGS = ("minimal", "reduced", "full")
 
@@ -39,10 +61,16 @@ class Verdict:
         self.units = list(units) if units else None
         self.searched = list(searched or [])
         self.evidence = dict(evidence or {})
+        #: Things true of this run that a reader must be told, and that are NOT reasons to
+        #: withhold it: an imbalance, a confound, a constraint from upstream.
+        self.caveats = []
+        #: The concrete settings this plugin should run with, from `settings_for`.
+        self.settings = {}
 
     def as_dict(self):
         return {"plugin": self.plugin, "verdict": self.verdict, "why": self.why,
-                "readiness": self.readiness,
+                "readiness": self.readiness, "caveats": self.caveats,
+                "settings": self.settings,
                 "rung": self.rung, "why_not_higher": self.why_not_higher,
                 "units": self.units, "searched": self.searched, "evidence": self.evidence}
 
@@ -161,6 +189,116 @@ def ready_count(verdicts):
     return ready, [v for v in verdicts if v.readiness]
 
 
+def confounding(facts):
+    """Factor pairs that partition the samples the same way, wholly or partly.
+
+    A CAVEAT, NEVER A SKIP. Two factors that split the cohort identically cannot have their
+    effects told apart - but the effect is still real and still worth estimating; what is
+    ambiguous is which name to put on it. That belongs in the result, beside the number, not in a
+    decision to withhold the number.
+
+    Returns [{"pair": [a, b], "agreement": 0..1, "note": str}], strongest first.
+    """
+    out, fs = [], facts.get("factors", {})
+    names = sorted(fs)
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            amap = {s: lv for lv, ss in fs[a]["levels"].items() for s in ss}
+            bmap = {s: lv for lv, ss in fs[b]["levels"].items() for s in ss}
+            shared = sorted(set(amap) & set(bmap))
+            if len(shared) < 2:
+                continue
+            # How well does knowing a's level determine b's? Perfect determination in either
+            # direction is complete confounding.
+            pairs = {}
+            for s in shared:
+                pairs.setdefault(amap[s], set()).add(bmap[s])
+            agree = sum(1 for lv, bs in pairs.items() if len(bs) == 1) / max(len(pairs), 1)
+            if agree >= 0.999:
+                out.append({"pair": [a, b], "agreement": 1.0,
+                            "note": f"{a!r} and {b!r} are COMPLETELY confounded: every level of "
+                                    f"{a!r} has exactly one level of {b!r}. Any effect estimated "
+                                    f"for one is equally an effect of the other. Run it; attribute "
+                                    f"it carefully."})
+            elif agree >= 0.5:
+                out.append({"pair": [a, b], "agreement": round(agree, 3),
+                            "note": f"{a!r} and {b!r} are PARTLY confounded ({agree:.0%} of "
+                                    f"{a!r}'s levels map to a single {b!r} level). The contrast is "
+                                    f"estimable; its attribution is weakened."})
+    return sorted(out, key=lambda d: -d["agreement"])
+
+
+def settings_for(k, *, keys, facts, references=None, cores=None):
+    """The SETTINGS this plugin should run with, at the highest capacity the project supports.
+
+    A plan that says "run liana" and not "over these 10 samples, on this layer, with this label
+    column" has not planned anything - the user still has to work out every flag, and a plugin run
+    with a default it should not have used produces a result nobody can tell from a correct one.
+
+    Everything here is DERIVED from the object and the design. No default is invented for a key
+    that was not detected; a key that is absent is absent, and the plugin's own guard decides.
+    """
+    s = {}
+    for role in ("label", "sample", "batch", "compartment", "embedding",
+                 "counts_layer", "lognorm_layer"):
+        if keys.get(role):
+            s[role] = keys[role]
+    if k.per_unit:
+        units = sorted(facts.get("units") or [])
+        s["per_unit"] = {"key": k.per_unit, "n": len(units),
+                         "units": units,
+                         "mode": "per unit" if units else "POOLED (no unit key found)"}
+    if getattr(k, "needs_design", False) and facts.get("has_design"):
+        # MAXIMUM CAPACITY: the richest contrast the design permits, not the safest one.
+        pairs = facts.get("crossed_pairs") or []
+        if pairs:
+            a, b = pairs[0]
+            s["contrast"] = {"kind": "interaction", "terms": [a, b],
+                             "formula": f"~ {a} + {b} + {a}:{b}",
+                             "why": f"{a} and {b} are crossed with replication in every cell, so "
+                                    f"the interaction is estimable - and it is usually the "
+                                    f"question the study was designed to ask."}
+            if len(pairs) > 1:
+                s["contrast"]["other_crossed_pairs"] = pairs[1:]
+        elif facts.get("testable"):
+            s["contrast"] = {"kind": "main effects", "terms": list(facts["testable"]),
+                             "formula": "~ " + " + ".join(facts["testable"]),
+                             "why": "no two factors are crossed with replication in every cell"}
+    if getattr(k, "reference_organisms", lambda: set())():
+        s["references"] = {"organism": (keys.get("organism") or None),
+                           "declared_for": sorted(k.reference_organisms()),
+                           "dir": references}
+    if cores:
+        want = int((getattr(k, "executor", None) or {}).get("cores", 1) or 1)
+        s["cores"] = min(int(cores), want)
+    return s
+
+
+def order_of_runs(names, available):
+    """Waves honouring `needs_kernels`, so a plan says WHEN as well as what.
+
+    A plugin that reads another's output has to run after it, and a plan that lists both without
+    saying so leaves the user to discover the ordering from a failure. Plugins in one wave are
+    independent BY THE GRAPH - not merely convenient to group.
+    """
+    remaining, done, waves, guard = sorted(names), set(), [], 0
+    while remaining:
+        guard += 1
+        if guard > len(names) + 2:
+            waves.append(list(remaining))          # a cycle: report it rather than looping
+            break
+        ready = [n for n in remaining
+                 if all(d in done or d not in names
+                        for d in getattr(available.get(n), "needs_kernels", []) or [])]
+        if not ready:
+            waves.append(list(remaining))
+            break
+        waves.append(ready)
+        done.update(ready)
+        remaining = [n for n in remaining if n not in done]
+    return waves
+
+
 def plan_kernel(k, *, present, facts, searched, ran, constraint=""):
     """One plugin's verdict. `present` is what the scan FOUND; `searched` where it looked.
 
@@ -174,20 +312,41 @@ def plan_kernel(k, *, present, facts, searched, ran, constraint=""):
                        [f"could not determine whether {n} is available" for n in unknown],
                        searched=searched, evidence={"undetermined": unknown})
 
-    # ---- the design, and only the design, may produce a SKIP --------------------------------
+    # ---- a SKIP only where NO ANALYSIS EXISTS ------------------------------------------------
+    # Not "this is imperfect". Not "this is confounded". Not "one arm is small". Those are
+    # caveats and the run proceeds. A skip means the design cannot phrase the question at all.
+    caveats = []
     if k.needs_design and facts.get("has_design"):
-        if not facts.get("testable"):
-            bad = facts.get("one_level", []) + facts.get("unreplicated", [])
-            detail = []
-            for n in bad:
-                v = facts["factors"][n]
-                detail.append(f"{n}: {v['n_levels']} level(s), smallest arm n="
-                              f"{v['min_replicates']}"
-                              + (f", singleton {v['singleton_levels']}" if v["singleton_levels"]
-                                 else ""))
+        fs = facts["factors"]
+        usable = [n for n, v in fs.items()
+                  if v["n_levels"] >= MIN_LEVELS_FOR_A_CONTRAST
+                  and max((len(s) for s in v["levels"].values()), default=0)
+                  >= MIN_REPLICATES_SOMEWHERE]
+        if not usable:
+            detail = [f"{n}: {v['n_levels']} level(s), largest arm n="
+                      f"{max((len(s) for s in v['levels'].values()), default=0)}"
+                      for n, v in sorted(fs.items())]
             return Verdict(k.name, SKIP,
-                           ["no factor in the design supports a test."] + detail,
-                           evidence={"factors": facts["factors"]})
+                           ["no factor can express a contrast at all - every one has a single "
+                            "level, or no level with two samples in it.",
+                            "This is the only kind of design problem that stops a run. An "
+                            "imbalance or a confound would be carried as a caveat instead."]
+                           + detail,
+                           evidence={"factors": fs})
+        # Everything below runs. It is recorded, not withheld.
+        for n in sorted(facts.get("unreplicated", [])):
+            v = fs[n]
+            caveats.append(f"{n!r} has a singleton arm ({', '.join(v['singleton_levels'])}); "
+                           f"that arm contributes no within-group variance.")
+        for c in confounding(facts):
+            caveats.append(c["note"])
+        if not facts.get("crossed_pairs") and len(facts.get("testable", [])) > 1:
+            caveats.append("no two factors are crossed with replication in every cell, so main "
+                           "effects only - an interaction is not estimable here.")
+    if constraint:
+        caveats.append("An upstream constraint on use applies to this object and is reproduced "
+                       "in the report; a claim it forbids must be refused by the plugin, not by "
+                       "this plan.")
 
     missing = sorted(n for n, v in needs.items() if v is False)
     if missing:
@@ -232,11 +391,13 @@ def plan_kernel(k, *, present, facts, searched, ran, constraint=""):
             rung = "reduced" if rung == "full" else rung
             why_not = why_not or (f"{', '.join(facts['unreplicated'])} has an arm with fewer than "
                                   f"2 samples and is not testable")
-    return Verdict(k.name, RUN, ["every declared input is present"], rung=rung,
-                   why_not_higher=why_not,
-                   units=(sorted(facts.get("units") or []) if k.per_unit else None),
-                   searched=searched,
-                   evidence={"constraint_on_use": constraint} if constraint else {})
+    v = Verdict(k.name, RUN, ["every declared input is present"], rung=rung,
+                why_not_higher=why_not,
+                units=(sorted(facts.get("units") or []) if k.per_unit else None),
+                searched=searched,
+                evidence={"constraint_on_use": constraint} if constraint else {})
+    v.caveats = caveats
+    return v
 
 
 # ------------------------------------------------------------------------------- the audit

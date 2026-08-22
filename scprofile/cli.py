@@ -1010,6 +1010,10 @@ def _plan(a):
             v = PL.plan_kernel(k, present=present, facts=facts, searched=roots,
                                ran=will, constraint=constraint)
             v.readiness = PL.build_state(k, _build_state(k), prefix=a.prefix)
+            v.settings = PL.settings_for(
+                k, keys={**{r_: kv[0] for r_, kv in keys.items()},
+                         "organism": organism[0]},
+                facts=facts, references=a.references, cores=a.cores)
             out.append(v)
         return out
 
@@ -1038,26 +1042,59 @@ def _plan(a):
     print("  Those are different questions and this plan answers both separately - a plugin that")
     print("  is not built yet is not a limitation of your data.")
     print()
-    for v in sorted(verdicts, key=lambda x: (x.verdict != PL.RUN, x.plugin)):
-        head = v.verdict + (f" ({v.rung})" if v.rung else "")
-        tag = "" if not v.readiness else f"   [needs: {v.readiness['kind']}]"
-        print(f"  {head:<16} {v.plugin}{tag}")
+    # ---- the prescription: what runs, in what order, with what settings ----------------------
+    runs = [v for v in verdicts if v.verdict == PL.RUN]
+    waves = PL.order_of_runs([v.plugin for v in runs], ks)
+    byname = {v.plugin: v for v in verdicts}
+    if waves and runs:
+        print("  ORDER OF RUNS - a wave waits only on what the graph says it waits on:")
+        for i, w in enumerate(waves, 1):
+            print(f"    wave {i}: " + ", ".join(w))
+    print()
+    for i, w in enumerate(waves, 1):
+        for name in w:
+            v = byname[name]
+            head = v.verdict + (f" ({v.rung})" if v.rung else "")
+            tag = "" if not v.readiness else f"   [prepare first: {v.readiness['kind']}]"
+            print(f"  wave {i}  {head:<14} {v.plugin}{tag}")
+            for key, val in sorted(v.settings.items()):
+                if isinstance(val, dict):
+                    if key == "per_unit":
+                        print(f"      {key:<14} {val['mode']}, {val['n']} unit(s) on "
+                              f"{val['key']!r}")
+                    elif key == "contrast":
+                        print(f"      {key:<14} {val['kind']}: {val['formula']}")
+                        print(f"                     {val['why']}")
+                    elif key == "references":
+                        print(f"      {key:<14} {val['organism']}, declared for "
+                              f"{', '.join(val['declared_for'])}")
+                else:
+                    print(f"      {key:<14} {val}")
+            if v.why_not_higher:
+                print(f"      NOT FULL:      {v.why_not_higher}")
+            for c in v.caveats:
+                print(f"      CAVEAT:        {c}")
+            if v.readiness:
+                print(f"      prepare with:  {v.readiness['fix']}")
+    for v in sorted(verdicts, key=lambda x: x.plugin):
+        if v.verdict == PL.RUN:
+            continue
+        print(f"  {v.verdict:<20} {v.plugin}")
         for w in v.why:
             print(f"      {w}")
-        if v.why_not_higher:
-            print(f"      NOT FULL: {v.why_not_higher}")
-        if v.units:
-            print(f"      over {len(v.units)} unit(s)")
-        if v.readiness:
-            print(f"      to make it runnable here: {v.readiness['fix']}")
 
     # ---- --build: repair what the plan found, then plan again ---------------------------------
     fixable = PL.fixable_builds(verdicts)
-    if fixable and not getattr(a, "build", False):
-        print(f"\n  {len(fixable)} build defect(s) are REPAIRABLE: "
-              + ", ".join(n for n, _d in fixable))
-        print("  `plan --build` runs the installs and re-plans. Nothing is built without it.")
-    elif fixable:
+    pend = [v for v in verdicts if v.readiness]
+    if pend and not getattr(a, "build", False):
+        print(f"\n  PREPARATION: {len(pend)} plugin(s) are not ready in this installation.")
+        print("  None of this is a limitation of your project - every one of them is planned")
+        print("  above against your data. Run `scprofile plan ... --build` and this command will")
+        print("  do the work it can and tell you precisely what is left:")
+        for v in pend:
+            mark = "auto" if (v.readiness or {}).get("fixable") else "you"
+            print(f"    [{mark:>4}] {v.plugin:<12} {v.readiness['fix']}")
+    if fixable and getattr(a, "build", False):
         print(f"\n=== --build: repairing {len(fixable)} build defect(s) ===")
         print("  ONLY build defects trigger this. A missing design table or an absent layer is a")
         print("  fact about the project and is never something this tool installs its way out of.")
@@ -1069,8 +1106,40 @@ def _plan(a):
                 runner.install(ks[name], a.prefix, force=(d["kind"] == "env_stale"), log=print)
                 repaired.append(name)
             except Exception as e:                                        # noqa: BLE001
+                # TROUBLESHOOT, do not just report. A build failure has a small number of causes
+                # and each has a different remedy; printing the traceback and stopping leaves the
+                # user to work out which one they hit.
+                msg = str(e)
+                print(f"    BUILD FAILED: {msg.splitlines()[0][:160]}")
+                hints = []
+                low = msg.lower()
+                if "no micromamba" in low or "conda" in low and "path" in low:
+                    hints.append("no conda/mamba on PATH. On a cluster this is usually a module: "
+                                 "`module load anaconda3` before running, or build the "
+                                 "environment yourself from the lock and point "
+                                 f"SCPROFILE_{name.upper()}_PYTHON at its python.")
+                if "selftest" in low:
+                    hints.append("the environment BUILT and its selftest failed, so the packages "
+                                 "resolved but the call they make does not work. That is a lock "
+                                 "problem, not a network one - the versions in "
+                                 f"kernels/{name}/lock.yml need revisiting.")
+                if "no space" in low or "disk" in low:
+                    hints.append("out of disk on the prefix. Environments here run to a few GB "
+                                 "each; pick a --prefix with room.")
+                if "timed out" in low or "temporary failure" in low or "resolve" in low:
+                    hints.append("looks like a network failure reaching the package index. "
+                                 "Retrying is reasonable; a compute node with no outbound route "
+                                 "is not.")
+                if "cython" in low or "wheel" in low or "build" in low and "failed" in low:
+                    hints.append("a package tried to build from source and could not. If it is "
+                                 "available from conda-forge, move it out of the pip section of "
+                                 f"kernels/{name}/lock.yml into the conda dependencies.")
+                if not hints:
+                    hints.append("no known signature matched. The full error is above; the lock "
+                                 f"is kernels/{name}/lock.yml.")
+                for h in hints:
+                    print(f"      -> {h}")
                 failed.append((name, e))
-                print(f"    BUILD FAILED: {e}")
         print(f"\n  repaired {len(repaired)}, failed {len(failed)}")
         if repaired:
             # RE-PLAN, do not patch the verdicts. A plan edited after the fact is a plan whose
