@@ -141,39 +141,87 @@ _SOURCE_SHAPES = (
     ("mtx triplet (gz)", ("spliced.mtx.gz", "unspliced.mtx.gz", "barcodes.tsv.gz")),
 )
 
+#: A velocyto `.loom` is a FILE, not a directory shape, so it needs its own test. The README has
+#: always said the kernel looks for one; this function - which the PLAN uses - did not, so the
+#: plan could report "no source found" for data the kernel would have picked up.
+_SOURCE_FILES = (("velocyto loom", ".loom"),)
 
-def find_layer_sources(roots, wanted=("spliced", "unspliced"), max_depth=8, cap=8000):
+#: Directories that are never an aligner's DELIVERED output and are enormous. STARsolo writes
+#: `<sample>__STARtmp` trees with thousands of entries; walking them exhausts any visit budget
+#: before the real output two levels away is reached. Pruning is not a shortcut here - it is what
+#: makes the budget mean anything.
+_PRUNE = ("__STARtmp", "_STARtmp", "STARtmp", ".git", ".snakemake", "__pycache__",
+          ".nextflow", "work", ".cache", "site-packages")
+
+
+def find_layer_sources(roots, wanted=("spliced", "unspliced"), max_depth=14, cap=400_000):
     """Where the missing layers actually are. Returns [(kind, path), ...].
 
     `plan` uses this to turn "this plugin will refuse" into "pass --search <this>". Reporting a
     gap without the path is the difference between a plan and an excuse.
+
+    AND A SEARCH THAT GAVE UP MUST NOT LOOK LIKE ONE THAT FINISHED. This returned the same empty
+    list whether it had walked the whole tree or run out of budget, and the caller turned that
+    into "the data is absent" - a fact about the SCAN reported as a fact about the project, which
+    is the one failure this tool's plan is written to avoid.
+
+    `find_layer_sources.exhausted` is True when the visit cap or the depth limit stopped the walk
+    before it was done. The plan reads it and answers UNRESOLVED rather than BLOCKED.
+
+    The defaults were measured against real aligner output, not chosen. STARsolo delivers
+    `<sample>_Solo.out/Velocyto/filtered/` at depth 9 below a project root, so the old
+    `max_depth=8` could not reach it, and its `__STARtmp` siblings exhausted the old 8,000-visit
+    cap long before that. Depth 14 with the temp trees pruned reaches it with budget to spare.
     """
     import os
-    found, visited = [], 0
+    found, visited, exhausted, deepest = [], 0, False, 0
     for root in roots:
         if not os.path.isdir(root):
             continue
         stack = [(root, 0)]
-        while stack and visited < cap:
+        while stack:
+            if visited >= cap:
+                exhausted = True
+                break
             d, depth = stack.pop()
             visited += 1
+            deepest = max(deepest, depth)
             try:
                 names = {e.name: e for e in os.scandir(d)}
             except OSError:
+                # A directory that could not be READ is not a directory known to be empty.
+                exhausted = True
                 continue
             for kind, need in _SOURCE_SHAPES:
                 if all(n in names for n in need):
                     found.append((kind, d))
                     break
+            else:
+                for kind, suffix in _SOURCE_FILES:
+                    hit = sorted(n for n in names if n.endswith(suffix))
+                    if hit:
+                        found.append((kind, os.path.join(d, hit[0])))
+                        break
             for e in names.values():
-                if e.is_dir(follow_symlinks=False) and depth < max_depth \
-                        and not e.name.startswith("."):
-                    stack.append((e.path, depth + 1))
+                if not e.is_dir(follow_symlinks=False) or e.name.startswith("."):
+                    continue
+                if any(pat in e.name for pat in _PRUNE):
+                    continue
+                if depth >= max_depth:
+                    exhausted = True          # there was more tree and we stopped looking
+                    continue
+                stack.append((e.path, depth + 1))
+        if exhausted and visited >= cap:
+            break
     find_layer_sources.visited = visited
+    find_layer_sources.deepest = deepest
+    find_layer_sources.exhausted = exhausted
     return found
 
 
 find_layer_sources.visited = 0
+find_layer_sources.deepest = 0
+find_layer_sources.exhausted = False
 
 
 def harvest(adata, *, extra_roots=()):

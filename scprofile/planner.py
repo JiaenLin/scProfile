@@ -30,8 +30,11 @@ class Verdict:
     """One plugin's place in the plan, with the evidence for it."""
 
     def __init__(self, plugin, verdict, why, *, rung=None, why_not_higher=None,
-                 units=None, searched=None, evidence=None):
+                 units=None, searched=None, evidence=None, readiness=None):
         self.plugin, self.verdict, self.why = plugin, verdict, list(why or [])
+        #: What stands between this installation and running it. None means ready. This is NOT
+        #: the verdict: a plugin can be RUN (full) on the project and still need its wrapper.
+        self.readiness = readiness
         self.rung, self.why_not_higher = rung, why_not_higher
         self.units = list(units) if units else None
         self.searched = list(searched or [])
@@ -39,6 +42,7 @@ class Verdict:
 
     def as_dict(self):
         return {"plugin": self.plugin, "verdict": self.verdict, "why": self.why,
+                "readiness": self.readiness,
                 "rung": self.rung, "why_not_higher": self.why_not_higher,
                 "units": self.units, "searched": self.searched, "evidence": self.evidence}
 
@@ -109,12 +113,19 @@ BUILD_DEFECTS = {
 }
 
 
-def build_verdict(k, state, *, prefix=None):
-    """BLOCKED-with-a-build-defect, or None if the build is fine. Never SKIP.
+def build_state(k, state, *, prefix=None):
+    """The plugin's READINESS in this installation, or None if it is ready. NEVER A VERDICT.
 
-    An environment that is missing is not a property of somebody's experiment and must never be
-    reported as one. It is also the one class of blocker the tool can repair itself, which is why
-    it is separated from every other reason a plugin cannot run.
+    READINESS IS A SECOND AXIS, NOT A BLOCKER, and collapsing it into the verdict was a design
+    error with a real cost: a plan run on a healthy project reported seven of nine plugins BLOCKED
+    because their wrappers had not been written here, in the same column and the same word as
+    "your data is missing". A user installing this tool and running the planner would conclude
+    their dataset could not be analysed, when every one of those plugins would run on it.
+
+    So a plugin now gets BOTH: what it would do ON THIS PROJECT (the verdict, from data and
+    design alone) and what stands between here and running it (this). The plan leads with the
+    first, because that is the question the user asked, and reports the second as work to be done
+    - most of it by `--build`.
     """
     kind = None
     if getattr(k, "status", "built") != "built":
@@ -134,21 +145,20 @@ def build_verdict(k, state, *, prefix=None):
     if not kind:
         return None
     d = BUILD_DEFECTS[kind]
-    fix = d["fix"].format(name=k.name, prefix=prefix or "<dir>")
-    v = Verdict(k.name, BLOCKED,
-                [f"BUILD DEFECT ({kind}): {d['why']}.",
-                 f"This is a fact about this installation, not about the project.",
-                 f"Fix: {fix}" + ("   `plan --build` runs this for you."
-                                  if d["fixable"] else "")])
-    v.evidence["build_defect"] = {"kind": kind, "fixable": d["fixable"], "fix": fix}
-    return v
+    return {"kind": kind, "fixable": d["fixable"], "why": d["why"],
+            "fix": d["fix"].format(name=k.name, prefix=prefix or "<dir>")}
 
 
 def fixable_builds(verdicts):
     """The plugins `--build` can repair, in plan order. Nothing else is ever triggered."""
-    return [(v.plugin, v.evidence["build_defect"])
-            for v in verdicts
-            if v.evidence.get("build_defect", {}).get("fixable")]
+    return [(v.plugin, v.readiness) for v in verdicts
+            if (v.readiness or {}).get("fixable")]
+
+
+def ready_count(verdicts):
+    """(ready, needing work) - the headline a user actually wants from a plan."""
+    ready = [v for v in verdicts if not v.readiness]
+    return ready, [v for v in verdicts if v.readiness]
 
 
 def plan_kernel(k, *, present, facts, searched, ran, constraint=""):

@@ -8,6 +8,32 @@ plan that says *why the other two will not, in terms a reader can check against 
 
 ---
 
+## 0. Two axes, and the plan must not confuse them
+
+Every plugin gets **two** answers, and they are about different things:
+
+| axis | question | example |
+|---|---|---|
+| **verdict** | what would this do **on this project**? | RUN (full) over 10 samples |
+| **readiness** | what stands between **this installation** and running it? | its wrapper is not written yet |
+
+**A plugin that is not built here is not a limitation of the user's data.** Collapsing the two
+cost exactly that: a plan on a healthy ten-sample project reported seven of nine plugins BLOCKED,
+in the same column and the same word as *"your spliced counts are missing"*, because their
+wrappers had not been written in that checkout. A user installing the tool and running the planner
+would conclude their dataset could not be analysed — when every one of those plugins would run on
+it.
+
+So the plan leads with the verdict, because that is the question the user asked, and reports
+readiness beside it as work to be done — most of it by `plan --build`. The headline says both:
+
+```
+ON THIS PROJECT:       7 of 9 plugin(s) would run.
+IN THIS INSTALLATION:  2 ready now, 7 need building first.
+```
+
+---
+
 ## 1. The four verdicts, and why there must be four
 
 Every plugin gets exactly one:
@@ -75,6 +101,17 @@ evidence, and let a flag override.
 **If a search cannot complete, say UNRESOLVED.** A directory that could not be read, an object that
 could not be opened backed, a provenance record whose shape is unrecognised — each is an
 UNRESOLVED, not an absence.
+
+**And a search has limits, so it must report whether it hit them.** Depth caps, visit budgets and
+unreadable directories all end a walk early, and a walk that ended early returns the same empty
+list as one that finished. Measured: STARsolo delivers its velocyto matrices at
+`<sample>_Solo.out/Velocyto/filtered/`, **depth 9** below a project root, beside `__STARtmp`
+directories holding thousands of entries. A search capped at depth 8 with an 8,000-directory
+budget could not reach it and reported the aligner output as absent — the exact failure this
+section exists to prevent, committed by the tool that documents it. The budget must be large
+enough for real aligner output, the noise directories must be pruned so the budget reaches the
+candidates, and **the searcher must expose whether it stopped early** so the caller can answer
+UNRESOLVED instead of BLOCKED.
 
 ---
 

@@ -110,6 +110,23 @@ v = P.plan_kernel(K("liana", per_unit="sample"), present={"liana": {"lognorm": T
                   facts=fm, searched=["obj"], ran=set())
 ck("full rung with 40 units", v.verdict == P.RUN and v.rung == "full", f"{v.verdict}/{v.rung}")
 
+print("\nreadiness is a SECOND AXIS and never blocks the project verdict")
+class KB2:
+    def __init__(self, name, status="built", needs_env=True):
+        self.name, self.status, self.needs_env = name, status, needs_env
+        self.needs_design, self.per_unit, self.needs_kernels = False, None, []
+_k = KB2("liana", status="planned")
+_v = P.plan_kernel(_k, present={"liana": {"lognorm": True}},
+                   facts=P.design_facts(None, [], "sample", ["a", "b", "c"]),
+                   searched=["/x"], ran={"liana"})
+_v.readiness = P.build_state(_k, "host", prefix="/env")
+ck("an unbuilt plugin still gets its PROJECT verdict", _v.verdict == P.RUN, _v.verdict)
+ck("and it is not BLOCKED by the build", _v.verdict != P.BLOCKED)
+ck("readiness records the wrapper is missing", _v.readiness["kind"] == "no_wrapper")
+ck("with the command that fixes it", "scaffold" in _v.readiness["fix"])
+_rdy, _pend = P.ready_count([_v])
+ck("it counts as pending, not as unrunnable", len(_pend) == 1 and len(_rdy) == 0)
+
 print("\na build defect is a fact about the installation, never about the project")
 class KB:
     def __init__(self, name, status="built", needs_env=True):
@@ -118,26 +135,24 @@ class KB:
 for state, kind, fixable in (("missing", "env_missing", True),
                              ("stale", "env_stale", True),
                              (None, "env_unknown", False)):
-    v = P.build_verdict(KB("x"), state, prefix="/env")
-    ck(f"{state!r} -> BLOCKED", v.verdict == P.BLOCKED, str(v.verdict))
-    ck(f"{state!r} is never a SKIP", v.verdict != P.SKIP)
-    ck(f"{state!r} names the defect kind", v.evidence["build_defect"]["kind"] == kind)
-    ck(f"{state!r} says it is about the installation",
-       any("not about the project" in w for w in v.why))
-    ck(f"{state!r} fixable={fixable}", v.evidence["build_defect"]["fixable"] is fixable)
-v = P.build_verdict(KB("x", status="planned"), "installed", prefix="/env")
-ck("no wrapper -> BLOCKED, not fixable by building",
-   v.verdict == P.BLOCKED and not v.evidence["build_defect"]["fixable"])
-ck("and it points at scaffold", "scaffold" in v.evidence["build_defect"]["fix"])
+    d = P.build_state(KB("x"), state, prefix="/env")
+    ck(f"{state!r} names the defect kind", d["kind"] == kind, str(d))
+    ck(f"{state!r} fixable={fixable}", d["fixable"] is fixable)
+    ck(f"{state!r} carries a fix", bool(d["fix"]))
+d = P.build_state(KB("x", status="planned"), "installed", prefix="/env")
+ck("no wrapper is not fixable by building", not d["fixable"])
+ck("and it points at scaffold", "scaffold" in d["fix"])
 for good in ("installed", "host", "override"):
-    ck(f"{good!r} is not a defect", P.build_verdict(KB("x"), good, prefix="/e") is None)
+    ck(f"{good!r} is not a defect", P.build_state(KB("x"), good, prefix="/e") is None)
 ck("a host-interpreter plugin with no prefix is fine",
-   P.build_verdict(KB("x", needs_env=False), None, prefix=None) is None)
+   P.build_state(KB("x", needs_env=False), None, prefix=None) is None)
 
 print("\nonly build defects are offered for repair")
-vs = [P.build_verdict(KB("a"), "missing", prefix="/e"),
-      P.build_verdict(KB("b"), "stale", prefix="/e"),
-      P.build_verdict(KB("c", status="planned"), "host", prefix="/e"),
+def _rv(name, state, status="built"):
+    v = P.Verdict(name, P.RUN, ["ok"], rung="full")
+    v.readiness = P.build_state(KB(name, status=status), state, prefix="/e")
+    return v
+vs = [_rv("a", "missing"), _rv("b", "stale"), _rv("c", "host", status="planned"),
       P.Verdict("d", P.BLOCKED, ["no design table was given"]),
       P.Verdict("e", P.RUN, ["ok"], rung="full")]
 fx = [n for n, _d in P.fixable_builds(vs)]

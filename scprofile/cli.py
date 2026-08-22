@@ -976,7 +976,16 @@ def _plan(a):
                 # NOT DETERMINED - which is UNRESOLVED and must never become a skip.
                 try:
                     hits = provenance.find_layer_sources(roots, (c,)) if roots else []
-                    need[f"layers[{c}]"] = bool(hits) if roots else None
+                    if hits:
+                        need[f"layers[{c}]"] = True
+                    elif not roots or provenance.find_layer_sources.exhausted:
+                        # NOT DETERMINED. The walk stopped on a limit or an unreadable directory,
+                        # so "found nothing" is a statement about the SEARCH. Reporting it as an
+                        # absence is how a plan tells someone their aligner output does not exist
+                        # when it is sitting two directories past where the walk gave up.
+                        need[f"layers[{c}]"] = None
+                    else:
+                        need[f"layers[{c}]"] = False
                 except Exception:                                         # noqa: BLE001
                     need[f"layers[{c}]"] = None
         present[name] = need
@@ -991,16 +1000,17 @@ def _plan(a):
         return st
 
     def _make_plan():
-        will = {n for n in sorted(want) if ks[n].status == "built"}
+        # EVERY plugin is planned against the project, INCLUDING the ones this installation
+        # cannot run yet. That is the whole point: "on your data this would run at full, and it
+        # needs its wrapper built" is useful, and "BLOCKED" is not.
+        will = {n for n in sorted(want)}
         out = []
         for n in sorted(want):
             k = ks[n]
-            # THE BUILD IS CHECKED FIRST. A plugin whose environment is missing cannot run
-            # whatever the data says, and reporting it as a data or design problem would send
-            # somebody to look at their experiment for a defect in this installation.
-            bv = PL.build_verdict(k, _build_state(k), prefix=a.prefix)
-            out.append(bv or PL.plan_kernel(k, present=present, facts=facts, searched=roots,
-                                            ran=will, constraint=constraint))
+            v = PL.plan_kernel(k, present=present, facts=facts, searched=roots,
+                               ran=will, constraint=constraint)
+            v.readiness = PL.build_state(k, _build_state(k), prefix=a.prefix)
+            out.append(v)
         return out
 
     verdicts = _make_plan()
@@ -1016,17 +1026,30 @@ def _plan(a):
               + (f"   crossed: {facts['crossed_pairs']}" if facts["crossed_pairs"] else ""))
     else:
         print("  no design table given")
-    print(f"  searched {len(roots)} location(s) for inputs not on the object")
+    print(f"  searched {len(roots)} location(s), {provenance.find_layer_sources.visited:,} "
+          f"director(ies), to depth {provenance.find_layer_sources.deepest}"
+          + ("  -- INCOMPLETE: the walk hit a limit or an unreadable directory"
+             if provenance.find_layer_sources.exhausted else ""))
+
+    ready, pending = PL.ready_count(verdicts)
+    will_run = [v for v in verdicts if v.verdict == PL.RUN]
+    print(f"\n  ON THIS PROJECT: {len(will_run)} of {len(verdicts)} plugin(s) would run.")
+    print(f"  IN THIS INSTALLATION: {len(ready)} ready now, {len(pending)} need building first.")
+    print("  Those are different questions and this plan answers both separately - a plugin that")
+    print("  is not built yet is not a limitation of your data.")
     print()
     for v in sorted(verdicts, key=lambda x: (x.verdict != PL.RUN, x.plugin)):
         head = v.verdict + (f" ({v.rung})" if v.rung else "")
-        print(f"  {head:<16} {v.plugin}")
+        tag = "" if not v.readiness else f"   [needs: {v.readiness['kind']}]"
+        print(f"  {head:<16} {v.plugin}{tag}")
         for w in v.why:
             print(f"      {w}")
         if v.why_not_higher:
             print(f"      NOT FULL: {v.why_not_higher}")
         if v.units:
             print(f"      over {len(v.units)} unit(s)")
+        if v.readiness:
+            print(f"      to make it runnable here: {v.readiness['fix']}")
 
     # ---- --build: repair what the plan found, then plan again ---------------------------------
     fixable = PL.fixable_builds(verdicts)
