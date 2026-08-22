@@ -51,6 +51,33 @@ def validate_plugin(kernel):
     """Static checks on one plugin. Returns [Finding]."""
     f, d, spec = [], Path(kernel.path), kernel.spec
     built = kernel.status == "built"
+    wraps = spec.get("wraps") or {}
+
+    # A ONE-FILE PLUGIN carries its upstream record, its selftest and its environment IN the file.
+    # Every check below was written against the directory shape and looked for siblings that a
+    # one-file plugin does not have - so the shape the host now prefers failed its own validator.
+    if not d.is_dir():
+        src = d.read_text(encoding="utf-8", errors="replace")
+        up_inline = spec.get("upstream") or {}
+        if wraps and not up_inline:
+            f.append(Finding("ERROR", "wraps a tool and records nothing about it",
+                             "a one-file plugin carries PLUGIN['upstream']: the docs it was "
+                             "read from, the defaults it changed and what it does not use"))
+        for field, why in (("docs", "where the record came from"),
+                           ("defaults_changed", "the defaults that are wrong for this contract"),
+                           ("not_used", "what of the tool is deliberately not used")):
+            if up_inline and not up_inline.get(field):
+                f.append(Finding("WARN", f"upstream records no {field}", why))
+        if "def selftest(" not in src:
+            f.append(Finding("WARN", "no selftest(ctx) in the file",
+                             "the builder runs it on every new machine to prove the call is "
+                             "well-formed against the versions installed there"))
+        if not spec.get("cannot_show"):
+            f.append(Finding("ERROR", "declares no limits",
+                             "almost every method here rests on an assumption a reader must be "
+                             "told about"))
+        return f
+
 
     for req in ("name", "summary"):
         if not spec.get(req):

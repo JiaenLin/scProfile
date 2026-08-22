@@ -154,7 +154,37 @@ _PRUNE = ("__STARtmp", "_STARtmp", "STARtmp", ".git", ".snakemake", "__pycache__
           ".nextflow", "work", ".cache", "site-packages")
 
 
-def find_layer_sources(roots, wanted=("spliced", "unspliced"), max_depth=14, cap=400_000):
+def _cache_path(roots, wanted):
+    """One cache file per (roots, wanted), in the user's cache dir. Not in the project."""
+    import hashlib
+    import os
+    import tempfile
+    key = hashlib.sha256(repr((sorted(map(str, roots)), sorted(wanted))).encode()).hexdigest()[:16]
+    base = (os.environ.get("XDG_CACHE_HOME")
+            or os.path.join(os.path.expanduser("~"), ".cache"))
+    d = os.path.join(base, "scprofile")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        d = tempfile.gettempdir()
+    return os.path.join(d, f"layers_{key}.json")
+
+
+def find_layer_sources(roots, wanted=("spliced", "unspliced"), max_depth=14, cap=400_000,
+                       cache_seconds=3600):
+    """Cached, because the PLANNER RUNS EVERY TIME and this walk is the expensive part.
+
+    Measured on a real project: 42,891 directories to depth 14. That is seconds on a warm local
+    filesystem and much worse on a cold network one, and `plan` is a command people are meant to
+    run freely - a plan that is expensive stops being consulted, and a plan nobody consults is a
+    run that finds out at the end.
+
+    The cache is keyed on the roots and what was wanted, lives in the user's cache directory and
+    NOT in the project, and is invalidated by age. It stores only paths, so a stale entry costs a
+    wrong suggestion rather than a wrong result - and the paths are re-checked for existence when
+    they are read back, because a cached directory that has since been deleted must not be
+    reported as a source.
+    """
     """Where the missing layers actually are. Returns [(kind, path), ...].
 
     `plan` uses this to turn "this plugin will refuse" into "pass --search <this>". Reporting a
@@ -173,7 +203,28 @@ def find_layer_sources(roots, wanted=("spliced", "unspliced"), max_depth=14, cap
     `max_depth=8` could not reach it, and its `__STARtmp` siblings exhausted the old 8,000-visit
     cap long before that. Depth 14 with the temp trees pruned reaches it with budget to spare.
     """
+    import json
     import os
+    import time
+
+    cp = _cache_path(roots, wanted)
+    if cache_seconds and os.path.exists(cp):
+        try:
+            age = time.time() - os.path.getmtime(cp)
+            if age < cache_seconds:
+                d = json.loads(open(cp, encoding="utf-8").read())
+                # RE-CHECK EXISTENCE. A cached path that has since been deleted is not a source,
+                # and reporting one would send a run at a directory that is not there.
+                hits = [(k, pth) for k, pth in d.get("found", []) if os.path.exists(pth)]
+                find_layer_sources.visited = d.get("visited", 0)
+                find_layer_sources.deepest = d.get("deepest", 0)
+                find_layer_sources.exhausted = bool(d.get("exhausted"))
+                find_layer_sources.cached = True
+                return hits
+        except (OSError, ValueError):
+            pass
+    find_layer_sources.cached = False
+
     found, visited, exhausted, deepest = [], 0, False, 0
     for root in roots:
         if not os.path.isdir(root):
@@ -216,12 +267,19 @@ def find_layer_sources(roots, wanted=("spliced", "unspliced"), max_depth=14, cap
     find_layer_sources.visited = visited
     find_layer_sources.deepest = deepest
     find_layer_sources.exhausted = exhausted
+    try:
+        with open(cp, "w", encoding="utf-8") as fh:
+            json.dump({"found": [[k, str(v)] for k, v in found], "visited": visited,
+                       "deepest": deepest, "exhausted": exhausted}, fh)
+    except OSError:
+        pass
     return found
 
 
 find_layer_sources.visited = 0
 find_layer_sources.deepest = 0
 find_layer_sources.exhausted = False
+find_layer_sources.cached = False
 
 
 def harvest(adata, *, extra_roots=()):

@@ -1,5 +1,15 @@
 """The plugin API. A plugin is ONE FILE, and dropping it in is the whole installation.
 
+WHERE THE EFFORT GOES, AND WHY IT IS ASYMMETRIC
+
+A plugin is written ONCE. The builder and the planner run again for every new user, every new
+machine, every new project. So a plugin should carry everything it will ever need - its
+environment, its references, its limits, its upstream record and ITS OWN PROOF - and the builder
+and planner should be light, adaptive and fast on repeat.
+
+That is why `selftest` lives in the plugin file rather than beside it: a plugin that cannot prove
+itself on a new machine is a plugin that will be debugged on that machine, one user at a time.
+
 WHAT A PLUGIN IS
 
     kernels/myplugin.py
@@ -165,6 +175,34 @@ class Context:
         self.status = "refused"
         self.absent.append({"what": what, "why": why})
         self.headline = self.headline or f"refused: {what}"
+
+    def fixture(self, n_cells=200, n_genes=300, *, genes=None, labels=("A", "B"), seed=0):
+        """A small synthetic AnnData for this plugin's own selftest, built by the HOST.
+
+        Every selftest in this project began by hand-rolling one of these, and each got it subtly
+        differently - one too small for the tool's own coverage check, one with no label column,
+        one whose X was counts where the tool wanted log values. A fixture is contract, not
+        method, so the host builds it and the plugin says only what it needs to be true.
+        """
+        import anndata as ad
+        import numpy as np
+        import pandas as pd
+        rng = np.random.default_rng(seed)
+        gv = list(genes) if genes else [f"Gene{i:04d}" for i in range(n_genes)]
+        X = rng.poisson(rng.uniform(0.2, 6.0, size=len(gv)), size=(n_cells, len(gv)))
+        A = ad.AnnData(
+            X.astype("float32"),
+            obs=pd.DataFrame({"label": pd.Categorical(
+                [labels[i % len(labels)] for i in range(n_cells)])},
+                index=[f"c{i}" for i in range(n_cells)]),
+            var=pd.DataFrame(index=gv))
+        A.layers["counts"] = A.X.copy()
+        import scanpy as sc
+        B = A.copy()
+        sc.pp.normalize_total(B, target_sum=1e4)
+        sc.pp.log1p(B)
+        A.layers["lognorm"] = B.X.copy()
+        return A
 
     def caveat(self, text):
         """Something true of this result that a reader must be told. Printed with the numbers."""

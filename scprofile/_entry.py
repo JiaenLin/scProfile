@@ -36,7 +36,33 @@ def load(path):
     return mod
 
 
+def selftest(plugin_path, log=print):
+    """Run a plugin's own `selftest(ctx)`, in the plugin's own interpreter.
+
+    THIS IS THE QUALITY CHECK THE BUILDER RUNS on every new machine. It proves the call is
+    well-formed against the versions actually installed there - which is what moves underneath a
+    wrapper, and what an import check cannot see: an API that moved, a scheduler handshake that
+    silently returns nothing, a keyword the function now forbids.
+
+    A plugin with no `selftest` is reported as unproven rather than as passing.
+    """
+    mod = load(plugin_path)
+    fn = getattr(mod, "selftest", None)
+    if fn is None:
+        log(f"  {Path(plugin_path).stem}: NO SELFTEST. Nothing has proved this plugin's call is "
+            f"well-formed against the versions installed here; only a real run will.")
+        return None
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        ctx = Context(None, keys={}, out=d, cores=1, log=log)
+        fn(ctx)
+    log(f"  {Path(plugin_path).stem}: selftest passed")
+    return True
+
+
 def main(argv):
+    if argv[1] == "--selftest":
+        return 0 if selftest(argv[2]) is not False else 1
     plugin_path = argv[1]
     inp = manifest.read_input(argv[2] if len(argv) > 2 else os.environ["SCPROFILE_IN"])
     out = Path(inp["out_dir"])

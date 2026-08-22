@@ -375,5 +375,57 @@ with _tf.TemporaryDirectory() as _d:
     ck("it is a standalone page", "<style>" in html and "<title>" in html)
     ck("no external resource is referenced", "http://" not in html and "src=" not in html)
 
+print("\nthe builder adapts to the machine, and the planner is cheap on repeat")
+from scprofile import runner as _R, provenance as _PV                           # noqa: E402
+_m = _R.machine()
+ck("the machine is probed, not assumed", set(_m) == {"managers", "pythons", "route", "why"})
+ck("a route is chosen", _m["route"] in ("micromamba", "mamba", "conda", "venv", "host"))
+ck("and it says WHY, in terms of what is present", len(_m["why"]) > 40)
+
+_root = [str(Path(__file__).resolve().parents[1])]
+_PV.find_layer_sources(_root, cache_seconds=0)          # cold, cache bypassed
+ck("a cold scan reports it was not cached", _PV.find_layer_sources.cached is False)
+_PV.find_layer_sources(_root)                            # writes the cache
+_a = _PV.find_layer_sources(_root)
+ck("a repeated scan is served from cache", _PV.find_layer_sources.cached is True)
+ck("and returns the same paths", _PV.find_layer_sources(_root) == _a)
+ck("the cache lives outside the project",
+   "scProfile" not in _PV._cache_path(_root, ("spliced",))
+   or ".cache" in _PV._cache_path(_root, ("spliced",)))
+
+print("\na plugin carries its own proof")
+import importlib.util as _iu                                                    # noqa: E402
+_pp = Path(__file__).resolve().parents[1] / "kernels" / "decoupler.py"
+_spec = _iu.spec_from_file_location("dcp", _pp)
+_mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+ck("it declares everything the builder needs",
+   {"env", "needs", "produces", "cannot_show", "upstream"} <= set(_mod.PLUGIN))
+ck("it has a run(ctx)", callable(getattr(_mod, "run", None)))
+ck("it has a selftest(ctx) in the same file", callable(getattr(_mod, "selftest", None)))
+ck("its env pins a python version", bool(_mod.PLUGIN["env"].get("python")))
+ck("its upstream record names defaults it changed",
+   bool(_mod.PLUGIN["upstream"].get("defaults_changed")))
+# THE RULE APPLIES TO run(), NOT TO selftest(). `run` is handed a stranger's object and may
+# name nothing about it. `selftest` BUILDS ITS OWN DATA, so it must name a species to fetch a
+# prior and may use the host fixture's own layer names - those are its inputs, not a user's.
+import inspect as _in2                                                          # noqa: E402
+_runsrc = _in2.getsource(_mod.run)
+# WHAT IS WRONG IS INDEXING WITH A LITERAL, not the presence of a word. `ctx.keys.get("lognorm")`
+# is a ROLE and is exactly right; `adata.layers["lognorm"]` is a column name and is not. The first
+# version of this check matched bare strings and failed on the correct line.
+import re as _re2                                                               # noqa: E402
+# obs, layers and var are the USER'S vocabulary and a plugin must reach them through ctx.
+# obsm is excluded deliberately: a plugin legitimately reads back the key the WRAPPED LIBRARY just
+# wrote - `ctx.adata.obsm["ulm_estimate"]` is decoupler's own API surface, not a name the user
+# chose - and failing that would push plugins into guessing where a library put its result.
+_bad = _re2.findall(r"\.(obs|layers|var)\[\s*['\"][A-Za-z_]", _runsrc)
+ck("run() indexes no user-owned namespace by a literal name", not _bad, str(_bad))
+ck("and hard-codes no organism",
+   not _re2.search(r"organism\s*=\s*['\"](human|mouse)", _runsrc))
+ck("run() reads keys by ROLE instead", 'ctx.keys.get(' in _runsrc or 'ctx.obs(' in _runsrc)
+ck("and takes the organism from the host", "ctx.organism" in _runsrc)
+ck("selftest is allowed its own fixture's names",
+   "human" in _in2.getsource(_mod.selftest))
+
 print("\n" + ("the report holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

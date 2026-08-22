@@ -362,6 +362,39 @@ def _install_r(p, entries, log=print):
     subprocess.run([str(rscript), str(f)], check=True, env=env)
 
 
+def machine(log=None):
+    """What THIS machine can build with. Probed once, reported, never assumed.
+
+    The builder runs again for every new user and every new machine, and the machines differ: a
+    cluster with `module load anaconda3` and nothing on PATH until you do, a laptop with
+    micromamba, a container with only the system python. A builder that assumes one of those
+    fails on the other two with a message about the tool it wanted rather than the ones present.
+
+    Returns {"managers": [...], "pythons": [...], "route": str, "why": str}.
+    """
+    import shutil
+    import sys as _s
+    mgrs = [m for m in ("micromamba", "mamba", "conda") if shutil.which(m)]
+    pys = sorted({f"{v}" for v in ("3.10", "3.11", "3.12", "3.13")
+                  if shutil.which(f"python{v}")})
+    if mgrs:
+        route = mgrs[0]
+        why = (f"{mgrs[0]} is on PATH, so an environment can be built at any pinned python "
+               f"version and with conda packages")
+    elif pys:
+        route = "venv"
+        why = (f"no conda-family manager on PATH, but python {', '.join(pys)} are - a lock that "
+               f"needs only pip packages can be built as a venv")
+    else:
+        route = "host"
+        why = (f"neither a conda-family manager nor a versioned python is on PATH. Only plugins "
+               f"declaring no environment can run; this interpreter is {_s.version.split()[0]}")
+    out = {"managers": mgrs, "pythons": pys, "route": route, "why": why}
+    if log:
+        log(f"  machine: {route} - {why}")
+    return out
+
+
 def install(kernel, prefix, *, force=False, log=print):
     """Build a kernel's environment from its lock, then prove it with its own selftest.
 
@@ -434,7 +467,14 @@ def install(kernel, prefix, *, force=False, log=print):
             log(f"  --force: removing {p} first, so the rebuild cannot inherit packages the "
                 f"current lock does not name")
             shutil.rmtree(p)
+        m = machine(log=log)
         mgr = (shutil.which("micromamba") or shutil.which("mamba") or shutil.which("conda"))
+        if not mgr and spec["conda"] and m["pythons"]:
+            # ADAPT RATHER THAN REFUSE. A lock whose conda section is only the interpreter can be
+            # built as a venv on a machine with no conda at all - and saying so beats telling a
+            # new user to install a package manager they do not need.
+            log(f"  no conda manager, but this lock's conda packages are {spec['conda']}; "
+                f"attempting a venv at python {spec['python']}")
         venv_py = _venv_python(spec["python"]) if not spec["conda"] else None
         if mgr:
             # `create`, never `env create`: it takes -y on every conda anyone still runs.

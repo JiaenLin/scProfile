@@ -98,3 +98,37 @@ def run(ctx):
                    "rather than per population.")
 
     ctx.headline = f"{acts.shape[1]:,} regulators scored per cell"
+
+
+def selftest(ctx):
+    """Prove the CALL works against the versions installed on THIS machine.
+
+    Not an import check. The failures worth catching here are all downstream of the import: the
+    prior's schema moving, `run_ulm` renaming a keyword, an obsm key that is no longer where the
+    result is put. Every one of those imports cleanly and dies inside the first real call.
+
+    Asserts SHAPES and FINITENESS, never a biological answer - the fixture is synthetic and there
+    is no correct activity to check against.
+    """
+    import decoupler as dc
+    import numpy as np
+
+    net = dc.get_collectri(organism="human", split_complexes=False)
+    assert len(net) > 1000, f"the prior looks truncated: {len(net)} edges"
+    for col in ("source", "target", "weight"):
+        assert col in net.columns, f"the prior has no {col!r} column; its schema moved"
+    ctx.log(f"  prior: {len(net):,} edges, {net['source'].nunique():,} regulators")
+
+    # A fixture whose genes ARE the prior's targets, so there is something to score.
+    targets = sorted(set(net["target"].astype(str)))[:400]
+    A = ctx.fixture(n_cells=120, genes=targets)
+    A.X = A.layers["lognorm"]
+
+    dc.run_ulm(mat=A, net=net, source="source", target="target", weight="weight",
+               use_raw=False, verbose=False)
+    assert "ulm_estimate" in A.obsm, "run_ulm no longer writes obsm['ulm_estimate']"
+    acts = A.obsm["ulm_estimate"]
+    assert acts.shape[0] == A.n_obs, f"{acts.shape[0]} rows for {A.n_obs} cells"
+    assert acts.shape[1] > 0, "no regulator was scored on data built from the prior's own targets"
+    assert np.isfinite(np.asarray(acts.values, dtype=float)).all(), "non-finite activity scores"
+    ctx.log(f"  scored {acts.shape[1]:,} regulators over {acts.shape[0]:,} cells")
