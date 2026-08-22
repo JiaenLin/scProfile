@@ -310,6 +310,9 @@ def _run(a):
     results = {}          # plugin -> [(out_dir, payload)]
     merged_slots = {}     # plugin -> what merge ACTUALLY put in the object
     timings = {}
+    from . import feedback as FB
+    diagnoses = []        # what these failures say about the TOOLING, not about the data
+    repaired = set()      # plugins rebuilt mid-run, so a retry is never silent
 
     def _stage(inst):
         """EVERYTHING THAT CAN REFUSE - guards, references, the readable copy. Writes no in.json.
@@ -464,9 +467,59 @@ def _run(a):
                 # unit reports that unit as absent and keeps the rest.
                 print(f"  FAILED {lbl}  ({secs:.0f}s)")
                 print(f"      {err}")
-                skipped.append({"kernel": name, "unit": inst["unit"], "why": [err]})
-                continue
+                dg = FB.diagnose(name, err, prefix=a.prefix)
+                print(f"      [{dg.layer}] {dg.why}")
+                diagnoses.append(dg)
+
+                # THE run -> build EDGE. An environment failure is the one class this can repair
+                # itself, and it repairs it ONCE. A loop that retries until something works turns
+                # a real defect into an intermittent one, which is the hardest kind to ever fix.
+                if dg.repairable and a.prefix and name not in repaired:
+                    repaired.add(name)
+                    print(f"      REPAIRING: rebuilding {name}'s environment and retrying once")
+                    try:
+                        runner.install(ks[name], a.prefix, force=True,
+                                       log=lambda s: print(f"        {s}"))
+                    except Exception as e2:                               # noqa: BLE001
+                        print(f"        REBUILD FAILED: {str(e2).splitlines()[0][:140]}")
+                        skipped.append({"kernel": name, "unit": inst["unit"],
+                                        "why": [err, f"rebuild also failed: {e2}"]})
+                        continue
+                    inst2, kout2, pl2, secs2, err2 = _go((inst, kout))
+                    timings.setdefault(name, []).append(round(secs2, 1))
+                    if err2:
+                        print(f"      STILL FAILED after rebuild: {err2}")
+                        diagnoses.append(FB.Diagnosis(
+                            FB.DECLARATION,
+                            f"{name} failed, its environment was rebuilt from its lock, and it "
+                            f"failed again the same way. The environment is not the cause; the "
+                            f"plugin or its lock is.", evidence=str(err2)))
+                        skipped.append({"kernel": name, "unit": inst["unit"],
+                                        "why": [err, "and again after a clean rebuild"]})
+                        continue
+                    # IT WORKED AFTER A REBUILD, WHICH IS ITSELF A FINDING. The environment had
+                    # drifted from its lock, and somebody needs to know that about this machine.
+                    print(f"      RECOVERED after rebuild ({secs2:.0f}s)")
+                    diagnoses.append(FB.Diagnosis(
+                        FB.ENVIRONMENT,
+                        f"{name} failed and then succeeded after its environment was rebuilt "
+                        f"from the same lock. The installed environment had DRIFTED - this run "
+                        f"is fine, and the next one on this machine will fail the same way "
+                        f"until it is rebuilt.",
+                        repairable=True,
+                        action=f"scprofile install {name} --prefix {a.prefix} --force"))
+                    pl, secs, err = pl2, secs2, None
+                else:
+                    skipped.append({"kernel": name, "unit": inst["unit"], "why": [err]})
+                    continue
             print(f"  {lbl:<28} {pl['status']:<8} {secs:>6.0f}s  {pl.get('headline', '')}")
+            # THE run -> declare EDGE, the cheapest in the loop: the run has happened and the
+            # declaration is right there. A plugin whose `produces` no longer matches what it
+            # emits has drifted, and the next person to read the declaration will believe it.
+            for dd in FB.declaration_drift(ks[name], pl):
+                print(f"      [{dd.layer}] {dd.why}")
+                diagnoses.append(dd)
+
             extra = undeclared(ks[name], pl)
             if extra:
                 print(f"      UNDECLARED OUTPUT: {', '.join(extra)} - no `cannot_show` covers "
@@ -509,6 +562,7 @@ def _run(a):
             ran.append(name)
             payloads.extend(pl for _k, pl in got_list)
 
+    FB.report(diagnoses)
     describe = inputs.describe(A, keys, organism, assay, csrc)
     folded = merge.fold_payloads(
         payloads, failed={s["kernel"]: [x["unit"] for x in skipped if x["kernel"] == s["kernel"]]
@@ -531,6 +585,10 @@ def _run(a):
                "kernels": folded,
                "merged": merged_slots,
                "partial": sorted({s["kernel"] for s in skipped} & set(ran)),
+               # WHAT THIS RUN LEARNED ABOUT THE TOOLING, kept apart from what it learned about
+               # the data. A defect in a plugin is not a property of somebody's cells.
+               "diagnoses": [d.as_dict() for d in diagnoses],
+               "repaired": sorted(repaired),
                "cannot_show": {n: ks[n].cannot_show for n in sorted(ks)},
                "summaries": {n: ks[n].summary for n in sorted(ks)},
                "object": str(op)}

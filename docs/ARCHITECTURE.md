@@ -5,8 +5,17 @@ every serious defect in its history has been one domain doing another's job.
 
 ```
       DECLARE  ──►  BUILD  ──►  PLAN  ──►  RUN
-    the plugin     the builder   the planner   the runner
+         ▲            ▲           ▲          │
+         │            │           └──────────┘   plan triggers the builder
+         │            └──────────────────────┘   a run that fails on the ENVIRONMENT
+         │                                        rebuilds it and retries, once
+         └───────────────────────────────────┘   a run whose output contradicts the
+                                                  DECLARATION is a maintainer's defect
 ```
+
+**The arrows back are the point.** A pipeline that only flows one way makes every downstream
+failure look like the user's problem. These three edges route a failure to the layer that owns
+it, and each has a different remedy.
 
 | domain | owns | may read | may NOT |
 |---|---|---|---|
@@ -71,6 +80,32 @@ samples. An imbalance, a confound, even a complete confound, all run with a cave
 ## 4. The runner executes
 
 Waves, subprocesses, merge by barcode, one report. It decides nothing.
+
+## 5. And when something fails, it says which layer is wrong
+
+A failure has a cause in exactly one layer, and reporting them all as *"plugin X failed"* makes
+the user read a traceback and guess.
+
+| layer | means | remedy |
+|---|---|---|
+| **environment** | the pins do not resolve here, or resolved to something that no longer works | **repaired automatically**: rebuild from the lock, retry once |
+| **declaration** | the plugin's description of itself is not true of what it did | a maintainer changes the declaration or the method |
+| **method** | the call failed on this data — out of memory, out of time | often not a defect at all; an analysis that cannot be done is a result |
+| **host** | the contract was applied wrongly | a bug in scProfile, not in the plugin or the data |
+
+**A retry is never silent.** If a plugin fails and then succeeds after a rebuild, the environment
+had *drifted from its own lock* — that is a finding about this machine that the next person
+needs, not a hiccup to hide. A loop that quietly retries until something works converts a real
+defect into an intermittent one, which is the hardest kind to ever fix. And a plugin that fails
+again after a clean rebuild is explicitly **not** blamed on its environment.
+
+**An unmatched failure is not guessed at.** A wrong layer sends somebody to the wrong file, which
+costs more than saying the layer is not established.
+
+**Drift is checked on every success**, not only on failure: what the plugin emitted against what
+its `produces` declares. It is the cheapest edge in the loop — the run has happened and the
+declaration is right there — and a declaration that has gone stale is one the next reader will
+believe.
 
 ---
 
