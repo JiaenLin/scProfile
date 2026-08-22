@@ -121,12 +121,53 @@ def _portable_uns(uns):
     return keep, sorted(dropped)
 
 
-def write_compatible(adata, path, *, log=print):
+def receipt(h5ad):
+    """What a compatibility copy was made FROM, as a string a later run can compare.
+
+    The copy is written as the last act of a successful conversion, so its presence alone says
+    nothing - a killed run leaves a truncated file that opens like a finished one, which is the
+    same failure the environment stamp exists for. Path, size and mtime of the SOURCE, because
+    those are what make a copy the wrong one.
+    """
+    p = Path(h5ad)
+    try:
+        st = p.stat()
+    except OSError:
+        return ""
+    return f"{p.resolve()}\n{st.st_size}\n{int(st.st_mtime)}\n"
+
+
+def reusable(copy, h5ad):
+    """Is the copy already on disk the one this source would produce? A pure question, so it can
+    be asked without anndata and tested without writing 3 GB.
+
+    False unless the copy exists AND carries a receipt AND the receipt matches this source. Any
+    doubt rebuilds: a wrong copy is a run against a different object, and a rebuilt one costs
+    disk time.
+    """
+    copy = Path(copy)
+    want = receipt(h5ad)
+    got = copy.with_suffix(copy.suffix + ".from")
+    if not want or not copy.exists() or not got.exists():
+        return False
+    try:
+        return got.read_text(encoding="utf-8") == want
+    except OSError:
+        return False
+
+
+def write_compatible(adata, path, *, log=print, source=None):
     """A copy a kernel's older anndata can read: the matrices, classic strings, portable uns.
 
     Deliberately NOT a faithful copy. It is an input handed to a subprocess, not a deliverable -
     the run's own output object is written by the host from the full original, and nothing here
     reaches it.
+
+    IT IS KEPT, AND IT IS NAMED. This file is what the plugins ACTUALLY read, and it is not the
+    object the user passed: uns entries are dropped by name and obsp/varm/varp are not carried.
+    Deleting it would remove the only on-disk record of what was analysed, which this project's
+    evidence rule does not allow. So it stays - and the run records it, because 3 GB nobody can
+    identify is not a record, it is debris.
     """
     import anndata as ad
 
@@ -151,6 +192,10 @@ def write_compatible(adata, path, *, log=print):
             log(f"    {slot} not carried: {', '.join(getattr(adata, slot).keys())}")
     with classic_string_encoding():
         B.write_h5ad(p)
+    # THE LAST ACT of a successful conversion. Written after the file, so a copy interrupted
+    # halfway leaves no receipt and is rebuilt rather than reused.
+    if source is not None:
+        p.with_suffix(p.suffix + ".from").write_text(receipt(source), encoding="utf-8")
     log(f"    {p.stat().st_size / 1e9:.2f} GB, {B.n_obs:,} x {B.n_vars:,}, "
         f"layers {manifest.layer_names(B)}")
     return p
@@ -176,7 +221,15 @@ def readable_input(adata, h5ad, python_exe, workdir, *, cache, log=print):
     log(f"    {detail}")
     conv = cache.get("converted")
     if conv is None:
-        conv = write_compatible(adata, Path(workdir) / "input_for_kernels.h5ad", log=log)
+        conv = Path(workdir) / "input_for_kernels.h5ad"
+        # REUSE IT IF IT IS THE SAME COPY. It was described as a cache and was not one: every run
+        # into the same --out rewrote 3 GB from scratch and nothing ever read the old file again,
+        # so the reason given for keeping it - "reusable" - was not true of it.
+        if reusable(conv, h5ad):
+            log(f"  reusing the compatibility copy already at {conv.name} "
+                f"({conv.stat().st_size / 1e9:.2f} GB); it was made from this same object")
+        else:
+            conv = write_compatible(adata, conv, log=log, source=h5ad)
         cache["converted"] = conv
     ok2, detail2 = can_read(exe, conv)
     if not ok2:

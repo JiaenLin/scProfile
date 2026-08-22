@@ -660,6 +660,14 @@ def _run(a):
                "repaired": sorted(repaired),
                "cannot_show": {n: ks[n].cannot_show for n in sorted(ks)},
                "summaries": {n: ks[n].summary for n in sorted(ks)},
+               # WHAT THE PLUGINS ACTUALLY READ. When a plugin's pinned anndata cannot read the
+               # object as written, the host hands it a compatibility copy instead - the matrices
+               # in the classic encoding, uns entries dropped BY NAME, obsp/varm/varp not carried.
+               # That file is not `input`, and every result in this run came from it. It is kept
+               # for exactly that reason and named here, because 3 GB nobody can identify beside
+               # an output directory is debris rather than a record.
+               "input_read_by_kernels": (str(readable.get("converted"))
+                                         if readable.get("converted") else None),
                "object": str(op) if op else None}
     (out / "report.json").write_text(json.dumps(payload, indent=1, default=str), encoding="utf-8")
     print(f"      {out}/report.json")

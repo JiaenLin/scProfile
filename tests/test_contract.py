@@ -900,6 +900,42 @@ def test_a_required_capability_is_checked_before_the_run_not_inside_it():
                       obs={"x"}) is False)
 
 
+def test_the_compatibility_copy_is_a_record_and_a_cache():
+    """3.14 GB was left beside every run and called "a legitimate cached working file, reusable".
+
+    It was neither. Nothing ever read it again - every run into the same `--out` rewrote it from
+    scratch - and nothing named it, so it sat beside an output directory as an unidentifiable
+    3 GB file. Both halves of the description are now true: a receipt makes it reusable, and
+    `report.json` names it as what the plugins ACTUALLY read, which is not the object passed in.
+    """
+    print("\nthe compatibility copy")
+    from scprofile import compat
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        src = td / "obj.h5ad"
+        src.write_bytes(b"x" * 100)
+        copy = td / "input_for_kernels.h5ad"
+        check("no copy, no reuse", not compat.reusable(copy, src))
+        copy.write_bytes(b"y" * 10)
+        check("a copy with NO receipt is not reused", not compat.reusable(copy, src),
+              "a run killed mid-conversion leaves a file that opens like a finished one")
+        copy.with_suffix(copy.suffix + ".from").write_text(compat.receipt(src))
+        check("a copy whose receipt matches this source is reused",
+              compat.reusable(copy, src))
+        src.write_bytes(b"x" * 200)                       # the object changed underneath it
+        check("and is NOT reused once the source changes", not compat.reusable(copy, src),
+              "a wrong copy is a run against a different object")
+        check("a receipt names the source, its size and its mtime",
+              len(compat.receipt(src).strip().splitlines()) == 3, compat.receipt(src))
+        check("and a missing source has no receipt at all",
+              compat.receipt(td / "gone.h5ad") == "")
+    import inspect
+    from scprofile import cli as _c
+    check("the run names the copy in its own record",
+          "input_read_by_kernels" in inspect.getsource(_c._run),
+          "3 GB nobody can identify beside an output directory is debris, not a record")
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -927,6 +963,7 @@ def main():
     test_an_environment_is_found_where_it_was_resolved_to()
     test_install_does_not_demand_a_lock_from_a_plugin_that_declares_a_requirement()
     test_a_required_capability_is_checked_before_the_run_not_inside_it()
+    test_the_compatibility_copy_is_a_record_and_a_cache()
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")
