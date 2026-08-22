@@ -52,6 +52,14 @@ export SCPROFILE_KERNELS="${EXTRA_KERNELS:-$TOOL/tests/smoke/plugins}"
 export OMP_NUM_THREADS="${NCPUS:-1}"
 export MKL_NUM_THREADS="${NCPUS:-1}"
 
+# STREAM TO SHARED STORAGE AS WE GO. PBS copies its -o file only when the job EXITS, so a build
+# that is still running - or one that was killed - leaves nothing to read, and "no output" then
+# looks exactly like "never started". Never /tmp: it is node-local, so a log written there is
+# invisible from the machine you are sitting on.
+LIVE="${LIVE_LOG:-$PWD/logs/live_${PHASE}.log}"
+exec > >(tee -a "$LIVE") 2>&1
+echo "live log : $LIVE"
+
 echo "job      : ${PBS_JOBID:-none}"
 echo "node     : $(hostname)"
 echo "phase    : ${PHASE}"
@@ -99,7 +107,7 @@ run)
   $PY -m scprofile.cli plan --h5ad "$OBJ" ${DES:+--design "$DES"} \
       ${ORGANISM:+--organism "$ORGANISM"} ${ASSAY:+--assay "$ASSAY"} \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
-      --audit --report --out "$OUT" || echo "  plan exit $?"
+      --kernel "$KERNELS" --audit --report "$OUT" || echo "  plan exit $?"
 
   say "4. RUN"
   $PY -m scprofile.cli run --h5ad "$OBJ" --out "$OUT" \

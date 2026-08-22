@@ -435,5 +435,23 @@ ck("and takes the organism from the host", "ctx.organism" in _runsrc)
 ck("selftest is allowed its own fixture's names",
    "human" in _in2.getsource(_mod.selftest))
 
+print("\nthe audit is stated over the plan that was ASKED FOR")
+# `plan --kernel a,b --audit` reported an ERROR for every plugin the user had deliberately left
+# out - "a known plugin is missing from the plan" - because the completeness rule was stated over
+# every plugin on disk rather than over the plan drawn. An audit that cannot be run clean on a
+# legitimate invocation is an audit people learn to silence with a flag.
+_v = [P.Verdict("a", P.RUN, ["ok"], rung="full")]
+_found = P.audit(_v, ["a"], {"has_design": False})
+ck("a restricted plan audits clean", not [x for x in _found if x.level == "ERROR"],
+   str(_found))
+_found = P.audit(_v, ["a", "b"], {"has_design": False})
+ck("and a plugin genuinely dropped from its own plan is still an ERROR",
+   any(x.level == "ERROR" and "b" in (x.detail or "") for x in _found), str(_found))
+import inspect as _in3                                                          # noqa: E402
+from scprofile import cli as _cli                                               # noqa: E402
+ck("the caller audits the plan it drew",
+   "PL.audit(verdicts, sorted(want)" in _in3.getsource(_cli._plan),
+   "the audit's `known` must be the set the verdicts were built from")
+
 print("\n" + ("the report holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

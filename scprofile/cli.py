@@ -1314,7 +1314,13 @@ def _plan(a):
         def _alog(line):
             audit_checks.append(str(line).strip())
             print(line)
-        found = audit_found = PL.audit(verdicts, sorted(ks), facts, present=present, log=_alog)
+        # AGAINST THE PLAN THAT WAS ASKED FOR, not against every plugin on disk. The completeness
+        # rule exists so nothing VANISHES from a plan; stated over `ks` it fired on every plugin
+        # the user had deliberately left out, so `plan --kernel a,b --audit` reported eight
+        # ERRORs about plugins nobody asked to plan - and an audit that cannot be run clean on a
+        # legitimate invocation is an audit people learn to pass a flag to silence.
+        # `want` is every plugin when none were named, so the default answer does not change.
+        found = audit_found = PL.audit(verdicts, sorted(want), facts, present=present, log=_alog)
         errs = [x for x in found if x.level == "ERROR"]
         for x in found:
             print(f"  {x.level}  {x.check}")
