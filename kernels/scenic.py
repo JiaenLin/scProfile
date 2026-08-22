@@ -120,7 +120,16 @@ PLUGIN = {
         "packages": {"pyscenic": "==0.12.1", "numpy": "==1.23.5", "pandas": "==1.5.3",
                      "dask": "==2023.5.0", "distributed": "==2023.5.0",
                      "pyarrow": "==11.0.0", "setuptools": "==75.8.2",
-                     "arboreto": "==0.1.6", "ctxcore": "==0.2.0"},
+                     "arboreto": "==0.1.6", "ctxcore": "==0.2.0",
+                     # THE CONTRACT NEEDS IT. `_entry.py` reads the object with
+                     # `anndata.read_h5ad` before this plugin sees anything, so an environment
+                     # without anndata cannot run ANY plugin - and this one did not have it.
+                     # Measured on PBS 677677: every one of ten units reported
+                     # `NOT RUN scenic[...]  scenic's interpreter cannot read this object even
+                     # re-encoded`, whose cause was `ModuleNotFoundError: No module named
+                     # 'anndata'`. A RANGE, not a pin: this is the contract's dependency, not
+                     # pySCENIC's, and nothing here calls it.
+                     "anndata": ">=0.9,<0.11"},
     },
 
     "cost": "high", "cores": 16,

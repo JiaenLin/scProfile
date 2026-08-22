@@ -118,5 +118,32 @@ ck("run() contains no prerequisite checking",
 ck("run() reads config without validating it",
    "ctx.config[" in run_src and "raise" not in run_src)
 
+print("\nthe CONTRACT'S own dependency is declared, not assumed")
+# `_entry.py` reads the object with `anndata.read_h5ad` BEFORE a plugin is called, so a python
+# plugin whose environment has no anndata cannot run at all - and the failure arrives as "this
+# kernel's interpreter cannot read the object", which reads as a problem with the OBJECT.
+# Measured on PBS 677677: ten instances of scenic reported exactly that, and the cause was
+# `No module named 'anndata'`. Two more plugins - abundance and de - had the same gap and worked
+# only because they SHARE an environment with plugins that name it, which is accidental.
+ck("the entrypoint reads with anndata, not scanpy",
+   "import anndata as ad" in (Path(__file__).resolve().parents[1]
+                              / "scprofile" / "_entry.py").read_text())
+_bad = declare.check({"api": 1, "summary": "x", "cannot_show": ["y"],
+                      "requires": {"python": ">=3.10", "packages": {"numpy": ">=1"}}})
+ck("a python requirement with no anndata is an ERROR",
+   any(l == "ERROR" and "anndata" in m for l, m in _bad), str(_bad))
+_ok = declare.check({"api": 1, "summary": "x", "cannot_show": ["y"],
+                     "requires": {"python": ">=3.10",
+                                  "packages": {"numpy": ">=1", "anndata": ">=0.10,<0.12"}}})
+ck("and with it, it is not", not any("anndata" in m for _l, m in _ok), str(_ok))
+_r = declare.check({"api": 1, "summary": "x", "cannot_show": ["y"],
+                    "requires": {"conda": {"r-base": "4.3"}, "r": ["a/b==1"]}})
+ck("a requirement that brings no python packages is not asked for it",
+   not any("anndata" in m for _l, m in _r), str(_r))
+from scprofile.kernels import discover as _disc                                 # noqa: E402
+for _n, _k in sorted(_disc().items()):
+    if (_k.spec.get("requires") or {}).get("packages"):
+        ck(f"{_n} declares it", "anndata" in _k.spec["requires"]["packages"])
+
 print("\n" + ("the declaration holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

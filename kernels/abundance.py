@@ -62,6 +62,11 @@ PLUGIN = {
         "python": ">=3.10,<3.13",
         "packages": {
             "pertpy": ">=0.9,<2", "pandas": ">=2.0,<3", "numpy": ">=1.24,<3",
+            # THE CONTRACT'S, NOT THIS METHOD'S. `_entry.py` reads the object with
+            # `anndata.read_h5ad` before run() is called. This plugin happens to work today
+            # because it SHARES an environment with plugins that do name anndata - which is
+            # accidental: isolate it for any reason and it stops being able to start.
+            "anndata": ">=0.10,<0.12",
             # PERTPY IMPORTS THIS AND DOES NOT DECLARE IT. `pertpy/data/_dataloader.py` does
             # `from filelock import FileLock` at module scope, and `pertpy/__init__.py` imports
             # `data`, so `import pertpy` raises ModuleNotFoundError in an environment resolved

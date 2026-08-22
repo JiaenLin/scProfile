@@ -165,6 +165,23 @@ def check(spec, name="<plugin>"):
             if not (req.get("packages") or req.get("conda") or req.get("r")):
                 out.append(("WARN", "`requires` names no packages, so it constrains only the "
                                     "interpreter"))
+            # THE CONTRACT'S OWN DEPENDENCY, WHICH NOTHING DECLARED AND NOTHING CHECKED.
+            # `_entry.py` reads the object with `anndata.read_h5ad` before a plugin sees
+            # anything, so a python plugin whose environment has no anndata cannot run - and the
+            # failure arrives as "this kernel's interpreter cannot read the object", which reads
+            # as a problem with the OBJECT. Measured on PBS 677677: ten instances of one plugin
+            # reported exactly that, and the cause was `No module named 'anndata'`.
+            #
+            # Only for a plugin that brings python packages. A requirement that is entirely
+            # conda or entirely another language is not run through the python entrypoint.
+            if req.get("packages") and "anndata" not in (req.get("packages") or {}):
+                out.append(("ERROR",
+                            "the requirement names no anndata, and the CONTRACT needs it. The "
+                            "host reads the object with `anndata.read_h5ad` in `_entry.py` "
+                            "before this plugin is called, so an environment without it cannot "
+                            "run any plugin at all - and the failure surfaces as 'this kernel's "
+                            "interpreter cannot read the object', which reads as a problem with "
+                            "the object rather than with the environment."))
             if not req.get("python") and not (req.get("conda") or req.get("r")):
                 out.append(("ERROR", "`requires` pins no python and names nothing outside pip. "
                                      "An environment has to be built at SOME interpreter version "

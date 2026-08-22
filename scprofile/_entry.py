@@ -139,9 +139,14 @@ def main(argv):
     log = print
 
     import numpy as np
-    import scanpy as sc
+    # ANNDATA, NOT SCANPY. This read the object with `scanpy.read_h5ad`, which is the same
+    # function one package further away - and it made SCANPY an undeclared requirement of the
+    # CONTRACT, imposed on every plugin's environment by the entrypoint rather than by anything a
+    # plugin asked for. The contract should need as little of a plugin's environment as it can:
+    # what it does here is read an h5ad, and anndata is what reads an h5ad.
+    import anndata as ad
 
-    A = sc.read_h5ad(inp["h5ad"])
+    A = ad.read_h5ad(inp["h5ad"])
     keys = dict(inp.get("keys") or {})
     unit = inp.get("unit")
     sentinels = set(inp.get("sentinels") or ())

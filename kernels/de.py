@@ -65,7 +65,12 @@ PLUGIN = {
     # environment the builder resolves for that stack rather than asking for one of its own.
     "requires": {
         "python": ">=3.10,<3.13",
-        "packages": {"pydeseq2": ">=0.4,<0.6", "pandas": ">=2.0,<3", "numpy": ">=1.24,<3"},
+        "packages": {"pydeseq2": ">=0.4,<0.6", "pandas": ">=2.0,<3", "numpy": ">=1.24,<3",
+                     # THE CONTRACT'S, NOT THIS METHOD'S. `_entry.py` reads the object with
+                     # `anndata.read_h5ad` before run() is called; this plugin never touches it
+                     # directly. It worked only because it shares an environment with plugins
+                     # that name it.
+                     "anndata": ">=0.10,<0.12"},
     },
 
     "cost": "medium", "cores": 4,
