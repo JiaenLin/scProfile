@@ -1031,10 +1031,16 @@ def _plan(a):
               + (f"   crossed: {facts['crossed_pairs']}" if facts["crossed_pairs"] else ""))
     else:
         print("  no design table given")
+    # AN INCOMPLETE WALK THAT FOUND WHAT IT NEEDED IS NOT A WARNING. It matters only for inputs
+    # reported ABSENT - those may merely be unfound - and saying "INCOMPLETE" over a plan where
+    # every input resolved trains the reader to skip the line that will one day matter.
+    _unresolved = [n for n, need in present.items() if any(v is None for v in need.values())]
     print(f"  searched {len(roots)} location(s), {provenance.find_layer_sources.visited:,} "
           f"director(ies), to depth {provenance.find_layer_sources.deepest}"
-          + ("  -- INCOMPLETE: the walk hit a limit or an unreadable directory"
-             if provenance.find_layer_sources.exhausted else ""))
+          + ("  -- the walk did not finish; nothing was reported absent on the strength of it"
+             if provenance.find_layer_sources.exhausted and not _unresolved else "")
+          + ("  -- INCOMPLETE, and it matters: see UNRESOLVED below"
+             if provenance.find_layer_sources.exhausted and _unresolved else ""))
 
     ready, pending = PL.ready_count(verdicts)
     will_run = [v for v in verdicts if v.verdict == PL.RUN]

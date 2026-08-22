@@ -103,7 +103,23 @@ st = P.settings_for(K("de", needs_design=True),
 ck("an interaction is chosen when the design is crossed",
    st["contrast"]["kind"] == "interaction", str(st.get("contrast")))
 ck("with a formula a user can read", ":" in st["contrast"]["formula"], str(st["contrast"]))
-ck("the detected keys are carried", st["label"] == "cell_type" and st["sample"] == "sample")
+ck("the sample key is carried for a design-aware plugin", st.get("sample") == "sample")
+# ONLY WHAT IT CONSUMES. K declares nothing in needs_*, so nothing but the sample key (needed to
+# join the design) should appear - listing every detected key against every plugin claimed that a
+# plugin would run on inputs it never reads.
+ck("a key the plugin does not declare is NOT listed", "embedding" not in st, str(sorted(st)))
+class KN:
+    name, needs_design, per_unit, needs_kernels = "n", False, None, []
+    needs_obs, needs_obsm, needs_layers, sees = ["{label}"], [], ["{lognorm}"], None
+stn = P.settings_for(KN(), keys={"label": "ct", "batch": "b", "embedding": "X_p",
+                                 "lognorm_layer": "lognorm", "sample": "s"},
+                     facts={}, references=None, cores=None)
+ck("a declared obs key is listed", stn.get("label") == "ct")
+ck("a declared layer is listed", stn.get("lognorm_layer") == "lognorm")
+ck("an undeclared embedding is not", "embedding" not in stn, str(sorted(stn)))
+ck("an undeclared batch is not", "batch" not in stn, str(sorted(stn)))
+ck("and neither is sample, for a plugin that is not per-unit or design-aware",
+   "sample" not in stn, str(sorted(stn)))
 st2 = P.settings_for(K("liana", per_unit="sample"), keys={"label": "ct"},
                      facts={"units": ["a", "b", "c"]}, references=None, cores=None)
 ck("a per-unit plugin is told its units", st2["per_unit"]["n"] == 3, str(st2["per_unit"]))

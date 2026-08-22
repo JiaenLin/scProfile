@@ -238,10 +238,29 @@ def settings_for(k, *, keys, facts, references=None, cores=None):
     Everything here is DERIVED from the object and the design. No default is invented for a key
     that was not detected; a key that is absent is absent, and the plugin's own guard decides.
     """
+    # ONLY WHAT THIS PLUGIN CONSUMES. Listing every detected key against every plugin said that
+    # `cellcycle` would run on `X_scanvi` and `batch`, which it never reads - a settings block
+    # that names an input the plugin ignores is not documentation, it is a claim about behaviour
+    # that is false, and the reader has no way to tell the used from the padding.
+    declared = " ".join(sum((list(getattr(k, attr, None) or [])
+                             for attr in ("needs_obs", "needs_obsm", "needs_layers", "sees")),
+                            []))
     s = {}
-    for role in ("label", "sample", "batch", "compartment", "embedding",
-                 "counts_layer", "lognorm_layer"):
-        if keys.get(role):
+    for role, tokens in (("label", ("{label}", "label")),
+                         ("sample", ("{sample}", "sample")),
+                         ("batch", ("{batch}", "batch")),
+                         ("compartment", ("{compartment}", "compartment")),
+                         ("embedding", ("{embedding}", "embedding")),
+                         ("counts_layer", ("{counts}", "counts")),
+                         ("lognorm_layer", ("{lognorm}", "lognorm"))):
+        if not keys.get(role):
+            continue
+        used = any(tok in declared for tok in tokens)
+        # A per-unit plugin uses the unit key whether or not it names it in `needs`, and a
+        # design-aware one uses the sample key to join the design table.
+        if role == "sample" and (k.per_unit or getattr(k, "needs_design", False)):
+            used = True
+        if used:
             s[role] = keys[role]
     if k.per_unit:
         units = sorted(facts.get("units") or [])
