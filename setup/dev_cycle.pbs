@@ -12,6 +12,10 @@
 #           INSTALL=decoupler,KERNELS=decoupler,silhouette,ORGANISM=mouse,ASSAY=nucleus \
 #        setup/dev_cycle.pbs
 #
+# `ALL=1` runs every discovered plugin instead of `KERNELS`. `SEARCH=<dir>` is handed to both
+# `plan` and `run` as `--search`, for inputs that are not in the object - the two must be given
+# the same leads or the plan can name a directory the run never looks in.
+#
 # `INSTALL` may name several plugins; each builds the ENVIRONMENT IT RESOLVES TO, so one name per
 # resolved group is enough and naming every plugin is harmless. `CORES` sets the budget
 # independently of `NCPUS`: the budget decides how many instances run AT ONCE as well as the share
@@ -109,8 +113,15 @@ build)
 
 run)
   : "${OBJ:?pass -v OBJ=<h5ad>}"
-  : "${KERNELS:?pass -v KERNELS=a,b}"
   OUT="${OUT:-$PWD/out}"
+  # EVERY PLUGIN, or a named subset. `-v` splits its value on commas, so a list cannot be passed
+  # through it at all without escaping - and `--all` is what a user running a whole profiling
+  # layer types anyway. KERNELS stays required for the RESTRICTED audit below, which exists to
+  # prove that auditing a subset is a legitimate invocation.
+  if [ -n "${ALL:-}" ]; then SEL=(--all); else
+    : "${KERNELS:?pass -v KERNELS=<one plugin>, or ALL=1}"
+    SEL=(--kernel "$KERNELS")
+  fi
 
   say "1. DECLARE"
   $PY -m scprofile.cli validate ${REFS:+--references "$REFS"} || echo "  validate exit $?"
@@ -121,7 +132,7 @@ run)
   say "3. PLAN, AUDITED, WITH ITS REPORT — over EVERY plugin"
   $PY -m scprofile.cli plan --h5ad "$OBJ" ${DES:+--design "$DES"} \
       ${ORGANISM:+--organism "$ORGANISM"} ${ASSAY:+--assay "$ASSAY"} \
-      --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
+      --prefix "$PREFIX" ${REFS:+--references "$REFS"} ${SEARCH:+--search "$SEARCH"} \
       --audit --report "$OUT" || echo "  plan exit $?"
 
   say "3b. THE SAME PLAN, RESTRICTED — the audit is over what was ASKED FOR"
@@ -130,14 +141,15 @@ run)
   $PY -m scprofile.cli plan --h5ad "$OBJ" ${DES:+--design "$DES"} \
       ${ORGANISM:+--organism "$ORGANISM"} ${ASSAY:+--assay "$ASSAY"} \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
-      --kernel "$KERNELS" --audit 2>&1 | grep -E "AUDIT|checked:|error\(s\)|ERROR|WARN" \
+      --kernel "${KERNELS:-$(ls "$TOOL/kernels" | head -1 | sed 's/\.py$//')}" --audit 2>&1 \
+      | grep -E "AUDIT|checked:|error\(s\)|ERROR|WARN" \
       || echo "  plan(restricted) exit $?"
 
   say "4. RUN"
   $PY -m scprofile.cli run --h5ad "$OBJ" --out "$OUT" \
       ${DES:+--design "$DES"} ${ORGANISM:+--organism "$ORGANISM"} \
-      ${ASSAY:+--assay "$ASSAY"} --kernel "$KERNELS" \
-      --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
+      ${ASSAY:+--assay "$ASSAY"} "${SEL[@]}" \
+      --prefix "$PREFIX" ${REFS:+--references "$REFS"} ${SEARCH:+--search "$SEARCH"} \
       --cores "${CORES:-${NCPUS:-4}}" --timeout "${TIMEOUT:-7200}" || echo "  run exit $?"
 
   say "5. WHAT LANDED"
