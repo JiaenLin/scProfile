@@ -263,16 +263,32 @@ class Kernel:
         idea: `produces` stops being a comment and becomes the set the host checks a kernel's
         actual output against. A kernel that quietly starts writing a second obs column is a
         kernel whose documentation, report section and provenance have all silently gone stale.
+
+        A TRAILING `?` marks an output only some runs produce, and is stripped here - see
+        `optional_produces`.
         """
         out = {}
         for item in self.produces:
-            s = str(item).strip()
+            s = str(item).strip().rstrip("?")
             if "[" in s and s.endswith("]"):
                 slot, _, rest = s.partition("[")
                 out.setdefault(slot.strip(), set()).add(rest[:-1].strip())
             else:
                 out.setdefault("tables", set()).add(s)
         return out
+
+    def optional_produces(self):
+        """The `produces` entries marked `?`: declared, and NOT a promise for every run.
+
+        A method with a mode produces different things in each - velocity writes `obs[latent_time]`
+        only in `dynamical` mode - and until this existed the declaration had two ways to be
+        wrong and no way to be right. Leave it out and every dynamical run reports an undeclared
+        output; put it in and every ordinary run reports a broken promise. Drift that fires on
+        correct behaviour is drift a maintainer learns to scroll past, which costs the check.
+
+        `?` says: this is mine, its ABSENCE is not drift, and its presence is declared.
+        """
+        return {str(x).strip().rstrip("?") for x in self.produces if str(x).strip().endswith("?")}
 
     @property
     def cannot_show(self):
@@ -305,6 +321,23 @@ class Kernel:
         """
         g = self.path / "guard.py"
         return g if g.exists() else None
+
+    @property
+    def has_guard(self):
+        return self.guard is not None
+
+    def guard_argv(self, exe):
+        """The command that asks this kernel's guard, or None if it ships none.
+
+        THE SHAPE ANSWERS HOW IT IS LAUNCHED, exactly as `argv` and `selftest_argv` do - and this
+        one did not exist, so `guard_verdict` reached for `kernel.path / "guard.py"` directly. For
+        a ONE-FILE plugin that path is inside a file and can never exist, which means converting a
+        guarded plugin to the shape this host prefers SILENTLY DROPPED ITS GUARD: no error, no
+        line in the log, and the first dataset the guard existed to refuse would have been
+        analysed and reported.
+        """
+        g = self.guard
+        return [str(exe), str(g)] if g else None
 
     @property
     def needs_env(self):
@@ -452,6 +485,28 @@ class FileKernel(Kernel):
     def selftest_argv(self, exe):
         return [str(exe), str(SHARED_ENTRY), "--selftest", str(self.path)] if self.has_selftest \
             else None
+
+    @property
+    def guard(self):
+        """There is no neighbouring `guard.py`; a one-file plugin's guard is a `guard(g)` in it."""
+        return self.path if self.has_guard else None
+
+    @property
+    def has_guard(self):
+        try:
+            return "def guard(" in self.path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return False
+
+    def guard_argv(self, exe):
+        """Run through the shared entrypoint, in the HOST's interpreter.
+
+        The host's, deliberately: a guard runs BEFORE the environment is resolved, and one of the
+        things it can say is that resolving it is not worth doing. `_entry.py` imports the plugin
+        module and calls `guard(g)` - which is why module scope in a plugin must stay importable
+        by the host, with every third-party import inside a function.
+        """
+        return [str(exe), str(SHARED_ENTRY), "--guard", str(self.path)] if self.has_guard else None
 
 
 def discover(root=None):
@@ -679,15 +734,16 @@ def guard_verdict(kernel, *, describe, constraint, params, log=print):
     factor is nested in the batch key runs perfectly and returns p-values for a contrast that is
     not identifiable.
     """
-    g = kernel.guard
-    if g is None:
-        return True, "", ""
     import json
     import subprocess
     import sys
+    argv = (kernel.guard_argv(sys.executable) if hasattr(kernel, "guard_argv")
+            else ([sys.executable, str(kernel.guard)] if getattr(kernel, "guard", None) else None))
+    if not argv:
+        return True, "", ""
     payload = json.dumps({"describe": describe, "constraint": constraint,
                           "params": dict(params or {})})
-    r = subprocess.run([sys.executable, str(g)], input=payload, capture_output=True, text=True)
+    r = subprocess.run(argv, input=payload, capture_output=True, text=True)
     if r.returncode == 0:
         return True, (r.stdout or "").strip(), ""
     reason = (r.stdout or "") + (r.stderr or "")

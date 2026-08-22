@@ -32,8 +32,23 @@ WHAT A PLUGIN IS
             ctx.emit_obs("my_score", score)
             ctx.headline = f"{len(score):,} cells scored"
 
+        def guard(g):                       # OPTIONAL, and see the Guard class below
+            if not g.assay:
+                g.deny("this result means different things on nuclei and on whole cells")
+
 That is the entire plugin. No manifest to keep in step with a wrapper, no `run.py` to write, no
 skeleton to finish, no boilerplate to copy from the plugin next door.
+
+A SHAPE THAT CANNOT EXPRESS SOMETHING SILENTLY DELETES IT. This shape had no guard for its first
+seven plugins, and nothing said so - so converting a guarded plugin to the shape the host prefers
+removed its check with no error and no line in the log, and the first dataset that guard existed
+to refuse would have been analysed and reported. The same reasoning is why `produces` can mark an
+output `"obs[latent_time]?"` when only one mode makes it: a declaration with no way to be right is
+a declaration that gets ignored.
+
+KEEP THIRD-PARTY IMPORTS INSIDE FUNCTIONS, as the sketch above does. Module scope is executed by
+the HOST's interpreter for anything that must happen before the plugin's environment is resolved -
+`guard(g)` is that case - and the host has none of the plugin's pins.
 
 WHY THIS REPLACED SIX FILES
 
@@ -62,6 +77,61 @@ from __future__ import annotations
 from pathlib import Path
 
 
+class Guard:
+    """What a plugin's GUARD is given, and the only two things it may do with it.
+
+    A guard answers one question, before anything is spent: is this dataset one where this
+    plugin's output would MEAN what its report says it means? It is NOT a prerequisite check -
+    those are structural, the host does them in `unmet()`, and no willingness makes a missing
+    layer runnable. A guard is about interpretability: the run would succeed, produce numbers,
+    and those numbers would not support the sentence a reader will write under them.
+
+        def guard(g):
+            if not g.assay:
+                g.deny("velocity says different things about nuclei and whole cells ...")
+
+    Modelled on the agent harness's PreToolUse hook, including the part that matters most: the
+    escape is `--allow <plugin>` and every use of it is appended to `guard_overrides.jsonl` with
+    its reason. A gate with no escape gets switched off; a gate whose escapes are all recorded
+    does not.
+
+    IT RUNS IN THE HOST'S INTERPRETER, before the plugin's environment is resolved - which is the
+    whole point, since one thing a guard can say is that building the environment is not worth it.
+    So a plugin that ships a guard must be IMPORTABLE BY THE HOST: keep every third-party import
+    inside a function, as every plugin here already does.
+    """
+
+    def __init__(self, describe=None, constraint="", params=None):
+        #: What the host knows about the object: n_obs, n_vars, keys, layers, obsm, organism,
+        #: assay and how each was decided. See `inputs.describe`.
+        self.describe = dict(describe or {})
+        #: The upstream tool's own constraint on use, verbatim, or "" when the object carries
+        #: none - and an ABSENT constraint is a finding, not a pass.
+        self.constraint = str(constraint or "")
+        self.params = dict(params or {})
+        self.notes, self.denials = [], []
+
+    @property
+    def assay(self):
+        return (self.describe.get("assay") or "").lower() or None
+
+    @property
+    def organism(self):
+        return (self.describe.get("organism") or "").lower() or None
+
+    @property
+    def keys(self):
+        return dict(self.describe.get("keys") or {})
+
+    def deny(self, reason):
+        """Refuse this dataset, and say what would make it runnable. Printed to the user."""
+        self.denials.append(str(reason))
+
+    def note(self, text):
+        """Allow, with something the reader of the result has to be told."""
+        self.notes.append(str(text))
+
+
 class Context:
     """Everything a plugin is given, already correct. Built by the host, never by a plugin.
 
@@ -71,7 +141,7 @@ class Context:
 
     def __init__(self, adata, *, keys, out, cores=1, unit=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
-                 sentinels=(),
+                 sentinels=(), provenance=None,
                  config=None, log=print):
         self.adata = adata
         #: {role: actual name in THIS object}. `ctx.keys["label"]`, never a literal column.
@@ -89,6 +159,10 @@ class Context:
         self.params = dict(params or {})
         self.design = design
         self.sentinels = tuple(sentinels or ())
+        #: What the upstream tools recorded about where this object came from - directory leads
+        #: and sample names, harvested by the host from `uns` and handed over as plain JSON.
+        #: Read through `source_layers()`; a plugin should not have to parse it.
+        self.provenance = dict(provenance or {})
         self.log = log
 
         #: Typed, defaulted and RANGE-CHECKED before run() was called. A plugin reads
@@ -104,6 +178,8 @@ class Context:
         self.caveats, self.absent = [], []
         #: So `populations()` says what it set aside ONCE however many tables a plugin writes.
         self._said_populations = False
+        #: Every directory `source_layers()` walked, so a refusal can name where it looked.
+        self.searched = []
         for d in ("tables", "figures", "obs", "arrays"):
             (self.out / d).mkdir(parents=True, exist_ok=True)
 
@@ -120,6 +196,19 @@ class Context:
         """The counts layer, or None. A count model handed non-integers returns a plausible lie."""
         lay = self.keys.get("counts")
         return self.adata.layers[lay] if lay and lay in self.adata.layers else None
+
+    def layers(self):
+        """The layer names this object actually HAS. NOT `list(adata.layers)`, and here is why.
+
+        On current anndata a bare object with no layers iterates as `[None]`, and `layers[None]`
+        is X under another name. So `sorted(adata.layers)` raises the moment a real layer exists,
+        and a plugin deciding what it was given is told about a layer that is not one. The guard
+        was written EIGHT times across five files in this project before anybody named it, which
+        is how the ninth copy comes to be the one that forgets - so it is answered here, once, for
+        every plugin.
+        """
+        from . import manifest
+        return manifest.layer_names(self.adata)
 
     def obs(self, role_or_name):
         """A column BY ROLE. `ctx.obs("label")` resolves through the key map; a literal name is
@@ -189,6 +278,45 @@ class Context:
                 f"They stay in the object and in any per-cell result; only the grouping excludes "
                 f"them.")
         return mask, np.asarray(lab.astype(str))[mask]
+
+    def source_layers(self, names=("spliced", "unspliced"), *, extra_roots=(),
+                      min_match=0.5):
+        """Layers the object does not carry, fetched from the ALIGNER OUTPUT beside it.
+
+        Returns `(ok, note)`. On success the layers are on `ctx.adata` and `note` says how many
+        cells each source covered; on failure `ok` is False and `note` says what was opened and
+        rejected. Either way `ctx.searched` names every lead that was walked, which is what turns
+        a refusal into something a user can act on: "I did not look where they are" and "your data
+        does not have them" are opposite statements and read identically without it.
+
+        WHY THE HOST OWNS THIS. Some inputs come from the aligner and cannot be derived from a
+        counts matrix - spliced/unspliced counts are the case that forced it, but the shape of the
+        problem is general. The host is the only party that has the upstream chain: `uns` is
+        dropped from the plugin's copy of the object on purpose, and the leads arrive as plain
+        JSON in `in.json`. A plugin doing this for itself would be re-deriving what it was already
+        given, once per plugin, differently each time.
+
+        Nothing here is a project's vocabulary. `names` are the host's own capability names, and
+        the search recognises sources by CONTENT rather than by any pipeline's filenames.
+        """
+        from . import sources
+        roots = [str(r) for r in extra_roots if r]
+        roots += list(self.provenance.get("search_paths") or [])
+        hints = list(self.provenance.get("sample_hints") or [])
+        samp = self.keys.get("sample")
+        if samp and self.adata is not None and samp in self.adata.obs:
+            hints += [str(x) for x in self.adata.obs[samp].astype(str).unique()]
+        hints = sorted({h for h in hints if h})
+        self.log(f"searching {len(roots)} lead(s) for aligner output"
+                 + (f", {len(hints)} sample name(s) known" if hints else ""))
+        cands = sources.find(roots, hints, log=self.log, names=tuple(names))
+        self.searched = list(sources.find.looked)
+        self.log(f"  visited {sources.find.visited} director(ies), "
+                 f"found {len(cands)} candidate(s)")
+        if not cands:
+            return False, ""
+        return sources.attach(self.adata, cands, sample_key=samp, min_match=float(min_match),
+                              log=self.log, names=tuple(names))
 
     def design_table(self):
         """{sample: {factor: level}} from the design CSV, or {} if none was given.
@@ -319,17 +447,66 @@ class Context:
         self._tables.append(p)
         return p
 
-    def emit_figure(self, name, fig, *, caption="", source=None):
-        """A panel, written as raster AND vector with its source data, at journal width."""
+    @property
+    def figure(self):
+        """The shared figure conventions: SINGLE, DOUBLE, INK, GREY, palette, legend_outside.
+
+        Reached through `ctx` so a plugin never imports a host module to draw. What lives there is
+        the difference between a figure you can read and one you can submit - live text in the
+        vector output, points rasterised and axes not, real column widths, a colour-vision-safe
+        palette - and it is contract, not method: every panel this tool produces should look like
+        the others whichever plugin drew it, including plugins written by somebody else.
+        """
+        from . import figure
+        return figure
+
+    def plot(self):
+        """`matplotlib.pyplot`, with the conventions already applied. Call before drawing.
+
+        NOTHING USED THIS UNTIL THE TWO PLUGINS THAT DRAW WERE CONVERTED. Seven one-file plugins
+        shipped and not one emitted a figure, so the whole figure half of this contract was
+        unexercised - `emit_figure` was overriding the publication DPI with a hard 200 and leaking
+        every canvas it was handed, and neither could be noticed by a plugin that never called it.
+        """
+        return self.figure.use()
+
+    def emit_figure(self, name, fig, *, caption="", source=None, close=True):
+        """A panel, written as raster AND vector with its source data, at journal width.
+
+        `source` is either a frame - written beside the panel - or a path to a table already on
+        disk, because a plugin whose figure is drawn from a table it emitted should be able to
+        point at that table rather than write the same numbers twice.
+
+        THE FIGURE IS CLOSED. matplotlib keeps every unclosed figure alive: a plugin drawing a
+        dozen panels holds a dozen canvases of a 100,000-cell scatter in memory and gets a
+        RuntimeWarning at twenty, and the plugin that trips it is the one whose report has the
+        most panels in it. `close=False` is there for the rare case of drawing on it again.
+        """
         png = self.out / "figures" / f"{name}.png"
         pdf = self.out / "figures" / f"{name}.pdf"
-        fig.savefig(png, dpi=200, bbox_inches="tight")
+        # THE CONVENTION WINS WHERE THERE IS ONE. `figure.use()` sets savefig.dpi to 400 for
+        # publication; a hard `dpi=200` here silently overrode it, so a plugin that had asked for
+        # the journal settings got half the resolution it asked for. Where nothing has been set,
+        # matplotlib leaves the string "figure" and 200 is the honest fallback.
+        import matplotlib as _mpl
+        dpi = _mpl.rcParams.get("savefig.dpi")
+        dpi = dpi if isinstance(dpi, (int, float)) else 200
+        fig.savefig(png, dpi=dpi, bbox_inches="tight")
         fig.savefig(pdf, bbox_inches="tight")
         src = None
         if source is not None:
-            src = self.out / "figures" / f"{name}.csv"
-            source.to_csv(src)
+            if hasattr(source, "to_csv"):
+                src = self.out / "figures" / f"{name}.csv"
+                source.to_csv(src)
+            else:
+                src = Path(source)
         self._figures.append({"path": png, "vector": pdf, "source": src, "caption": caption})
+        if close:
+            try:
+                import matplotlib.pyplot as plt
+                plt.close(fig)
+            except Exception:                                             # noqa: BLE001
+                pass
         return png
 
     def emit_object(self, name, path):

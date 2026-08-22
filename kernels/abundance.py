@@ -81,14 +81,22 @@ PLUGIN = {
 
 
 def _counts_frame(ctx, pd, np):
-    """A samples x populations count matrix, sentinels excluded and named."""
+    """A samples x populations count matrix, sentinels excluded and NAMED.
+
+    `ctx.populations()` returns `(mask, groups)` - the mask of real cells and their labels. This
+    read it as `(populations, dropped)`, which is the third time in this repository that a plugin
+    has got the sentinel affordance wrong and the first time it was caught by reading rather than
+    by a results table. What it did: `set(pops)` became `{True, False}`, every population was
+    filtered out of the crosstab as "not a population", and the next line asked the truth value of
+    a numpy array - so the plugin would have died before reaching scCODA at all.
+    """
+    mask, groups = ctx.populations()
+    mask, groups = np.asarray(mask), np.asarray(groups)
     samp = ctx.obs("sample").astype(str).to_numpy()
-    pops, dropped = ctx.populations()
     lab = ctx.obs("label").astype(str).to_numpy()
-    real = np.asarray(ctx.real_cells())
-    tab = (pd.crosstab(pd.Series(samp[real], name="sample"),
-                       pd.Series(lab[real], name="population")))
-    return tab.loc[:, [p for p in tab.columns if p in set(pops)]], dropped
+    tab = pd.crosstab(pd.Series(samp[mask], name="sample"),
+                      pd.Series(groups, name="population"))
+    return tab, sorted(set(lab[~mask]))
 
 
 def run(ctx):
@@ -145,10 +153,9 @@ def run(ctx):
                            obs=pd.DataFrame({term: tab[term].to_numpy()},
                                             index=tab.index.astype(str)),
                            var=pd.DataFrame(index=pd.Index(pops, name="population")))
-        mdata = sccoda.load(adata, type="cell_level" if False else "sample_level",
-                            covariate_obs=[term]) if hasattr(sccoda, "load") else adata
-        model = sccoda.prepare(mdata if hasattr(sccoda, "prepare") else adata,
-                               formula=term, reference_cell_type=ref)
+        mdata = (sccoda.load(adata, type="sample_level", covariate_obs=[term])
+                 if hasattr(sccoda, "load") else adata)
+        model = sccoda.prepare(mdata, formula=term, reference_cell_type=ref)
         sccoda.run_nuts(model, num_samples=1000, num_warmup=500, rng_key=0)
         res = sccoda.credible_effects(model, est_fdr=ctx.config["fdr"])
         df = res.reset_index() if hasattr(res, "reset_index") else pd.DataFrame(res)

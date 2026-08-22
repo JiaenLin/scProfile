@@ -14,8 +14,14 @@ world it wraps is not.
 ## What you own
 
 One file. `kernels/<name>.py` — the declaration, the environment, the references, the limits, the
-upstream record, `run(ctx)` and `selftest(ctx)`. Everything about that plugin is in it, which is
-what makes ownership possible: there is no second file to keep in step.
+upstream record, `run(ctx)`, `selftest(ctx)` and, where the dataset can make the result mean
+something it does not, `guard(g)`. Everything about that plugin is in it, which is what makes
+ownership possible: there is no second file to keep in step.
+
+**Module scope must be importable by the host.** Keep every third-party import inside a function,
+as every shipped plugin does. The host executes your module in its own interpreter for anything
+that must happen before your environment is resolved — `guard(g)` is that case today — and the
+host's interpreter has none of your pins.
 
 You own it against a moving target. The wrapped tool releases, renames a keyword, changes a
 default, moves a result key, drops a python version. **None of that reaches the user as a bug in
@@ -95,6 +101,13 @@ a real negative.
 
 **Declare every limit.** `cannot_show` is printed with the numbers. A result whose limits were
 never written down reads exactly as authoritative as one whose limits were thought about.
+
+**Say when an output is conditional.** `produces` may end an entry with `?` — `"obs[latent_time]?"`
+— for something only some modes produce, and may glob a name chosen at run time —
+`"obsm[velocity_*]"`. Without the `?` the declaration has two ways to be wrong and no way to be
+right: leave the entry out and every run that produces it reports an undeclared output, put it in
+and every run that does not reports a broken promise. Drift that fires on correct behaviour is
+drift a maintainer learns to scroll past.
 
 **The selftest asserts shapes, columns and finiteness — never a biological answer.** The fixture
 is synthetic; there is no correct answer to check against, and a selftest that asserted one would

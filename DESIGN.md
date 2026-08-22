@@ -191,7 +191,7 @@ half-reinventing them. Adopted verbatim:
 |---|---|
 | a skill's `description` says **when** to use it, so a router judges relevance without loading it | `when_to_use` in `kernel.yml`; `doctor` reports whether a kernel is RELEVANT to this dataset, not only whether it is installed |
 | `allowed-tools` — a skill is **held to** what it declared | `produces` is checked against what the kernel actually wrote. An undeclared output is reported everywhere, because nothing in `cannot_show` covers it and no documentation mentions it |
-| a `PreToolUse` hook **denies** an action and names the remedy, and its escape is **logged** | `guard.py` per kernel, run in the host before anything is spent. `--allow <kernel>` overrides, and every override lands in `guard_overrides.jsonl` with its reason |
+| a `PreToolUse` hook **denies** an action and names the remedy, and its escape is **logged** | `guard(g)` in a one-file plugin, or `guard.py` in the directory shape — run in the host before anything is spent. `--allow <kernel>` overrides, and every override lands in `guard_overrides.jsonl` with its reason |
 | plugin namespacing makes an override visible | a site kernel shadowing a shipped one is legitimate and is why `$SCPROFILE_KERNELS` exists — doing it **silently** is not, so `doctor` prints it |
 
 The escape-hatch rule is the harness's own, and it is the one worth stating twice: **a gate with no

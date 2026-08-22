@@ -269,8 +269,18 @@ ck("doctor still has the unbuilt branch", '"TODO"' in _dsrc and "planned" in _ds
 ck("and it keys on status, not on a name", 'k.status == "built"' in _dsrc)
 ck("no plugin in this tree is unbuilt", "TODO" not in _doc,
    "which is the goal state, not a reason to delete the rule")
-ck("doctor still calls a built host plugin ok",
-   any(l.strip().startswith("ok") and "cellcycle" in l for l in _doc.splitlines()))
+# AND NO PLUGIN IN THIS TREE RUNS IN THE HOST INTERPRETER ANY MORE, which is the same shape of
+# problem one line up: `cellcycle` was the built host-interpreter plugin this asserted against,
+# and it now declares a requirement and shares the others' environment. The RULE - a plugin that
+# needs no environment is ready, not missing - is tested against the branch and against a kernel
+# that declares it, so keeping one plugin unpinned forever is not the price of keeping the check.
+ck("doctor still has the host-interpreter branch", '"host"' in _dsrc or "host" in _dsrc)
+from scprofile import runner as _rn                                            # noqa: E402
+import types as _ty                                                            # noqa: E402
+_hostk = _ty.SimpleNamespace(name="hostish", needs_env=False, language="python",
+                             path=Path("/nowhere/hostish.py"))
+ck("a plugin needing no environment reads as host, not missing",
+   _rn.env_state(_hostk, prefix=None)[0] == "host", str(_rn.env_state(_hostk, prefix=None)))
 ck("doctor can say how many are unbuilt", "DECLARED BUT NOT BUILT" in _dsrc)
 
 from scprofile import refs as _refs                                            # noqa: E402

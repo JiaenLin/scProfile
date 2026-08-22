@@ -101,31 +101,63 @@ def declaration_drift(kernel, payload):
     matches what it emits has drifted, and the next person to read the declaration will believe
     it.
     """
+    import fnmatch
     out = []
-    declared = set(kernel.spec.get("produces") or [])
-    if not declared:
+    raw = [str(x).strip() for x in (kernel.spec.get("produces") or [])]
+    if not raw:
         return out
-    got = set()
-    for slot in ("obs", "obsm", "layers"):
-        for key in (payload.get(slot) or {}):
-            got.add(f"{slot}[{key}]")
-    for rel in (payload.get("tables") or []):
-        got.add(f"tables/{str(rel).split('/')[-1]}")
 
-    for d in sorted(declared - got):
+    # A `?` SUFFIX MARKS AN OUTPUT ONLY SOME RUNS PRODUCE, and a GLOB matches a name chosen at run
+    # time. Neither was understood here, and both were already understood by `undeclared()` in
+    # kernels.py - two functions asking the same question of the same declaration and disagreeing
+    # about the answer. Measured on the one shipped plugin that uses either: `obsm[velocity_*]`
+    # was reported TWICE on a correct run, once as a promise broken and once as an output
+    # undeclared, and `obs[latent_time]` as a broken promise on every run not in dynamical mode.
+    # A check that fires on correct behaviour is a check a maintainer learns to scroll past.
+    #
+    # THE GLOB IS ON THE NAME, NOT ON `slot[name]`, and that is not a detail: in fnmatch `[phase]`
+    # is a CHARACTER CLASS, so matching the whole string makes `obs[phase]` match `obsp` and not
+    # itself. `undeclared()` splits first for the same reason.
+    def _split(item):
+        t = item.rstrip("?").strip()
+        if "[" in t and t.endswith("]"):
+            slot, _, rest = t.partition("[")
+            return slot.strip(), rest[:-1].strip()
+        return "tables", t.split("/")[-1]
+
+    declared = [_split(x) for x in raw]
+    optional = {_split(x) for x in raw if x.endswith("?")}
+    got = set()
+    for slot in ("obs", "obsm", "layers", "objects"):
+        for key in (payload.get(slot) or {}):
+            got.add((slot, str(key)))
+    for rel in (payload.get("tables") or []):
+        got.add(("tables", str(rel).split("/")[-1]))
+
+    def _shown(slot, name):
+        return f"{slot}/{name}" if slot == "tables" else f"{slot}[{name}]"
+
+    for slot, pat in sorted(set(declared)):
         if payload.get("status") in ("refused", "partial"):
             continue          # a refusal is allowed to produce nothing; it said why
+        if (slot, pat) in optional:
+            continue
+        if any(g_slot == slot and fnmatch.fnmatchcase(g_name, pat) for g_slot, g_name in got):
+            continue
         out.append(Diagnosis(
             DECLARATION,
-            f"declares {d!r} in `produces` and did not emit it. Either the method stopped "
-            f"producing it or the declaration is stale; both mislead the next reader.",
+            f"declares {_shown(slot, pat)!r} in `produces` and did not emit it. Either the method "
+            f"stopped producing it or the declaration is stale; both mislead the next reader.",
             action=f"fix `produces` in the plugin, or the method"))
-    for g in sorted(got - declared):
+    for slot, name in sorted(got):
+        if any(d_slot == slot and fnmatch.fnmatchcase(name, d_pat)
+               for d_slot, d_pat in declared):
+            continue
         out.append(Diagnosis(
             DECLARATION,
-            f"emitted {g!r}, which it does not declare in `produces`. An undeclared output is "
-            f"one no `cannot_show` covers and no documentation mentions.",
-            action=f"add {g!r} to `produces`, with its limits"))
+            f"emitted {_shown(slot, name)!r}, which it does not declare in `produces`. An "
+            f"undeclared output is one no `cannot_show` covers and no documentation mentions.",
+            action=f"add {_shown(slot, name)!r} to `produces`, with its limits"))
     return out
 
 

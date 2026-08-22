@@ -145,27 +145,30 @@ def test_declared_but_absent_is_refused(tmp):
 
 
 def test_velocity_declaration():
+    """velocity is ONE FILE now, and everything it used to keep in five must still be true."""
     print("\nvelocity's own declaration")
-    k = Kernel(Path(__file__).resolve().parents[1] / "kernels" / "velocity")
+    k = discover()["velocity"]
+    check("it is one file", k.path.is_file() and k.path.suffix == ".py", str(k.path))
     slots = k.declared_slots()
     check("declares the side-car object", "velocity_h5ad" in slots.get("objects", set()))
     check("declares no layers", "layers" not in slots,
           "velocity layers are on a SELECTED gene set and must not be merged into the full object")
     check("needs both layers", set(k.needs_layers) == {"spliced", "unspliced"})
-    check("ships a guard", k.guard is not None)
-    check("ships a lock", (k.path / "lock.yml").exists())
-    check("ships a selftest", (k.path / "selftest.py").exists())
+    check("ships a guard", k.has_guard)
+    check("ships a selftest", k.has_selftest)
     check("declares its limits", len(k.cannot_show) >= 6, f"{len(k.cannot_show)}")
 
-    # The lock exists to STOP the resolver picking today's versions. A lock with no `==` is a
-    # lock in name only, and this is the exact failure it was written for.
-    lock = (k.path / "lock.yml").read_text()
-    pins = [ln.strip() for ln in lock.splitlines()
-            if ln.strip().startswith("- ") and "==" in ln]
-    check("lock pins exactly", len(pins) >= 10, f"only {len(pins)} `==` pins")
-    check("scvelo is pinned", any("scvelo==" in p for p in pins))
-    check("pandas is pinned", any("pandas==" in p for p in pins),
+    # THE LOCK BECAME A `requires`, and it exists for the same reason: to stop the resolver
+    # picking today's versions. scvelo 0.3.4 declares `pandas>=1.1.1`, which resolves to pandas 3.
+    req = k.spec["requires"]
+    pins = {n: v for n, v in req["packages"].items() if str(v).startswith("==")}
+    check("it pins exactly", len(pins) >= 10, f"only {len(pins)} exact pins")
+    check("scvelo is pinned", pins.get("scvelo") == "==0.3.4", str(pins.get("scvelo")))
+    check("pandas is pinned", "pandas" in pins,
           "scvelo declares pandas>=1.1.1, which today resolves to pandas 3")
+    check("the interpreter is pinned", req.get("python") == "==3.11", str(req.get("python")))
+    check("and the exactness is JUSTIFIED, once, rather than warned about sixteen times",
+          len(str(req.get("exact_pins_why") or "")) > 100)
 
     # A wildcard in `produces` must still HOLD the kernel to a shape.
     ok = {"kernel": "velocity", "obsm": {"velocity_scanvi": "a.npy"},
@@ -176,21 +179,139 @@ def test_velocity_declaration():
           str(undeclared(k, bad)))
 
 
+def test_one_file_plugins_are_importable_by_the_host():
+    """Module scope in a plugin must import nothing the host does not have.
+
+    THIS IS NOT A STYLE RULE. The host executes a plugin's module scope in its OWN interpreter for
+    anything that has to happen before the environment is resolved - `guard(g)` is the case that
+    exists today - and this workstation has no numpy, pandas or anndata at all. A plugin importing
+    its pinned stack at module scope therefore cannot be guarded, and the failure appears as a
+    guard that denied for a reason having nothing to do with the data.
+
+    Every shipped plugin already does this. Asserting it is what stops the next one from not.
+    """
+    print("\nevery one-file plugin loads in the host's own interpreter")
+    import importlib.util
+    for name, k in sorted(discover().items()):
+        if not k.path.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location(f"_probe_{name}", k.path)
+        mod = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(mod)
+            ok, why = True, ""
+        except Exception as e:                                            # noqa: BLE001
+            ok, why = False, f"{type(e).__name__}: {e}"
+        check(f"{name} imports here", ok, why)
+        if ok:
+            check(f"{name} exposes run(ctx)", callable(getattr(mod, "run", None)))
+
+
+def test_a_one_file_plugin_can_have_a_guard():
+    """The one-file shape had no way to declare a guard, and nothing said so.
+
+    A guard runs in the host BEFORE the environment is resolved, and `guard_verdict` reached for
+    `kernel.path / "guard.py"` directly. For a one-file plugin that path is inside a file and can
+    never exist - so converting a guarded plugin to the shape this host prefers DELETED ITS GUARD
+    silently: no error, no line in the log, and the first dataset the guard existed to refuse
+    would have been analysed and reported.
+    """
+    print("\na guard survives the one-file shape")
+    import sys as _sys
+    from scprofile.kernels import guard_verdict
+    k = discover()["velocity"]
+    check("the kernel says how its guard is launched", k.guard_argv(_sys.executable) is not None)
+    check("through the shared entrypoint, not by executing the plugin",
+          "_entry.py" in " ".join(k.guard_argv(_sys.executable)))
+
+    # The dataset velocity's guard exists to refuse: no assay, so every caveat it writes about
+    # nuclei versus whole cells would be unfounded.
+    allow, why, escape = guard_verdict(k, describe={"assay": "", "organism": "mouse"},
+                                       constraint="", params={})
+    check("it DENIES an object with no declared assay", not allow, why[:80])
+    check("and names the fix", "--assay" in why, why[:160])
+    check("and the escape is offered and logged", "--allow velocity" in escape, escape)
+
+    allow, why, _ = guard_verdict(k, describe={"assay": "nucleus", "organism": "mouse"},
+                                  constraint="", params={})
+    check("it ALLOWS nuclei", allow, why[:80])
+    check("with the note a reader needs", "directional" in why.lower(), why[:120])
+
+    # A plugin with no guard is allowed without one being invented for it.
+    allow, why, _ = guard_verdict(discover()["decoupler"], describe={}, constraint="", params={})
+    check("a plugin that ships no guard is not gated", allow and not why, why)
+
+
+def test_produces_can_be_conditional_and_globbed():
+    """`declaration_drift` and `undeclared` ask the same question and must agree.
+
+    Both read `produces`; only one understood a glob, and neither understood an output a mode
+    produces and another does not. Measured on velocity: a correct run reported `obsm[velocity_*]`
+    TWICE - as a promise broken and as an output undeclared - and `obs[latent_time]` as a broken
+    promise on every run that is not in dynamical mode.
+    """
+    print("\nproduces: a glob, and an output only some runs make")
+    from scprofile import feedback as FB
+    k = discover()["velocity"]
+    check("the optional entry is marked", "obs[latent_time]" in k.optional_produces(),
+          str(k.optional_produces()))
+    check("and it is still a declared slot",
+          "latent_time" in k.declared_slots().get("obs", set()))
+
+    full = {"status": "ok",
+            "obs": {"velocity_confidence": "a", "velocity_length": "b",
+                    "velocity_pseudotime": "c"},
+            "obsm": {"velocity_umap": "d"},
+            "objects": {"velocity_h5ad": "e"},
+            "tables": ["tables/velocity_by_label.csv", "tables/velocity_transitions.csv",
+                       "tables/velocity_genes.csv"]}
+    d = FB.declaration_drift(k, full)
+    check("a stochastic run has NO drift", not d, "; ".join(x.why[:70] for x in d))
+    d = FB.declaration_drift(k, dict(full, obs=dict(full["obs"], latent_time="f")))
+    check("and neither does a dynamical one", not d, "; ".join(x.why[:70] for x in d))
+    d = FB.declaration_drift(k, dict(full, obs=dict(full["obs"], surprise="g")))
+    check("an output nobody declared is still caught", len(d) == 1, str(d))
+    check("and it is named", "surprise" in d[0].why, d[0].why[:90])
+
+    # fnmatch treats `[phase]` as a CHARACTER CLASS, so globbing the whole `slot[name]` string
+    # makes `obs[phase]` match `obsp` and not itself. This is that trap, asserted.
+    class _K:
+        spec = {"produces": ["obs[phase]"]}
+    check("a bracketed name is not read as a character class",
+          not FB.declaration_drift(_K(), {"status": "ok", "obs": {"phase": "p"}}),
+          str(FB.declaration_drift(_K(), {"status": "ok", "obs": {"phase": "p"}})))
+    check("and it does not match a name that merely fits the class",
+          len(FB.declaration_drift(_K(), {"status": "ok", "obs": {"obsp": "p"}})) == 2)
+
+
 def test_lock_is_read_not_delegated():
     """The lock is parsed here, not handed to conda. Sites run conda 4.10; `env create --yes`
     does not exist there, and a pip section conda runs as a second resolve reports its failures
     as a warning."""
     print("\nthe lock, as the installer reads it")
     from scprofile.runner import lock_spec
-    k = Kernel(Path(__file__).resolve().parents[1] / "kernels" / "velocity")
-    s = lock_spec(k)
-    check("pins the interpreter", s["python"] == "3.11", str(s["python"]))
-    check("reads every pip pin", len(s["pip"]) >= 15, f"{len(s['pip'])}")
-    check("every pip entry is pinned", all("==" in x for x in s["pip"]),
-          str([x for x in s["pip"] if "==" not in x]))
-    check("no stray conda deps", s["conda"] == [], str(s["conda"]))
-    check("channel declared", s["channels"] == ["conda-forge"], str(s["channels"]))
-    check("`pip` itself is not a pin", "pip" not in s["conda"])
+    import tempfile as _tf0
+    # AGAINST A LOCK BUILT HERE, not against a shipped plugin. Every plugin in this tree is now
+    # one file and declares a `requires`; the lock reader still has to work, because a plugin
+    # handed in from outside may carry one and because `resolve.from_lock` reads the same shape.
+    # A test that needed a directory plugin to exist would have to keep one forever to keep
+    # passing, which is how a tree acquires a plugin nobody maintains.
+    with _tf0.TemporaryDirectory() as td0:
+        d0 = Path(td0) / "locked"
+        d0.mkdir()
+        (d0 / "kernel.yml").write_text("name: locked\nentry: run.py\n")
+        (d0 / "lock.yml").write_text(
+            "name: scprofile-locked\nchannels:\n  - conda-forge\ndependencies:\n"
+            "  - python=3.11\n  - pip\n  - pip:\n"
+            + "".join(f"      - pkg{i}==1.{i}.0\n" for i in range(16)))
+        s = lock_spec(Kernel(d0))
+        check("pins the interpreter", s["python"] == "3.11", str(s["python"]))
+        check("reads every pip pin", len(s["pip"]) >= 15, f"{len(s['pip'])}")
+        check("every pip entry is pinned", all("==" in x for x in s["pip"]),
+              str([x for x in s["pip"] if "==" not in x]))
+        check("no stray conda deps", s["conda"] == [], str(s["conda"]))
+        check("channel declared", s["channels"] == ["conda-forge"], str(s["channels"]))
+        check("`pip` itself is not a pin", "pip" not in s["conda"])
 
     # A lock with no interpreter pin is not a lock: wheels are built per minor version.
     import tempfile as _tf
@@ -220,7 +341,16 @@ def test_unmet_names_the_fix():
     check("velocity declares it", k.can_source_layers)
     check("it still declares WHAT it needs, for doctor",
           set(k.needs_layers) == {"spliced", "unspliced"})
-    check("it ships the finder", (k.path / "sources.py").exists())
+    # THE FINDER IS THE HOST'S NOW. It was `kernels/velocity/sources.py`, and it was never about
+    # velocity: any plugin needing something the ALIGNER produced is in the same position, and the
+    # host is the only party holding the upstream chain. Two searches for one thing, in two
+    # layers, is how a plan comes to promise what a run cannot deliver.
+    from scprofile import sources as _SRC
+    from scprofile.plugin import Context as _Ctx
+    check("the host ships the finder", callable(_SRC.find) and callable(_SRC.attach))
+    check("and a plugin reaches it through ctx", callable(getattr(_Ctx, "source_layers", None)))
+    check("it names no pipeline's directory layout",
+          "cellranger" not in _SRC.__doc__.lower() and "starsolo" not in _SRC.find.__doc__.lower())
 
     # A kernel that cannot source its own inputs is still blocked, and still names the fix.
     import types
@@ -1148,6 +1278,9 @@ def main():
         test_a_plugin_is_launched_the_way_its_shape_requires(tmp)
     test_figure_conventions()
     test_velocity_declaration()
+    test_one_file_plugins_are_importable_by_the_host()
+    test_a_one_file_plugin_can_have_a_guard()
+    test_produces_can_be_conditional_and_globbed()
     test_lock_is_read_not_delegated()
     test_r_lock_section()
     test_every_lock_is_validated_whatever_the_status()

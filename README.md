@@ -206,7 +206,12 @@ PLUGIN = {
 }
 def run(ctx): ...
 def selftest(ctx): ...
+def guard(g): ...        # optional: refuse datasets where the result would mislead
 ```
+
+`produces` may name an output only some runs make - `"obs[latent_time]?"` - and may glob a name
+chosen at run time - `"obsm[velocity_*]"`. Both are held to: the `?` says the ABSENCE is not
+drift, and the glob still refuses a name that does not match it.
 
 The older directory shape still loads, and is what a plugin in another language uses:
 
@@ -219,6 +224,10 @@ kernels/<name>/
   guard.py         optional: refuse datasets where the result would mislead
   selftest.py      proves the environment works
 ```
+
+Every plugin shipped here is one file. The directory shape is kept because a plugin written in
+another language needs it, and because nothing that worked should stop working - but it is not
+the shape to write a new plugin in.
 
 Kernels talk to the host through JSON — write your results, declare them in `out.json`, and the
 host merges and reports them. Any language.

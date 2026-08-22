@@ -1,16 +1,24 @@
-#!/usr/bin/env python3
-"""Finding spliced/unspliced counts that are NOT in the object, and attaching them safely.
+"""Finding layers that are NOT in the object, in the aligner output beside it, and attaching them.
 
-WHY THIS EXISTS
+WHY THIS IS THE HOST'S JOB AND NOT ONE PLUGIN'S
 
-Spliced and unspliced counts come from the aligner. They are not in a counts matrix and cannot be
-derived from one, so an object that went counts -> QC -> annotation -> integration has lost the
-route to velocity even though the files are usually still sitting on disk beside it. Telling a
-user to go and rebuild an object by hand is exactly the friction this tool exists to remove.
+Some inputs come from the ALIGNER and cannot be derived from a counts matrix. Spliced and
+unspliced counts are the example this was written for, but nothing below is about velocity: an
+object that went counts -> QC -> annotation -> integration has lost every aligner-produced layer
+while the files are usually still sitting on disk beside it, and any plugin that needs one is in
+exactly the same position. Telling a user to go and rebuild an object by hand is the friction this
+tool exists to remove.
 
 So: the host harvests the upstream chain from `uns` and passes the directory leads in `in.json`
-(see scprofile/provenance.py). This module searches them for anything an aligner writes velocity
-counts into, and attaches what it finds BY BARCODE.
+(see scprofile/provenance.py). This module searches them for anything an aligner writes those
+layers into, and attaches what it finds BY BARCODE. A plugin reaches it through
+`ctx.source_layers()` and writes none of it.
+
+IT LIVED IN A PLUGIN UNTIL 2026-08-22, and moving it is a correction rather than a tidy-up. A
+plugin may not know a project; the aligner-output shapes below are not one project's vocabulary,
+they are a fact about how quantifiers write output - the same fact `provenance.find_layer_sources`
+already encoded on the PLANNER'S side of the same question. Two searches for one thing, in two
+layers, is how a plan comes to promise what a run cannot deliver.
 
 WHAT IS AND IS NOT ASSUMED
 
@@ -36,11 +44,9 @@ from __future__ import annotations
 
 import os
 import re
-import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from scprofile import manifest                                            # noqa: E402
+from . import manifest
 
 #: 10x-style barcodes are ACGT runs. Pulling the longest one out of a name absorbs sample
 #: prefixes, `-1` suffixes and velocyto's trailing `x` in a single rule. A name with no such run
@@ -54,6 +60,12 @@ _SKIP = {".git", "logs", "cache", "__pycache__", "figures", "reports", "report",
 MAX_DEPTH = 3
 MAX_DIRS = 4000
 MIN_MATCH = 0.5
+
+#: The layer pair this was written for, and the only one any shipped plugin asks for today. It is
+#: a DEFAULT and not a definition: every function below takes `names`, so a plugin needing some
+#: other aligner-written pair gets the same search rather than a copy of it. The names are the
+#: host's own capability vocabulary (`declare.CAPABILITIES`), never a project's column.
+DEFAULT_LAYERS = ("spliced", "unspliced")
 
 
 def core(name):
@@ -79,8 +91,9 @@ def _sample_from(path, hints):
     return max(hit, key=len) if hit else None
 
 
-def find(search_paths, sample_hints=(), *, log=print, max_depth=MAX_DEPTH):
-    """Every velocity-counts source under the given leads. Reports where it looked."""
+def find(search_paths, sample_hints=(), *, log=print, max_depth=MAX_DEPTH,
+         names=DEFAULT_LAYERS):
+    """Every source of the wanted layers under the given leads. Reports where it looked."""
     found, seen_dirs, visited = [], set(), 0
     looked = []
     for root in search_paths:
@@ -100,15 +113,15 @@ def find(search_paths, sample_hints=(), *, log=print, max_depth=MAX_DEPTH):
                 entries = list(os.scandir(d))
             except OSError:
                 continue
-            names = {e.name for e in entries}
+            entry_names = {e.name for e in entries}
             # An mtx triplet: spliced/unspliced matrices beside a barcode list. This is what
             # STARsolo's Velocyto output and several other quantifiers write.
-            sp = [n for n in names if re.match(r"^spliced\.mtx(\.gz)?$", n)]
-            up = [n for n in names if re.match(r"^unspliced\.mtx(\.gz)?$", n)]
-            bc = [n for n in names if re.match(r"^barcodes\.tsv(\.gz)?$", n)]
-            if sp and up and bc:
+            mtx = [[n for n in entry_names if re.match(rf"^{re.escape(w)}\.mtx(\.gz)?$", n)]
+                   for w in names]
+            bc = [n for n in entry_names if re.match(r"^barcodes\.tsv(\.gz)?$", n)]
+            if all(mtx) and bc:
                 found.append(Source("mtx", d, _sample_from(d, sample_hints),
-                                    "spliced.mtx + unspliced.mtx + barcodes.tsv"))
+                                    " + ".join(f"{w}.mtx" for w in names) + " + barcodes.tsv"))
             for e in entries:
                 if e.is_file():
                     if e.name.endswith(".loom"):
@@ -116,7 +129,7 @@ def find(search_paths, sample_hints=(), *, log=print, max_depth=MAX_DEPTH):
                                             "a .loom, which velocyto writes"))
                     elif e.name.endswith(".h5ad") and "velocity" not in e.name:
                         found.append(Source("h5ad", e.path, _sample_from(e.path, sample_hints),
-                                            "an .h5ad - checked for spliced/unspliced layers"))
+                                            "an .h5ad - checked for the wanted layers"))
                 elif e.is_dir(follow_symlinks=False) and depth < max_depth \
                         and e.name not in _SKIP and not e.name.startswith("."):
                     stack.append((Path(e.path), depth + 1))
@@ -129,8 +142,8 @@ find.looked = []
 find.visited = 0
 
 
-def load(source, log=print):
-    """(barcodes, genes, spliced, unspliced) from one source, or None if it carries neither."""
+def load(source, log=print, names=DEFAULT_LAYERS):
+    """(barcodes, genes, [matrix per wanted layer]) from one source, or None if it has none."""
     import numpy as np
     import scipy.sparse as sp
 
@@ -138,23 +151,23 @@ def load(source, log=print):
         import anndata as ad
         A = ad.read_loom(str(source.path), sparse=True, validate=False)
         have = set(manifest.layer_names(A))
-        if not {"spliced", "unspliced"} <= have:
+        if not set(names) <= have:
             return None
         return (list(map(str, A.obs_names)), list(map(str, A.var_names)),
-                sp.csr_matrix(A.layers["spliced"]), sp.csr_matrix(A.layers["unspliced"]))
+                [sp.csr_matrix(A.layers[w]) for w in names])
 
     if source.kind == "h5ad":
         import h5py
         try:
             with h5py.File(source.path, "r") as f:
-                if "layers" not in f or not {"spliced", "unspliced"} <= set(f["layers"].keys()):
+                if "layers" not in f or not set(names) <= set(f["layers"].keys()):
                     return None
         except OSError:
             return None
         import anndata as ad
         A = ad.read_h5ad(source.path)
         return (list(map(str, A.obs_names)), list(map(str, A.var_names)),
-                sp.csr_matrix(A.layers["spliced"]), sp.csr_matrix(A.layers["unspliced"]))
+                [sp.csr_matrix(A.layers[w]) for w in names])
 
     if source.kind == "mtx":
         import scipy.io
@@ -175,24 +188,26 @@ def load(source, log=print):
                 return [ln.split("\t")[0].strip() for ln in fh if ln.strip()]
 
         fb, fg = _p("barcodes.tsv"), _p("features.tsv", "genes.tsv")
-        fs, fu = _p("spliced.mtx"), _p("unspliced.mtx")
-        if not all((fb, fg, fs, fu)):
+        fm = [_p(f"{w}.mtx") for w in names]
+        if not all([fb, fg] + fm):
             return None
         bcs, genes = _read_list(fb), _read_list(fg)
-        S, U = scipy.io.mmread(str(fs)).tocsr(), scipy.io.mmread(str(fu)).tocsr()
+        mats = [scipy.io.mmread(str(f)).tocsr() for f in fm]
         # mtx from these quantifiers is genes x cells; orient by which axis matches the lists.
-        if S.shape[0] == len(genes) and S.shape[1] == len(bcs):
-            S, U = S.T.tocsr(), U.T.tocsr()
-        if S.shape[0] != len(bcs):
-            log(f"    {d}: {S.shape} matches neither {len(bcs)} barcodes nor {len(genes)} genes")
+        if mats[0].shape[0] == len(genes) and mats[0].shape[1] == len(bcs):
+            mats = [m.T.tocsr() for m in mats]
+        if mats[0].shape[0] != len(bcs):
+            log(f"    {d}: {mats[0].shape} matches neither {len(bcs)} barcodes nor "
+                f"{len(genes)} genes")
             return None
-        return bcs, genes, S, U
+        return bcs, genes, mats
 
     return None
 
 
-def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print):
-    """Fill `A.layers['spliced'/'unspliced']` from the sources. Returns (ok, note).
+def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
+           names=DEFAULT_LAYERS):
+    """Fill `A.layers[name]` for each wanted layer from the sources. Returns (ok, note).
 
     Matching is on the barcode core, within a sample when the source names one, and the rate is
     printed for every source tried - including the ones that matched nothing, because a source
@@ -202,8 +217,7 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print):
     import scipy.sparse as sp
 
     n, g = A.n_obs, A.n_vars
-    S = sp.lil_matrix((n, g), dtype="float32")
-    U = sp.lil_matrix((n, g), dtype="float32")
+    dest = [sp.lil_matrix((n, g), dtype="float32") for _ in names]
     filled = np.zeros(n, dtype=bool)
     var_pos = {str(v).upper(): i for i, v in enumerate(A.var_names)}
     obs_core = np.array([core(b) for b in A.obs_names])
@@ -212,10 +226,10 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print):
     notes, used = [], 0
 
     for src in sources:
-        loaded = load(src, log=log)
+        loaded = load(src, log=log, names=names)
         if loaded is None:
             continue
-        bcs, genes, s_mat, u_mat = loaded
+        bcs, genes, mats = loaded
 
         # Restrict to this source's sample when it names one. The same core barcode legitimately
         # recurs across samples, and matching globally would give one animal's unspliced counts
@@ -248,8 +262,8 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print):
         dst_cols = np.array([c for _, c in keep])
         src_rows = np.array([j for _, j in rows])
         dst_rows = np.array([i for i, _ in rows])
-        S[np.ix_(dst_rows, dst_cols)] = s_mat[np.ix_(src_rows, src_cols)]
-        U[np.ix_(dst_rows, dst_cols)] = u_mat[np.ix_(src_rows, src_cols)]
+        for D, M in zip(dest, mats):
+            D[np.ix_(dst_rows, dst_cols)] = M[np.ix_(src_rows, src_cols)]
         filled[dst_rows] = True
         used += 1
         notes.append(f"{src.path.name}: {len(rows):,} cells, {len(keep):,} genes")
@@ -259,8 +273,8 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print):
 
     cov = float(filled.mean())
     log(f"  attached from {used} source(s): {filled.sum():,}/{n:,} cells "
-        f"({100 * cov:.1f}%) have spliced/unspliced counts")
-    A.layers["spliced"] = sp.csr_matrix(S)
-    A.layers["unspliced"] = sp.csr_matrix(U)
+        f"({100 * cov:.1f}%) have {'/'.join(names)} counts")
+    for w, D in zip(names, dest):
+        A.layers[w] = sp.csr_matrix(D)
     return True, (f"{used} source(s), {filled.sum():,}/{n:,} cells ({100 * cov:.1f}%) covered. "
                   + "; ".join(notes))

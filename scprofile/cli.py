@@ -274,7 +274,14 @@ def _run(a):
               f"  Fix: --label-key <one of> {list(A.obs.columns)[:12]}", file=sys.stderr)
         return REFUSE
 
-    prov = provenance.harvest(A, extra_roots=_split(a.search or ""))
+    # THE SAME LEADS THE PLAN SEARCHED. `plan` looks in `prov.search_paths` PLUS the directories
+    # around the object (`ancestry_roots`) plus `--search`; this passed only the first and the
+    # third, so a plan could report "velocity would find its counts at X" and the run then never
+    # looked there. A recorded chain is only as long as the tools that wrote it, and walking up
+    # from the object is the generic recovery - a plan that promises what the run cannot deliver
+    # is worse than one that promises nothing.
+    prov = provenance.harvest(
+        A, extra_roots=_split(a.search or "") + provenance.ancestry_roots(a.h5ad))
     provenance.describe(prov, log=print)
 
     # From DETECTION, not from a literal. `{lognorm}` is a key a plugin names; which layer it

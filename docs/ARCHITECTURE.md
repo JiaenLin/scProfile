@@ -37,7 +37,13 @@ A plugin directory is **self-describing**. The builder does not go looking; it r
 | `lock.yml` | its environment, pinned |
 | `references.yml` | reference data, with URL, organism, digest and size |
 | `selftest.py` / `.R` | proof the call is well-formed against the installed versions |
+| `guard.py` | whether this DATASET is one where the result would mean what the report says |
 | `UPSTREAM.md` | what the wrapped tool's own documentation says, and which of its defaults are wrong here |
+
+In the one-file shape every row above is a key of `PLUGIN` or a function in the file — including
+the guard, which is `def guard(g)`. **A shape that cannot express one of these silently deletes
+it**: the one-file shape had no guard, so converting a guarded plugin to it removed the check with
+no error, no log line, and the first dataset the guard existed to refuse analysed and reported.
 
 **Nothing in a plugin may name a project's vocabulary** — not a column, a layer, an organism or a
 sample. Those arrive at run time through `keys` and `organism`. The compiler refuses a recipe that

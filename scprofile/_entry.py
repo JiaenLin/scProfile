@@ -12,6 +12,7 @@ a fix to the contract is a fix for every plugin including ones this project did 
 
     <plugin's python> <this file, by path> <plugin module path> <in.json>
     <plugin's python> <this file, by path> --selftest <plugin module path>
+    <HOST's python>    <this file, by path> --guard    <plugin module path>   < payload on stdin
 
 BY PATH, NOT AS `-m`. The interpreter is the PLUGIN'S, in the plugin's own pinned environment,
 where the host is not installed and must not have to be - `-m scprofile._entry` would not resolve
@@ -34,7 +35,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scprofile import declare, manifest                                   # noqa: E402
-from scprofile.plugin import Context                                      # noqa: E402
+from scprofile.plugin import Context, Guard                               # noqa: E402
 
 
 def _has(ctx, cap, inp):
@@ -91,9 +92,47 @@ def selftest(plugin_path, log=print):
     return True
 
 
+def guard(plugin_path, payload, log=print):
+    """Ask a one-file plugin's `guard(g)`. Exit 0 allows and prints notes; non-zero denies.
+
+    THE SAME PROTOCOL A `guard.py` USED, because `guard_verdict` reads an exit code and a stream
+    and must not learn about shapes. What changed is only where the function lives: a one-file
+    plugin has no neighbouring file for the host to execute, so it had NO GUARD AT ALL and nothing
+    said so - converting a guarded plugin to this shape silently deleted the check.
+
+    This runs in the HOST's interpreter, before the plugin's environment is resolved. If the
+    module cannot be imported here that is reported as a denial, not waved through: a guard that
+    was never consulted has not allowed anything, and running as though it had is the one outcome
+    a gate must never produce.
+    """
+    import json
+    d = json.loads(payload or "{}")
+    g = Guard(d.get("describe"), d.get("constraint"), d.get("params"))
+    try:
+        mod = load(plugin_path)
+    except Exception as e:                                                # noqa: BLE001
+        log(f"{Path(plugin_path).stem} ships a guard and could not be imported by the host "
+            f"interpreter ({type(e).__name__}: {e}).\n"
+            f"  A guard runs before the environment is resolved, so its module scope must import "
+            f"nothing the host does not have - keep third-party imports inside the functions.\n"
+            f"  Nothing has been checked, so nothing is allowed.")
+        return 2
+    fn = getattr(mod, "guard", None)
+    if fn is None:
+        return 0
+    fn(g)
+    if g.denials:
+        log("\n".join(g.denials))
+        return 1
+    log(" | ".join(g.notes) if g.notes else "")
+    return 0
+
+
 def main(argv):
     if argv[1] == "--selftest":
         return 0 if selftest(argv[2]) is not False else 1
+    if argv[1] == "--guard":
+        return guard(argv[2], sys.stdin.read())
     plugin_path = argv[1]
     inp = manifest.read_input(argv[2] if len(argv) > 2 else os.environ["SCPROFILE_IN"])
     out = Path(inp["out_dir"])
@@ -191,7 +230,11 @@ def main(argv):
     ctx = Context(A, keys=keys, out=out, cores=cores, unit=unit,
                   organism=inp.get("organism"), assay=inp.get("assay"),
                   references=inp.get("references"), params=inp.get("params"),
-                  design=inp.get("design"), sentinels=sentinels, config=config, log=log)
+                  design=inp.get("design"), sentinels=sentinels, config=config,
+                  # The upstream chain, so a plugin needing a file that is NOT in the object can
+                  # ask the host to go and find it (`ctx.source_layers`). Harvested from `uns`,
+                  # which is dropped from this copy of the object on purpose.
+                  provenance=inp.get("provenance"), log=log)
     ctx.caveats.extend(pre_caveats)
 
     # REQUIRED CAPABILITIES. The host either satisfies them or does not call run() - a plugin
