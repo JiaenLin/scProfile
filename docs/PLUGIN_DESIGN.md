@@ -102,6 +102,20 @@ Everything below happens for every plugin, in `_entry.py`, and none of it is a p
 
 Every wrapper bug in this project's history lived somewhere in that list.
 
+And a few things the host will *do for* a plugin that asks, so that no plugin writes them twice:
+
+| `ctx.populations()` | the grouping, the mask, `.names` and `.dropped` — five plugins destructured the old two-tuple wrongly |
+| `ctx.layers()` | the layer names the object actually has; `list(adata.layers)` yields anndata's `None` alias for X |
+| `ctx.source_layers()` | fetch a layer the object does not carry from the ALIGNER OUTPUT beside it, following the upstream chain the host harvested |
+| `ctx.plot()`, `ctx.figure` | matplotlib with the journal conventions applied, so a plugin never imports a host module to draw |
+| `ctx.fixture()` | the synthetic object a selftest needs, built once rather than hand-rolled per plugin |
+| `ctx.effect()` | acquire and release, on every exit path including a raise |
+
+**The environment's own `bin` is on `PATH`**, so a plugin whose method is in another language
+reaches its interpreter by name. And **the core share is set as `OMP_NUM_THREADS` and its five
+siblings**, because numpy's BLAS sizes its pool at import, before any plugin code runs — that is
+the one thread pool a plugin cannot honour for itself.
+
 ---
 
 ## Why this is robust for the builder

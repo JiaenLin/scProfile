@@ -162,6 +162,17 @@ samples. An imbalance, a confound, even a complete confound, all run with a cave
 
 Waves, subprocesses, merge by barcode, one report. It decides nothing.
 
+Three things it must do that are easy to leave undone, because each is invisible until it is not:
+
+- **the environment's own `bin` on `PATH`.** An environment is not only an interpreter; a plugin
+  whose method is in another language reaches its interpreter by name. Launching `<env>/bin/python`
+  by absolute path is not what `conda activate` does.
+- **the core share as `OMP_NUM_THREADS` and its siblings.** A plugin honours its share for what it
+  schedules; numpy's BLAS sizes its pool at import, before any plugin code runs, from whatever the
+  caller exported.
+- **at most `budget / smallest declared cores` instances at a time.** Dividing the share each
+  instance is *told* it has is a different question from how many of them run.
+
 ## 5. And when something fails, it says which layer is wrong
 
 A failure has a cause in exactly one layer, and reporting them all as *"plugin X failed"* makes
