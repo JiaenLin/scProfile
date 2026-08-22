@@ -60,7 +60,10 @@ module load "${CONDA_MODULE:-anaconda3/3.0.0}" 2>/dev/null || true
 # micromamba or mamba and it is used instead; nothing else changes, because all three build the
 # same prefix. A 50-package conda-forge + bioconda solve is minutes with one and can be hours
 # with the other.
-[ -n "${MANAGER_PATH:-}" ] && export PATH="${MANAGER_PATH}:$PATH"
+# An `if`, not `[ ... ] && ...`: under `set -e` a bare test that FAILS is the last command of
+# the statement and ends the job - silently, before the live log is even opened, so a run with
+# MANAGER_PATH unset would have looked exactly like a job that produced nothing.
+if [ -n "${MANAGER_PATH:-}" ]; then export PATH="${MANAGER_PATH}:$PATH"; fi
 export PYTHONPATH="$TOOL"
 export MPLCONFIGDIR="$PWD/.mpl"
 # A plugin supplied from OUTSIDE the shipped set, to test the FORMAT rather than the tool.
