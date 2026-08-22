@@ -100,7 +100,7 @@ open:   a run that produces nothing still leaves its 3.14 GB compatibility copy
 
 clean:  6 suites, validate 0 errors.
 
-## 2026-08-22 — cycle 4 (PBS 677258 build, 677295 run)
+## 2026-08-22 — cycle 4 (PBS 677258 build, 677295 run, 677296 repair)
 
 Split into phases as separate jobs, one at a time against one `--prefix`. `setup/dev_cycle.pbs`
 runs them and names no project.
@@ -117,6 +117,16 @@ tested: resolve + install of a SHARED environment / selftest of all 8 / plan --a
 **A ONE-FILE PLUGIN WITH ITS OWN ENVIRONMENT RAN THROUGH `_entry.py`** (677295): `decoupler ok
         281s  674 regulators scored per cell`, `prior: 39,961 edges, 1,114 regulators for mouse`,
         `merged obsm: X_tf_activity`. Two plugins into one 3.48 GB object, one report, one README.
+
+**THE REPAIR LOOP CLOSED ON A SHARED ENVIRONMENT** (677296): `scvelo` removed from the resolved
+        environment by hand -> `FAILED velocity (2s)` -> `ModuleNotFoundError: No module named
+        'scvelo'` -> `[environment] a package the plugin imports is not in its environment` ->
+        `REPAIRING: rebuilding velocity's environment and retrying once` + `that environment is
+        scprofile-env-3cd799b82e, SHARED WITH decoupler, liana, pseudotime - all of them are
+        rebuilt and re-proved` -> `proved for 4 of 4 member(s)` -> `RECOVERED after rebuild (12s)`
+        -> `[environment] ... The installed environment had DRIFTED` -> `repaired: ['velocity']`.
+        Retried once, did not loop, was not silent, right layer - and this time it named what a
+        `--force` rebuild of a shared environment actually does.
 
 found:  [host] `install` read the named plugin's own `lock.yml`. Resolution decided the DIRECTORY
               and the lock decided the CONTENT, so an environment shared by four was built from
