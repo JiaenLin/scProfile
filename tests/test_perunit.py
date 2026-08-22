@@ -117,6 +117,34 @@ with tempfile.TemporaryDirectory() as d:
     n = int(md.split("- ")[2].split(" files")[0])
     ck("the file count includes README.md itself", n == 3, f"counted {n} of 3")
 
+print("\na run that produced nothing must still be able to say so")
+# THE REGRESSION THAT PROMPTED THIS. `objects/` was created unconditionally, and it was the only
+# thing that created the run's output directory at all. Making it conditional on something having
+# merged - so that a run in which every plugin refused stops writing a multi-gigabyte copy of its
+# input under a name that says it was profiled - killed `report.json` with FileNotFoundError on
+# exactly the run whose report matters most. A fix that only works on the happy path is worse
+# than the bug: the wasteful object was at least accompanied by an explanation.
+import ast as _ast
+import textwrap as _tw
+_src = _tw.dedent(inspect.getsource(cli._run))
+_fn = _ast.parse(_src).body[0]
+_top = [n for n in _fn.body
+        if isinstance(n, _ast.Expr) and isinstance(n.value, _ast.Call)
+        and isinstance(n.value.func, _ast.Attribute) and n.value.func.attr == "mkdir"
+        and getattr(n.value.func.value, "id", "") == "out"]
+ck("the output directory is created by the function, not by one of its branches", bool(_top),
+   "every writer below assumes it exists; a conditional mkdir makes that true only sometimes")
+
+with tempfile.TemporaryDirectory() as d:
+    d = Path(d)
+    empty = dict(pay, version="0.1", input="x.h5ad", object=None, ran=[], kernels={})
+    report.write_index(d, empty)
+    idx = (d / "report" / "index.html").read_text()
+    ck("the report says no object was written rather than rendering None",
+       "No object was written" in idx and ">None<" not in idx, idx[:200])
+    cli._write_readme(d, empty)
+    ck("the README still renders with no object", (d / "README.md").exists())
+
 print("\nan adversarial review's eight findings")
 class _Obs(dict):
     @property

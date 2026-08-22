@@ -217,6 +217,13 @@ def _run(a):
             return REFUSE
 
     out = Path(a.out)
+    # UNCONDITIONALLY, AND FIRST. Every later writer - report.json, report/, README.md - assumes
+    # this exists, and until this line the only thing that created it was the `objects/` mkdir
+    # further down. The moment that mkdir became conditional on something having merged, a run in
+    # which every plugin refused died with FileNotFoundError on `report.json` - losing the report
+    # for exactly the run whose report matters most. A directory the whole function writes into
+    # is the function's own precondition, not a side effect of one of its branches.
+    out.mkdir(parents=True, exist_ok=True)
     print(f"reading {a.h5ad}")
     A = ad.read_h5ad(a.h5ad)
     print(f"  {A.n_obs:,} cells x {A.n_vars:,} genes")
