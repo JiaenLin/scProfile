@@ -351,7 +351,28 @@ this cycle: the previous attempt's R step failed and `install` raised before any
 
         [method] nothing yet.
 
-harness: the job script grew `ALL=1`, `SEARCH`, `CORES` and `MANAGER_PATH` → 2a28a40, 5f719d1.
+harness: **three of my own, all in the job script or the suites, and all of the same family.**
+
+        `[ -n "$MANAGER_PATH" ] && export PATH=...` is the last command of its statement, so with
+        the variable unset the test fails, `set -e` fires, and the job ends before the live log is
+        even opened - which looks exactly like a job that produced nothing → b27ed62.
+
+        `$PY "$t" | tail -25 | sed ...` in a failing branch is a PIPELINE, and under
+        `set -o pipefail` its status is the failing python's - so the `if` returned non-zero and
+        `set -e` ended PBS 677608 on the first failing suite instead of reporting all seven. The
+        exact trap this file's own header warns about, reintroduced by the block added to report
+        suite failures → 0e5f951.
+
+        And running the suites from a directory other than the repository root, for the first
+        time ever, found that **three checks in `test_perunit` had been passing on ZERO FILES**:
+        `Path("scprofile").rglob(...)` returns nothing from anywhere else, so `no file uses a
+        module it did not import` and `nothing iterates layers raw any more` were both green over
+        an empty list. That is the failure `test_portability` guards its own scan against - "a
+        clean report from a check that ran on zero files is the worst kind" - written down in one
+        suite and not applied in the next. Rooted at `__file__`, file counts asserted, and all
+        seven pass from `/tmp` → 0e5f951.
+
+        The job script also grew `ALL=1`, `SEARCH`, `CORES` and `MANAGER_PATH` → 2a28a40, 5f719d1.
         `MANAGER_PATH` matters more than it looks: micromamba solved a 51-package conda-forge +
         bioconda spec in seconds where the classic conda solver had taken minutes on 7. And the
         line that added it was written as `[ -n "$X" ] && export ...`, which under `set -e` ends
