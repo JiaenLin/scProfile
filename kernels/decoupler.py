@@ -85,6 +85,12 @@ PLUGIN = {
         "gotchas": [
             "get_collectri takes `organism` and silently returns a small table for a species it "
             "has little for - it does not raise. The refusal above exists for that.",
+            "THE PRIOR IS FETCHED OVER THE NETWORK, at run time, from OmniPath's API. It is not "
+            "a file with a URL and a checksum, so it cannot be declared as a reference and "
+            "fetched once by the host - which means a run needs a route out of the compute node, "
+            "and two runs a month apart score against two different priors. The edge and "
+            "regulator counts are logged and in the caveats for that reason: they are the only "
+            "record of WHICH prior produced a result.",
         ],
     },
 
@@ -94,6 +100,9 @@ PLUGIN = {
         "Scores are relative WITHIN this dataset and are not comparable with another dataset's.",
         "The prior is published per organism. On the wrong species it does not error - it "
         "returns a small, plausible table.",
+        "THE PRIOR IS FETCHED WHEN THE RUN HAPPENS and is not pinned. Two runs against the same "
+        "object, weeks apart, can score against different versions of it; the edge and regulator "
+        "counts in the caveats are the only record of which one this was.",
     ],
 }
 
@@ -107,6 +116,10 @@ def run(ctx):
     net = dc.get_collectri(organism=ctx.organism, split_complexes=False)
     ctx.log(f"prior: {len(net):,} edges, {net['source'].nunique():,} regulators "
             f"for {ctx.organism}")
+    ctx.caveat(f"Scored against a CollecTRI prior of {len(net):,} edges over "
+               f"{net['source'].nunique():,} regulators, fetched for {ctx.organism} when this run "
+               f"happened. The prior is not pinned and is not a file this host can checksum, so "
+               f"those two counts are the only record of which version produced this result.")
     if len(net) < ctx.config["min_edges"]:
         return ctx.refuse("activity scores",
                           f"the prior has {len(net):,} edges, below the declared minimum of "
