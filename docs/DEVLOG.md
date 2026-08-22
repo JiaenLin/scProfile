@@ -428,6 +428,25 @@ harness: **three of my own, all in the job script or the suites, and all of the 
         the job when X is unset - before the live log is opened, so it looks exactly like a job
         that produced nothing → b27ed62.
 
+conversion: **did the two plugins lose behaviour?** No, and what they GAINED is the point.
+
+        cellcycle's converted form produces the same shape - `status ok`, `obs [phase, S_score,
+        G2M_score]`, two captioned figures with source data, the same headline format - and its
+        selftest passes the same assertions with one added. What changed is that it now goes
+        through `_entry.py`: `100,713 cells x 34,290 genes` -> `4,225 sentinel-labelled cells
+        kept` -> `excluded 2,086 cells with NaN in X_scanvi` -> scored 98,627. **The directory
+        shape read `in.json` itself and applied NONE of that**, which is what "the contract is the
+        host's" means in numbers rather than in prose.
+
+        velocity's selftest passes in one file with an added check that its plotting path imports
+        and draws, and the search half - the part that was proven and was MOVED rather than
+        rewritten - found its counts on the real project for the first time. Three behaviours
+        changed deliberately and are recorded rather than assumed: its `--params` are now typed
+        `config` validated before the run; its per-population table and its directed transitions
+        exclude annotator sentinels instead of marking them `is_sentinel` and sorting them last;
+        and `attach` assembles COO arrays rather than filling a `lil_matrix`, which is a rewrite
+        of a half that had never executed.
+
 format: the plugin FORMAT had to change twice, and both changes are the same lesson - **a shape
         that cannot express something deletes it silently rather than refusing it.** Neither
         change was needed by a plugin somebody else wrote; both were found by moving two plugins
