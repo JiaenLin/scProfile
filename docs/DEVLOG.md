@@ -369,7 +369,36 @@ this cycle: the previous attempt's R step failed and `install` raised before any
               it. The check found **two more**: abundance and de work only because they SHARE an
               environment with plugins that do name anndata → c7adf43
 
-        [method] nothing yet.
+        **THE LAYER SEARCH WORKED END TO END, on the real project, in its moved form** - the
+        half of velocity that had never run on anything:
+
+            visited 20,064 director(ies), found 503 candidate(s)
+            mtx  filtered: 13,824/13,824 barcodes matched (100.0%) within sample Aging1   [x10]
+            141 further candidate(s) not opened: every cell was already covered
+            attached from 10 source(s): 98,627/98,627 cells (100.0%) have spliced/unspliced counts
+
+        ...and velocity then refused, because of a COLUMN INDEX.
+
+        [host] `features.tsv` is `<gene id>	<symbol>	<type>` and `sources.load` read column 0.
+              The object is indexed by SYMBOLS: 466 of 34,290 genes matched,
+              `filter_and_normalize` dropped 34,286 for want of shared counts, and velocity
+              refused because `only 4 genes survived selection` - **a refusal about the DATA whose
+              cause was a column index**, and one that would have been believed. Every field is a
+              candidate now and `attach` takes whichever overlaps the object more → b318bcd
+        [declaration] de raised `numpy.linalg.LinAlgError: Singular matrix` from inside pydeseq2.
+              `~ age + diet + chemistry + batch`: chemistry takes one value for every aged sample
+              and another for every young one. `RUN_PLAN.md` says an imbalance, a confound, even
+              a COMPLETE confound all run with a caveat - so the terms that add no estimable
+              column are dropped, in the order given, and NAMED → b318bcd
+        [host] and the loop could only say `no known failure signature matched, so the layer is
+              not established`. Correct, and useless. A singular model matrix is now a METHOD
+              signature saying the terms are collinear and that it is a property of the DESIGN
+              TABLE, not of the data or the tool → b318bcd
+
+        [method] velocity's refusal on the FIRST run was not a method finding at all - see the
+              column index above. `pseudotime` reported `No velocity field was on this object, so
+              the ordering comes from CONNECTIVITY alone`, which is correct and is the caveat
+              that plugin exists to write.
 
 harness: **three of my own, all in the job script or the suites, and all of the same family.**
 
