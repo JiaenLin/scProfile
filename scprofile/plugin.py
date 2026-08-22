@@ -19,7 +19,11 @@ WHAT A PLUGIN IS
             "needs":   {"layers": ["{lognorm}"], "obs": ["{label}"]},
             "produces": ["obs[my_score]"],
             "cannot_show": ["what a reader must not conclude"],
-            "env": {"python": "3.11", "pip": ["mytool==1.2.3"]},   # omit to use the host's
+            # WHAT IT NEEDS, NOT WHAT TO BUILD. The builder resolves every plugin's
+            # requirement together and builds as few environments as satisfy them all; a plugin
+            # cannot know what else is installed, so it must not decide its own environment.
+            # Omit `requires` and the plugin runs in the host's interpreter.
+            "requires": {"python": ">=3.10,<3.13", "packages": {"mytool": ">=1.2,<1.3"}},
         }
 
         def run(ctx):

@@ -27,7 +27,7 @@ their data if you are doing this job**, and all of it does if you are not.
 
 | signal | what it means | what to do |
 |---|---|---|
-| a user's `selftest` fails on a new machine | the pins do not resolve there, or resolve to something that no longer works | reproduce, then fix the lock — not the selftest |
+| a user's `selftest` fails on a new machine | the constraints do not resolve there, or resolve to something that no longer works | reproduce, then fix the requirement — not the selftest |
 | the wrapped tool releases | the pin is now behind; it is not automatically wrong | read the changelog against `upstream.defaults_changed`, then decide |
 | `validate` warns | the declaration has drifted from what the code does | fix the declaration |
 | a run reports a caveat you did not write | the host added it — a sentinel count, an excluded NaN row | nothing; that is the contract working |
@@ -42,9 +42,19 @@ python version going out of support — and prove it.
 
 ## Updating
 
-1. **Change the pin.** In `PLUGIN["env"]`.
+1. **Change the constraint.** In `PLUGIN["requires"]` — `python`, `packages`, and where the tool
+   needs them `conda`, `channels` and `r`. Constraints, not pins, wherever the tool genuinely
+   tolerates a range: a pin says only *that* version works, and claiming it where it is untrue
+   forces an environment nobody can share.
 2. **Run the selftest against it.** On a machine that matters, not only on yours. This is the
    whole check: it runs the real call and asserts the schema, not an import.
+
+   **Your plugin may not be alone in there.** The builder resolves every plugin's requirement
+   together, so tightening yours can move you out of a shared environment and into your own — and
+   `install` proves the environment for *every* member, so a change of yours can surface as
+   somebody else's selftest failing. That is the mechanism working: it is the failure that would
+   otherwise have happened inside a user's run. `scprofile install <name> --prefix <dir>
+   --dry-run` shows which environment you land in and who is in it, without building anything.
 3. **Read the changelog against your `upstream` record.** Every entry in `defaults_changed` is a
    claim about the old version. A default that was wrong may now be right, or the reverse, and
    the record must say what is true of the version you pinned.
@@ -100,9 +110,12 @@ host bug, or you are about to reintroduce one of the bugs that lived in the wrap
 
 ```
 scprofile validate <name>                          # the declaration
-scprofile install <name> --prefix <dir>            # builds it, and runs your selftest
+scprofile install <name> --prefix <dir> --dry-run  # which environment, shared with whom
+scprofile install <name> --prefix <dir>            # builds it, and runs every member's selftest
 python tests/test_contract.py                      # the rules above
 ```
 
-`install` is the builder and it ends in your selftest deliberately: **an environment nothing
-proved is one that fails inside somebody's run.**
+`install` is the builder and it ends in a selftest deliberately: **an environment nothing proved
+is one that fails inside somebody's run.** It runs *every* member's, not only yours — an
+environment shared by four and proved by one is an environment three of them meet for the first
+time in a stranger's cohort.

@@ -58,7 +58,7 @@ PLUGIN = {
         "min_cells": {"type": "int", "default": 10, "min": 1,
                       "help": "populations smaller than this are not scored"},
     },
-    "env": {...}, "references": {...}, "upstream": {...}, "cannot_show": [...],
+    "requires": {...}, "references": {...}, "upstream": {...}, "cannot_show": [...],
 }
 ```
 
