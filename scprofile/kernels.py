@@ -629,6 +629,31 @@ def _budget(wave, budget):
     return wave
 
 
+def concurrency(instances, budget):
+    """How many instances of a wave may run AT ONCE. `min(budget / smallest declared, ready)`.
+
+    `docs/EXECUTION.md` §4 has stated this rule since it was written, and nothing implemented it:
+    the runner started every instance of a wave at once, however many there were. `_budget` divides
+    the CORE SHARE each instance is told to use, which is a different thing from how many of them
+    exist - so a wave that is larger than the budget was scaled to one core each and then all
+    launched together.
+
+    Measured on the shipped set, ten samples and an eight-core allocation: nine plugins, three of
+    them `per_unit`, is 35 instances. Thirty-five subprocesses, each opening a 3 GB object, on a
+    node that was asked for eight cores. Every one of them is correctly told `cores: 1` and the
+    node still runs thirty-five of them, which is the oversubscription the share exists to prevent
+    wearing the other hat - and the memory failure it causes looks like the plugin's fault.
+
+    The SMALLEST DECLARED, not the smallest scaled: a wave of cheap plugins should fill the budget,
+    and scaling has already flattened everything to 1 by the time it is oversubscribed. A plugin
+    declaring more than the whole budget runs alone, at the budget, rather than being refused.
+    """
+    if not instances:
+        return 1
+    smallest = max(1, min(int(i.get("declared", i.get("cores", 1)) or 1) for i in instances))
+    return max(1, min(len(instances), int(budget) // smallest))
+
+
 def resolve_keys(items, keys):
     """Substitute `{label}`, `{counts}` and the rest through the key map.
 

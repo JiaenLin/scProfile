@@ -188,7 +188,7 @@ def _default_cores():
 
 def _run(a):
     from . import compat, inputs, manifest, merge, provenance, refs, report, runner
-    from .kernels import (_budget, discover, guard_verdict, log_escape, schedule,
+    from .kernels import (_budget, concurrency, discover, guard_verdict, log_escape, schedule,
                           undeclared, unmet)
 
     try:
@@ -456,9 +456,12 @@ def _run(a):
         if not staged:
             continue
         _budget([i for i, _k, _c in staged], budget)
+        at_once = concurrency([i for i, _k, _c in staged], budget)
         print(f"\n=== wave {wi} === " + ", ".join(
             f"{x['plugin']}" + (f"[{x['unit']}]" if x["unit"] else "") + f"({x['cores']}c)"
-            for x, _k, _c in staged), flush=True)
+            for x, _k, _c in staged)
+              + (f"   [{at_once} at a time of {len(staged)}]"
+                 if at_once < len(staged) else ""), flush=True)
         prepared = [(inst, _write_in(inst, kout, ctx)) for inst, kout, ctx in staged]
 
         # Instances in a wave are independent by construction, so they run CONCURRENTLY. The
@@ -483,7 +486,10 @@ def _run(a):
             except Exception as e:                                        # noqa: BLE001
                 return inst, kout, None, _time.perf_counter() - t0, f"{lbl}: {e}"
 
-        with cf.ThreadPoolExecutor(max_workers=max(1, len(prepared))) as ex:
+        # AT MOST `at_once`, which is the rule EXECUTION.md §4 has always stated and nothing
+        # implemented. Telling 35 instances that they have one core each and then starting all 35
+        # is the oversubscription the core share exists to prevent, wearing the other hat.
+        with cf.ThreadPoolExecutor(max_workers=at_once) as ex:
             done = list(ex.map(_go, prepared))
 
         for inst, kout, pl, secs, err in done:

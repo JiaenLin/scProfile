@@ -434,6 +434,27 @@ w2 = [{"plugin": "a", "unit": None, "cores": 2}, {"plugin": "b", "unit": None, "
 _budget(w2, 8)
 ck("an under-subscribed wave is left alone", [i["cores"] for i in w2] == [2, 1])
 
+print("\nand the wave does not START more instances than the budget holds")
+# EXECUTION.md §4 has stated `min(budget / smallest declared cores, ready)` since it was written,
+# and the runner started EVERY instance of a wave at once. The two are not the same thing: the
+# budget divides the share each instance is TOLD it has, and every one of 35 correctly told
+# `cores: 1` still runs on a node asked for 8. On the shipped set - nine plugins, three of them
+# per_unit, ten samples - that is 35 subprocesses each opening a 3 GB object.
+from scprofile.kernels import concurrency                                      # noqa: E402
+big = [{"plugin": "velocity", "unit": None, "cores": 8, "declared": 8}] + \
+      [{"plugin": "scenic", "unit": f"S{i}", "cores": 1, "declared": 4} for i in range(10)] + \
+      [{"plugin": "cellcycle", "unit": None, "cores": 1, "declared": 1}]
+_budget(big, 8)
+ck("every instance is told a share it can use", all(i["cores"] >= 1 for i in big))
+ck("but they do not all start at once", concurrency(big, 8) == 8,
+   f"{concurrency(big, 8)} of {len(big)} would start on an 8-core allocation")
+ck("a wave smaller than the budget starts whole", concurrency(w2, 8) == 2, str(concurrency(w2, 8)))
+ck("one instance declaring more than the budget runs alone",
+   concurrency([{"plugin": "x", "cores": 8, "declared": 16}], 8) == 1)
+ck("an empty wave does not divide by zero", concurrency([], 8) == 1)
+ck("and the rule is the one the document states",
+   "budget / smallest_declared_cores" in (Path("docs") / "EXECUTION.md").read_text())
+
 print("\nthe uns payload is writable, checked before write_h5ad")
 prov = merge.provenance(f, {"n_obs": 10, "compartment": None}, {"liana": ["x"]},
                         merged={"liana": {"obs": ["ccc_score"], "obsm": [],

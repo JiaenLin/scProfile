@@ -110,6 +110,14 @@ it reports the node, not the share, and four plugins each reading it will each s
 Concurrency is then `min(budget / smallest_declared_cores, ready_plugins)`, floored at 1. A plugin
 declaring more cores than the whole budget runs alone, at the budget, rather than being refused.
 
+*That sentence was here from the beginning and nothing implemented it until 2026-08-22: the runner
+started **every** instance of a wave at once, however many there were. The two are not the same
+thing — the budget divides the share each instance is **told** it has, and thirty-five instances
+each correctly told `cores: 1` still run thirty-five processes on a node asked for eight. On the
+shipped set, ten samples and three `per_unit` plugins, that is 35 subprocesses each opening a 3 GB
+object, and the memory failure it causes reads as the plugin's fault. `kernels.concurrency()` is
+the rule; the wave is now started through it.*
+
 **The budget is divided over the instances that actually launch, at the start of each wave — not
 over the ones that were requested.** A wave is filtered by five things first, in order: the plugin
 is declared but not built; its prerequisites are unmet; a guard refuses it; a declared reference is
