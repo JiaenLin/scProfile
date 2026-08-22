@@ -52,6 +52,13 @@ PLUGIN = {
             "anndata": ">=0.10,<0.12",
             "numpy": ">=1.24,<2",        # decoupler 1.8 predates the numpy 2 ABI
             "pandas": ">=2.0,<3",
+            # DECOUPLER IMPORTS THIS AND DOES NOT REQUIRE IT. `get_collectri` calls
+            # `_omnipath_check_version`, which does `import omnipath` - lazily, inside the
+            # function, so nothing about installing decoupler asks for it and nothing about
+            # importing decoupler notices. It surfaces on the first call to the one function this
+            # plugin exists to make. Measured on PBS 677555:
+            # `ModuleNotFoundError: No module named 'omnipath'` from inside `get_collectri`.
+            "omnipath": ">=1.0",
         },
     },
 
