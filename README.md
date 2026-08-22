@@ -5,8 +5,10 @@ pseudotime, regulons, pathway and TF activity, cell–cell communication, differ
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Each method is a **kernel** with its own pinned environment. Install the ones you want; the rest
-appear in the report as not run, with the reason.
+Each method is a **plugin** that declares what it NEEDS; the builder resolves every plugin's
+needs together and builds as few environments as satisfy them all, sharing where it can prove that
+is safe and isolating where it cannot — and saying which, and why. Install the ones you want; the
+rest appear in the report as not run, with the reason.
 
 Takes the output of [scQC](https://github.com/JiaenLin/scQC) →
 [scAnno](https://github.com/JiaenLin/scAnno) →
@@ -52,9 +54,17 @@ The host needs numpy and pandas; `[run]` adds anndata and scanpy. Kernel environ
 with conda/mamba, or point scProfile at ones you already have with
 `SCPROFILE_<KERNEL>_PYTHON`.
 
-Installing a kernel builds its environment from a pinned lock and then runs the kernel's own
-selftest against it — a real computation, not a set of imports — so a broken environment is found
-before a run is spent on it.
+Installing a kernel builds **the environment it resolves to** — which several plugins may share —
+and then runs the selftest of every plugin in it. A real computation, not a set of imports, so a
+broken environment is found before a run is spent on it; and every plugin, not only the one you
+asked for, because an environment shared by four and proved by one is an environment the other
+three meet for the first time inside a run.
+
+```
+scprofile install decoupler --prefix ~/envs --dry-run   # which environment, shared with whom
+  environment scprofile-env-3cd799b82e
+      shared by: decoupler, liana, pseudotime, velocity
+```
 
 ## Run
 
@@ -183,10 +193,27 @@ Colours are colourblind-safe and stable across panels.
 
 ## Adding a kernel
 
+A plugin is ONE FILE — `kernels/<name>.py` holding a `PLUGIN` dict and a `run(ctx)`. Dropping it
+in is the whole installation; the host reads the declaration without importing it, resolves the
+environment, and runs it through the shared entrypoint.
+
+```python
+PLUGIN = {
+    "api": 1, "summary": "...", "cannot_show": [...],
+    "inject": {"required": ["lognorm", "label"], "optional": ["design"]},
+    "produces": ["obs[my_score]"],
+    "requires": {"python": ">=3.10,<3.13", "packages": {"mytool": ">=1.2,<1.3"}},
+}
+def run(ctx): ...
+def selftest(ctx): ...
+```
+
+The older directory shape still loads, and is what a plugin in another language uses:
+
 ```
 kernels/<name>/
   kernel.yml       what it needs, what it produces, what it cannot show
-  lock.yml         its environment
+  lock.yml         a fully-pinned environment - read as the strictest possible requirement
   references.yml   reference data, with checksums
   run.py | run.R   entry point: reads in.json, writes out.json
   guard.py         optional: refuse datasets where the result would mislead
