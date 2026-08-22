@@ -12,12 +12,14 @@ from scQC → scAnno → scIntegrate, and most of the field's best tools need so
 
 ## The admission gate
 
-No kernel is added without written answers to all six. They are the entries in `kernel.yml`.
+No kernel is added without written answers to all six. They are the fields of `PLUGIN`, in the
+one file the plugin is.
 
 1. **What question does it answer** that no shipped kernel answers?
 2. **What does it need** beyond counts + labels + samples? Anything extra is a gate most datasets
    fail, and the kernel must refuse cleanly rather than produce a number.
-3. **Can it be installed reproducibly** — a lock that pins, and a selftest that runs the real
+3. **Can it be installed reproducibly** — a `requires` the builder can resolve against every
+   other plugin's, and a selftest that runs the real
    thing? An R tool needs a working bridge before its kernel is worth writing.
 4. **What can its output NOT show?** If this list is short, it has not been thought about.
 5. **Is there evidence it works**, on data like the target, from someone other than its authors?
