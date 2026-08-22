@@ -37,8 +37,13 @@ ENVIRONMENT, DECLARATION, METHOD, HOST = "environment", "declaration", "method",
 #: to do - never a guess, and never a traceback handed back to the user.
 SIGNATURES = (
     (r"ModuleNotFoundError|No module named", ENVIRONMENT, True,
-     "a package the plugin imports is not in its environment. Either the lock does not name it "
-     "or the environment was not built from the current lock."),
+     "a package the plugin imports is not in its environment. Either the requirement does not "
+     "name it or the environment was not built from the current requirement - and those have "
+     "different remedies. CHECK THE DECLARATION FIRST: if the missing module is not named by "
+     "this plugin's `requires`, a rebuild cannot add it, and what you are looking at is a "
+     "dependency the wrapped tool needs and its own metadata does not declare. Three of those "
+     "in one cycle: filelock behind pertpy, omnipath imported lazily inside decoupler's "
+     "get_collectri, and forty-four R packages behind CellChat."),
     (r"ImportError|cannot import name|undefined symbol|GLIBC", ENVIRONMENT, True,
      "a package is present but not importable here - usually a binary built against something "
      "this machine does not have, or two pins that disagree."),
