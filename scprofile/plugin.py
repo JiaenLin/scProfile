@@ -121,6 +121,30 @@ class Context:
         emb = self.keys.get("embedding")
         return self.adata.obsm[emb] if emb and emb in self.adata.obsm else None
 
+    def real_cells(self):
+        """A boolean mask: cells whose label is a REAL call, not an annotator's refusal to make one.
+
+        A sentinel - `UNRESOLVED`, `EXCLUDED`, whatever this annotator writes - is a cell the
+        annotator declined to type. The rule is that it stays in the object and leaves the
+        STATISTICS: never a population, never a denominator, never dropped.
+
+        The host cannot apply that rule for you, because only this plugin knows what it groups
+        by; what the host can do is answer the question once, the same way, for every plugin.
+        Anything that reports per-label results should mask with this and say how many it set
+        aside - a sentinel in a results table reads as a cell type that scored badly, and the
+        first plugin supplied from outside this repository put `UNRESOLVED` in its output as the
+        least-separated population in the dataset.
+
+        All-True when the object carries no label column or no sentinels are declared, so a
+        plugin can call it unconditionally.
+        """
+        from . import inputs
+        lab = self.obs("label")
+        if lab is None:
+            import numpy as np
+            return np.ones(self.adata.n_obs, dtype=bool)
+        return inputs.sentinel_mask(lab, self.sentinels)[0]
+
     def reference(self, name):
         """A declared reference file, verified by the host before the plugin was started."""
         return self.references.get(name)

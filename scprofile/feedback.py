@@ -129,6 +129,53 @@ def declaration_drift(kernel, payload):
     return out
 
 
+def sentinel_as_population(out_dir, payload, sentinels):
+    """Did this plugin report an annotator's refusal as though it were a cell type?
+
+    The contract says a sentinel stays in the object and leaves the STATISTICS - never a
+    population, never a denominator. Until now that was ASSERTED, in a caveat the host printed
+    and had no way to make true, and the first plugin supplied from outside this repository
+    shipped a `separation_by_label.csv` whose worst-scoring population was `UNRESOLVED`.
+
+    A rule the host states and does not check is a rule that holds until somebody writes a
+    plugin. So it is checked, on the one thing the host can actually read: the FIRST COLUMN of
+    each emitted table, which is where a per-group result puts its group. Stdlib `csv`, first
+    column only, first hit per table - the table is not scanned for content, it is checked for
+    one specific mistake.
+
+    Not fatal. Reported as a DECLARATION defect, the layer whose remedy is "a maintainer changes
+    the plugin or its method".
+    """
+    import csv
+    from pathlib import Path
+
+    sent = {str(s) for s in (sentinels or ()) if s}
+    if not sent:
+        return []
+    out = []
+    for rel in (payload.get("tables") or []):
+        f = Path(out_dir) / str(rel)
+        if not f.exists():
+            continue
+        try:
+            with open(f, newline="", encoding="utf-8", errors="replace") as fh:
+                rows = csv.reader(fh)
+                next(rows, None)                 # the header names the column, not a group
+                hit = next((r[0] for r in rows if r and r[0] in sent), None)
+        except OSError:
+            continue
+        if hit:
+            out.append(Diagnosis(
+                DECLARATION,
+                f"reported the annotator sentinel {hit!r} as a group in {f.name}. A sentinel is "
+                f"the annotator declining to call a cell type; scored beside real populations it "
+                f"reads as a cell type that did badly. Mask with `ctx.real_cells()` and say how "
+                f"many cells were set aside.",
+                action=f"exclude sentinels from the grouping in {payload.get('kernel')}",
+                evidence=str(f)))
+    return out
+
+
 def report(diagnoses, log=print):
     """Print the loop's findings grouped by the layer that owns them, and what each needs."""
     if not diagnoses:

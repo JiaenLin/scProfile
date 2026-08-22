@@ -529,6 +529,13 @@ def _run(a):
             for dd in FB.declaration_drift(ks[name], pl):
                 print(f"      [{dd.layer}] {dd.why}")
                 diagnoses.append(dd)
+            # AND THE RULE THE HOST STATES BUT CANNOT APPLY. Only the plugin knows what it groups
+            # by, so the host cannot keep sentinels out of a plugin's populations - it can only
+            # offer `ctx.real_cells()` and then check. A rule stated and never checked holds until
+            # somebody writes a plugin.
+            for dd in FB.sentinel_as_population(kout, pl, sentinels):
+                print(f"      [{dd.layer}] {dd.why}")
+                diagnoses.append(dd)
 
             extra = undeclared(ks[name], pl)
             if extra:

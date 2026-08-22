@@ -91,6 +91,47 @@ ck("a REFUSAL is allowed to produce nothing", not d,
 d = FB.declaration_drift(K([]), {"status": "ok", "obs": {"anything": "x"}})
 ck("a plugin declaring no produces is not policed", not d)
 
+print("\na rule the host states must be a rule the host checks")
+# The contract says a sentinel - an annotator declining to call a cell type - stays in the object
+# and leaves the STATISTICS. The host printed that as a guarantee in every plugin's caveats and
+# could not deliver it: only the plugin knows what it groups by. The first plugin supplied from
+# outside this repository then shipped a table whose worst-scoring population was `UNRESOLVED`,
+# under a caveat saying sentinels were not treated as populations. Offer the mechanism, then
+# CHECK - an unchecked rule holds until somebody writes a plugin.
+import tempfile                                                                 # noqa: E402
+with tempfile.TemporaryDirectory() as d:
+    d = Path(d)
+    (d / "tables").mkdir()
+    (d / "tables" / "by_label.csv").write_text(
+        "label,mean\nUNRESOLVED,-0.14\nFibroblast,0.31\n", encoding="utf-8")
+    (d / "tables" / "clean.csv").write_text(
+        "label,mean\nFibroblast,0.31\n", encoding="utf-8")
+    pay = {"kernel": "k", "tables": ["tables/by_label.csv"]}
+    got = FB.sentinel_as_population(d, pay, ("EXCLUDED", "UNRESOLVED"))
+    ck("a sentinel used as a group is caught", len(got) == 1, str(got))
+    ck("it is a DECLARATION defect - a maintainer changes the plugin",
+       got and got[0].layer == FB.DECLARATION)
+    ck("it names the sentinel and the file",
+       got and "UNRESOLVED" in got[0].why and "by_label.csv" in got[0].why)
+    ck("it names the mechanism rather than only the fault",
+       got and "real_cells()" in got[0].why)
+    ck("a clean table is not flagged",
+       not FB.sentinel_as_population(d, {"kernel": "k", "tables": ["tables/clean.csv"]},
+                                     ("UNRESOLVED",)))
+    ck("no declared sentinels means nothing to check",
+       not FB.sentinel_as_population(d, pay, ()))
+    ck("a header matching a sentinel is not a group",
+       not FB.sentinel_as_population(d, {"kernel": "k", "tables": ["tables/clean.csv"]},
+                                     ("label",)))
+    ck("a table the plugin declared and did not write is skipped, not raised",
+       FB.sentinel_as_population(d, {"kernel": "k", "tables": ["tables/gone.csv"]},
+                                 ("UNRESOLVED",)) == [])
+
+from scprofile.plugin import Context                                            # noqa: E402
+ck("the host offers the mechanism on Context", hasattr(Context, "real_cells"))
+ck("and it is documented as the host answering once for every plugin",
+   "every plugin" in (Context.real_cells.__doc__ or ""))
+
 print("\nthe loop is wired into the run, and a retry is never silent")
 from scprofile import cli                                                       # noqa: E402
 src = inspect.getsource(cli._run)
@@ -102,6 +143,7 @@ ck("a recovery after rebuild is REPORTED as drift",
 ck("a second failure is not blamed on the environment",
    "The environment is not the cause" in src)
 ck("drift is checked on every success", "declaration_drift(" in src)
+ck("and the sentinel rule with it", "sentinel_as_population(" in src)
 ck("findings reach report.json", '"diagnoses"' in src)
 ck("and which plugins were repaired", '"repaired"' in src)
 

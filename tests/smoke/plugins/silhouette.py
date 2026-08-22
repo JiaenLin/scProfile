@@ -85,11 +85,24 @@ def run(ctx):
     emb = np.asarray(ctx.embedding())
     lab = ctx.obs("label").astype(str).to_numpy()
 
+    # A SENTINEL IS NOT A POPULATION. `UNRESOLVED` is the annotator declining to call a cell type.
+    # This plugin's first real run scored it beside the real ones and reported it as the
+    # least-separated population in the dataset - a refusal to annotate, presented as a badly
+    # defined cell type. The mask comes from the HOST, so every plugin answers this the same way
+    # and none of them has to know which strings this particular annotator writes.
+    real = np.asarray(ctx.real_cells())
+    n_sent = int((~real).sum())
+    if n_sent:
+        ctx.caveat(f"{n_sent:,} cells carry an annotator sentinel and are NOT scored as a "
+                   f"population - a sentinel is a refusal to call a cell type, and a silhouette "
+                   f"for it reads as a cell type that is badly separated. They stay in the "
+                   f"object and their per-cell score is NaN.")
+
     # POPULATIONS TOO SMALL TO SCORE ARE EXCLUDED AND NAMED, never quietly dropped: a label
     # missing from a results table reads as a label that scored nothing.
-    counts = pd.Series(lab).value_counts()
+    counts = pd.Series(lab[real]).value_counts()
     too_small = sorted(counts[counts < ctx.config["min_cells_per_label"]].index)
-    keep = ~np.isin(lab, too_small)
+    keep = real & ~np.isin(lab, too_small)
     if too_small:
         ctx.caveat(f"{len(too_small)} population(s) have fewer than "
                    f"{ctx.config['min_cells_per_label']} cells and are NOT scored: "

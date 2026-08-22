@@ -129,13 +129,25 @@ def main(argv):
 
     # A sentinel is an annotator declining to call a cell type. They are CELLS: never a
     # population, never a denominator, never dropped.
+    #
+    # THE CAVEAT SAYS WHAT IS TRUE, NOT WHAT WOULD BE NICE. It used to end "and are not treated as
+    # a population", which the host has no way to make true: only the plugin knows what it groups
+    # by. In the first run that ever reached a third-party plugin, that sentence was printed
+    # beside a results table whose worst-scoring population was `UNRESOLVED` - the annotator's
+    # refusal to call a cell type, reported as a cell type that scored badly. The host offers
+    # `ctx.real_cells()` and CHECKS the emitted tables afterwards; it does not promise.
     lab = keys.get("label")
     if lab and lab in A.obs:
-        n = int(A.obs[lab].astype(str).isin(sentinels).sum())
+        from scprofile import inputs
+        _real, found = inputs.sentinel_mask(A.obs[lab], sentinels)
+        n = int((~_real).sum())
         if n:
             pre_caveats.append(
-                f"{n:,} cells carry an annotator sentinel ({', '.join(sorted(sentinels))}). "
-                f"They are KEPT - they are cells - and are not treated as a population.")
+                f"{n:,} cells carry an annotator sentinel "
+                f"({', '.join(f'{s} {c:,}' for s, c in sorted(found.items()))}). They are KEPT - "
+                f"they are cells, not a population, and nothing here drops them. If one of those "
+                f"names appears in this plugin's results as though it were a cell type, that is a "
+                f"defect in the plugin and not a finding about the data.")
             log(f"  {n:,} sentinel-labelled cells kept")
 
     # A NaN row in a computed embedding is a cell an upstream step withheld. In a neighbour graph
