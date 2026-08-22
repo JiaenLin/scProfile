@@ -677,6 +677,10 @@ def run(ctx):
                                       f"unrecognised mode is passed straight through and produces "
                                       f"a plausible field from a model nobody chose.")
     n_jobs = int(C["n_jobs"]) or ctx.cores
+    # THE JOURNAL CONVENTIONS, APPLIED BEFORE ANYTHING IS FITTED. Not for the settings' sake - it
+    # is the cheapest possible check that this environment can draw at all, and the alternative is
+    # discovering a broken matplotlib backend after an hour of moments on a real cohort.
+    ctx.plot()
     A = ctx.adata
     n0, g0 = A.n_obs, A.n_vars
     ctx.log(f"scvelo {scv.__version__}, mode {C['mode']}, {n_jobs} worker(s)")

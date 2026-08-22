@@ -199,9 +199,8 @@ def run(ctx):
     # A trajectory that is secretly a cell-cycle axis is what this plugin exists to catch, and
     # that is a claim somebody will have to make in print. So it ships the two panels that support
     # it, to the same standard as everything else: vector, captioned, with their source data.
-    plt = ctx.plot()
-    F = ctx.figure
     try:
+        plt, F = ctx.plot(), ctx.figure
         # A SENTINEL IS NOT A POPULATION. The directory-shaped version of this plugin grouped by
         # the raw label column, so an annotator's refusal to call a cell type appeared in the
         # per-population panel as a population with a cycling fraction. `ctx.populations()` is the
