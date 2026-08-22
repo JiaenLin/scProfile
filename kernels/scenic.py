@@ -104,6 +104,12 @@ PLUGIN = {
                                           "three genes is a correlation, not a module"},
         "seed": {"type": "int", "default": 0,
                  "help": "GRNBoost2 is stochastic; this is what makes a run reproducible"},
+        "min_cells_per_gene": {"type": "int", "default": 3, "min": 0,
+                               "help": "a gene detected in fewer cells than this is not offered "
+                                       "as a TARGET. It is never removed from the object, never "
+                                       "removed as a REGULATOR, and 0 disables the filter. A gene "
+                                       "seen in two cells cannot support a regression across "
+                                       "thousands, and every one of them costs a full fit"},
     },
 
     "requires": {
@@ -171,12 +177,39 @@ def run(ctx):
 
     counts = ctx.counts()
     genes = np.asarray(ctx.adata.var_names).astype(str)
-    dense = np.asarray(counts.todense() if hasattr(counts, "todense") else counts)
-    ex = pd.DataFrame(dense, index=ctx.adata.obs_names.astype(str), columns=genes)
     tfs = [l.strip() for l in open(tf_path, encoding="utf-8") if l.strip()]
     present = [t for t in tfs if t in set(genes)]
+
+    # TARGETS ONLY, AND REGULATORS ARE NEVER DROPPED. A gene detected in a handful of cells cannot
+    # support a boosted regression over thousands of them, and GRNBoost2 fits EVERY column as a
+    # target - so an undetected gene costs a full fit to return noise. Restricting targets is
+    # standard SCENIC practice; doing it silently would not be, so the count is logged, the gene
+    # stays in the object, and `min_cells_per_gene: 0` turns it off.
+    #
+    # A TF is exempt whatever its detection rate: it is a REGRESSOR, dropping it removes an
+    # explanation rather than a cost, and nothing downstream could recover the regulon it would
+    # have carried.
+    detected = np.asarray((counts > 0).sum(axis=0)).ravel()
+    floor = int(ctx.config["min_cells_per_gene"])
+    keep = detected >= floor if floor else np.ones(len(genes), bool)
+    keep |= np.isin(genes, list(present))
+    dropped = int((~keep).sum())
+
+    sub = counts[:, keep]
+    kept_genes = genes[keep]
+    # float32 HALVES the graph dask ships to its workers. GRNBoost2 splits on ordering, and no
+    # split in a boosted tree over UMI counts turns on the 8th decimal place.
+    dense = np.asarray(sub.todense() if hasattr(sub, "todense") else sub, dtype=np.float32)
+    ex = pd.DataFrame(dense, index=ctx.adata.obs_names.astype(str), columns=kept_genes)
     ctx.log(f"{ex.shape[0]:,} cells x {ex.shape[1]:,} genes; "
             f"{len(present):,} of {len(tfs):,} declared TFs present")
+    if dropped:
+        ctx.log(f"  {dropped:,} gene(s) not offered as targets: detected in fewer than {floor} "
+                f"cell(s) here. They remain in the object and every TF was kept regardless.")
+        ctx.caveat(f"{dropped:,} of {len(genes):,} genes were not offered to GRNBoost2 as TARGETS "
+                   f"(detected in fewer than {floor} cells in this unit). No regulon can name one "
+                   f"of them as a target here. They were NOT removed from the object and were NOT "
+                   f"removed as regulators; set min_cells_per_gene to 0 to offer all of them.")
     if len(present) < 10:
         return ctx.refuse("regulon activity",
                           f"only {len(present)} of {len(tfs):,} transcription factors from the "

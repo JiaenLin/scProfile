@@ -622,15 +622,25 @@ def _budget(wave, budget):
         return wave
     for i in wave:
         i.setdefault("declared", i["cores"])
-    want = sum(i["declared"] for i in wave)
+    # EVERY INSTANCE GETS WHAT IT DECLARED, capped at the budget - never a proportional share of
+    # it. Dividing the budget across the WHOLE wave assumed the whole wave runs at once, and it
+    # does not: `concurrency` admits a subset. Doing both charged every instance for the presence
+    # of instances that were not running yet, and the arithmetic collapsed on any wave larger than
+    # the budget - 37 instances declaring 313 cores against a budget of 12 gave scenic
+    # `int(16 * 12 / 313)` = 0 -> 1, so a tool that declares 16 and scales nearly linearly ran
+    # single-threaded while eleven other single-core instances sat beside it.
+    #
+    # A DECLARATION READ AND THEN DISCARDED IS WORSE THAN ONE NEVER READ, because the plan prints
+    # the discarded number's consequence and nothing prints the declaration. Measured on PBS
+    # 677891: ten GRNBoost2 fits, 34,290 targets each, at one core apiece, still unfinished after
+    # 4h23m of a 12h timeout.
     for i in wave:
-        i["cores"] = (i["declared"] if want <= budget
-                      else max(1, min(budget, int(i["declared"] * budget / want))))
+        i["cores"] = max(1, min(int(i["declared"] or 1), int(budget)))
     return wave
 
 
 def concurrency(instances, budget):
-    """How many instances of a wave may run AT ONCE. `min(budget / smallest declared, ready)`.
+    """How many instances of a wave are resident at once, PACKED BY CORES.
 
     `docs/EXECUTION.md` §4 has stated this rule since it was written, and nothing implemented it:
     the runner started every instance of a wave at once, however many there were. `_budget` divides
@@ -644,14 +654,65 @@ def concurrency(instances, budget):
     node still runs thirty-five of them, which is the oversubscription the share exists to prevent
     wearing the other hat - and the memory failure it causes looks like the plugin's fault.
 
-    The SMALLEST DECLARED, not the smallest scaled: a wave of cheap plugins should fill the budget,
-    and scaling has already flattened everything to 1 by the time it is oversubscribed. A plugin
-    declaring more than the whole budget runs alone, at the budget, rather than being refused.
+    This is a HEADLINE for the plan, not the scheduler: `CorePool` does the admitting, and it is
+    work-conserving in a way one integer cannot express. The count is computed the same way the
+    pool behaves - greedily, skipping an instance too large for the remainder rather than stopping
+    at it, because a 1-core instance behind a 16-core one still starts.
+
+    A plugin declaring more than the whole budget runs alone, at the budget, rather than being
+    refused.
     """
     if not instances:
         return 1
-    smallest = max(1, min(int(i.get("declared", i.get("cores", 1)) or 1) for i in instances))
-    return max(1, min(len(instances), int(budget) // smallest))
+    used, n = 0, 0
+    for i in instances:
+        c = max(1, min(int(i.get("cores", i.get("declared", 1)) or 1), int(budget)))
+        if used + c > int(budget) and n:
+            continue        # it does not fit YET; a smaller one behind it still might
+        used += c
+        n += 1
+    return max(1, n)
+
+
+class CorePool:
+    """Admission by CORES, not by count: a wave keeps the whole allocation busy.
+
+    `concurrency` answers "how many fit" as one number, and one number cannot schedule a wave
+    whose instances declare different core counts. A fixed pool of N threads either starves the
+    expensive plugin to make room for cheap ones or runs a single fat instance while the rest of
+    the node idles.
+
+    Permits fix both directions. An instance acquires the cores it was allocated, runs, and
+    releases them; anything that fits in the remainder starts immediately. A 16-core GRNBoost2
+    fit and eight 1-core instances share a 24-core allocation without either being throttled.
+
+    Cores are capped at the budget before acquisition, so an instance declaring more than the
+    whole allocation runs alone rather than waiting for permits that can never exist. That cap is
+    what makes this deadlock-free: every request is satisfiable by an empty pool.
+    """
+
+    def __init__(self, budget):
+        import threading
+        self.budget = max(1, int(budget))
+        self.free = self.budget
+        self._cv = threading.Condition()
+
+    def want(self, cores):
+        """The permits an instance may ask for: at least one, never more than the whole budget."""
+        return max(1, min(int(cores or 1), self.budget))
+
+    def acquire(self, cores):
+        n = self.want(cores)
+        with self._cv:
+            while self.free < n:
+                self._cv.wait()
+            self.free -= n
+        return n
+
+    def release(self, n):
+        with self._cv:
+            self.free = min(self.budget, self.free + int(n))
+            self._cv.notify_all()
 
 
 def resolve_keys(items, keys):

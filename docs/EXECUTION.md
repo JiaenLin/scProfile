@@ -116,8 +116,22 @@ share in the manifest it was just handed — one statement of the number, so the
 *Without it an eight-instance wave on a sixteen-core allocation ran 128 BLAS threads on 16 cores,
 with every instance correctly told `cores: 1`.*
 
-Concurrency is then `min(budget / smallest_declared_cores, ready_plugins)`, floored at 1. A plugin
-declaring more cores than the whole budget runs alone, at the budget, rather than being refused.
+**Admission is by CORES, not by count.** Every instance is given the cores it DECLARED, capped at
+the budget, and `kernels.CorePool` admits it when that many are free. A plugin declaring more cores
+than the whole budget runs alone, at the budget, rather than being refused.
+`kernels.concurrency()` reports how many that leaves resident — a headline for the plan, computed
+the way the pool behaves.
+
+*Until 2026-08-22 the budget was divided PROPORTIONALLY across the whole wave —
+`declared x budget / sum(declared)` — and that is a different rule wearing the same word. It
+assumed a wave runs all at once, when only the resident subset does, so it charged every instance
+for the presence of instances that had not started. On any wave larger than the budget the
+arithmetic collapsed to one core each: 37 instances declaring 313 cores against a budget of 12 gave
+`scenic` `int(16 x 12 / 313)` = 0, floored to 1. Measured on PBS 677891 — ten GRNBoost2 fits, each
+declaring 16 cores, each running on one, still unfinished after 4h23m of a 12h timeout while the
+plan printed `scenic[Aging1](1c)` and nothing printed the 16. **A declaration read and then
+discarded is worse than one never read**, because the plan prints its consequence and never prints
+the declaration.*
 
 *That sentence was here from the beginning and nothing implemented it until 2026-08-22: the runner
 started **every** instance of a wave at once, however many there were. The two are not the same

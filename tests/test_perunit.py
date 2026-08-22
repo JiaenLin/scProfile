@@ -437,11 +437,15 @@ first = [i["cores"] for i in w]
 _budget(w, 4)
 ck("re-budgeting an unfiltered wave changes nothing", [i["cores"] for i in w] == first,
    f"{first} became {[i['cores'] for i in w]}")
-ck("velocity keeps its planned share", first[0] == 2, str(first))
+# DECLARED, CAPPED AT THE BUDGET - not a proportional share of it. This expected 2, which is
+# `int(8 * 4 / 15)`: the old rule divided the budget across the whole wave as though all six
+# instances ran at once. They do not; CorePool admits what fits. The old rule is why a plugin
+# declaring 16 cores ran on one.
+ck("velocity gets what it declared, capped at the budget", first[0] == 4, str(first))
 live = [i for i in w if i["plugin"] != "perunit"]
 _budget(live, 4)
-ck("re-budgeting a FILTERED wave gives the survivors more",
-   [i["cores"] for i in live] == [3, 1], str([i["cores"] for i in live]))
+ck("filtering the wave does not change what a survivor was allocated",
+   [i["cores"] for i in live] == [4, 1], str([i["cores"] for i in live]))
 w2 = [{"plugin": "a", "unit": None, "cores": 2}, {"plugin": "b", "unit": None, "cores": 1}]
 _budget(w2, 8)
 ck("an under-subscribed wave is left alone", [i["cores"] for i in w2] == [2, 1])
@@ -458,14 +462,56 @@ big = [{"plugin": "velocity", "unit": None, "cores": 8, "declared": 8}] + \
       [{"plugin": "cellcycle", "unit": None, "cores": 1, "declared": 1}]
 _budget(big, 8)
 ck("every instance is told a share it can use", all(i["cores"] >= 1 for i in big))
-ck("but they do not all start at once", concurrency(big, 8) == 8,
+ck("velocity is given the 8 it declared, not a share of them",
+   big[0]["cores"] == 8, str(big[0]))
+# ONE, because velocity declared the whole allocation and got it. The old rule flattened all
+# twelve to a single core and started eight of them; this runs the 8-core instance on 8 cores and
+# admits the others as it releases them. Same cores busy, but the plugin that declared 8 gets 8.
+ck("but they do not all start at once", concurrency(big, 8) == 1,
    f"{concurrency(big, 8)} of {len(big)} would start on an 8-core allocation")
 ck("a wave smaller than the budget starts whole", concurrency(w2, 8) == 2, str(concurrency(w2, 8)))
 ck("one instance declaring more than the budget runs alone",
    concurrency([{"plugin": "x", "cores": 8, "declared": 16}], 8) == 1)
 ck("an empty wave does not divide by zero", concurrency([], 8) == 1)
-ck("and the rule is the one the document states",
-   "budget / smallest_declared_cores" in (_ROOT / "docs" / "EXECUTION.md").read_text())
+
+print("\nand the pool never holds more cores than the allocation, under real threads")
+# The headline is an integer; the POOL is what schedules. This is the property that actually
+# protects the node, and no integer can express it for a wave of mixed core counts.
+import threading as _th                                                        # noqa: E402
+from scprofile.kernels import CorePool                                         # noqa: E402
+_pool, _held, _peak, _lk = CorePool(8), 0, 0, _th.Lock()
+
+
+def _work(n):
+    global _held, _peak
+    got = _pool.acquire(n)
+    with _lk:
+        _held += got
+        _peak = max(_peak, _held)
+    _th.Event().wait(0.01)
+    with _lk:
+        _held -= got
+    _pool.release(got)
+
+
+_ts = [_th.Thread(target=_work, args=(c,)) for c in ([8] + [4] * 10 + [1] * 5)]
+for _t in _ts:
+    _t.start()
+for _t in _ts:
+    _t.join()
+ck(f"peak residency never exceeded the budget (peak {_peak})", _peak <= 8, f"peak {_peak}")
+ck("and every permit came back", _pool.free == 8, f"{_pool.free} free of 8")
+ck("an instance wanting more than the budget is capped, not deadlocked",
+   CorePool(8).acquire(64) == 8)
+# THE DOCUMENT MUST STATE THE RULE THE CODE IMPLEMENTS. This pinned the literal
+# "budget / smallest_declared_cores", which was the proportional rule replaced on 2026-08-22;
+# leaving it would have kept EXECUTION.md describing an allocator that no longer exists, and
+# this check green for saying so.
+_ex = (_ROOT / "docs" / "EXECUTION.md").read_text()
+ck("the document states admission is by cores", "Admission is by CORES, not by count" in _ex)
+ck("and names what implements it", "CorePool" in _ex)
+ck("and the replaced rule is recorded as replaced, not deleted",
+   "declared x budget / sum(declared)" in _ex)
 
 print("\nthe uns payload is writable, checked before write_h5ad")
 prov = merge.provenance(f, {"n_obs": 10, "compartment": None}, {"liana": ["x"]},

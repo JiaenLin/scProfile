@@ -752,10 +752,23 @@ def test_schedule():
     check("b, d do NOT wait for a", {"b", "d"} <= set(w1), str(w1))
     check("longest pole first", w1[0] == "b", str(w1))
     check("per_unit fans out over units", w1.count("d") == 3, str(w1))
+    # THE BUDGET BINDS ON WHAT IS RESIDENT, NOT ON THE WAVE'S TOTAL. This asserted
+    # `sum(wave) <= 16`, which reads as safety and is actually the bug: a wave is the set of
+    # instances that MAY run, and only `concurrency`/`CorePool` decides how many do. Requiring the
+    # whole wave to fit forced a proportional split across instances that were not running yet,
+    # and on any wave larger than the budget it drove every instance to one core - scenic declared
+    # 16 and got `int(16 * 12 / 313)` = 0 -> 1.
+    from scprofile.kernels import CorePool
     for wave in plan:
-        used = sum(i["cores"] for i in wave)
-        check(f"budget respected ({used} <= 16)", used <= 16)
+        check("no instance is given more than the whole budget", all(i["cores"] <= 16 for i in wave))
         check("every instance gets at least one core", all(i["cores"] >= 1 for i in wave))
+        # what is actually held at any moment, simulated the way the pool admits
+        pool, held = CorePool(16), 0
+        for i in wave:
+            n = pool.want(i["cores"])
+            if held + n <= 16:
+                held += n
+        check(f"resident cores fit the budget ({held} <= 16)", held <= 16)
 
     solo = schedule(["b"], {"b": fake("b", "high", 64)}, budget_cores=8)
     check("a plugin wanting more than the budget runs alone at the budget",

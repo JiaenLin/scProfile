@@ -188,7 +188,8 @@ def _default_cores():
 
 def _run(a):
     from . import compat, inputs, manifest, merge, provenance, refs, report, runner
-    from .kernels import (_budget, concurrency, discover, guard_verdict, log_escape, schedule,
+    from .kernels import (CorePool, _budget, concurrency, discover, guard_verdict,
+                          log_escape, schedule,
                           undeclared, unmet)
 
     try:
@@ -487,11 +488,26 @@ def _run(a):
             except Exception as e:                                        # noqa: BLE001
                 return inst, kout, None, _time.perf_counter() - t0, f"{lbl}: {e}"
 
-        # AT MOST `at_once`, which is the rule EXECUTION.md §4 has always stated and nothing
-        # implemented. Telling 35 instances that they have one core each and then starting all 35
-        # is the oversubscription the core share exists to prevent, wearing the other hat.
-        with cf.ThreadPoolExecutor(max_workers=at_once) as ex:
-            done = list(ex.map(_go, prepared))
+        # ADMISSION IS BY CORES, NOT BY COUNT. `at_once` is a headline for the plan; the pool is
+        # what actually schedules, because a wave mixing a 16-core fit with 1-core instances has
+        # no single correct thread count. Each instance takes the cores it was allocated and
+        # releases them when its subprocess exits, so the allocation stays full without ever
+        # being oversubscribed - the two failures a fixed pool has to choose between.
+        pool = CorePool(budget)
+
+        def _gated(item):
+            inst, _kout = item
+            n = pool.acquire(inst.get("cores", 1))
+            try:
+                return _go(item)
+            finally:
+                pool.release(n)
+
+        # Threads block on permits before they spawn anything, so one per instance is cheap and
+        # the pool decides what is resident. Sizing THIS to `at_once` would re-impose the count
+        # limit the permits exist to replace.
+        with cf.ThreadPoolExecutor(max_workers=max(1, len(prepared))) as ex:
+            done = list(ex.map(_gated, prepared))
 
         for inst, kout, pl, secs, err in done:
             name = inst["plugin"]
