@@ -234,7 +234,13 @@ def main(argv):
 
     ctx = Context(A, keys=keys, out=out, cores=cores, unit=unit,
                   organism=inp.get("organism"), assay=inp.get("assay"),
-                  references=inp.get("references"), params=inp.get("params"),
+                  references=inp.get("references"),
+                  # BY ROLE, NOT BY NAME. `Context` accepted these from the beginning and nothing
+                  # ever passed them, so `ctx.reference_for_role(...)` returned None for every
+                  # role of every plugin - and scenic, the only plugin that asks, refused on all
+                  # ten units of a real cohort with "the cisTarget references are not available"
+                  # while `in.json` listed all three of them, verified, by absolute path.
+                  reference_specs=inp.get("reference_specs"), params=inp.get("params"),
                   design=inp.get("design"), sentinels=sentinels, config=config,
                   # The upstream chain, so a plugin needing a file that is NOT in the object can
                   # ask the host to go and find it (`ctx.source_layers`). Harvested from `uns`,

@@ -403,6 +403,7 @@ def _run(a):
             # what the plugin ever sees.
             keys=_km,
             organism=organism[0], assay=assay[0], design=a.design, references=ctx["refs"],
+            reference_specs=ks[name].references(organism[0]),
             params=json.loads(a.params) if a.params else {},
             upstream=flat, upstream_units={k_: v_ for k_, v_ in per.items() if v_},
             sentinels=sentinels,

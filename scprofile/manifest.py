@@ -60,8 +60,8 @@ DEFAULT_SENTINELS = ("EXCLUDED", "UNRESOLVED")
 
 
 def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=None,
-                references=None, params=None, upstream=None, upstream_units=None,
-                sentinels=DEFAULT_SENTINELS,
+                references=None, reference_specs=None, params=None, upstream=None,
+                upstream_units=None, sentinels=DEFAULT_SENTINELS,
                 provenance=None, resources=None, unit=None, contract=CONTRACT_VERSION):
     """Write `in.json`. Every path is made ABSOLUTE first.
 
@@ -97,6 +97,17 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
         "assay": assay,
         "design": str(Path(design).resolve()) if design else None,
         "references": {k: str(Path(v).resolve()) for k, v in (references or {}).items()},
+        # THE DECLARATIONS BEHIND THOSE PATHS, so a plugin can ask for one BY ROLE. Without them
+        # `ctx.reference_for_role` has nothing to search and returns None for every role, for
+        # every plugin, always - which is not a degraded answer, it is the whole mechanism that
+        # keeps a SPECIES out of a plugin failing closed. The mouse and human entries of one
+        # reference are different files with different names, so a plugin asking by NAME has to
+        # know both and pick, and picking is the one thing no plugin may do.
+        "reference_specs": {str(k): {kk: (str(vv) if not isinstance(vv, (int, float, bool))
+                                          else vv)
+                                     for kk, vv in dict(v).items()}
+                            for k, v in (reference_specs or {}).items()
+                            if isinstance(v, dict)},
         "params": dict(params or {}),
         "upstream": {k: str(Path(v).resolve()) for k, v in (upstream or {}).items()},
         "upstream_units": {k: {str(u): str(Path(d).resolve()) for u, d in (v or {}).items()}
@@ -135,6 +146,7 @@ def read_input(path):
     # has not been updated. Absent and empty mean the same thing for all three.
     d.setdefault("upstream", {})
     d.setdefault("upstream_units", {})
+    d.setdefault("reference_specs", {})
     d.setdefault("sentinels", list(DEFAULT_SENTINELS))
     d.setdefault("params", {})
     d.setdefault("provenance", {})

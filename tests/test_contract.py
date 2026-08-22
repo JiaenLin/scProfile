@@ -388,6 +388,49 @@ def test_the_plan_and_the_run_search_the_same_distance():
               (_np.asarray(A.layers["unspliced"].todense())[:3, 1] == 10.0).all())
 
 
+def test_a_reference_can_be_asked_for_by_role():
+    """`ctx.reference_for_role` had nothing to search and returned None for every plugin.
+
+    The mouse and human entries of one reference are different FILES with different NAMES, so a
+    plugin asking by name would have to know both and pick - and picking a species is the one
+    thing no plugin may do. `reference_for_role` exists so the host picks; `Context` accepted the
+    declarations from the beginning and NOTHING EVER PASSED THEM, because `in.json` carried only
+    `{name: path}`.
+
+    Measured on PBS 677757: scenic refused on all ten units of a real cohort with "the cisTarget
+    references are not available", while its own `in.json` listed all three of them, verified, by
+    absolute path.
+    """
+    print("\na reference can be asked for by ROLE, which is the point of roles")
+    from scprofile.plugin import Context
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        (tmp / "r.feather").write_text("x")
+        manifest.write_input(
+            tmp / "in.json", h5ad=tmp / "x.h5ad", out_dir=tmp, keys={"label": "l"},
+            references={"mm10_rankings_10kb": tmp / "r.feather"},
+            reference_specs={"mm10_rankings_10kb": {"organism": "mouse", "role": "rankings",
+                                                    "sha256": "0" * 64, "size": 1}})
+        inp = manifest.read_input(tmp / "in.json")
+        check("in.json carries the declarations", "rankings" in json.dumps(inp["reference_specs"]),
+              str(inp.get("reference_specs")))
+        ctx = Context(None, keys={}, out=tmp, references=inp["references"],
+                      reference_specs=inp["reference_specs"])
+        check("and the role resolves to the file",
+              str(ctx.reference_for_role("rankings")).endswith("r.feather"),
+              str(ctx.reference_for_role("rankings")))
+        check("a role nobody declared is still None", ctx.reference_for_role("nope") is None)
+        # A CONTEXT GIVEN NO SPECS MUST NOT PRETEND. That is the state every plugin was in.
+        bare = Context(None, keys={}, out=tmp, references=inp["references"])
+        check("without them it answers None, which is what happened for a year",
+              bare.reference_for_role("rankings") is None)
+    src = (Path(__file__).resolve().parents[1] / "scprofile" / "_entry.py").read_text()
+    check("the entrypoint passes them", "reference_specs=inp.get" in src)
+    cli_src = (Path(__file__).resolve().parents[1] / "scprofile" / "cli.py").read_text()
+    check("and the run fills them from the plugin's own declaration",
+          "reference_specs=ks[name].references(" in cli_src)
+
+
 def test_the_core_share_reaches_the_thread_pools():
     """A plugin cannot honour its share for numpy. The host has to, and now does.
 
@@ -1521,6 +1564,7 @@ def main():
     test_a_plugin_gets_its_own_environments_bin_on_path()
     test_a_failed_build_still_proves_what_it_can()
     test_the_plan_and_the_run_search_the_same_distance()
+    test_a_reference_can_be_asked_for_by_role()
     test_the_core_share_reaches_the_thread_pools()
     test_one_file_plugins_are_importable_by_the_host()
     test_a_one_file_plugin_can_have_a_guard()
