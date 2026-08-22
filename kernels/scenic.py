@@ -60,7 +60,9 @@ PLUGIN = {
 
     "inject": {"required": ["counts", "organism"], "optional": ["label", "sample"]},
     "provides": ["activity"],
-    "produces": ["obsm[X_regulon_auc]", "tables/regulon_targets.csv"],
+    "produces": ["obsm[X_regulon_auc]", "tables/regulon_targets.csv",
+                 # cohort fit only - the aggregate a between-condition test should read
+                 "tables/regulon_activity_by_sample.csv?"],
     "per_unit": "sample",
     # AND ONCE OVER THE WHOLE COHORT, because a regulon set is INFERRED, not fixed. Each fit
     # discovers its own vocabulary, so two units' AUC columns are not the same quantity and a
@@ -281,6 +283,31 @@ def run(ctx):
 
     auc = aucell(ex, regulons, num_workers=ctx.cores, seed=ctx.config["seed"])
     ctx.emit_obsm("X_regulon_auc", auc.to_numpy())
+
+    # THE UNIT OF REPLICATION IS THE SAMPLE, NOT THE CELL, and the cohort fit is where that gets
+    # got wrong. Its AUC columns ARE comparable between cells - that is the whole point of fitting
+    # once - and the obvious next step is a per-cell test across conditions with n in the tens of
+    # thousands. Cells from one animal are not independent replicates of that animal's condition,
+    # so such a test reports the cell count, not the effect: the field's answer for exactly this
+    # structure is a mixed model with the individual as a random effect, or pseudobulk first
+    # (Fleck/Nagy et al. meta-analyses of AD and SCZ snRNA-seq, Nat Commun 2025).
+    #
+    # So the cohort fit also ships the AGGREGATE a between-condition test should consume, which
+    # makes the correct comparison the easy one to reach for. `de` already treats the sample as
+    # the replicate; there is no reason regulon activity should not.
+    if PLUGIN.get("per_unit") and ctx.unit is None and "sample" in ctx.keys:
+        samp = ctx.obs("sample").astype(str).to_numpy()
+        by = auc.copy()
+        by.index = samp[:len(by)] if len(samp) >= len(by) else samp
+        by = by.groupby(level=0).mean()
+        by.index.name = "sample"
+        ctx.emit_table("regulon_activity_by_sample", by)
+        ctx.caveat(
+            f"tables/regulon_activity_by_sample.csv is the MEAN AUC per regulon per sample, and "
+            f"it is what a between-condition test should read. n = {by.shape[0]} samples, not "
+            f"{auc.shape[0]:,} cells: cells from one animal are not independent replicates of "
+            f"that animal's condition, and a per-cell test across conditions reports the cell "
+            f"count rather than the effect.")
     ctx.emit_table("regulon_targets", pd.DataFrame(
         [{"regulon": r.name, "n_targets": len(r.genes),
           "targets": ";".join(sorted(r.genes))} for r in regulons]).set_index("regulon"))
