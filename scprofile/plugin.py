@@ -93,6 +93,7 @@ class Context:
         #: the plan is drawn, not an hour into a queue.
         self.config = dict(config or {})
         self._effects = []
+        self._design_cache, self._design_factors = None, []
         self.headline = ""
         self.status = "ok"
         self._obs, self._obsm, self._layers = {}, {}, {}
@@ -185,6 +186,48 @@ class Context:
                 f"They stay in the object and in any per-cell result; only the grouping excludes "
                 f"them.")
         return mask, np.asarray(lab.astype(str))[mask]
+
+    def design_table(self):
+        """{sample: {factor: level}} from the design CSV, or {} if none was given.
+
+        Read by the HOST so every design-aware plugin reads it the same way. Three plugins each
+        parsing a CSV is three chances to disagree about whether a sample with no row is an
+        error, and it is: a sample present in the object with no row is refused BY NAME upstream,
+        never derived from its name.
+        """
+        if self._design_cache is None:
+            self._design_cache = {}
+            if self.design:
+                try:
+                    from . import inputs
+                    tab, _key, factors = inputs.read_design(self.design)
+                    self._design_cache = dict(tab)
+                    self._design_factors = list(factors)
+                except Exception as e:                                # noqa: BLE001
+                    self.log(f"  design table could not be read: {e}")
+        return self._design_cache
+
+    def testable_factors(self, min_levels=2, min_replicates=2):
+        """Factors with at least two levels and replication in every level, sorted.
+
+        THE SAME BAR THE PLANNER USES. A plugin that invented its own would disagree with the
+        plan the user read - and the plan is what they decided to spend a queue on.
+        """
+        tab = self.design_table()
+        if not tab:
+            return []
+        samples = set(str(s) for s in (self.obs("sample").astype(str).unique()
+                                       if self.obs("sample") is not None else tab))
+        out = []
+        for f in sorted(self._design_factors or
+                        {k for row in tab.values() for k in row}):
+            levels = {}
+            for s, row in tab.items():
+                if str(s) in samples:
+                    levels.setdefault(str(row.get(f, "")), []).append(s)
+            if len(levels) >= min_levels and min(map(len, levels.values())) >= min_replicates:
+                out.append(f)
+        return out
 
     def reference(self, name):
         """A declared reference file, verified by the host before the plugin was started."""
