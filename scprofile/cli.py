@@ -1409,6 +1409,15 @@ def _write_readme(out, payload):
     L += ["## 1. What is this, and where did it come from?", "",
           f"Produced by scProfile {payload.get('version', '?')} from `{payload.get('input')}`.",
           f"Plugins that ran: {', '.join(ran) or 'none'}.", ""]
+    if payload.get("input_read_by_kernels"):
+        # WHAT THE PLUGINS ACTUALLY READ is not always what was passed in, and the README is the
+        # document somebody opens. A 3 GB file beside the results that no document admits to is
+        # not a record of anything.
+        L += [f"The plugins did not read that file directly: their pinned anndata could not, so "
+              f"they were given `{Path(payload['input_read_by_kernels']).name}` — the same "
+              f"matrices in the classic encoding, with `uns` entries dropped by name and "
+              f"obsp/varm/varp not carried. It is kept beside these results because it is what "
+              f"the numbers came from.", ""]
     if payload.get("constraint_on_use"):
         L += ["The input carried a **constraint on use**, reproduced in the report. It applies to "
               "everything here.", ""]
