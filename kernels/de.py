@@ -89,6 +89,37 @@ PLUGIN = {
 }
 
 
+def _identifiable(obs, terms, np, pd):
+    """The terms that can be estimated together, and the ones that cannot. Returns (keep, aliased).
+
+    A DESIGN TABLE CARRIES COVARIATES THAT ARE NOT INDEPENDENT. In this cohort `chemistry` takes
+    one value for every aged sample and another for every young one, so `~ age + diet + chemistry
+    + batch` has a rank-deficient model matrix and pydeseq2's IRLS inverts it:
+
+        numpy.linalg.LinAlgError: Singular matrix
+
+    which is a true statement about linear algebra and tells the user nothing. `RUN_PLAN.md` says
+    an imbalance, a confound, even a COMPLETE confound, all run with a caveat - so the terms that
+    add nothing estimable are dropped, in the order given, and NAMED. Dropping is not the same as
+    ignoring: a term aliased with one already in the model contributes no column the model does
+    not already have, and its coefficient would not have been interpretable in isolation anyway.
+    """
+    cols = [np.ones((len(obs), 1))]
+    keep, aliased = [], []
+    for t in terms:
+        d = pd.get_dummies(obs[t].astype(str), drop_first=True).to_numpy(dtype=float)
+        if d.shape[1] == 0:
+            aliased.append((t, "it has one level here"))
+            continue
+        trial = np.hstack(cols + [d])
+        if np.linalg.matrix_rank(trial) < trial.shape[1]:
+            aliased.append((t, "it is collinear with " + " + ".join(keep or ["the intercept"])))
+            continue
+        cols.append(d)
+        keep.append(t)
+    return keep, aliased
+
+
 def _pseudobulk(ctx, np, pd):
     """Sum counts per (sample, population). Returns (matrix, obs) or refuses."""
     counts = ctx.counts()
@@ -150,7 +181,7 @@ def run(ctx):
             f"terms {', '.join(terms)}")
 
     genes = np.asarray(ctx.adata.var_names).astype(str)
-    out, skipped = [], []
+    out, skipped, dropped_terms = [], [], {}
     for pop in sorted(set(obs["population"])):
         m = obs["population"].to_numpy() == pop
         sub_obs = obs[m].reset_index(drop=True)
@@ -164,6 +195,15 @@ def run(ctx):
             skipped.append((pop, int(m.sum()), thin))
             continue
 
+        # IDENTIFIABLE FIRST. Otherwise the fit raises `Singular matrix` from inside numpy,
+        # which is a true statement about linear algebra and tells the user nothing.
+        use, aliased = _identifiable(sub_obs, terms, np, pd)
+        if not use:
+            skipped.append((pop, int(m.sum()), [t for t, _w in aliased]))
+            continue
+        if aliased:
+            dropped_terms.setdefault(pop, aliased)
+
         sub = mat[m]
         keep = sub.sum(axis=0) >= ctx.config["min_counts"]
         counts_df = pd.DataFrame(np.rint(sub[:, keep]).astype(int),
@@ -171,13 +211,13 @@ def run(ctx):
                                  columns=genes[keep])
         sub_obs.index = counts_df.index
 
-        formula = "~ " + " + ".join(terms)
-        if len(terms) >= 2 and (ctx.params.get("contrast") or {}).get("kind") == "interaction":
-            formula = f"~ {terms[0]} + {terms[1]} + {terms[0]}:{terms[1]}"
+        formula = "~ " + " + ".join(use)
+        if len(use) >= 2 and (ctx.params.get("contrast") or {}).get("kind") == "interaction":
+            formula = f"~ {use[0]} + {use[1]} + {use[0]}:{use[1]}"
         dds = DeseqDataSet(counts=counts_df, metadata=sub_obs, design=formula,
                            refit_cooks=True, n_cpus=ctx.cores, quiet=True)
         dds.deseq2()
-        for term in terms:
+        for term in use:
             levels = sorted(sub_obs[term].unique())
             st = DeseqStats(dds, contrast=[term, levels[-1], levels[0]],
                             alpha=ctx.config["alpha"], quiet=True)
@@ -189,6 +229,17 @@ def run(ctx):
             out.append(r)
         ctx.log(f"  {pop}: {int(m.sum())} pseudobulk samples, {int(keep.sum()):,} genes tested")
 
+    if dropped_terms:
+        ctx.caveat(
+            "TERMS DROPPED FROM THE MODEL because they are not separately estimable from the "
+            "ones kept: "
+            + "; ".join(f"{p}: " + ", ".join(f"{t} ({w})" for t, w in a)
+                        for p, a in sorted(dropped_terms.items()))
+            + ". A term aliased with one already in the model adds no column the model does not "
+              "have, and its coefficient would not have been interpretable in isolation. This is "
+              "a property of the DESIGN, not of the data: name the terms you want with "
+              "--params '{\"contrast\": {\"terms\": [...]}}' if this is not the split you "
+              "meant.")
     if skipped:
         ctx.caveat("Not tested, because a level of the contrast had fewer than "
                    f"{ctx.config['min_samples_per_level']} samples: "
@@ -205,7 +256,7 @@ def run(ctx):
     sig = int((res["padj"] < ctx.config["alpha"]).sum())
     ctx.headline = (f"{sig:,} gene-population-term results below padj {ctx.config['alpha']} "
                     f"across {res['population'].nunique()} population(s), "
-                    f"formula ~ {' + '.join(terms)}")
+                    f"formula ~ {' + '.join(sorted(set(res['term'])))}")
     ctx.caveat("The unit of replication is the SAMPLE. Counts were summed per (sample, "
                "population) before testing, so no p-value here is inflated by cell count.")
 

@@ -43,6 +43,17 @@ for err in ("TypeError: score_genes() got multiple values for keyword argument '
 ck("and it says the selftest should have caught it",
    "selftest" in FB.diagnose("k", "got multiple values for keyword argument 'x'").why)
 
+print("\na singular design is a METHOD outcome and is named as one")
+# PBS 677677: `~ age + diet + chemistry + batch` on a cohort where chemistry takes one value for
+# every aged sample and another for every young one. pydeseq2's IRLS inverted the model matrix and
+# raised `numpy.linalg.LinAlgError: Singular matrix`, which the loop could only report as "no
+# known failure signature matched". True, and it tells a user nothing about their experiment.
+d = FB.diagnose("de", "numpy.linalg.LinAlgError: Singular matrix")
+ck("-> method", d.layer == FB.METHOD, d.layer)
+ck("not repairable by rebuilding", not d.repairable)
+ck("it says the terms are collinear", "collinear" in d.why)
+ck("and that it is the DESIGN, not the data", "design table" in d.why)
+
 print("\nrunning out of resources is a METHOD outcome, not a defect")
 for err, word in (("MemoryError", "memory"), ("Killed", "memory"),
                   ("TimeoutExpired: timed out after 900s", "timeout")):

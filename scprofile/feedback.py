@@ -58,6 +58,13 @@ SIGNATURES = (
     (r"out\.json|contract|manifest", HOST, False,
      "the output manifest could not be read or written. That is the contract, which is this "
      "host's code and not the plugin's."),
+    (r"Singular matrix|LinAlgError|rank[- ]deficient|not full rank", METHOD, False,
+     "the model matrix is not full rank: two or more terms are collinear on this design, so "
+     "their coefficients are not identifiable and the fit inverted a singular matrix. Not a "
+     "defect in the data or the tool - it is a property of the design table. A plugin that fits "
+     "a model should check the rank first and say which terms are aliased, because "
+     "`LinAlgError: Singular matrix` is a true statement about linear algebra and tells a user "
+     "nothing about their experiment."),
     (r"MemoryError|Killed|OOM|out of memory", METHOD, False,
      "it ran out of memory. Not a defect: give it more, or fewer cells."),
     (r"timed out|TimeoutExpired", METHOD, False,

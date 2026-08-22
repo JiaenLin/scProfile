@@ -228,17 +228,31 @@ def load(source, log=print, names=DEFAULT_LAYERS):
                         return f
             return None
 
-        def _read_list(f):
+        def _read_list(f, col=0):
             import gzip
             op = gzip.open if str(f).endswith(".gz") else open
             with op(f, "rt") as fh:
-                return [ln.split("\t")[0].strip() for ln in fh if ln.strip()]
+                out = []
+                for ln in fh:
+                    if not ln.strip():
+                        continue
+                    parts = ln.rstrip("\n").split("\t")
+                    out.append((parts[col] if col < len(parts) else parts[0]).strip())
+                return out
 
         fb, fg = _p("barcodes.tsv"), _p("features.tsv", "genes.tsv")
         fm = [_p(f"{w}.mtx") for w in names]
         if not all([fb, fg] + fm):
             return None
-        bcs, genes = _read_list(fb), _read_list(fg)
+        bcs = _read_list(fb)
+        # EVERY COLUMN OF features.tsv IS A CANDIDATE GENE NAME, and which one the object uses is
+        # the object's business. The 10x/STARsolo convention is `<gene id>\t<symbol>\t<type>`;
+        # this read column 0 while the object is indexed by SYMBOLS, so on a real cohort it
+        # matched 466 of 34,290 genes, `filter_and_normalize` then dropped 34,286 for want of
+        # shared counts, and velocity refused because "only 4 genes survived selection" - a
+        # refusal about the DATA whose cause was a column index. Both columns are returned;
+        # `attach` takes whichever overlaps the object more and says which, and by how much.
+        genes = [_read_list(fg, c) for c in (0, 1)]
         mats = [scipy.io.mmread(str(f)).tocsr() for f in fm]
         # mtx from these quantifiers is genes x cells; orient by which axis matches the lists.
         if mats[0].shape[0] == len(genes) and mats[0].shape[1] == len(bcs):
@@ -335,12 +349,24 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
             notes.append(f"{src.path.name}: every cell it matched was already covered")
             continue
 
-        gcols = [var_pos.get(str(gn).upper()) for gn in genes]
-        keep = [(k, c) for k, c in enumerate(gcols) if c is not None]
+        # WHICHEVER COLUMN THE OBJECT SPEAKS. A source may offer gene ids and symbols; the
+        # object uses one of them, and choosing the wrong one produces a full, valid, nearly-empty
+        # matrix rather than an error.
+        options = genes if genes and isinstance(genes[0], list) else [genes]
+        best, best_keep = 0, []
+        for ci, col in enumerate(options):
+            gcols = [var_pos.get(str(gn).upper()) for gn in col]
+            hit = [(k, c) for k, c in enumerate(gcols) if c is not None]
+            if len(hit) > len(best_keep):
+                best, best_keep = ci, hit
+        keep = best_keep
         if not keep:
             notes.append(f"{src.path.name}: no gene name overlapped the object")
             log(f"      no gene name overlapped the object - not used")
             continue
+        if len(options) > 1:
+            log(f"      gene names: field {best} of {len(options)} overlaps most "
+                f"({len(keep):,} of {len(options[best]):,})")
         src_cols = np.array([k for k, _ in keep])
         dst_cols = np.array([c for _, c in keep], dtype="int32")
         src_rows = np.array([j for _, j in rows])
