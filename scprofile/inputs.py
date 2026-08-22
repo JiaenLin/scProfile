@@ -206,12 +206,31 @@ def read_constraint(adata):
     Returns (text, source). Source is "" when there is none, and the caller must say so rather
     than proceeding as though the design had been checked.
     """
-    u = adata.uns.get("scintegrate")
-    if isinstance(u, dict):
-        c = u.get("constraint_on_use")
-        if c:
-            return str(c), "uns['scintegrate']['constraint_on_use']"
-    return "", ""
+    # ANY upstream block that declares one, not one named tool. This read
+    # `uns['scintegrate']['constraint_on_use']` and nothing else, so the whole mechanism - the
+    # thing that stops an unidentifiable factor being tested - was silent for every object not
+    # produced by one particular toolchain. A SAFETY feature that fires only for its author's
+    # pipeline is worse than none, because its absence reads exactly like "no constraint applies".
+    #
+    # The KEY is the contract, not the writer's name: an upstream tool declares
+    # `constraint_on_use` and any host can read it. Sorted so two writers give a stable answer,
+    # and both are reported rather than one silently winning.
+    found = []
+    for key in sorted(adata.uns):
+        block = adata.uns[key]
+        if isinstance(block, dict) and block.get("constraint_on_use"):
+            found.append((str(block["constraint_on_use"]), f"uns[{key!r}]['constraint_on_use']"))
+    top = adata.uns.get("constraint_on_use")
+    if top:
+        found.append((str(top), "uns['constraint_on_use']"))
+    if not found:
+        return "", ""
+    if len(found) == 1:
+        return found[0]
+    # TWO CONSTRAINTS ARE BOTH BINDING. Picking one would silently drop a restriction somebody
+    # wrote down deliberately.
+    return ("\n\n".join(t for t, _ in found),
+            " + ".join(src for _, src in found))
 
 
 def describe(adata, keys, organism, assay, constraint_src):
@@ -224,7 +243,10 @@ def describe(adata, keys, organism, assay, constraint_src):
         "assay": assay[0] or "", "assay_why": assay[1],
         "layers": manifest.layer_names(adata),
         "obsm": sorted(str(k) for k in adata.obsm),
-        "upstream": sorted(k for k in ("scqc", "scanno_embed", "scintegrate") if k in adata.uns),
+        # Whatever upstream tools recorded themselves, not a list of one project's three. A
+        # provenance block is any uns entry that is a mapping - naming the three this project
+        # happens to use made every other pipeline's object look like it had no provenance.
+        "upstream": sorted(str(k) for k, v in adata.uns.items() if isinstance(v, dict)),
         "constraint_source": constraint_src or "ABSENT",
     }
 

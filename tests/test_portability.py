@@ -205,5 +205,34 @@ missing = {f for f in ("label-key", "sample-key", "batch-key", "counts-layer", "
            if f not in plan_flags}
 ck("plan takes the same key overrides as run", not missing, str(sorted(missing)))
 
+print("\nthe constraint on use is read from ANY upstream tool, not one toolchain")
+# A SAFETY MECHANISM THAT FIRES ONLY FOR ITS AUTHOR'S PIPELINE IS WORSE THAN NONE. This read
+# `uns['scintegrate']['constraint_on_use']` and nothing else, so for every object produced by
+# any other pipeline the whole mechanism was silent - and silence here reads exactly like
+# "no constraint applies", which is the one wrong answer it must never give.
+from scprofile.inputs import read_constraint as _rc                            # noqa: E402
+
+
+class _Stub:
+    def __init__(self, uns):
+        self.uns = uns
+
+
+ck("no constraint is reported as absent, not as clear", _rc(_Stub({})) == ("", ""))
+_t, _s = _rc(_Stub({"someothertool": {"constraint_on_use": "do not test X"}}))
+ck("a THIRD-PARTY tool's constraint is found", _t == "do not test X", _s)
+ck("and the source names that tool", "someothertool" in _s, _s)
+_t2, _s2 = _rc(_Stub({"scintegrate": {"constraint_on_use": "Y"},
+                      "atool": {"constraint_on_use": "X"}}))
+ck("two writers are BOTH binding, neither silently dropped",
+   "X" in _t2 and "Y" in _t2, _t2)
+ck("and both sources are named", "atool" in _s2 and "scintegrate" in _s2, _s2)
+ck("a top-level constraint is found too", _rc(_Stub({"constraint_on_use": "Z"}))[0] == "Z")
+ck("a non-mapping uns entry does not raise", _rc(_Stub({"x": "a string", "y": 42})) == ("", ""))
+ck("no upstream tool is named in the reader",
+   not any(t in inspect.getsource(_rc) .replace("scintegrate", "", 1)
+           for t in ("scqc", "scanno")),
+   "the reader still names a specific pipeline")
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
