@@ -174,3 +174,29 @@ clean:  7 suites, validate 0 errors. plan --audit over all 10 plugins: `0 error(
 format: nothing in the plugin format had to change to accommodate anything. The third-party
         plugin ran unchanged (`silhouette ok 161s`); decoupler needed a builder that could read
         the format's own `requires` block, which is a host defect and not a format one.
+
+## 2026-08-22 — cycle 5 (PBS 677332)
+
+A confirmation cycle at the final commit, `fb0e7b4`, against the exact log lines that had shown
+cycle 4's last two defects.
+
+tested: the sentinel affordance / the compatibility copy's receipt / the whole path again on the
+        final code — validate, 8 selftests, plan --audit --report over every plugin, run
+
+found:  nothing.
+
+        sentinel: `decoupler_activity_by_label.csv` has 13 rows and no sentinel among them (was
+        14, with an `UNRESOLVED` row over 2,139 cells), the host's own check reported nothing —
+        `diagnoses: []` where cycle 4 had one — and the caveat `ctx.populations()` attaches is in
+        the run: *"2,139 cells carry an annotator sentinel and are NOT summarised as a
+        population"*.
+        compatibility copy: `reusing the compatibility copy already at input_for_kernels.h5ad
+        (3.14 GB); it was made from this same object` — a 3.14 GB rewrite that every previous run
+        into the same `--out` had done. `report.json` carries `input_read_by_kernels` and the
+        README says what that file is.
+        merge by barcode, again: `decoupler obsm['X_tf_activity']: 98,627 of 100,713 cells
+        covered; the rest are NaN` -> `merged obsm: X_tf_activity`, on the final code.
+        plan: `0 error(s), 0 warning(s)` over all 10 plugins; `wrote .../out/run_plan.html`.
+        restricted: `checked: all 2 known plugin(s) appear exactly once`.
+
+clean:  7 suites, validate 0 errors, on `fb0e7b4`.
