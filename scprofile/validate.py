@@ -26,6 +26,19 @@ from pathlib import Path
 
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
+#: `a, b = ctx.populations()`, captured so the two names can be checked.
+_POPS_UNPACK = re.compile(r"([A-Za-z_]\w*)\s*,\s*([A-Za-z_]\w*)\s*=\s*ctx\.populations\(")
+
+#: THE ONLY CORRECT TWO-NAME READING. `populations()` returns `(mask, groups)` - a boolean mask
+#: over every cell and the labels of the real ones - and FOUR plugins in this repository have
+#: destructured it as `(populations, dropped)`, which is what its name asks for and not what it
+#: gives. The wrong reading is silent in the worst way: `len(pops)` becomes the cell count, so a
+#: refusal that should fire never does and a headline claims a hundred thousand populations, while
+#: `if dropped:` asks the truth value of an array and raises. Four occurrences of one mistake is a
+#: statement about the affordance, so the object now carries `.names` and `.dropped` too - and
+#: this check is what stops the fifth.
+_POPS_OK = {("mask", "groups"), ("real", "groups"), ("_mask", "groups"), ("mask", "_groups")}
+
 #: Names a plugin must not hard-code where the profile defines a key for it.
 DOMAIN_LITERALS = ("cell_type", "celltype", "leiden", "louvain", "X_umap", "X_pca",
                    "n_genes", "pct_counts_mt", "sample_id")
@@ -73,6 +86,15 @@ def validate_plugin(kernel):
                            ("not_used", "what of the tool is deliberately not used")):
             if up_inline and not up_inline.get(field):
                 f.append(Finding("WARN", f"upstream records no {field}", why))
+        for m in _POPS_UNPACK.finditer(src):
+            if (m.group(1), m.group(2)) not in _POPS_OK:
+                f.append(Finding(
+                    "ERROR", f"reads ctx.populations() as ({m.group(1)}, {m.group(2)})",
+                    "it unpacks as (mask, groups) - a boolean mask over EVERY cell, and the "
+                    "labels of the real ones. Four plugins have read it as (populations, "
+                    "dropped): `len(...)` then returns the cell count and `if dropped:` asks the "
+                    "truth value of an array. Use `p = ctx.populations()` and `p.names` / "
+                    "`p.dropped`, or name the two `mask, groups`"))
         if "def selftest(" not in src:
             f.append(Finding("WARN", "no selftest(ctx) in the file",
                              "the builder runs it on every new machine to prove the call is "

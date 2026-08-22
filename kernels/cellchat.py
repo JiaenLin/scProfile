@@ -129,13 +129,18 @@ def run(ctx):
                           f"{', '.join(sorted(_DB))}. Scoring against another species' database "
                           f"returns a small plausible table rather than failing.")
 
-    pops, dropped = ctx.populations()
-    if len(pops) < 2:
+    # `ctx.populations()` unpacks as (mask, groups); `.names` and `.dropped` are what this wants.
+    # Read as (populations, dropped) this made `len(pops)` the CELL COUNT - so the refusal below
+    # could never fire and the headline claimed a hundred thousand populations - and `if dropped:`
+    # asked the truth value of a numpy array, which raises.
+    pop = ctx.populations()
+    if len(pop.names) < 2:
         return ctx.refuse("cell-cell communication",
-                          f"only {len(pops)} population(s); communication needs two to be "
+                          f"only {len(pop.names)} population(s); communication needs two to be "
                           f"between.")
-    if dropped:
-        ctx.caveat(f"{len(dropped)} annotator sentinel(s) excluded: {', '.join(dropped)}.")
+    if pop.dropped:
+        ctx.caveat(f"{len(pop.dropped)} annotator sentinel(s) excluded: "
+                   f"{', '.join(pop.dropped)}.")
 
     real = np.asarray(ctx.real_cells())
     A = ctx.adata[real]
@@ -169,7 +174,7 @@ def run(ctx):
 
     df = pd.read_csv(edges)
     ctx.emit_table("ccc_edges", df.set_index(df.columns[0]))
-    ctx.headline = f"{len(df):,} interactions over {len(pops)} populations, {db}"
+    ctx.headline = f"{len(df):,} interactions over {len(pop.names)} populations, {db}"
     ctx.caveat(f"Database: {db}, bundled in the pinned CellChat package. Its version is fixed by "
                f"the package version and by nothing else, so two runs on different CellChat "
                f"versions are two databases.")

@@ -95,6 +95,13 @@ Two of the first two plugins that grouped by `ctx.obs("label")` reported `UNRESO
 population, and in a results table that reads exactly like a cell type that scored badly. The
 per-cell result still covers every cell; only the grouping excludes them.
 
+> **It is not `(populations, dropped)`, and `validate` refuses that reading by name.** Five
+> plugins in this repository destructured it that way, which is not five mistakes but one bad
+> affordance: `len(pops)` then returns the cell count, so a refusal that should fire never does
+> and a headline claims a hundred thousand populations, while `if dropped:` asks the truth value
+> of an array and raises. If those are the two things you want, they are on the object —
+> `p = ctx.populations()`, then `p.names` and `p.dropped`.
+
 **Refuse rather than return something empty.** `ctx.refuse(what, why)` is a result the host
 records. A plugin that returns an empty answer produces a result-shaped hole nobody can tell from
 a real negative.

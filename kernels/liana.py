@@ -94,20 +94,25 @@ def run(ctx):
             f"is human and would return a small plausible table on other symbols rather than "
             f"failing. Known: {', '.join(sorted(_RESOURCE))}.")
 
-    pops, dropped = ctx.populations()
-    if len(pops) < 2:
+    # `ctx.populations()` unpacks as (mask, groups); `.names` and `.dropped` are what this wants.
+    # It read the two-tuple as (populations, dropped), so `len(pops)` was the CELL COUNT - the
+    # refusal below could never fire and the headline would have claimed 100,713 populations -
+    # and `if dropped:` asked the truth value of a numpy array, which raises. Fourth plugin to
+    # misread it, which is a statement about the affordance and not about four authors.
+    pop = ctx.populations()
+    if len(pop.names) < 2:
         return ctx.refuse("cell-cell communication",
-                          f"only {len(pops)} population(s) here; communication needs at least "
-                          f"two to be between.")
-    if dropped:
-        ctx.caveat(f"{len(dropped)} annotator sentinel(s) excluded as senders and receivers: "
-                   f"{', '.join(dropped)}. A sentinel is a refusal to call a cell type, and an "
-                   f"interaction attributed to one names nothing.")
+                          f"only {len(pop.names)} population(s) here; communication needs at "
+                          f"least two to be between.")
+    if pop.dropped:
+        ctx.caveat(f"{len(pop.dropped)} annotator sentinel(s) excluded as senders and receivers: "
+                   f"{', '.join(pop.dropped)}. A sentinel is a refusal to call a cell type, and "
+                   f"an interaction attributed to one names nothing.")
 
     lab = ctx.keys["label"]
     A = ctx.adata[ctx.real_cells()].copy()
     A.X = ctx.X if ctx.X.shape[0] == A.n_obs else A.X
-    ctx.log(f"{A.n_obs:,} cells, {len(pops)} populations, resource {res_name}")
+    ctx.log(f"{A.n_obs:,} cells, {len(pop.names)} populations, resource {res_name}")
 
     li.mt.rank_aggregate(A, groupby=lab, resource_name=res_name,
                          expr_prop=ctx.config["expr_prop"],
@@ -118,7 +123,7 @@ def run(ctx):
     ctx.emit_table("ccc_edges", edges.set_index("source"))
 
     top = edges.nsmallest(3, "magnitude_rank")
-    ctx.headline = (f"{len(edges):,} interactions over {len(pops)} populations"
+    ctx.headline = (f"{len(edges):,} interactions over {len(pop.names)} populations"
                     + (f"; strongest {top.iloc[0]['source']} -> {top.iloc[0]['target']} "
                        f"({top.iloc[0]['ligand_complex']}:{top.iloc[0]['receptor_complex']})"
                        if len(top) else ""))

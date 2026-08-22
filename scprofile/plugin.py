@@ -77,6 +77,46 @@ from __future__ import annotations
 from pathlib import Path
 
 
+class Populations(tuple):
+    """What `ctx.populations()` returns: `(mask, groups)`, and the two things people wanted.
+
+    FOUR PLUGINS HAVE NOW GOT THIS WRONG, and two of them the same way - `pops, dropped =
+    ctx.populations()` - which is not four mistakes, it is one bad affordance. A function called
+    `populations` that returns a boolean mask and a per-cell label array is answering a different
+    question from the one its name asks, and the wrong reading is silent: `len(pops)` becomes the
+    cell count, `if dropped:` asks the truth value of an array, and one of those raises and the
+    other reports 100,713 populations.
+
+    So it still IS `(mask, groups)` - every correct caller is untouched, because this is a tuple -
+    and it now also answers what the wrong callers were asking for:
+
+        p = ctx.populations()
+        p.mask       boolean over every cell of the object: is this a REAL call?
+        p.groups     the labels of those cells, as strings, aligned to p.mask
+        p.names      the distinct populations, sorted. What `len(pops)` was reaching for.
+        p.dropped    the sentinel labels actually present, sorted. What `dropped` was reaching for.
+
+    `groups` is None when the object carries no label column, and `mask` is then all-True, so a
+    plugin can call this unconditionally and branch on `p.groups is None`.
+    """
+
+    def __new__(cls, mask, groups, names=(), dropped=()):
+        return super().__new__(cls, (mask, groups))
+
+    def __init__(self, mask, groups, names=(), dropped=()):
+        super().__init__()
+        self.names = list(names)
+        self.dropped = list(dropped)
+
+    @property
+    def mask(self):
+        return self[0]
+
+    @property
+    def groups(self):
+        return self[1]
+
+
 class Guard:
     """What a plugin's GUARD is given, and the only two things it may do with it.
 
@@ -256,21 +296,26 @@ class Context:
         annotator DECLINING to call a cell type - and a mean activity or a silhouette computed
         for `UNRESOLVED` reads in a results table exactly like a cell type that scored badly.
 
-        Returns `(mask, groups)`: the boolean mask of real cells, and their labels as strings.
-        The caveat naming how many were set aside is added HERE, once, so a plugin cannot mask
-        correctly and then forget to say it did.
+        Returns a `Populations`: it unpacks as `(mask, groups)` - the boolean mask of real
+        cells and their labels as strings - and it also carries `.names` and `.dropped`, which is
+        what four plugins reached for by destructuring it wrongly. See the class.
 
             mask, groups = ctx.populations()
             ctx.emit_table("x_by_label", frame[mask].groupby(groups).mean())
 
+            p = ctx.populations()
+            if len(p.names) < 2: ...
+            if p.dropped: ctx.caveat(f"excluded {', '.join(p.dropped)}")
+
         `groups` is None when the object carries no such column, and the mask is all-True - so a
-        plugin can call this unconditionally and branch on `groups is None`.
+        plugin can call this unconditionally and branch on `p.groups is None`.
         """
         import numpy as np
         lab = self.obs(role)
         if lab is None:
-            return np.ones(self.adata.n_obs, dtype=bool), None
+            return Populations(np.ones(self.adata.n_obs, dtype=bool), None)
         mask = np.asarray(self.real_cells())
+        raw = np.asarray(lab.astype(str))
         n = int((~mask).sum())
         if n and not self._said_populations:
             self._said_populations = True
@@ -280,7 +325,9 @@ class Context:
                 f"per-population number computed for one reads as a cell type with that value. "
                 f"They stay in the object and in any per-cell result; only the grouping excludes "
                 f"them.")
-        return mask, np.asarray(lab.astype(str))[mask]
+        groups = raw[mask]
+        return Populations(mask, groups, sorted(set(groups.tolist())),
+                           sorted(set(raw[~mask].tolist())))
 
     def source_layers(self, names=("spliced", "unspliced"), *, extra_roots=(),
                       min_match=0.5):

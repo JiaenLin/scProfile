@@ -83,20 +83,20 @@ PLUGIN = {
 def _counts_frame(ctx, pd, np):
     """A samples x populations count matrix, sentinels excluded and NAMED.
 
-    `ctx.populations()` returns `(mask, groups)` - the mask of real cells and their labels. This
-    read it as `(populations, dropped)`, which is the third time in this repository that a plugin
-    has got the sentinel affordance wrong and the first time it was caught by reading rather than
-    by a results table. What it did: `set(pops)` became `{True, False}`, every population was
-    filtered out of the crosstab as "not a population", and the next line asked the truth value of
-    a numpy array - so the plugin would have died before reaching scCODA at all.
+    `ctx.populations()` unpacks as `(mask, groups)`; `.names` and `.dropped` are what this wants.
+    This read the two-tuple as `(populations, dropped)`: `set(pops)` became `{True, False}`, every
+    population was filtered out of the crosstab as "not a population", and the next line asked the
+    truth value of a numpy array - so the plugin would have died before reaching scCODA at all.
+
+    Third of four plugins to misread the same two-tuple, which is why it now carries `.names` and
+    `.dropped` as well.
     """
-    mask, groups = ctx.populations()
-    mask, groups = np.asarray(mask), np.asarray(groups)
+    pop = ctx.populations()
+    mask = np.asarray(pop.mask)
     samp = ctx.obs("sample").astype(str).to_numpy()
-    lab = ctx.obs("label").astype(str).to_numpy()
     tab = pd.crosstab(pd.Series(samp[mask], name="sample"),
-                      pd.Series(groups, name="population"))
-    return tab, sorted(set(lab[~mask]))
+                      pd.Series(np.asarray(pop.groups), name="population"))
+    return tab, pop.dropped
 
 
 def run(ctx):

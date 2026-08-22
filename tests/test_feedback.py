@@ -132,6 +132,39 @@ ck("the host offers the mechanism on Context", hasattr(Context, "real_cells"))
 ck("and it is documented as the host answering once for every plugin",
    "every plugin" in (Context.real_cells.__doc__ or ""))
 
+print("\nthe affordance four plugins misread is now gated, not merely documented")
+# `ctx.populations()` returns (mask, groups). FOUR plugins destructured it as (populations,
+# dropped) - which is what the NAME asks for and not what it gives - and the wrong reading is
+# silent in the worst way: `len(pops)` is the cell count, so a refusal that should fire never
+# does; `if dropped:` asks the truth value of an array and raises. Four occurrences of one
+# mistake is a statement about the affordance.
+from scprofile.plugin import Populations                                        # noqa: E402
+_p = Populations([True, True, False], ["A", "B"], ["A", "B"], ["UNRESOLVED"])
+_m, _g = _p
+ck("it still unpacks as (mask, groups)", list(_m) == [True, True, False] and list(_g) == ["A", "B"])
+ck("and now answers what the wrong readers wanted",
+   _p.names == ["A", "B"] and _p.dropped == ["UNRESOLVED"], f"{_p.names} {_p.dropped}")
+ck("mask and groups are also reachable by name",
+   list(_p.mask) == list(_m) and list(_p.groups) == list(_g))
+
+import tempfile as _tf2, types as _ty2                                          # noqa: E402
+from scprofile import validate as _V                                            # noqa: E402
+with _tf2.TemporaryDirectory() as _d2:
+    _f2 = Path(_d2) / "badpop.py"
+    _f2.write_text('PLUGIN = {"api": 1, "summary": "x", "cannot_show": ["y"]}\n'
+                   'def run(ctx):\n    pops, dropped = ctx.populations()\n'
+                   'def selftest(ctx):\n    pass\n')
+    from scprofile.kernels import FileKernel as _FK                             # noqa: E402
+    _fnd = _V.validate_plugin(_FK(_f2))
+    ck("the wrong destructuring is an ERROR",
+       any(x.level == "ERROR" and "populations()" in x.check for x in _fnd), str(_fnd))
+    _f2.write_text('PLUGIN = {"api": 1, "summary": "x", "cannot_show": ["y"]}\n'
+                   'def run(ctx):\n    mask, groups = ctx.populations()\n'
+                   'def selftest(ctx):\n    pass\n')
+    _fnd = _V.validate_plugin(_FK(_f2))
+    ck("and the correct one is not",
+       not any("populations()" in x.check for x in _fnd), str(_fnd))
+
 print("\nthe loop is wired into the run, and a retry is never silent")
 from scprofile import cli                                                       # noqa: E402
 src = inspect.getsource(cli._run)
