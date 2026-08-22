@@ -174,8 +174,19 @@ def run(ctx):
                           f"{ctx.organism} list are in this object. That is a gene-NAMING "
                           f"mismatch, not a biological result.")
 
+    # THE ALLOCATED SHARE, NOT THE MACHINE'S. `client_or_address="local"` makes arboreto build a
+    # LocalCluster sized from `multiprocessing.cpu_count()` - the NODE - so this plugin, which
+    # runs once per sample, starts the node's worth of workers per sample. Ten instances on one
+    # node is ten times the machine in dask workers, and the symptom is a wave slower than running
+    # the same work serially. `ctx.effect` releases the client on every exit path including a
+    # raise, which is the case a `finally` written in a hurry gets wrong.
+    from distributed import Client, LocalCluster
+    client = ctx.effect(
+        lambda: Client(LocalCluster(n_workers=max(1, int(ctx.cores)), threads_per_worker=1,
+                                    processes=False)),
+        lambda c: c.close())
     adj = grnboost2(expression_data=ex, tf_names=present, verbose=False,
-                    seed=ctx.config["seed"], client_or_address="local")
+                    seed=ctx.config["seed"], client_or_address=client)
     # EMPTY IS THE FAILURE THAT DOES NOT RAISE. When arboreto and dask disagree about the
     # scheduler, GRNBoost2 returns no edges and downstream reads that as "no regulons found".
     if adj.shape[0] == 0:
