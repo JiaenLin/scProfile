@@ -700,6 +700,37 @@ def test_a_plugin_is_launched_the_way_its_shape_requires(tmp):
               len(k.argv("PY", "IN")) >= 3)
 
 
+def test_every_data_capability_can_actually_be_delivered():
+    """A capability the host RESOLVES but never puts in `in.json` is a capability nothing has.
+
+    `inject: {required: ["lognorm"]}` is checked against `keys`, and `keys` came from detection,
+    where the roles are called `lognorm_layer` and `counts_layer`. The host therefore detected the
+    layer, printed it, planned against it - and wrote a manifest with no `lognorm` in it. A plugin
+    requiring it was refused a capability the object had; `ctx.X` fell back to `.X` and said
+    nothing; `ctx.counts()` returned None on an object with a counts layer.
+
+    The names are two vocabularies on purpose. This asserts the bridge between them exists for
+    every data capability, rather than for the ones somebody remembered.
+    """
+    print("\ncapability delivery")
+    from scprofile import inputs
+    from scprofile.declare import CAPABILITIES
+
+    detected = {r: (f"col_{r}", "detected") for r in inputs.CANDIDATES}
+    km = inputs.capability_keys(detected)
+    for cap, spec in sorted(CAPABILITIES.items()):
+        if spec["resolve"] != "data" or cap in ("organism", "spliced", "unspliced"):
+            continue
+        check(f"{cap!r} is deliverable", cap in km,
+              f"detection produces {sorted(detected)}; nothing maps to {cap!r}")
+
+    check("an alias does not overwrite a real detection",
+          inputs.capability_keys({"counts_layer": "raw", "counts": "counts"})["counts"]
+          == "counts")
+    check("a role detected as empty is dropped, not delivered as null",
+          "label" not in inputs.capability_keys({"label": (None, "absent")}))
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -719,6 +750,7 @@ def main():
     test_ordering()
     test_schedule()
     test_key_map_is_resolved()
+    test_every_data_capability_can_actually_be_delivered()
     test_scaffold_cannot_produce_a_running_noop()
     test_validate_catches_what_got_through()
     test_wrapping_plugins_record_upstream()

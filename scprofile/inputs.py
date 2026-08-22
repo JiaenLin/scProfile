@@ -164,6 +164,38 @@ def sentinel_mask(labels, sentinels=DEFAULT_SENTINELS):
     return is_real, found
 
 
+#: A ROLE the host detects, mapped to the CAPABILITY a plugin injects. They are two vocabularies
+#: on purpose - a role is about this object ("which layer holds log-normalised values here"), a
+#: capability is about the plugin's need ("give me log-normalised values") - and everywhere they
+#: differ is a place the host can resolve a role and then fail to satisfy the capability it
+#: answers. Only two differ, and both did: `in.json` carried `counts_layer` and `lognorm_layer`
+#: and nothing named `counts` or `lognorm`, so `ctx.counts()` returned None on an object with a
+#: counts layer, `ctx.X` fell back to `.X` without saying so, and any plugin declaring
+#: `inject.required: ["lognorm"]` was refused a capability the object plainly had.
+ROLE_CAPABILITY = {"counts_layer": "counts", "lognorm_layer": "lognorm"}
+
+
+def capability_keys(detected):
+    """The key map handed to a plugin: every detected role, plus its capability name.
+
+    `detected` is either {role: (name, why)} as `detect_keys` returns it, or {role: name}.
+    Roles whose name is empty are dropped - a key present and null reads as a key that was looked
+    for and found, which is the opposite of what it means.
+
+    Kept HERE rather than at each call site, because it WAS at each call site: two of the three
+    aliased, and the third was the one that wrote `in.json`.
+    """
+    flat = {}
+    for role, v in (detected or {}).items():
+        name = v[0] if isinstance(v, (tuple, list)) else v
+        if name:
+            flat[role] = name
+    for role, cap in ROLE_CAPABILITY.items():
+        if flat.get(role):
+            flat.setdefault(cap, flat[role])
+    return flat
+
+
 def read_constraint(adata):
     """The upstream constraint on use, if the object carries one. Absence is a FINDING.
 

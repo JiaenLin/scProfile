@@ -290,7 +290,13 @@ def write_index(out_dir, payload):
         '<p class="sub">A value marked <i>detected</i> was a guess this tool made and printed; '
         'one marked <i>given on the command line</i> was your instruction. They carry different '
         'weight when a result is questioned later.</p>',
-        f"<h2>The object</h2><p><code>{_e(payload.get('object'))}</code></p>",
+        # NO OBJECT IS A RESULT, NOT A BLANK. A run in which nothing merged writes no object, and
+        # a report that renders `None` in a <code> block reads as a path somebody mistyped.
+        "<h2>The object</h2>" + (
+            f"<p><code>{_e(payload.get('object'))}</code></p>" if payload.get("object") else
+            '<p class="bad"><b>No object was written.</b> No plugin contributed anything to '
+            'merge, so the only object this run could have written is a copy of its input under '
+            'a name that says it was profiled. What each plugin did instead is below.</p>'),
         '<p class="sub">Cell-level results are merged into it BY BARCODE. Edge-level results — '
         'cell–cell communication, regulon targets, abundance tests — are CSV beside it, because '
         'they are not per-cell and forcing them into <code>uns</code> makes them readable by this '

@@ -257,12 +257,11 @@ def _run(a):
     prov = provenance.harvest(A, extra_roots=_split(a.search or ""))
     provenance.describe(prov, log=print)
 
-    _km = {r_: v[0] for r_, v in keys.items() if v[0]}
     # From DETECTION, not from a literal. `{lognorm}` is a key a plugin names; which layer it
-    # resolves to is this object's business, and `--lognorm-layer` says so outright.
-    _km.setdefault('lognorm', _km.get('lognorm_layer'))
-    _km.setdefault('counts', _km.get('counts_layer'))
-    _km = {k2: v2 for k2, v2 in _km.items() if v2}
+    # resolves to is this object's business, and `--lognorm-layer` says so outright. ONE
+    # FUNCTION, because this was written out twice here and omitted at the third place - the one
+    # that writes `in.json`, which is the only one a plugin ever sees.
+    _km = inputs.capability_keys(keys)
     have_obs = set(A.obs.columns)
     have_obsm = set(A.obsm)
     have_layers = set(manifest.layer_names(A))
@@ -368,7 +367,11 @@ def _run(a):
                 flat[up_name] = by_unit[unit]
         manifest.write_input(
             kout / "in.json", h5ad=ctx["h5ad"], out_dir=kout,
-            keys={r_: v[0] for r_, v in keys.items() if v[0]},
+            # THE SAME MAP THE PREREQUISITE CHECK USED. This wrote the raw roles, so the host
+            # decided a plugin's `lognorm` was satisfied and then handed it a manifest with no
+            # `lognorm` in it - the check and the delivery disagreed, and only the delivery is
+            # what the plugin ever sees.
+            keys=_km,
             organism=organism[0], assay=assay[0], design=a.design, references=ctx["refs"],
             params=json.loads(a.params) if a.params else {},
             upstream=flat, upstream_units={k_: v_ for k_, v_ in per.items() if v_},
@@ -569,11 +572,23 @@ def _run(a):
                           for s in skipped})
     A.uns["scprofile"] = merge.provenance(
         folded, describe, {n: ks[n].cannot_show for n in ran}, merged=merged_slots)
-    (out / "objects").mkdir(parents=True, exist_ok=True)
-    op = out / "objects" / a.object_name
-    from .emit import write_h5ad
-    write_h5ad(A, op)
-    print(f"\nwrote {op}  ({op.stat().st_size / 1e9:.2f} GB)")
+    # NOTHING MERGED, NOTHING TO WRITE. When every plugin refused, failed or was skipped, `A` is
+    # still exactly the object that was read, and writing it out is a multi-gigabyte copy of the
+    # input under a name that says it was profiled. It is not merely wasteful - it is the one
+    # artifact a reader opens to see what the run produced, and it looks identical whether the
+    # run produced everything or nothing. The absence is NAMED here and `report.json` carries a
+    # null `object`, so a consumer can tell "no object" from "an object I have not looked at".
+    op = None
+    if merged_slots:
+        (out / "objects").mkdir(parents=True, exist_ok=True)
+        op = out / "objects" / a.object_name
+        from .emit import write_h5ad
+        write_h5ad(A, op)
+        print(f"\nwrote {op}  ({op.stat().st_size / 1e9:.2f} GB)")
+    else:
+        print(f"\nNO OBJECT WRITTEN: no plugin contributed anything to merge, so the only object "
+              f"this run could write is a copy of\n  {a.h5ad}\nunder a name that says it was "
+              f"profiled. The reports below still describe what happened and why.")
 
     payload = {"version": _v(), "input": str(a.h5ad), "describe": describe,
                "constraint_on_use": constraint, "constraint_source": csrc,
@@ -591,7 +606,7 @@ def _run(a):
                "repaired": sorted(repaired),
                "cannot_show": {n: ks[n].cannot_show for n in sorted(ks)},
                "summaries": {n: ks[n].summary for n in sorted(ks)},
-               "object": str(op)}
+               "object": str(op) if op else None}
     (out / "report.json").write_text(json.dumps(payload, indent=1, default=str), encoding="utf-8")
     print(f"      {out}/report.json")
     # THE README IS WRITTEN LAST, and it has to be. It describes the directory BY INSPECTING IT,
@@ -819,10 +834,20 @@ def _plan(a):
         print(f"      yields a graph those cells are absent from.")
 
     if constraint:
+        # PRINTED WHOLE, AND WRAPPED RATHER THAN CUT. This took the first 4 lines and the first
+        # 100 characters of each, silently. On the object that motivated the feature it stopped
+        # at "...may carry visualisation, clustering and cell-type identification" and dropped
+        # the clause beginning "it must NOT" - the half that says what you may not claim, which
+        # is the entire reason an upstream tool writes a constraint at all. The audit two hundred
+        # lines below reads the FULL text for "must NOT", so the check and the reader were
+        # looking at different documents.
+        import textwrap
         print(f"  constraint on use           PRESENT")
-        for line in str(constraint).strip().splitlines()[:4]:
-            if line.strip():
-                print(f"      {line.strip()[:100]}")
+        for line in str(constraint).strip().splitlines():
+            if not line.strip():
+                continue
+            for wrapped in textwrap.wrap(line.strip(), width=100) or [""]:
+                print(f"      {wrapped}")
         print("      a plugin whose claim this forbids must refuse and name the alternative")
     design_levels = {}
     if a.design:
@@ -856,12 +881,9 @@ def _plan(a):
 
     # ---- per plugin ---------------------------------------------------------------------------
     print("\nplugins")
-    _km = {r_: v[0] for r_, v in keys.items() if v[0]}
-    # From DETECTION, not from a literal. `{lognorm}` is a key a plugin names; which layer it
-    # resolves to is this object's business, and `--lognorm-layer` says so outright.
-    _km.setdefault('lognorm', _km.get('lognorm_layer'))
-    _km.setdefault('counts', _km.get('counts_layer'))
-    _km = {k2: v2 for k2, v2 in _km.items() if v2}
+    # From DETECTION, not from a literal - and from the same function `run` uses, so the plan and
+    # the run cannot disagree about what a plugin will be given.
+    _km = inputs.capability_keys(keys)
     have_obs, have_obsm = set(A.obs.columns), set(A.obsm)
     have_layers = set(manifest.layer_names(A))
     import os
