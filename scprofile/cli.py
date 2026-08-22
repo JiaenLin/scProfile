@@ -832,6 +832,10 @@ def _plan(a):
     before any of it is spent.
     """
     from . import compat, declare, inputs, manifest, provenance, refs, runner
+
+    # RESOLVED ONCE, HERE, exactly as `run` does it - `--cores` now defaults to None in both, so
+    # the plan and the run answer the same question about the same machine.
+    a.cores = int(getattr(a, "cores", 0) or _default_cores())
     from .kernels import discover, guard_verdict, schedule, unmet
 
     try:
@@ -1649,7 +1653,14 @@ def main(argv=None):
     pl.add_argument("--all", action="store_true")
     pl.add_argument("--prefix", default=None)
     pl.add_argument("--design", default=None)
-    pl.add_argument("--cores", type=int, default=8)
+    # THE SAME DEFAULT AS `run`, AND IT HAS TO BE. A hard-coded 8 made `plan` describe a machine
+    # nobody was using: on PBS 679143 the plan printed `scenic[Aging1](8c)` and the run, given the
+    # allocation, did `scenic[Aging1](16c)`. The plan is the document a person reads BEFORE
+    # committing a job, so a plan that understates the budget understates every share in it - and
+    # two documents of one run disagreeing is how the last core-allocation bug was found.
+    pl.add_argument("--cores", type=int, default=None, metavar="N",
+                    help="core budget divided across concurrently running plugins. Defaults to "
+                         "the scheduler's allocation, never the machine's core count")
     # THE SAME OVERRIDES AS `run`. A plan computed with different keys from the run it predicts
     # is a plan about a different object, and `plan` exists to be believed.
     for f in ("label-key", "sample-key", "batch-key", "counts-layer", "compartment-key",

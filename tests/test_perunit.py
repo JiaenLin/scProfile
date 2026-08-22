@@ -9,6 +9,7 @@ and every one of them fails by delivering a document that looks complete.
 Run: python tests/test_perunit.py
 """
 import inspect
+import pathlib
 import json
 import sys
 import tempfile
@@ -303,6 +304,21 @@ ck("--kernel a,a is deduplicated", cli._split("a,b,a") == ["a", "b"])
 src = inspect.getsource(cli._run)
 ck("the budget is redivided over what launches",
    "_budget([i for i, _k, _c in staged], budget)" in src)
+
+# PLAN AND RUN MUST ANSWER THE SAME QUESTION ABOUT THE SAME MACHINE. `plan` hard-coded
+# `--cores 8` while `run` defaulted to the scheduler's allocation, so on PBS 679143 the plan
+# printed `scenic[Aging1](8c)` and the run did `scenic[Aging1](16c)`. The plan is what a person
+# reads BEFORE committing a job; one that understates the budget understates every share in it.
+_parser = cli._parser() if hasattr(cli, "_parser") else None
+_plansrc = inspect.getsource(cli._plan)
+ck("plan resolves its budget the way run does",
+   "_default_cores()" in _plansrc, "plan never calls _default_cores()")
+_cli_src = pathlib.Path(cli.__file__).read_text()
+ck("neither subcommand hard-codes a core budget",
+   'add_argument("--cores", type=int, default=8)' not in _cli_src)
+ck("both --cores default to the allocation",
+   _cli_src.count('add_argument("--cores", type=int, default=None') == 2,
+   f'{_cli_src.count(chr(39))}: found {_cli_src.count("--cores")} --cores definitions')
 # The CALL SITE, not the def - which sits above _budget in the same function and would make this
 # pass by matching the wrong occurrence. A check that passes for its own reasons is the failure
 # mode three defects in this morning's harness already had.
