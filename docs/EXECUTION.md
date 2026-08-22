@@ -107,6 +107,15 @@ instance is told its share in `in.json`:
 **A plugin MUST use that number and not the machine's.** `os.cpu_count()` inside a plugin is a bug:
 it reports the node, not the share, and four plugins each reading it will each start 24 threads.
 
+**And the host sets the thread-pool variables to the same number**, because there is one thread
+pool a plugin cannot control: the BLAS behind numpy sizes itself from `OMP_NUM_THREADS` when numpy
+is imported, before any plugin code runs, and inherits whatever the job script exported for its own
+sake. `manifest.env_for_kernel` therefore sets `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
+`MKL_NUM_THREADS`, `NUMEXPR_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS` and `BLIS_NUM_THREADS` from the
+share in the manifest it was just handed — one statement of the number, so the two cannot disagree.
+*Without it an eight-instance wave on a sixteen-core allocation ran 128 BLAS threads on 16 cores,
+with every instance correctly told `cores: 1`.*
+
 Concurrency is then `min(budget / smallest_declared_cores, ready_plugins)`, floored at 1. A plugin
 declaring more cores than the whole budget runs alone, at the budget, rather than being refused.
 

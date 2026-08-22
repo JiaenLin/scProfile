@@ -12,6 +12,13 @@
 #           INSTALL=decoupler,KERNELS=decoupler,silhouette,ORGANISM=mouse,ASSAY=nucleus \
 #        setup/dev_cycle.pbs
 #
+# `INSTALL` may name several plugins; each builds the ENVIRONMENT IT RESOLVES TO, so one name per
+# resolved group is enough and naming every plugin is harmless. `CORES` sets the budget
+# independently of `NCPUS`: the budget decides how many instances run AT ONCE as well as the share
+# each is given, and a wave of 35 instances on a big node is bounded by memory, not by cores.
+# Override the resource request at submit time - `qsub -l select=... -l walltime=...` - rather than
+# editing this file for one cycle.
+#
 # NOTHING HERE NAMES A PROJECT. Every path, kernel, organism and assay arrives through -v, because
 # a job script in this repository that hard-coded one dataset would be the same overfitting the
 # portability test exists to stop - and the next person's cluster is not this one.
@@ -53,6 +60,10 @@ export SCPROFILE_KERNELS="${EXTRA_KERNELS:-$TOOL/tests/smoke/plugins}"
 # stdout when it is not a terminal, so a job that is working looks exactly like a job that is hung.
 export PYTHONUNBUFFERED=1
 
+# For THIS process - the host, which reads a multi-GB object. Each plugin gets its own share set
+# by the runner from `in.json`, so what is exported here does not reach them: a job script handing
+# the node's core count to every plugin it launches is how a wave comes to run the node's worth of
+# BLAS threads per instance.
 export OMP_NUM_THREADS="${NCPUS:-1}"
 export MKL_NUM_THREADS="${NCPUS:-1}"
 
@@ -127,7 +138,7 @@ run)
       ${DES:+--design "$DES"} ${ORGANISM:+--organism "$ORGANISM"} \
       ${ASSAY:+--assay "$ASSAY"} --kernel "$KERNELS" \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
-      --cores "${NCPUS:-4}" --timeout "${TIMEOUT:-7200}" || echo "  run exit $?"
+      --cores "${CORES:-${NCPUS:-4}}" --timeout "${TIMEOUT:-7200}" || echo "  run exit $?"
 
   say "5. WHAT LANDED"
   [ -d "$OUT" ] && ( cd "$OUT" && find . -type f \( -name '*.csv' -o -name '*.json' \

@@ -295,13 +295,33 @@ def unknown_keys(payload):
     return sorted(set(payload) - known - set(OUTPUT_SLOTS))
 
 
-def env_for_kernel(inp):
+#: Thread-pool variables, every one read at IMPORT time by the library it controls.
+_THREAD_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
+                "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS")
+
+
+def env_for_kernel(inp, cores=None):
     """The environment a kernel entry point is run with. Kept here so host and kernel agree.
 
     `SCPROFILE_IN` is how a kernel in any language finds its manifest without argument parsing -
     the R bridge reads the same variable.
+
+    THE CORE SHARE IS ALSO AN ENVIRONMENT VARIABLE, and it has to be, which is the part that was
+    missing. The contract says a plugin must use its allocated share and never the machine's, and
+    a plugin can honour that for the work it schedules itself - `n_jobs`, a dask client, a
+    thread pool. It cannot honour it for numpy: the BLAS behind it sizes its pool from
+    `OMP_NUM_THREADS` at IMPORT time, before any plugin code runs. So an eight-instance wave on a
+    sixteen-core allocation started sixteen BLAS threads per instance, 128 on 16 cores - the exact
+    oversubscription the share exists to prevent, arriving through the one door a plugin cannot
+    close. Worse, it is inherited: a job script exporting `OMP_NUM_THREADS=$NCPUS` for its own
+    sake hands the node's count to every plugin it launches.
+
+    The share is authoritative here. A caller passing None leaves the variables alone.
     """
     e = dict(os.environ)
     e["SCPROFILE_IN"] = str(inp)
     e["SCPROFILE_CONTRACT"] = CONTRACT_VERSION
+    if cores:
+        for var in _THREAD_VARS:
+            e[var] = str(int(cores))
     return e

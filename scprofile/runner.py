@@ -781,9 +781,16 @@ def run(kernel, *, inp, out_dir, prefix=None, log=print, timeout=None):
     log(f"  interpreter: {exe}  ({src})")
     log(f"  running: {' '.join(cmd[1:])}", )
     logf = out / f"{kernel.name}.log"
+    # THE SHARE, AS AN ENVIRONMENT VARIABLE TOO. `in.json` tells the plugin its share and the
+    # plugin honours it for what it schedules itself; numpy's BLAS sizes its pool from
+    # OMP_NUM_THREADS at import, before the plugin exists. Read from the manifest that was just
+    # written, so there is exactly one statement of the share and the two cannot disagree.
+    import json as _json
+    _cores = ((_json.loads(Path(inp).read_text(encoding="utf-8")).get("resources") or {})
+              .get("cores"))
     with open(logf, "w", encoding="utf-8") as fh:
         r = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT,
-                           env=manifest.env_for_kernel(inp), timeout=timeout)
+                           env=manifest.env_for_kernel(inp, cores=_cores), timeout=timeout)
     if r.returncode != 0:
         tail = "".join(logf.read_text(encoding="utf-8", errors="replace").splitlines(True)[-15:])
         raise RuntimeError(

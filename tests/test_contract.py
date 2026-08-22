@@ -179,6 +179,36 @@ def test_velocity_declaration():
           str(undeclared(k, bad)))
 
 
+def test_the_core_share_reaches_the_thread_pools():
+    """A plugin cannot honour its share for numpy. The host has to, and now does.
+
+    The contract says a plugin must use `resources.cores` and never the machine's count. It can,
+    for what it schedules itself. It cannot for the BLAS behind numpy, which sizes its pool from
+    `OMP_NUM_THREADS` at IMPORT time - before any plugin code runs - and inherits whatever the job
+    script exported. Eight instances on a sixteen-core allocation is then 128 BLAS threads on 16
+    cores, which is the oversubscription the share exists to prevent arriving through the one door
+    a plugin cannot close.
+    """
+    print("\nthe allocated share reaches the thread pools, not only in.json")
+    import os as _os
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        manifest.write_input(tmp / "in.json", h5ad=tmp / "x.h5ad", out_dir=tmp,
+                             keys={"label": "l"}, resources={"cores": 3})
+        _os.environ["OMP_NUM_THREADS"] = "64"          # what a job script exports for itself
+        e = manifest.env_for_kernel(tmp / "in.json", cores=3)
+        for var in manifest._THREAD_VARS:
+            check(f"{var} is the share", e.get(var) == "3", f"{var}={e.get(var)}")
+        check("and the manifest still arrives", e["SCPROFILE_IN"].endswith("in.json"))
+        untouched = manifest.env_for_kernel(tmp / "in.json")
+        check("a caller that names no share leaves them alone",
+              untouched.get("OMP_NUM_THREADS") == "64", untouched.get("OMP_NUM_THREADS"))
+        _os.environ.pop("OMP_NUM_THREADS", None)
+    src = (Path(__file__).resolve().parents[1] / "scprofile" / "runner.py").read_text()
+    check("the runner reads the share from the manifest it just wrote",
+          "env_for_kernel(inp, cores=" in src)
+
+
 def test_one_file_plugins_are_importable_by_the_host():
     """Module scope in a plugin must import nothing the host does not have.
 
@@ -1278,6 +1308,7 @@ def main():
         test_a_plugin_is_launched_the_way_its_shape_requires(tmp)
     test_figure_conventions()
     test_velocity_declaration()
+    test_the_core_share_reaches_the_thread_pools()
     test_one_file_plugins_are_importable_by_the_host()
     test_a_one_file_plugin_can_have_a_guard()
     test_produces_can_be_conditional_and_globbed()
