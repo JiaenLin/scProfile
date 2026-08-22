@@ -112,9 +112,15 @@ def run(ctx):
     acts = ctx.adata.obsm["ulm_estimate"]
     ctx.emit_obsm("X_tf_activity", acts.values)
 
-    lab = ctx.obs("label")
-    if lab is not None:
-        ctx.emit_table("activity_by_label", acts.groupby(lab.astype(str).values).mean())
+    # A SENTINEL IS NOT A POPULATION. `UNRESOLVED` is the annotator declining to call a cell
+    # type; a mean activity computed for it lands in the table beside the real populations and
+    # reads as a cell type with that activity. Measured on a real cohort: PBS 677295 delivered
+    # `activity_by_label.csv` with an `UNRESOLVED` row over 2,139 cells, and the host's own check
+    # reported it as a declaration defect. `ctx.populations()` is the host's answer to the
+    # question, so every plugin gives the same one and the caveat cannot be forgotten.
+    mask, groups = ctx.populations()
+    if groups is not None and len(groups):
+        ctx.emit_table("activity_by_label", acts[mask].groupby(groups).mean())
     else:
         ctx.emit_table("activity_by_label", acts.mean().to_frame("mean_activity"))
         ctx.caveat("No label column was named, so activity is summarised over all cells together "

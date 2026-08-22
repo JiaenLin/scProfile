@@ -430,7 +430,11 @@ _bad = _re2.findall(r"\.(obs|layers|var)\[\s*['\"][A-Za-z_]", _runsrc)
 ck("run() indexes no user-owned namespace by a literal name", not _bad, str(_bad))
 ck("and hard-codes no organism",
    not _re2.search(r"organism\s*=\s*['\"](human|mouse)", _runsrc))
-ck("run() reads keys by ROLE instead", 'ctx.keys.get(' in _runsrc or 'ctx.obs(' in _runsrc)
+# EVERY host route to a column is by ROLE. `ctx.populations()` is the strongest of them - it
+# resolves the label role AND applies the sentinel rule - and listing only the two older ones made
+# a plugin fail this check for using the better one.
+ck("run() reads keys by ROLE instead",
+   any(x in _runsrc for x in ('ctx.keys.get(', 'ctx.obs(', 'ctx.populations(')))
 ck("and takes the organism from the host", "ctx.organism" in _runsrc)
 ck("selftest is allowed its own fixture's names",
    "human" in _in2.getsource(_mod.selftest))

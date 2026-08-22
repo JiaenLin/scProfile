@@ -98,6 +98,8 @@ class Context:
         self._obs, self._obsm, self._layers = {}, {}, {}
         self._tables, self._figures, self._objects = [], [], {}
         self.caveats, self.absent = [], []
+        #: So `populations()` says what it set aside ONCE however many tables a plugin writes.
+        self._said_populations = False
         for d in ("tables", "figures", "obs", "arrays"):
             (self.out / d).mkdir(parents=True, exist_ok=True)
 
@@ -148,6 +150,41 @@ class Context:
             import numpy as np
             return np.ones(self.adata.n_obs, dtype=bool)
         return inputs.sentinel_mask(lab, self.sentinels)[0]
+
+    def populations(self, role="label"):
+        """The grouping a per-population result must use, and the caveat that goes with it.
+
+        TWO OF THE FIRST TWO PLUGINS THAT GROUPED BY LABEL GOT THIS WRONG, which is a statement
+        about the affordance and not about the two authors. `ctx.obs("label")` hands back the raw
+        column; using it correctly means remembering, unprompted, that some of its values are the
+        annotator DECLINING to call a cell type - and a mean activity or a silhouette computed
+        for `UNRESOLVED` reads in a results table exactly like a cell type that scored badly.
+
+        Returns `(mask, groups)`: the boolean mask of real cells, and their labels as strings.
+        The caveat naming how many were set aside is added HERE, once, so a plugin cannot mask
+        correctly and then forget to say it did.
+
+            mask, groups = ctx.populations()
+            ctx.emit_table("x_by_label", frame[mask].groupby(groups).mean())
+
+        `groups` is None when the object carries no such column, and the mask is all-True - so a
+        plugin can call this unconditionally and branch on `groups is None`.
+        """
+        import numpy as np
+        lab = self.obs(role)
+        if lab is None:
+            return np.ones(self.adata.n_obs, dtype=bool), None
+        mask = np.asarray(self.real_cells())
+        n = int((~mask).sum())
+        if n and not self._said_populations:
+            self._said_populations = True
+            self.caveat(
+                f"{n:,} cells carry an annotator sentinel and are NOT summarised as a "
+                f"population - a sentinel is the annotator declining to call a cell type, and a "
+                f"per-population number computed for one reads as a cell type with that value. "
+                f"They stay in the object and in any per-cell result; only the grouping excludes "
+                f"them.")
+        return mask, np.asarray(lab.astype(str))[mask]
 
     def reference(self, name):
         """A declared reference file, verified by the host before the plugin was started."""

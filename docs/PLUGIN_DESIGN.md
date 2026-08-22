@@ -88,6 +88,9 @@ plan is drawn, not an hour into a queue.
 Everything below happens for every plugin, in `_entry.py`, and none of it is a plugin's business:
 
 - keys resolved, so **no plugin ever writes a column name**;
+- `ctx.populations()`: the grouping a per-population result must use, sentinels already out of it
+  and the caveat attached — because two of the first two plugins that grouped by the raw label
+  column reported an annotator's refusal as a cell type;
 - the object subset to this plugin's unit;
 - annotator sentinels kept as cells and counted;
 - cells with NaN in a computed embedding excluded and reported;

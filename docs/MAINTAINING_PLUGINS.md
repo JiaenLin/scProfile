@@ -82,6 +82,13 @@ works on exactly one project.
 **Never use `os.cpu_count()`.** `ctx.cores` is the allocated share. Four plugins each reading the
 machine start four times the node's worth of threads.
 
+**Group with `ctx.populations()`, never with the raw label column.** It returns
+`(mask, groups)` with the annotator's sentinels already out of the grouping, and it adds the
+caveat saying how many were set aside — so you cannot mask correctly and then forget to say it.
+Two of the first two plugins that grouped by `ctx.obs("label")` reported `UNRESOLVED` as a
+population, and in a results table that reads exactly like a cell type that scored badly. The
+per-cell result still covers every cell; only the grouping excludes them.
+
 **Refuse rather than return something empty.** `ctx.refuse(what, why)` is a result the host
 records. A plugin that returns an empty answer produces a result-shaped hole nobody can tell from
 a real negative.

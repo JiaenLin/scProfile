@@ -1020,6 +1020,77 @@ def test_an_array_carries_its_barcodes():
                   "disagree" in str(e), str(e))
 
 
+def test_the_host_answers_the_sentinel_question_once():
+    """Two of the first two plugins that grouped by label reported a sentinel as a population.
+
+    That is a statement about the affordance, not about two authors. `ctx.obs("label")` hands back
+    the raw column, and using it correctly means remembering, unprompted, that some of its values
+    are the annotator DECLINING to call a cell type - and a mean activity or a silhouette for
+    `UNRESOLVED` reads in a table exactly like a cell type that scored badly. Measured twice on
+    real cohorts: PBS 676943 (silhouette) and PBS 677295 (decoupler).
+
+    `ctx.populations()` is the host answering it once, with the caveat attached so a plugin
+    cannot mask correctly and then forget to say it did.
+    """
+    print("\nthe host answers the sentinel question once, for every plugin")
+    import numpy as np
+    from scprofile.plugin import Context
+
+    class _Col(list):
+        def astype(self, _):
+            return self
+
+    class _AD:
+        def __init__(self, labels):
+            self.obs = {"cell_type": _Col(labels)}
+            self.n_obs = len(labels)
+            self.obs_names = _Col([f"c{i}" for i in range(len(labels))])
+            self.obsm, self.layers = {}, {}
+            self.X = None
+
+    with tempfile.TemporaryDirectory() as td:
+        A = _AD(["T", "B", "UNRESOLVED", "T", "EXCLUDED"])
+        ctx = Context(A, keys={"label": "cell_type"}, out=td,
+                      sentinels=("UNRESOLVED", "EXCLUDED"), log=lambda *_a: None)
+        mask, groups = ctx.populations()
+        check("sentinels are out of the grouping", list(groups) == ["T", "B", "T"], str(groups))
+        check("and the mask says which cells they were",
+              list(mask) == [True, True, False, True, False], str(mask))
+        check("the caveat is added by the HOST, not by the plugin",
+              any("NOT summarised as a population" in c for c in ctx.caveats), str(ctx.caveats))
+        n_caveats = len(ctx.caveats)
+        ctx.populations()
+        check("and said once however many tables a plugin writes",
+              len(ctx.caveats) == n_caveats, str(ctx.caveats))
+
+        # No sentinels present: nothing is set aside and nothing is claimed to have been.
+        ctx2 = Context(_AD(["T", "B"]), keys={"label": "cell_type"}, out=td,
+                       sentinels=("UNRESOLVED",), log=lambda *_a: None)
+        mask2, groups2 = ctx2.populations()
+        check("a clean object gets no caveat", not ctx2.caveats, str(ctx2.caveats))
+        check("and every cell is in the grouping", bool(np.asarray(mask2).all()))
+
+        # No label column at all: callable unconditionally, and it says so by returning None.
+        ctx3 = Context(_AD(["T"]), keys={}, out=td, log=lambda *_a: None)
+        mask3, groups3 = ctx3.populations()
+        check("no label column returns None rather than raising", groups3 is None)
+        check("and an all-True mask", bool(np.asarray(mask3).all()))
+
+    # And the bundled plugin that got it wrong now uses it.
+    import inspect
+    ks = discover()
+    src = inspect.getsource(_load_module(ks["decoupler"].path).run)
+    check("decoupler groups through ctx.populations()", "ctx.populations()" in src, src[:200])
+
+
+def _load_module(path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(f"_t_{Path(path).stem}", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -1049,6 +1120,7 @@ def main():
     test_a_required_capability_is_checked_before_the_run_not_inside_it()
     test_the_compatibility_copy_is_a_record_and_a_cache()
     test_an_array_carries_its_barcodes()
+    test_the_host_answers_the_sentinel_question_once()
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")
