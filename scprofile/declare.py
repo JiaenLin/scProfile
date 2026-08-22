@@ -170,7 +170,16 @@ def check(spec, name="<plugin>"):
                                      "An environment has to be built at SOME interpreter version "
                                      "- wheels are built per minor version - and a requirement "
                                      "that names none cannot be built at all."))
+            # A PLUGIN MAY SAY ITS PINS ARE DELIBERATE, ONCE. scenic genuinely needs an exact,
+            # older, self-consistent stack - pySCENIC's dask handshake breaks on anything newer -
+            # and nine identical warnings telling its maintainer to "see whether a range holds"
+            # is nine pieces of advice that are wrong. Stating why is better than suppressing.
+            deliberate = str(req.get("exact_pins_why") or "").strip()
+            if deliberate and len(deliberate) < 30:
+                out.append(("WARN", "exact_pins_why is too short to be a reason"))
             for name, s in sorted((req.get("packages") or {}).items()):
+                if deliberate:
+                    continue
                 if str(s).startswith("==") and "," not in str(s):
                     out.append(("WARN", f"requires {name} {s} exactly. A pin says only THAT "
                                         f"version works, and where that is not true it forces an "

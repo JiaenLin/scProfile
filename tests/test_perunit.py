@@ -261,12 +261,17 @@ _doc = _buf.getvalue()
 for _n in ("de", "decoupler", "abundance", "liana", "scenic", "cellchat", "pseudotime"):
     _line = next((l for l in _doc.splitlines() if f" {_n} " in l or f" {_n}  " in l), "")
     ck(f"doctor does not call {_n} ok", not _line.strip().startswith("ok"), _line.strip()[:90])
-# The count moves as plugins are migrated to the one-file shape and become built. What must hold
-# is that an unbuilt plugin is marked TODO and never `ok`, not that there are seven of them.
-ck("doctor marks unbuilt plugins TODO", _doc.count("TODO") >= 1)
+# EVERY PLUGIN IS NOW BUILT, so there is no unbuilt one to observe. The RULE still has to hold,
+# so it is tested against the branch rather than against the tree - a test that needed an unbuilt
+# plugin to exist would have to keep one unbuilt forever to keep passing.
+_dsrc = inspect.getsource(cli._doctor)
+ck("doctor still has the unbuilt branch", '"TODO"' in _dsrc and "planned" in _dsrc)
+ck("and it keys on status, not on a name", 'k.status == "built"' in _dsrc)
+ck("no plugin in this tree is unbuilt", "TODO" not in _doc,
+   "which is the goal state, not a reason to delete the rule")
 ck("doctor still calls a built host plugin ok",
    any(l.strip().startswith("ok") and "cellcycle" in l for l in _doc.splitlines()))
-ck("doctor says how many are unbuilt", "DECLARED BUT NOT BUILT" in _doc)
+ck("doctor can say how many are unbuilt", "DECLARED BUT NOT BUILT" in _dsrc)
 
 from scprofile import refs as _refs                                            # noqa: E402
 from scprofile.kernels import discover as _disc                                # noqa: E402

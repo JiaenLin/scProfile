@@ -313,6 +313,21 @@ class Kernel:
 
     def references(self, organism=None):
         """{name: {url, sha256, size, organism}} for this kernel, filtered by organism."""
+        # DECLARED IN THE PLUGIN FIRST. A one-file plugin carries its references in PLUGIN, and
+        # this read only `references.yml` - so a one-file plugin's references were INVISIBLE:
+        # `reference_organisms()` came back empty, `require_supported` passed, and scenic would
+        # have run with no cisTarget rankings at all. Nothing is pruned then, every co-expression
+        # module survives, and the regulons are raw correlation wearing a regulon's name. A full
+        # result file, and wrong - which is the exact failure that plugin's own docstring names.
+        inline = (self.spec or {}).get("references")
+        if isinstance(inline, dict) and inline:
+            out = {k: dict(v) for k, v in inline.items() if isinstance(v, dict)}
+            if organism:
+                out = {k: v for k, v in out.items()
+                       if not v.get("organism")
+                       or str(v["organism"]).lower() == str(organism).lower()}
+            return out
+
         f = self.path / "references.yml"
         if not f.exists():
             return {}

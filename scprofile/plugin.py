@@ -70,7 +70,8 @@ class Context:
     """
 
     def __init__(self, adata, *, keys, out, cores=1, unit=None, organism=None, assay=None,
-                 references=None, params=None, design=None, sentinels=(),
+                 references=None, reference_specs=None, params=None, design=None,
+                 sentinels=(),
                  config=None, log=print):
         self.adata = adata
         #: {role: actual name in THIS object}. `ctx.keys["label"]`, never a literal column.
@@ -83,6 +84,8 @@ class Context:
         self.organism = (organism or "").lower() or None
         self.assay = (assay or "").lower() or None
         self.references = dict(references or {})
+        #: The declarations behind those paths, so a plugin can ask by role rather than by name.
+        self._reference_specs = dict(reference_specs or {})
         self.params = dict(params or {})
         self.design = design
         self.sentinels = tuple(sentinels or ())
@@ -228,6 +231,19 @@ class Context:
             if len(levels) >= min_levels and min(map(len, levels.values())) >= min_replicates:
                 out.append(f)
         return out
+
+    def reference_for_role(self, role):
+        """A declared reference BY ROLE, for this organism. `ctx.reference_for_role("rankings")`.
+
+        The mouse and human entries of the same reference are different files with different
+        names, so a plugin asking by NAME has to know both and pick - which is a species named in
+        a plugin, and the one thing no plugin may do. Asking by role, the host picks.
+        """
+        for name, path in sorted(self.references.items()):
+            spec = (self._reference_specs or {}).get(name, {})
+            if spec.get("role") == role:
+                return path
+        return None
 
     def reference(self, name):
         """A declared reference file, verified by the host before the plugin was started."""

@@ -47,7 +47,7 @@ PLUGIN = {
     "requires": {
         "python": ">=3.10,<3.13",
         "packages": {
-            "decoupler": "==1.8.0",      # the API this plugin calls is 1.8's
+            "decoupler": ">=1.8,<1.9",   # the API this plugin calls is 1.8's, any patch of it
             "scanpy": ">=1.10,<1.11",
             "anndata": ">=0.10,<0.12",
             "numpy": ">=1.24,<2",        # decoupler 1.8 predates the numpy 2 ABI
