@@ -936,6 +936,90 @@ def test_the_compatibility_copy_is_a_record_and_a_cache():
           "3 GB nobody can identify beside an output directory is debris, not a record")
 
 
+def test_an_array_carries_its_barcodes():
+    """"An array carries no barcodes" was a gap the host had left, stated as a fact about arrays.
+
+    The host EXCLUDES cells with NaN in a computed embedding from every plugin. A plugin handed
+    98,627 of an object's 100,713 cells therefore returned an array of 98,627 rows, and the merge
+    refused it for not covering 100,713 - refused the plugin for returning exactly the cells the
+    host had given it. Nothing in that is specific to one plugin: it is every plugin that emits
+    an array on an object with a withheld cell in it.
+
+    The barcodes are `ctx.adata.obs_names`, and `emit_obsm` is the host's own code.
+    """
+    print("\nan emitted array carries the barcodes its rows belong to")
+    import numpy as np
+    from scprofile import merge
+
+    class _Idx(list):
+        is_unique = True
+        def astype(self, _):
+            return self
+        def intersection(self, other):
+            o = set(other)
+            return [x for x in self if x in o]
+        def __getitem__(self, k):
+            v = list.__getitem__(self, k)
+            return _Idx(v) if isinstance(k, slice) else v
+
+    class _AD:
+        def __init__(self, bcs):
+            self.obs_names = _Idx(bcs)
+            self.n_obs = len(bcs)
+            self.obs, self.obsm, self.layers = {}, {}, {}
+
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        (td / "arrays").mkdir()
+        # The plugin saw three of the object's four cells - the fourth was withheld upstream.
+        np.save(td / "arrays" / "X_a.npy", np.arange(6, dtype="float32").reshape(3, 2))
+        check("no sidecar, no barcodes", merge._array_barcodes(td / "arrays" / "X_a.npy") is None)
+        A = _AD(["c0", "c1", "c2", "c3"])
+        try:
+            merge.merge_one(A, td, {"kernel": "P", "obsm": {"X_a": "arrays/X_a.npy"}})
+            check("without barcodes a short array is still refused", False, "it was accepted")
+        except merge.MergeError as e:
+            check("without barcodes a short array is still refused", True)
+            check("and the refusal names the remedy", "emit_obsm" in str(e), str(e))
+
+        (td / "arrays" / "X_a.barcodes.txt").write_text("c0\nc2\nc3\n")
+        check("the sidecar is found beside the array",
+              merge._array_barcodes(td / "arrays" / "X_a.npy") == ["c0", "c2", "c3"])
+        said = []
+        A = _AD(["c0", "c1", "c2", "c3"])
+        got = merge.merge_one(A, td, {"kernel": "P", "obsm": {"X_a": "arrays/X_a.npy"}},
+                              log=said.append)
+        check("with barcodes it merges", got["obsm"] == ["X_a"], str(got))
+        arr = A.obsm["X_a"]
+        check("and every row lands where its barcode says", arr.shape == (4, 2), str(arr.shape))
+        check("c0 keeps its own row", list(arr[0]) == [0.0, 1.0], str(arr[0]))
+        check("c2 is the array's SECOND row, not the object's second cell",
+              list(arr[2]) == [2.0, 3.0], str(arr[2]))
+        check("the cell the plugin never saw is NaN, not somebody else's value",
+              bool(np.isnan(arr[1]).all()), str(arr[1]))
+        check("and the coverage is said out loud",
+              any("3 of 4 cells covered" in x for x in said), str(said))
+
+        # Barcodes that are not this object's are not a coverage gap, they are a different object.
+        (td / "arrays" / "X_a.barcodes.txt").write_text("z0\nz1\nz2\n")
+        try:
+            merge.merge_one(_AD(["c0", "c1", "c2", "c3"]), td,
+                            {"kernel": "P", "obsm": {"X_a": "arrays/X_a.npy"}})
+            check("barcodes from another object are refused", False, "it was accepted")
+        except merge.MergeError as e:
+            check("barcodes from another object are refused", "not the same cells" in str(e),
+                  str(e))
+        # An index that disagrees with its own array says nothing about any cell.
+        (td / "arrays" / "X_a.barcodes.txt").write_text("c0\nc1\n")
+        try:
+            merge.merge_one(_AD(["c0", "c1", "c2", "c3"]), td,
+                            {"kernel": "P", "obsm": {"X_a": "arrays/X_a.npy"}})
+            check("an index disagreeing with its array is refused", False)
+        except merge.MergeError as e:
+            check("an index disagreeing with its array is refused",
+                  "disagree" in str(e), str(e))
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -964,6 +1048,7 @@ def main():
     test_install_does_not_demand_a_lock_from_a_plugin_that_declares_a_requirement()
     test_a_required_capability_is_checked_before_the_run_not_inside_it()
     test_the_compatibility_copy_is_a_record_and_a_cache()
+    test_an_array_carries_its_barcodes()
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")

@@ -164,9 +164,32 @@ class Context:
         return p
 
     def emit_obsm(self, name, array):
+        """A per-cell ARRAY, written with the barcodes its rows belong to.
+
+        "AN ARRAY CARRIES NO BARCODES" WAS NOT A FACT, IT WAS A GAP. The host said it three times
+        - as the reason a per-cell array must cover every cell in order, and as the reason a
+        per-unit one can never be merged at all - and the host is the party that knows the
+        barcodes: they are `self.adata.obs_names`, right here.
+
+        What it cost: the host itself EXCLUDES cells with NaN in a computed embedding from every
+        plugin, so a plugin handed 98,627 of an object's 100,713 cells returned an array of
+        98,627 rows and the merge refused it for not covering 100,713 - refused the plugin for
+        returning exactly the cells the host had given it. Nothing about that is specific to one
+        plugin or one dataset; it is every plugin that emits an array on an object with a
+        withheld cell in it.
+        """
         import numpy as np
+        arr = np.asarray(array, dtype="float32")
         p = self.out / "arrays" / f"{name}.npy"
-        np.save(p, np.asarray(array, dtype="float32"))
+        if self.adata is not None:
+            if arr.shape[0] != self.adata.n_obs:
+                raise ValueError(
+                    f"emit_obsm({name!r}): {arr.shape[0]:,} rows for the {self.adata.n_obs:,} "
+                    f"cells this plugin was given. An obsm is per cell of the object handed to "
+                    f"run(); if this result is not, emit it as a table or a side-car object.")
+            (self.out / "arrays" / f"{name}.barcodes.txt").write_text(
+                "\n".join(self.adata.obs_names.astype(str)) + "\n", encoding="utf-8")
+        np.save(p, arr)
         self._obsm[name] = p
         return p
 

@@ -48,6 +48,50 @@ def _read_array(path):
     raise MergeError(f"{p} is not .npy or .npz; the contract accepts those for arrays")
 
 
+def _array_barcodes(path):
+    """The barcodes an emitted array's rows belong to, or None if it carries none.
+
+    Written by `ctx.emit_obsm` beside the `.npy`. Its absence is not an error - a plugin built
+    before this, or one that writes its own array, has none - and the caller then falls back on
+    the positional rule.
+    """
+    q = Path(path)
+    stem = q.name[:-len(q.suffix)] if q.suffix else q.name
+    side = q.parent / f"{stem}.barcodes.txt"
+    if not side.exists():
+        return None
+    idx = [ln.strip() for ln in side.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    return idx or None
+
+
+def _align_rows(arr, idx, bc, *, what, log=print):
+    """Put an array's rows where its barcodes say they go, NaN where it has nothing to say.
+
+    The obs path has always done this - `reindex(bc)` - and the array path could not, because
+    nothing recorded which cells the rows were. Now something does.
+    """
+    import numpy as np
+    if len(idx) != arr.shape[0]:
+        raise MergeError(
+            f"{what}: {arr.shape[0]:,} rows and {len(idx):,} barcodes beside it. The array and "
+            f"its index disagree, so nothing here can say which cell a row belongs to.")
+    a = arr if arr.ndim > 1 else arr.reshape(-1, 1)
+    pos = {b: i for i, b in enumerate(idx)}
+    take = np.fromiter((pos.get(b, -1) for b in bc), dtype=np.int64, count=len(bc))
+    hit = take >= 0
+    if not hit.any():
+        raise MergeError(
+            f"{what}: NONE of its {len(idx):,} barcodes match the object's {len(bc):,}. These "
+            f"are not the same cells. First few from each:\n"
+            f"  kernel: {idx[:3]}\n  object: {list(bc[:3])}")
+    out = np.full((len(bc), a.shape[1]), np.nan, dtype="float32")
+    out[hit] = a[take[hit]]
+    n = int(hit.sum())
+    if n < len(bc):
+        log(f"    {what}: {n:,} of {len(bc):,} cells covered; the rest are NaN")
+    return out
+
+
 def _require_unique_barcodes(adata):
     """Every merge here is `reindex(obs_names)`, which needs the object's barcodes to be unique.
 
@@ -104,15 +148,25 @@ def merge_one(adata, out_dir, payload, *, log=print):
 
     for key, rel in (payload.get("obsm") or {}).items():
         arr = _read_array(out / rel)
+        idx = _array_barcodes(out / rel)
+        if idx is not None:
+            # BY BARCODE, like every obs column. The host excludes cells with NaN in a computed
+            # embedding from every plugin, so a plugin handed 98,627 of 100,713 cells returned
+            # 98,627 rows and this refused it for not covering 100,713 - refused a plugin for
+            # returning exactly the cells the host gave it.
+            pend_arr.append(("obsm", key,
+                             _align_rows(arr, idx, bc,
+                                         what=f"{payload['kernel']} obsm[{key!r}]", log=log)))
+            continue
         if arr.shape[0] != adata.n_obs:
             raise MergeError(
                 f"{payload['kernel']} obsm[{key!r}] has {arr.shape[0]:,} rows for "
-                f"{adata.n_obs:,} cells. An array carries no barcodes, so it can only be merged "
-                f"when it covers every cell in order - and this one does not. The kernel must "
-                f"return every cell, or return a CSV keyed on barcode instead."
+                f"{adata.n_obs:,} cells, and carries no barcodes beside it. Without them it can "
+                f"only be merged when it covers every cell in order - and this one does not. "
+                f"Emit it with `ctx.emit_obsm`, which writes the barcodes, or return a CSV keyed "
+                f"on barcode instead."
                 + (f"\n  This plugin ran per unit ({payload['unit']!r}), so its array covers one "
-                   f"unit's cells by construction. Return it keyed on barcode, or declare it "
-                   f"under `objects` as a side-car."
+                   f"unit's cells by construction."
                    if payload.get("unit") else ""))
         pend_arr.append(("obsm", key, arr))
 
@@ -188,24 +242,79 @@ def merge_many(adata, results, *, log=print):
         adata.obs[col] = full.reindex(bc).values
         merged["obs"].append(col)
 
-    # An array output that cannot cross units is an ABSENCE and has to survive as one. Logging it
-    # to stdout left the report free to go on printing "merged into the object by barcode" from
-    # the plugin's DECLARATION, so `uns` and the HTML both asserted a key the object did not have
-    # and the only trace was one line of a finished run's console. Note the asymmetry it fixes:
-    # `merge_one` REFUSES a mismatched array loudly; this path was discarding one silently.
+    # AN ARRAY THAT CARRIES ITS BARCODES CAN CROSS UNITS. `ctx.emit_obsm` writes them, so a
+    # per-unit plugin's arrays concatenate exactly as its obs columns do - the same disjointness
+    # check, the same NaN for cells no unit covered. The sentence this replaced said an array
+    # "carries no barcodes" as though that were a property of arrays; it was a property of what
+    # the host had chosen to write down.
+    import numpy as np
+    pieces = {}
+    for out_dir, payload in results:
+        for key, rel in (payload.get("obsm") or {}).items():
+            arr = _read_array(Path(out_dir) / rel)
+            idx = _array_barcodes(Path(out_dir) / rel)
+            pieces.setdefault(key, []).append((payload, arr, idx))
+    for key, parts in sorted(pieces.items()):
+        if any(idx is None for _p, _a, idx in parts):
+            for payload, _a, idx in parts:
+                if idx is not None:
+                    continue
+                _record_absent(merged, payload, "obsm", key, log,
+                               "was returned per unit with no barcodes beside it, so nothing "
+                               "here can say which cell a row belongs to. Emit it with "
+                               "`ctx.emit_obsm`, which writes them.")
+            continue
+        seen, rows, index = set(), [], []
+        clash = None
+        for payload, arr, idx in parts:
+            dup = seen.intersection(idx)
+            if dup:
+                clash = (payload.get("unit"), sorted(dup)[:3], len(dup))
+                break
+            seen.update(idx)
+            rows.append(arr if arr.ndim > 1 else arr.reshape(-1, 1))
+            index.extend(idx)
+        if clash:
+            raise MergeError(
+                f"obsm[{key!r}]: unit {clash[0]!r} claims {clash[2]:,} cell(s) another unit "
+                f"already returned, e.g. {clash[1]}. The units are not disjoint, and taking one "
+                f"of them would hide that.")
+        widths = {r.shape[1] for r in rows}
+        if len(widths) > 1:
+            _record_absent(merged, parts[0][0], "obsm", key, log,
+                           f"came back with different widths across units ({sorted(widths)}), so "
+                           f"the columns are not the same quantity and stacking them would "
+                           f"invent one.")
+            continue
+        full = np.vstack(rows)
+        adata.obsm[key] = _align_rows(full, index, bc, what=f"obsm[{key!r}]", log=log)
+        merged["obsm"].append(key)
+
+    # A LAYER STILL CANNOT CROSS UNITS: the barcodes name the rows and nothing names the columns,
+    # and two units' layers can differ on the gene axis without saying so.
     for _out_dir, payload in results:
-        for slot in ("obsm", "layers"):
-            for key in sorted(payload.get(slot) or {}):
-                why = (f"{slot}[{key!r}] was returned per unit and an array carries no barcodes, "
-                       f"so it cannot be concatenated across units. It is NOT in the merged "
-                       f"object; each unit's copy stays in its own run directory.")
-                log(f"    NOT MERGED: unit {payload.get('unit')!r} {why}")
-                payload.setdefault("absent", []).append(
-                    {"what": f"{slot}[{key}]", "why": why})
-                d = merged.setdefault("dropped", [])
-                if f"{slot}[{key}]" not in d:      # one key, however many units returned it
-                    d.append(f"{slot}[{key}]")
+        for key in sorted(payload.get("layers") or {}):
+            _record_absent(merged, payload, "layers", key, log,
+                           "was returned per unit. The barcodes beside an array name its ROWS; "
+                           "nothing names its columns, and two units' gene axes can differ "
+                           "without saying so. It is not concatenated.")
     return merged
+
+
+def _record_absent(merged, payload, slot, key, log, why):
+    """An output that did not reach the object is an ABSENCE and has to survive as one.
+
+    Logging it to stdout left the report free to go on printing "merged into the object by
+    barcode" from the plugin's DECLARATION, so `uns` and the HTML both asserted a key the object
+    did not have and the only trace was one line of a finished run's console.
+    """
+    text = f"{slot}[{key!r}] {why} It is NOT in the merged object; each unit's copy stays in its "\
+           f"own run directory."
+    log(f"    NOT MERGED: unit {payload.get('unit')!r} {text}")
+    payload.setdefault("absent", []).append({"what": f"{slot}[{key}]", "why": text})
+    d = merged.setdefault("dropped", [])
+    if f"{slot}[{key}]" not in d:                  # one key, however many units returned it
+        d.append(f"{slot}[{key}]")
 
 
 def delivered_name(payload, rel):
