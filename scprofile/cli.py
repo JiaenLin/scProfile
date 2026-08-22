@@ -1341,24 +1341,33 @@ def main(argv=None):
         sys.stdout.reconfigure(line_buffering=True)
     except (AttributeError, ValueError):
         pass                       # a stdout that cannot be reconfigured is one to leave alone
-    ap = argparse.ArgumentParser(prog="scprofile", description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    # WHO EACH COMMAND IS FOR. A user runs doctor/install/fetch/plan/run and nothing else; the
+    # rest are for whoever MAINTAINS a plugin. Marking them is not decoration - a user who cannot
+    # tell which commands are theirs assumes all of them are, and starts scaffolding.
+    ap = argparse.ArgumentParser(
+        prog="scprofile", description=(__doc__ or "") + """
+
+  [you]        commands for running an analysis: doctor, install, fetch, plan, run, report
+  [maintainer] commands for whoever maintains a plugin: validate, selftest, scaffold
+               see docs/MAINTAINING_PLUGINS.md - a user should never need these
+""",
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--version", action="version", version=f"scprofile {_v()}")
     sub = ap.add_subparsers(dest="cmd", metavar="COMMAND")
 
-    d = sub.add_parser("doctor", help="what is installed, what is missing, and the exact fix")
+    d = sub.add_parser("doctor", help="[you] what is installed, what is missing, and the exact fix")
     d.add_argument("--prefix", default=None, help="where kernel environments live")
     d.add_argument("--references", default=None, help="where reference data lives")
     d.add_argument("--organism", default=None)
     d.set_defaults(fn=_doctor)
 
-    i = sub.add_parser("install", help="build a kernel's environment from its lock")
+    i = sub.add_parser("install", help="[you] build a kernel's environment from its lock")
     i.add_argument("kernel")
     i.add_argument("--prefix", required=True)
     i.add_argument("--force", action="store_true", help="rebuild an existing environment")
     i.set_defaults(fn=_install)
 
-    f = sub.add_parser("fetch", help="download and verify a kernel's declared references")
+    f = sub.add_parser("fetch", help="[you] download and verify a kernel's declared references")
     f.add_argument("kernel")
     f.add_argument("--to", required=True)
     f.add_argument("--organism", default=None)
@@ -1368,7 +1377,7 @@ def main(argv=None):
                         "is a worse failure than refusing at the start")
     f.set_defaults(fn=_fetch)
 
-    r = sub.add_parser("run", help="run kernels, merge results, write the report")
+    r = sub.add_parser("run", help="[you] run kernels, merge results, write the report")
     r.add_argument("--h5ad", required=True, type=Path)
     r.add_argument("--out", required=True, type=Path)
     r.add_argument("--kernel", default=None, help="comma separated")
@@ -1429,7 +1438,7 @@ def main(argv=None):
                         "itself, and its result would not mean what the report says it means")
     r.set_defaults(fn=_run)
 
-    pl = sub.add_parser("plan", help="what WOULD run, and what stops it. Runs nothing")
+    pl = sub.add_parser("plan", help="[you] what WOULD run, and what stops it. Runs nothing")
     pl.add_argument("--h5ad", required=True)
     pl.add_argument("--kernel", default=None)
     pl.add_argument("--all", action="store_true")
@@ -1463,7 +1472,7 @@ def main(argv=None):
                          "left below a rung the project would support")
     pl.set_defaults(fn=_plan)
 
-    va = sub.add_parser("validate", help="static checks on plugins and their references")
+    va = sub.add_parser("validate", help="[maintainer] static checks on plugins and their references")
     va.add_argument("name", nargs="?", default=None,
                     help="plugin name(s), comma-separated. Default: all")
     va.add_argument("--references", default=None, metavar="DIR",
@@ -1474,19 +1483,19 @@ def main(argv=None):
     va.add_argument("--organism", default=None)
     va.set_defaults(fn=_validate)
 
-    se = sub.add_parser("selftest", help="prove each plugin's environment still works")
+    se = sub.add_parser("selftest", help="[maintainer] prove each plugin's environment still works")
     se.add_argument("name", nargs="?", default=None,
                     help="plugin name(s), comma-separated. Default: every built plugin")
     se.add_argument("--prefix", default=None, help="where kernel environments live")
     se.add_argument("--timeout", type=int, default=None, metavar="SEC")
     se.set_defaults(fn=_selftest)
 
-    sc_ = sub.add_parser("scaffold", help="write a declared plugin's build skeleton")
+    sc_ = sub.add_parser("scaffold", help="[maintainer] write a declared plugin's build skeleton")
     sc_.add_argument("name", help="plugin name(s), comma-separated")
     sc_.add_argument("--force", action="store_true", help="overwrite existing skeleton files")
     sc_.set_defaults(fn=_scaffold)
 
-    p = sub.add_parser("report", help="rebuild the documents from report.json")
+    p = sub.add_parser("report", help="[you] rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)
     p.set_defaults(fn=_report)
 

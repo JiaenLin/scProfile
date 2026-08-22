@@ -1,0 +1,108 @@
+# Maintaining a plugin
+
+**This page is for plugin maintainers. It is not for users.**
+
+A user installs scProfile, points it at an object, and runs `plan` and `run`. They never open a
+plugin, never edit one, and never write a wrapper. If a user is reading this page to get their
+analysis to work, something upstream of them has failed.
+
+A **plugin maintainer** owns one plugin for as long as it exists. The plugin is written once; the
+world it wraps is not.
+
+---
+
+## What you own
+
+One file. `kernels/<name>.py` — the declaration, the environment, the references, the limits, the
+upstream record, `run(ctx)` and `selftest(ctx)`. Everything about that plugin is in it, which is
+what makes ownership possible: there is no second file to keep in step.
+
+You own it against a moving target. The wrapped tool releases, renames a keyword, changes a
+default, moves a result key, drops a python version. **None of that reaches the user as a bug in
+their data if you are doing this job**, and all of it does if you are not.
+
+---
+
+## When a plugin needs attention
+
+| signal | what it means | what to do |
+|---|---|---|
+| a user's `selftest` fails on a new machine | the pins do not resolve there, or resolve to something that no longer works | reproduce, then fix the lock — not the selftest |
+| the wrapped tool releases | the pin is now behind; it is not automatically wrong | read the changelog against `upstream.defaults_changed`, then decide |
+| `validate` warns | the declaration has drifted from what the code does | fix the declaration |
+| a run reports a caveat you did not write | the host added it — a sentinel count, an excluded NaN row | nothing; that is the contract working |
+| a new organism is asked for | `references.yml` covers species you declared and no others | add the entries, fetch, record the digests |
+
+**A release is not a reason to bump.** A pin is a claim that *these versions were seen to work
+together*. Upgrading replaces a tested claim with an untested one, and the selftest is what turns
+it back into a tested one. Bump when there is a reason — a fix you need, a security issue, a
+python version going out of support — and prove it.
+
+---
+
+## Updating
+
+1. **Change the pin.** In `PLUGIN["env"]`.
+2. **Run the selftest against it.** On a machine that matters, not only on yours. This is the
+   whole check: it runs the real call and asserts the schema, not an import.
+3. **Read the changelog against your `upstream` record.** Every entry in `defaults_changed` is a
+   claim about the old version. A default that was wrong may now be right, or the reverse, and
+   the record must say what is true of the version you pinned.
+4. **Update `upstream.read`** to the date you read the documentation. That field exists so a
+   later maintainer knows how stale the reading is, not to prove diligence.
+5. **Check `cannot_show` still holds.** A new version can change what a method can support.
+6. **Note it in the plugin's docstring** if the result changes. A user comparing two runs across
+   a bump needs to know the difference is the tool and not their data.
+
+---
+
+## The rules a plugin must keep
+
+These are enforced — by `validate`, by the contract tests, or by the compiler — because each was
+broken once.
+
+**Never name a user's vocabulary.** No column, no layer, no organism, no sample, in `run()`.
+Those arrive as `ctx.keys[...]` and `ctx.organism`. A plugin that writes `adata.obs["cell_type"]`
+works on exactly one project.
+
+> `ctx.keys.get("lognorm")` is a **role** and is correct. `adata.layers["lognorm"]` is a **name**
+> and is not. Reading back a key the wrapped library itself just wrote — `obsm["ulm_estimate"]` —
+> is that library's API surface and is fine.
+
+**Never use `os.cpu_count()`.** `ctx.cores` is the allocated share. Four plugins each reading the
+machine start four times the node's worth of threads.
+
+**Refuse rather than return something empty.** `ctx.refuse(what, why)` is a result the host
+records. A plugin that returns an empty answer produces a result-shaped hole nobody can tell from
+a real negative.
+
+**Declare every limit.** `cannot_show` is printed with the numbers. A result whose limits were
+never written down reads exactly as authoritative as one whose limits were thought about.
+
+**The selftest asserts shapes, columns and finiteness — never a biological answer.** The fixture
+is synthetic; there is no correct answer to check against, and a selftest that asserted one would
+be testing its fixture.
+
+---
+
+## What you do NOT own
+
+The contract. Reading `in.json`, resolving keys, subsetting to a unit, keeping annotator sentinels
+as cells, excluding cells with NaN in a computed embedding, honouring the core share, writing
+`out.json` — all of that is `scprofile/_entry.py`, shipped once and shared by every plugin.
+
+If you find yourself writing any of it, stop: either the host is missing something and that is a
+host bug, or you are about to reintroduce one of the bugs that lived in the wrappers this replaced.
+
+---
+
+## Checking your work
+
+```
+scprofile validate <name>                          # the declaration
+scprofile install <name> --prefix <dir>            # builds it, and runs your selftest
+python tests/test_contract.py                      # the rules above
+```
+
+`install` is the builder and it ends in your selftest deliberately: **an environment nothing
+proved is one that fails inside somebody's run.**

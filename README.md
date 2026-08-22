@@ -13,7 +13,15 @@ Takes the output of [scQC](https://github.com/JiaenLin/scQC) →
 [scIntegrate](https://github.com/JiaenLin/scIntegrate), or any `.h5ad` with counts, a label column
 and a sample column.
 
-📖 **[Design](DESIGN.md)** · **[Roadmap](ROADMAP.md)** · **[Build plan](BUILD_PLAN.md)** · **[Execution](docs/EXECUTION.md)**
+**This README is for people running an analysis.** You install scProfile, point it at an object,
+and run `plan` and `run`. You never open a plugin, never edit one and never write a wrapper — if
+you find yourself doing that, it is a bug in this tool, not a step you were meant to take.
+
+Writing or updating a plugin is a **maintainer** job:
+**[docs/MAINTAINING_PLUGINS.md](docs/MAINTAINING_PLUGINS.md)**.
+
+📖 For users: **[Run plan](docs/RUN_PLAN.md)** · **[Reference data](docs/REFERENCES.md)**
+📖 For developers: **[Architecture](docs/ARCHITECTURE.md)** · **[Maintaining plugins](docs/MAINTAINING_PLUGINS.md)** · **[Execution](docs/EXECUTION.md)** · **[Design](DESIGN.md)** · **[Roadmap](ROADMAP.md)**
 
 ---
 

@@ -147,6 +147,25 @@ with _tf.TemporaryDirectory() as _d:
     except RuntimeError:
         ck("a lock from another host is not assumed dead", True)
 
+print("\nthe two audiences are distinguishable")
+_cli = inspect.getsource(cli)
+for _c in ("doctor", "install", "fetch", "run", "plan", "report"):
+    ck(f"{_c} is marked for the user", f'"{_c}", help="[you]' in _cli)
+for _c in ("validate", "selftest", "scaffold"):
+    ck(f"{_c} is marked for the maintainer", f'"{_c}", help="[maintainer]' in _cli)
+_rt = Path(__file__).resolve().parents[1]
+_rm = (_rt / "README.md").read_text()
+ck("the README says who it is for", "for people running an analysis" in _rm)
+ck("and points maintainers elsewhere", "MAINTAINING_PLUGINS" in _rm)
+_mg = _rt / "docs" / "MAINTAINING_PLUGINS.md"
+ck("the maintainer guide exists", _mg.exists())
+_mt = _mg.read_text() if _mg.exists() else ""
+ck("it says it is not for users", "not for users" in _mt)
+ck("it covers WHEN a plugin needs attention", "needs attention" in _mt)
+ck("it says a release is not automatically a reason to bump",
+   "not a reason to bump" in _mt)
+ck("it names what a maintainer does NOT own", "do NOT own" in _mt)
+
 print("\nthe planner assumes no design shape and no cohort")
 from scprofile import planner as _P                                            # noqa: E402
 # CODE, NOT PROSE. The first version searched the whole source and fired on the docstring
