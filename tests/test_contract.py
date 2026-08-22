@@ -179,6 +179,53 @@ def test_velocity_declaration():
           str(undeclared(k, bad)))
 
 
+def test_a_selftest_is_bounded_and_visible():
+    """A captured selftest with no timeout is indistinguishable from a hang, and blocks the build.
+
+    Measured on PBS 677555: decoupler's selftest fetches a published prior over the network. With
+    `capture_output=True` nothing is written until the process exits, and with no timeout there is
+    nothing to exit - so `install` sat with no output, having proved nothing and reported nothing,
+    and would have done so until the job's sixteen-hour walltime. `run` learned this when a plugin
+    that takes an hour and prints nothing looked like one that had stopped; `selftest` had not.
+    """
+    print("\na selftest is bounded, and can be watched while it runs")
+    from scprofile import runner
+    check("there is a default limit", isinstance(runner.SELFTEST_TIMEOUT, int)
+          and runner.SELFTEST_TIMEOUT > 0, str(runner.SELFTEST_TIMEOUT))
+    src = inspect.getsource(runner.selftest)
+    # THE CODE, not the comment that explains what it stopped doing.
+    check("output goes to a NAMED file, not a pipe",
+          "stdout=fh" in src and "subprocess.run(cmd, capture_output" not in src)
+    check("the file is named in the log so it can be tailed", 'log(f"      live:' in src)
+    check("a timeout is applied even when the caller names none",
+          "SELFTEST_TIMEOUT if timeout is None" in src)
+    check("and it is reported as stuck rather than as slow",
+          "stuck, not slow" in src)
+
+    # It really runs: a plugin whose selftest sleeps must be cut off, not waited for.
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td)
+        (d / "bin").mkdir()
+        exe = d / "bin" / "python"
+        exe.write_text("#!/bin/sh\nsleep 30\n")
+        exe.chmod(0o755)
+        plug = d / "slow.py"
+        plug.write_text('PLUGIN = {"api": 1}\ndef run(ctx):\n    pass\n'
+                        'def selftest(ctx):\n    pass\n')
+        from scprofile.kernels import FileKernel
+        k = FileKernel(plug)
+        import os as _os
+        _os.environ["SCPROFILE_SLOW_PYTHON"] = str(exe)
+        try:
+            runner.selftest(k, prefix=None, log=lambda *_a: None, timeout=1)
+            check("a selftest that will not finish is cut off", False, "it waited")
+        except RuntimeError as e:
+            check("a selftest that will not finish is cut off", "did not finish within" in str(e),
+                  str(e)[:120])
+        finally:
+            _os.environ.pop("SCPROFILE_SLOW_PYTHON", None)
+
+
 def test_a_plugin_gets_its_own_environments_bin_on_path():
     """An environment is not only an interpreter; it provides BINARIES.
 
@@ -1467,6 +1514,7 @@ def main():
         test_a_plugin_is_launched_the_way_its_shape_requires(tmp)
     test_figure_conventions()
     test_velocity_declaration()
+    test_a_selftest_is_bounded_and_visible()
     test_a_plugin_gets_its_own_environments_bin_on_path()
     test_a_failed_build_still_proves_what_it_can()
     test_the_plan_and_the_run_search_the_same_distance()

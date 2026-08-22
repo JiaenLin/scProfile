@@ -768,6 +768,15 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
     return p
 
 
+#: How long a selftest may take before it is called a failure. A selftest proves a CALL is
+#: well-formed; it is seconds to a few minutes by construction, and one that runs longer than
+#: this is not slow, it is stuck. Measured: decoupler's fetches a published prior over the
+#: network, and on a compute node with no route out it blocked with no output and no timeout -
+#: `install` would have sat there until the job's walltime, sixteen hours, having proved nothing
+#: and reported nothing.
+SELFTEST_TIMEOUT = 1800
+
+
 def selftest(kernel, *, prefix=None, log=print, timeout=None):
     """Run a plugin's selftest with THAT PLUGIN'S OWN INTERPRETER. Raises if it fails.
 
@@ -789,17 +798,35 @@ def selftest(kernel, *, prefix=None, log=print, timeout=None):
     if not exe:
         raise RuntimeError(f"{kernel.name}: no interpreter to run its selftest with. {why}")
     cmd = kernel.selftest_argv(exe)
+    limit = SELFTEST_TIMEOUT if timeout is None else timeout
+    # TO A FILE, NOT TO A PIPE, and the file is named. `capture_output` holds everything until the
+    # process exits, so a selftest that is waiting on a network call prints nothing and is
+    # indistinguishable from one that has hung - which is the same lesson `run` learned when a
+    # plugin that takes an hour and prints nothing looked like a plugin that had stopped. Here it
+    # was not hypothetical: decoupler's selftest blocked on a published prior it fetches, with no
+    # output and no timeout, and there was nothing to look at while it did.
+    logf = Path(exe).resolve().parent.parent / f".scprofile_selftest_{kernel.name}.log"
     log(f"  selftest: {Path(cmd[-1]).name}  ({why})")
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
-                       env=with_env_bin(exe))
+    log(f"      live: {logf}")
+    try:
+        with open(logf, "w", encoding="utf-8") as fh:
+            r = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, timeout=limit,
+                               env=with_env_bin(exe))
+    except subprocess.TimeoutExpired:
+        tail = "".join(logf.read_text(encoding="utf-8", errors="replace").splitlines(True)[-15:])
+        raise RuntimeError(
+            f"{kernel.name}'s selftest did not finish within {limit}s, so nothing has proved this "
+            f"environment. A selftest proves a CALL is well-formed and is seconds to minutes by "
+            f"construction; one that runs longer is stuck, not slow - a fetch with no route out "
+            f"is the usual reason.\n  Last lines of {logf.name}:\n{tail}") from None
+    out = logf.read_text(encoding="utf-8", errors="replace")
     if r.returncode != 0:
         raise RuntimeError(
-            f"{kernel.name}'s selftest FAILED, so the environment is not usable:\n"
-            + (r.stdout or "") + (r.stderr or ""))
+            f"{kernel.name}'s selftest FAILED, so the environment is not usable:\n" + out)
     # Print it on SUCCESS too. "selftest ok" tells you a check passed and not which versions it
     # passed against, and the versions are the thing anyone debugging this later needs - a lock is
     # a claim about an environment, and this is the receipt.
-    for line in (r.stdout or "").splitlines():
+    for line in out.splitlines():
         log(f"    {line}")
     log("  selftest ok")
     return True
