@@ -128,8 +128,9 @@ def _install(a):
             return REFUSE
         print(f"{name}:", flush=True)
         try:
-            p = runner.install(ks[name], a.prefix, force=a.force)
-            print(f"  installed at {p}")
+            p = runner.install(ks[name], a.prefix, force=a.force,
+                               dry_run=bool(getattr(a, "dry_run", False)))
+            print(f"  {'would install at' if getattr(a, 'dry_run', False) else 'installed at'} {p}")
         except Exception as e:                                            # noqa: BLE001
             print(f"  FAILED: {e}", file=sys.stderr)
             return 1
@@ -290,6 +291,9 @@ def _run(a):
     #: can read a predecessor's result directly. This is what makes `needs_kernels` mean something
     #: beyond ordering.
     upstream = {}
+    #: Derived capabilities this run will have, because a plugin in it provides them. The host
+    #: resolves `inject` against these; a plugin never names another plugin.
+    _provided = {c for n in want for c in (ks[n].spec.get("provides") or [])}
     #: Probe results per interpreter, and at most one compatibility copy of the object. A kernel's
     #: pinned anndata may have no reader for the encoding a current one writes; see compat.py.
     readable = {}
@@ -413,7 +417,8 @@ def _run(a):
                         f"skeleton; the method still has to be wrapped."]})
                 continue
             probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers, ran=ran,
-                          has_design=bool(a.design), keys=_km)
+                          has_design=bool(a.design), keys=_km, organism=organism[0],
+                          var=set(A.var.columns), derived=_provided)
             if probs and not a.force:
                 if name not in {s["kernel"] for s in skipped}:
                     skipped.append({"kernel": name, "why": probs})
@@ -498,7 +503,17 @@ def _run(a):
                 # a real defect into an intermittent one, which is the hardest kind to ever fix.
                 if dg.repairable and a.prefix and name not in repaired:
                     repaired.add(name)
-                    print(f"      REPAIRING: rebuilding {name}'s environment and retrying once")
+                    # NAME WHAT IS ACTUALLY BEING REBUILT. An environment resolved as shared is
+                    # not "{name}'s environment", and a --force rebuild of it removes and rebuilds
+                    # it for every plugin that resolves there. That is correct - a shared
+                    # environment is not divisible - and it is not something to discover from the
+                    # elapsed time.
+                    _g, _gp = runner.env_for(ks[name], a.prefix)
+                    _also = [m for m in (_g.members if _g else []) if m != name]
+                    print(f"      REPAIRING: rebuilding {name}'s environment and retrying once"
+                          + (f"\n      that environment is {_g.name}, SHARED WITH "
+                             f"{', '.join(_also)} - all of them are rebuilt and re-proved"
+                             if _also else ""))
                     try:
                         runner.install(ks[name], a.prefix, force=True,
                                        log=lambda s: print(f"        {s}"))
@@ -778,7 +793,7 @@ def _plan(a):
     produced here in seconds, and the schedule is printed so the shape of the work is visible
     before any of it is spent.
     """
-    from . import compat, inputs, manifest, provenance, refs, runner
+    from . import compat, declare, inputs, manifest, provenance, refs, runner
     from .kernels import discover, guard_verdict, schedule, unmet
 
     try:
@@ -928,13 +943,15 @@ def _plan(a):
     import os
     prov = provenance.harvest(A)
     runnable, planned, todo = [], [], []
+    _provided = {c for n in want for c in (ks[n].spec.get("provides") or [])}
     for name in sorted(want):
         k = ks[name]
         if k.status != "built":
             planned.append((name, k))
             continue
         probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers,
-                      ran=set(want), has_design=bool(a.design), keys=_km)
+                      ran=set(want), has_design=bool(a.design), keys=_km,
+                      organism=organism[0], var=set(A.var.columns), derived=_provided)
         state, why, fix = runner.env_state(k, a.prefix)
         env_ok = state in ("installed", "override", "host")
         if probs:
@@ -983,7 +1000,8 @@ def _plan(a):
         for name, k in planned:
             probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers,
                           ran={n for n, _ in planned} | set(runnable),
-                          has_design=bool(a.design), keys=_km)
+                          has_design=bool(a.design), keys=_km,
+                          organism=organism[0], var=set(A.var.columns), derived=_provided)
             mark = "ready when built" if not probs else "would refuse"
             wraps = k.spec.get("plans_to_wrap") or "-"
             unit = f", per {k.per_unit}" if k.per_unit else ""
@@ -1067,6 +1085,14 @@ def _plan(a):
     present = {}
     for name in sorted(want):
         k, need = ks[name], {}
+        # A REQUIRED CAPABILITY IS AN INPUT LIKE ANY OTHER, and until now the plan did not read
+        # `inject` at all: the entrypoint refuses without one, and the plan - whose job is to say
+        # that before a queue slot is spent - called the plugin RUN.
+        for cap in k.injects_required:
+            need[f"capability {cap}"] = declare.available(
+                cap, keys=_km, obs=have_obs, obsm=have_obsm, layers=have_layers,
+                var=set(A.var.columns), has_design=bool(a.design), organism=organism[0],
+                derived=_provided)
         for c in _rk(k.needs_obs, _km):
             need[f"obs[{c}]"] = c in have_obs
         for c in _rk(k.needs_obsm, _km):
@@ -1482,10 +1508,15 @@ def main(argv=None):
     d.add_argument("--organism", default=None)
     d.set_defaults(fn=_doctor)
 
-    i = sub.add_parser("install", help="[you] build a kernel's environment from its lock")
+    i = sub.add_parser("install", help="[you] build the environment a kernel resolves to")
     i.add_argument("kernel")
     i.add_argument("--prefix", required=True)
     i.add_argument("--force", action="store_true", help="rebuild an existing environment")
+    i.add_argument("--dry-run", action="store_true",
+                   help="resolve and report what would be built - the environment, who shares "
+                        "it, and every package handed to the manager - and build nothing. The "
+                        "resolver proves the DECLARED constraints do not contradict each other; "
+                        "only a real resolve proves their transitive closure installs")
     i.set_defaults(fn=_install)
 
     f = sub.add_parser("fetch", help="[you] download and verify a kernel's declared references")

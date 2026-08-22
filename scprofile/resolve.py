@@ -142,12 +142,61 @@ def compatible(spec_a, spec_b):
     return True, ""
 
 
-class Group:
-    """One environment, and every plugin that will share it."""
+#: The interpreter versions the builder will ask a manager for, when a requirement names a RANGE
+#: rather than a version. Not a policy about what is good - a list of what may be tried, so that
+#: `>=3.10,<3.13` resolves to something concrete and SAYS which.
+PYTHONS = ("3.10", "3.11", "3.12", "3.13")
 
-    def __init__(self, python, packages, members, why_alone=""):
+
+def concrete_python(spec, candidates=PYTHONS):
+    """One interpreter version satisfying a merged constraint, or None when none is constrained.
+
+    A CONSTRAINT IS NOT A VERSION, and the builder has to hand a manager a version. An exact
+    clause wins - if any member pinned the interpreter, that pin is the answer and the rest is
+    checked against it. Otherwise the highest candidate that satisfies every clause is taken,
+    because a range is the plugin's own claim that any of it works.
+
+    Raises rather than guessing: an environment built at a version nothing satisfies is one that
+    fails inside somebody's run, at a version nobody chose.
+    """
+    if not str(spec or "").strip():
+        return None
+    clauses = parse(spec)
+    exact = [w for op, w in clauses if op == "=="]
+    if exact:
+        v = ".".join(str(x) for x in exact[0])
+        if not satisfies(v, clauses):
+            raise ValueError(f"python {spec!r} cannot be satisfied: the pin {v} does not meet "
+                             f"every clause")
+        return v
+    for v in sorted(candidates, key=_ver, reverse=True):
+        if satisfies(v, clauses):
+            return v
+    raise ValueError(f"no interpreter satisfies python {spec!r}. Tried {', '.join(candidates)}; "
+                     f"a requirement no version meets is a requirement nothing can build.")
+
+
+class Group:
+    """One environment, and every plugin that will share it.
+
+    IT CARRIES THE WHOLE BUILD RECIPE, not only the pip pins. A requirement that can express only
+    pip packages excludes every tool with a compiled dependency, a system library or another
+    language - which is most of bioinformatics - and those plugins then had to smuggle the rest
+    in through a private lock the resolver could not read. `conda`, `channels` and `r` are here
+    for the same reason `packages` is: so the builder can merge them across plugins instead of
+    each plugin assuming it is alone.
+    """
+
+    def __init__(self, python, packages, members, why_alone="",
+                 conda=None, channels=(), r=()):
         self.python = python
-        self.packages = dict(packages)          # {name: constraint}
+        self.packages = dict(packages)          # {name: pip-style constraint}
+        #: {name: conda match-spec, verbatim}. NOT the same grammar as pip - conda's `=3.20` is a
+        #: prefix match and `==3.20` is not - so it is carried through unparsed and two of them
+        #: are called compatible only when they are IDENTICAL. When in doubt, isolate.
+        self.conda = dict(conda or {})
+        self.channels = list(channels)
+        self.r = list(r)
         self.members = sorted(members)
         #: Empty when this group holds more than one plugin. When a plugin is alone, this says
         #: WHICH package and WHICH two constraints forced it - never just "incompatible".
@@ -160,25 +209,47 @@ class Group:
         Named for its CONTENT and not for a plugin: an environment named `scprofile-velocity`
         that three plugins share is a lie the moment the second one joins, and the first plugin
         to be removed takes its name with it.
+
+        EVERYTHING THAT DECIDES WHAT GETS BUILT IS IN THE KEY. A name covering only the pip pins
+        would give one directory to two groups differing in their conda packages or their
+        channels - and the second would silently find the first's environment already there.
         """
-        key = repr((self.python, sorted(self.packages.items())))
+        key = repr((self.python, sorted(self.packages.items()), sorted(self.conda.items()),
+                    sorted(self.channels), sorted(self.r)))
         return "scprofile-env-" + hashlib.sha256(key.encode()).hexdigest()[:10]
 
     def as_dict(self):
         return {"name": self.name, "python": self.python, "packages": self.packages,
+                "conda": self.conda, "channels": self.channels, "r": self.r,
                 "members": self.members, "why_alone": self.why_alone}
 
     def __repr__(self):
         return f"<Group {self.name} python={self.python} {len(self.members)} member(s)>"
 
 
+def _blank(**kw):
+    out = {"python": "", "packages": {}, "conda": {}, "channels": [], "r": []}
+    out.update(kw)
+    return out
+
+
 def requirement(kernel):
-    """A plugin's declared environment requirement, or None if it needs no environment."""
+    """A plugin's declared environment requirement, or None if it needs no environment.
+
+    Five fields, because an environment is five things: an interpreter, language packages,
+    channel-level packages that have no wheel, the channels to take them from, and - for a plugin
+    whose method lives in another language - that language's packages. A requirement that could
+    say only the first two forced every plugin needing the rest to declare a private lock, which
+    is the layering this module exists to correct.
+    """
     spec = getattr(kernel, "spec", {}) or {}
     req = spec.get("requires")
     if req:
-        return {"python": str(req.get("python") or ""),
-                "packages": dict(req.get("packages") or {})}
+        return _blank(python=str(req.get("python") or ""),
+                      packages=dict(req.get("packages") or {}),
+                      conda=dict(req.get("conda") or {}),
+                      channels=list(req.get("channels") or []),
+                      r=list(req.get("r") or []))
     # A FULLY-PINNED ENVIRONMENT IS STILL A REQUIREMENT - the strictest possible one. Both older
     # shapes are read as exact constraints, so nothing that worked stops working and every plugin
     # takes part in resolution whichever shape it uses.
@@ -188,26 +259,65 @@ def requirement(kernel):
     # Loosening it is the MAINTAINER'S decision, and `validate` suggests it.
     env = spec.get("env")
     if env:
-        return {"python": f"=={env.get('python')}" if env.get("python") else "",
-                "packages": _exact(env.get("pip") or [])}
+        return _blank(python=f"=={env.get('python')}" if env.get("python") else "",
+                      packages=_exact(env.get("pip") or []))
 
     lock = getattr(kernel, "path", None)
     lock = (lock / "lock.yml") if lock is not None and lock.is_dir() else None
     if lock is None or not lock.exists():
         return None
-    py, pins, in_pip = "", [], False
-    for raw in lock.read_text(encoding="utf-8").splitlines():
-        s = raw.strip()
-        if not s or s.startswith("#"):
+    return from_lock(lock.read_text(encoding="utf-8"))
+
+
+def from_lock(text):
+    """A lock file read as a requirement - ALL of it, not only its pip section.
+
+    Reading only `python=` and the pip pins made a lock whose method is an R package, or whose
+    dependency has no wheel, resolve to NOTHING: the resolver skipped the plugin, reported a
+    count of environments that did not include it, and the builder fell back to a private
+    per-plugin path. A plugin that needs an environment and is invisible to the thing that
+    resolves environments is the worst of both layers.
+    """
+    py, pins, conda, channels, rr = "", [], {}, [], []
+    section, in_pip = None, False
+    for raw in text.splitlines():
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip():
             continue
-        if s in ("pip:", "- pip:"):
-            in_pip = True
+        body = line.strip()
+        if not body.startswith("- "):
+            section, in_pip = body.split(":", 1)[0].strip(), False
             continue
-        if s.startswith("- python="):
-            py = "==" + s.split("=", 1)[1].strip()
-        elif in_pip and s.startswith("- "):
-            pins.append(s[2:].strip())
-    return {"python": py, "packages": _exact(pins)} if (py or pins) else None
+        item = body[2:].strip()
+        if section == "channels":
+            channels.append(item)
+        elif section == "r":
+            rr.append(item)
+        elif section == "dependencies":
+            if in_pip:
+                pins.append(item)
+                continue
+            if item in ("pip:", "pip :"):
+                in_pip = True
+            elif item.startswith("python="):
+                py = "==" + item.split("=", 1)[1].strip()
+            elif item != "pip":
+                # VERBATIM, not translated. conda's `=3.20` means 3.20.* and `==3.20` means a
+                # version literally called 3.20, which for petsc4py does not exist. Rewriting one
+                # into the other would build a different environment from the one the lock names.
+                n, _, v = item.partition("=")
+                conda[n.strip()] = v.strip()
+    if not (py or pins or conda or rr):
+        return None
+    return _blank(python=py, packages=_exact(pins), conda=conda, channels=channels, r=rr)
+
+
+def _r_name(pin):
+    """The package a pinned R entry installs. `owner/repo@sha` -> repo; `Pkg==1.2` -> Pkg."""
+    s = str(pin)
+    if "==" in s:
+        return s.split("==", 1)[0].strip()
+    return s.split("@", 1)[0].rsplit("/", 1)[-1].strip()
 
 
 def _exact(pins):
@@ -234,16 +344,37 @@ def group_by_compatibility(kernels, log=None):
         if req is None:
             continue
         placed = None
-        blockers = []
+        #: Kept apart so the reason a plugin is alone LEADS WITH A CLASH where one exists. A real
+        #: contradiction - "python pinned to 3.11 and 3.10" - is a fact about two declarations; a
+        #: silence is only a fact about this resolver's caution, and reading the second first
+        #: sends a maintainer to look for a conflict that is not there.
+        clashes, silences = [], []
         for g in groups:
             ok, why = _fits(g, req)
-            if ok:
-                placed = g
-                break
-            blockers.append(f"{g.members[0]}: {why}")
+            if not ok:
+                clashes.append(f"{g.members[0]}: {why}")
+                continue
+            # NOT CLASHING IS NOT THE SAME AS BEING COMPATIBLE, and greedy first-fit cannot tell
+            # them apart on its own. A requirement that names no interpreter and no package the
+            # group also names clashes with nothing - so it joins the FIRST group it meets and is
+            # built into a stack it never mentioned.
+            #
+            # Measured on the shipped set: an R plugin pinning r-base and 60 conda packages, and
+            # naming no python and no pip package at all, was placed in the python group with
+            # four python plugins - one 6 GB environment holding two language stacks, on the
+            # strength of an absence of evidence. Sharing needs a POSITIVE reason.
+            if not _overlaps(g, req):
+                silences.append(f"{g.members[0]}: nothing in common - neither the interpreter "
+                                f"nor any package is named by both requirements, so nothing "
+                                f"proves they can share")
+                continue
+            placed = g
+            break
+        blockers = clashes + silences
         if placed is None:
             g = Group(req["python"], req["packages"], [k.name],
-                      why_alone=("; ".join(blockers[:2]) if blockers else ""))
+                      why_alone=("; ".join(blockers[:2]) if blockers else ""),
+                      conda=req["conda"], channels=req["channels"], r=req["r"])
             groups.append(g)
             say(f"  {k.name}: new environment"
                 + (f" - cannot share ({blockers[0]})" if blockers else ""))
@@ -253,6 +384,24 @@ def group_by_compatibility(kernels, log=None):
             placed.why_alone = ""
             say(f"  {k.name}: shares with {', '.join(n for n in placed.members if n != k.name)}")
     return groups
+
+
+def _overlaps(group, req):
+    """Do these two requirements constrain anything in common?
+
+    The POSITIVE half of the sharing decision. `_fits` says nothing here contradicts; this says
+    something here agrees. Both are required, because "when in doubt, isolate" has to bite on
+    doubt caused by silence as well as doubt caused by an operator this module cannot model.
+
+    Two plugins that both pin the interpreter overlap on it, which is the ordinary case and the
+    one that saves the disk: they go on sharing. Two whose requirements are disjoint do not.
+    """
+    if req["python"] and group.python:
+        return True
+    for field in ("packages", "conda"):
+        if set(req[field]) & set(getattr(group, field)):
+            return True
+    return bool({_r_name(x) for x in req["r"]} & {_r_name(x) for x in group.r})
 
 
 def _fits(group, req):
@@ -266,6 +415,19 @@ def _fits(group, req):
             ok, why = compatible(group.packages[name], spec)
             if not ok:
                 return False, f"{name} {why}"
+    # A CONDA MATCH-SPEC IS NOT PARSED, so two of them are provably compatible only when they are
+    # the same string. `=3.20` is a prefix match, `>=3.20` is a bound and `3.20.*` is a glob, and
+    # a resolver that guessed at that grammar would merge two environments over a difference it
+    # had misread. Anything else isolates, and says both specs.
+    for name, spec in sorted(req["conda"].items()):
+        if name in group.conda and str(group.conda[name]) != str(spec):
+            return False, (f"conda {name} pinned to {group.conda[name] or 'any'} and "
+                           f"{spec or 'any'}")
+    for pin in req["r"]:
+        nm = _r_name(pin)
+        for have in group.r:
+            if _r_name(have) == nm and have != pin:
+                return False, f"r package {nm} pinned to {have} and {pin}"
     return True, ""
 
 
@@ -292,6 +454,15 @@ def _merge(group, req):
     for name, spec in req["packages"].items():
         group.packages[name] = (_join(group.packages[name], spec)
                                 if name in group.packages else spec)
+    # conda specs and r pins are already known IDENTICAL where they overlap - `_fits` refused
+    # anything else - so merging is a union, and the union is sorted into the name.
+    group.conda.update(req["conda"])
+    for c in req["channels"]:
+        if c not in group.channels:
+            group.channels.append(c)
+    for pin in req["r"]:
+        if pin not in group.r:
+            group.r.append(pin)
 
 
 def report(groups, log=print):
@@ -299,8 +470,10 @@ def report(groups, log=print):
     log(f"\n{len(groups)} environment(s) will satisfy "
         f"{sum(len(g.members) for g in groups)} plugin(s):")
     for g in sorted(groups, key=lambda x: (-len(x.members), x.name)):
+        extra = "".join(f", {n} {w}" for n, w in
+                        ((len(g.conda), "conda"), (len(g.r), "r")) if n)
         log(f"  {g.name}  python {g.python or 'unconstrained'}  "
-            f"{len(g.packages)} package(s)")
+            f"{len(g.packages)} package(s){extra}")
         log(f"      shared by: {', '.join(g.members)}")
         if len(g.members) == 1 and g.why_alone:
             log(f"      ALONE because {g.why_alone}")

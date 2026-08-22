@@ -1,0 +1,175 @@
+#!/bin/bash
+#PBS -N scprofile_cycle
+#PBS -q long
+#PBS -l select=1:ncpus=8:mem=64gb
+#PBS -l walltime=06:00:00
+#PBS -j oe
+#PBS -o logs/
+
+# ONE TEST-FIX CYCLE of the host, against a real object, as a batch job.
+#
+#   qsub -v PHASE=build,TOOL=...,PY=...,PREFIX=...,OBJ=...,DES=...,REFS=...,\
+#           INSTALL=decoupler,KERNELS=decoupler,silhouette,ORGANISM=mouse,ASSAY=nucleus \
+#        setup/dev_cycle.pbs
+#
+# NOTHING HERE NAMES A PROJECT. Every path, kernel, organism and assay arrives through -v, because
+# a job script in this repository that hard-coded one dataset would be the same overfitting the
+# portability test exists to stop - and the next person's cluster is not this one.
+#
+# THREE PHASES, RUN AS SEPARATE JOBS.
+#
+#   build    doctor -> install --dry-run -> install.  Builds the RESOLVED environment, which may
+#            be shared, and proves it with every member's selftest.
+#   run      validate -> selftest -> plan --audit --report -> run.  Touches no environment.
+#   repair   breaks an environment on purpose and watches the run -> build edge close.
+#
+# They are separate jobs because a rebuild can eat the walltime of everything after it, and a
+# phase that did not run looks exactly like a phase that found nothing.
+#
+# ONE JOB AT A TIME AGAINST ONE PREFIX. Two concurrent jobs sharing --prefix have already cost
+# this project a day: a --force rebuild in one deleted the environment the other's selftest was
+# reading, and it was written up as a tool defect before anybody noticed.
+
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+mkdir -p logs
+
+: "${PHASE:?pass -v PHASE=build|run|repair}"
+: "${TOOL:?pass -v TOOL=<path to the scProfile checkout>}"
+: "${PY:?pass -v PY=<host interpreter, one with anndata>}"
+: "${PREFIX:?pass -v PREFIX=<dir the environments are built in>}"
+
+# --- environment ----------------------------------------------------------
+# A conda-family manager has to be on PATH for the builder to have a route at all; `machine()`
+# reports which one it found, and refuses with the alternatives if it found none.
+module load "${CONDA_MODULE:-anaconda3/3.0.0}" 2>/dev/null || true
+export PYTHONPATH="$TOOL"
+export MPLCONFIGDIR="$PWD/.mpl"
+# A plugin supplied from OUTSIDE the shipped set, to test the FORMAT rather than the tool.
+export SCPROFILE_KERNELS="${EXTRA_KERNELS:-$TOOL/tests/smoke/plugins}"
+# --------------------------------------------------------------------------
+
+export OMP_NUM_THREADS="${NCPUS:-1}"
+export MKL_NUM_THREADS="${NCPUS:-1}"
+
+echo "job      : ${PBS_JOBID:-none}"
+echo "node     : $(hostname)"
+echo "phase    : ${PHASE}"
+echo "tool     : $(cut -c1-7 "$TOOL/HEAD.txt" 2>/dev/null || echo unknown)"
+echo "manager  : $(command -v micromamba || command -v mamba || command -v conda || echo NONE)"
+echo "started  : $(date)"
+
+# `plan`, `validate` and `selftest` RETURN NON-ZERO WHEN THEY HAVE SOMETHING TO SAY. That is a
+# result, not a crash, and under `set -e` it would end the job on a working feature.
+say() { echo; echo "########## $* ##########"; }
+
+case "${PHASE}" in
+
+build)
+  : "${INSTALL:?pass -v INSTALL=<kernel whose environment to build>}"
+  say "1. WHAT THE BUILDER RESOLVED"
+  $PY -m scprofile.cli doctor --prefix "$PREFIX" || echo "  doctor exit $?"
+
+  say "2. WHAT WOULD BE BUILT, AND FOR WHOM"
+  # Resolve and report; build nothing. The resolver proves the DECLARED constraints do not
+  # contradict each other. Whether their transitive closure installs is a different claim.
+  $PY -m scprofile.cli install "$INSTALL" --prefix "$PREFIX" --dry-run \
+      || echo "  install --dry-run exit $?"
+
+  say "3. BUILD IT, AND PROVE IT FOR EVERY MEMBER"
+  $PY -m scprofile.cli install "$INSTALL" --prefix "$PREFIX" ${FORCE:+--force} \
+      || echo "  install exit $?"
+
+  say "4. WHERE EACH PLUGIN'S INTERPRETER NOW IS"
+  $PY -m scprofile.cli doctor --prefix "$PREFIX" || echo "  doctor exit $?"
+  ;;
+
+run)
+  : "${OBJ:?pass -v OBJ=<h5ad>}"
+  : "${KERNELS:?pass -v KERNELS=a,b}"
+  OUT="${OUT:-$PWD/out}"
+
+  say "1. DECLARE"
+  $PY -m scprofile.cli validate ${REFS:+--references "$REFS"} || echo "  validate exit $?"
+
+  say "2. SELFTEST — every environment, against what is installed HERE"
+  $PY -m scprofile.cli selftest --prefix "$PREFIX" || echo "  selftest exit $?"
+
+  say "3. PLAN, AUDITED, WITH ITS REPORT"
+  $PY -m scprofile.cli plan --h5ad "$OBJ" ${DES:+--design "$DES"} \
+      ${ORGANISM:+--organism "$ORGANISM"} ${ASSAY:+--assay "$ASSAY"} \
+      --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
+      --audit --report --out "$OUT" || echo "  plan exit $?"
+
+  say "4. RUN"
+  $PY -m scprofile.cli run --h5ad "$OBJ" --out "$OUT" \
+      ${DES:+--design "$DES"} ${ORGANISM:+--organism "$ORGANISM"} \
+      ${ASSAY:+--assay "$ASSAY"} --kernel "$KERNELS" \
+      --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
+      --cores "${NCPUS:-4}" --timeout "${TIMEOUT:-7200}" || echo "  run exit $?"
+
+  say "5. WHAT LANDED"
+  [ -d "$OUT" ] && ( cd "$OUT" && find . -type f \( -name '*.csv' -o -name '*.json' \
+      -o -name '*.md' -o -name '*.html' \) | sort | sed 's/^/    /' ) || echo "    nothing"
+
+  say "6. WHAT THE RUN LEARNED ABOUT THE TOOLING"
+  [ -f "$OUT/report.json" ] && $PY -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+print('    ran      :',d.get('ran'))
+print('    repaired :',d.get('repaired'))
+print('    object   :',d.get('object'))
+for x in (d.get('diagnoses') or []): print('    [%s] %s'%(x['layer'],x['why'][:200]))
+" "$OUT/report.json" || echo "    no report.json"
+  ;;
+
+repair)
+  # THE run -> build EDGE, watched end to end. A package the plugin imports is removed from the
+  # environment it resolves to; the run must diagnose that as [environment], rebuild, retry ONCE,
+  # recover, and REPORT the drift rather than swallowing it.
+  : "${OBJ:?pass -v OBJ=<h5ad>}"
+  : "${KERNELS:?pass -v KERNELS=<the plugin to break>}"
+  : "${BREAK:?pass -v BREAK=<import name to remove from its environment>}"
+  OUT="${OUT:-$PWD/out_repair}"
+
+  say "1. WHERE ${KERNELS} RESOLVES TO"
+  ENVDIR=$($PY - "$TOOL" "$KERNELS" "$PREFIX" <<'PYEOF'
+import sys
+sys.path.insert(0, sys.argv[1])
+from scprofile.kernels import discover
+from scprofile import runner
+k = discover()[sys.argv[2]]
+exe, why = runner.interpreter(k, sys.argv[3])
+print(exe or "")
+print(why, file=sys.stderr)
+PYEOF
+)
+  echo "  interpreter: ${ENVDIR}"
+
+  say "2. BREAK IT ON PURPOSE"
+  "${ENVDIR}" -m pip uninstall -y "$BREAK" || echo "  uninstall exit $?"
+
+  say "3. RUN, AND WATCH THE LOOP CLOSE"
+  $PY -m scprofile.cli run --h5ad "$OBJ" --out "$OUT" \
+      ${DES:+--design "$DES"} ${ORGANISM:+--organism "$ORGANISM"} \
+      ${ASSAY:+--assay "$ASSAY"} --kernel "$KERNELS" \
+      --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
+      --cores "${NCPUS:-4}" --timeout "${TIMEOUT:-7200}" || echo "  run exit $?"
+
+  say "4. WAS THE DRIFT REPORTED, OR SWALLOWED"
+  [ -f "$OUT/report.json" ] && $PY -c "
+import json,sys
+d=json.load(open(sys.argv[1]))
+print('    repaired :',d.get('repaired'))
+for x in (d.get('diagnoses') or []): print('    [%s] %s'%(x['layer'],x['why'][:200]))
+" "$OUT/report.json" || echo "    no report.json"
+  ;;
+
+*)
+  echo "unknown PHASE ${PHASE}; one of build, run, repair" >&2
+  exit 2
+  ;;
+esac
+
+echo
+echo "finished : $(date)"

@@ -54,44 +54,80 @@ wanted the same numpy/pandas/scanpy stack and got four copies of it.
 
 ```python
 "requires": {"python": ">=3.10,<3.13",
-             "packages": {"decoupler": "==1.8.0", "scanpy": ">=1.10,<1.11"}},
+             "packages": {"decoupler": "==1.8.0", "scanpy": ">=1.10,<1.11"},
+             "conda":    {"petsc4py": "3.20"},        # what has no wheel
+             "channels": ["conda-forge"],
+             "r":        ["owner/repo@<40-hex>"]},    # another language's packages
 ```
 
 **Constraints, not pins, wherever the tool genuinely tolerates a range.** A pin says only *that*
 version works; claiming it where it is untrue forces an environment nobody can share, and
 `validate` warns on every bare `==`.
 
+**A requirement is five things, not two.** An interpreter, language packages, channel-level
+packages that have no wheel, the channels to take them from, and — for a plugin whose method
+lives in another language — that language's packages. A requirement that could express only the
+first two forced every plugin needing the rest to declare a private lock the resolver could not
+read: it resolved such a plugin to *nothing*, reported an environment count that did not include
+it, and let the builder fall back to a private path nobody planned. Most of bioinformatics is in
+the other three fields.
+
+> **conda's grammar is not pip's and is not translated.** `petsc4py=3.20` is a prefix match;
+> `petsc4py==3.20` asks for a version that does not exist. Conda specs are carried through
+> unparsed and two of them are called compatible only when they are **identical**.
+
 The builder then resolves every plugin's constraints together:
 
 ```
-2 environment(s) will satisfy 5 plugin(s):
-  scprofile-env-1bc98148e9   shared by: decoupler, liana, pseudotime, velocity
-  scprofile-env-f56ccb478c   shared by: scenic
+3 environment(s) will satisfy 6 plugin(s):
+  scprofile-env-3cd799b82e   shared by: decoupler, liana, pseudotime, velocity
+  scprofile-env-6adcafa2b1   shared by: cellchat
+  scprofile-env-9c7b6e9d49   shared by: scenic
       ALONE because decoupler: python pinned to 3.11 and 3.10
 ```
 
-Three properties that make this safe to trust:
+Four properties that make this safe to trust:
 
 - **When in doubt, isolate.** A wrongly *shared* environment runs a plugin against versions
   nobody tested it on — the failure that returns a plausible number rather than an error. A
   wrongly *isolated* one costs disk. Those are not comparable, so anything the resolver cannot
   **prove** compatible gets its own environment.
+- **Not clashing is not the same as being compatible.** Sharing needs a positive reason: two
+  requirements share only when they *overlap* — on the interpreter, or on a package both name.
+  Greedy first-fit without this put an R plugin that pins `r-base`, 60 conda packages and no
+  python at all into the python group, because a requirement that names nothing contradicts
+  nothing. One 6 GB environment holding two language stacks, on an absence of evidence.
 - **An isolated plugin is told why**, naming the package and the two constraints that clash —
-  never just "incompatible".
+  and a clash is reported before a silence, because a contradiction is a fact about two
+  declarations and a silence is only a fact about this resolver's caution.
 - **The environment is named for its CONTENT**, not for a plugin. An environment called
   `scprofile-velocity` that three plugins share is a lie the moment the second joins, and the
-  first plugin removed takes its name with it.
+  first plugin removed takes its name with it. The name covers *everything that decides what gets
+  built* — conda specs and channels included — or two different groups claim one directory and
+  the second finds the first's environment already there.
 
 ## 2. The builder makes it runnable, and does not discover
 
 `scprofile install <name>` takes a declared plugin all the way:
 
-1. **compiles `run.py`** from `recipe.py` — the contract half is generated identically for every
-   plugin: reading `in.json`, resolving keys, subsetting to a unit, keeping annotator sentinels as
-   cells, excluding cells with NaN in a computed embedding, honouring the allocated core share,
-   writing declared outputs and `out.json`;
-2. builds the environment from `lock.yml`;
-3. proves it with the plugin's own selftest.
+1. **resolves** its requirement against every other plugin's, and reports the environment it
+   lands in and who shares it;
+2. **builds that environment WHOLE**, from the merged requirement — not from the named plugin's
+   own lock. Resolution used to decide only *where* the environment goes while the plugin's
+   `lock.yml` still decided *what went into it*, so an environment shared by four was built from
+   one of them and the other three found a directory that looked finished, carried a current
+   stamp and did not contain their packages;
+3. **proves it with every member's selftest.** An environment shared by four and proved by one is
+   an environment three of them meet for the first time inside a run. A member whose selftest
+   fails does not make this a partial success: the directory's name is a claim about all of them.
+
+**The unit of installation is the resolved environment, not the plugin.** That is why installing
+one member costs what it costs — a shared environment is not divisible — and why a `run → build`
+repair rebuilds and re-proves every member, which the repair message says.
+
+`install --dry-run` resolves and prints exactly what would be handed to the package manager, and
+builds nothing. The resolver proves the *declared* constraints do not contradict each other; only
+a real resolve proves their transitive closure installs, and those are different claims.
 
 **The builder is mechanical and knows no plugin by name.** If a declaration is incomplete it says
 which file is missing — it does not guess, and it does not hand the user a skeleton to finish.

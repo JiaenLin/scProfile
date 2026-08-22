@@ -71,6 +71,13 @@ against the object and the design, and either calls `run()` with everything pres
 precisely which capability was missing — to the *planner*, which turns it into a verdict a user
 can act on.
 
+> **One function answers that question, for both.** `declare.available()` is asked by the
+> entrypoint before `run()` and by the planner before a queue slot is spent, so the plan and the
+> run cannot disagree about what a plugin will be given. It was implemented at run time only:
+> the entrypoint refused correctly, the planner did not know `inject` existed, and a plugin
+> requiring an organism was planned `RUN` against an object that had none — discovered an hour
+> later, in a queue.
+
 **`config` is validated before anything runs.** A bad `--params` should fail in the second the
 plan is drawn, not an hour into a queue.
 

@@ -146,6 +146,68 @@ with _tf.TemporaryDirectory() as d:
        len(R.group_by_compatibility([Dir(), K("new", ">=3.11,<3.12",
                                               {"numpy": "==1.26.4"})])) == 1)
 
+print("\nnot clashing is not the same as being compatible")
+# An R plugin pinning r-base and 60 conda packages, naming NO python and NO pip package, clashes
+# with nothing - so greedy first-fit put it in the python group with four python plugins. One
+# 6 GB environment holding two language stacks, on the strength of an absence of evidence.
+class Silent:
+    name = "silent"
+    spec = {"requires": {"conda": {"r-base": "4.3.3"}, "r": ["owner/repo@" + "a" * 40]}}
+gs = R.group_by_compatibility([K("py", "==3.11", {"numpy": "==1.26.4"}), Silent()])
+ck("a requirement with nothing in common is isolated", len(gs) == 2,
+   str([g.members for g in gs]))
+alone = [g for g in gs if g.members == ["silent"]]
+ck("and told that the reason is silence, not a conflict",
+   bool(alone) and "nothing in common" in alone[0].why_alone,
+   str([g.why_alone for g in gs]))
+ck("two plugins that both pin the interpreter still share",
+   len(R.group_by_compatibility([K("a", ">=3.10,<3.13", {"x": "==1"}),
+                                 K("b", "==3.11", {"y": "==2"})])) == 1,
+   "overlapping on the interpreter is the ordinary case and the one that saves the disk")
+
+print("\na requirement is five things, not two")
+LOCK = ("name: x\nchannels:\n  - conda-forge\n  - bioconda\ndependencies:\n"
+        "  - r-base=4.3.3\n  - petsc4py=3.20\n  - pip\n  - pip:\n      - numpy==1.26.4\n"
+        "r:\n  - NMF==0.28\n  - owner/repo@" + "b" * 40 + "\n")
+req = R.from_lock(LOCK)
+ck("conda packages are read", req["conda"] == {"r-base": "4.3.3", "petsc4py": "3.20"},
+   str(req["conda"]))
+ck("channels are read", req["channels"] == ["conda-forge", "bioconda"], str(req["channels"]))
+ck("r pins are read", len(req["r"]) == 2, str(req["r"]))
+ck("pip pins are still read", req["packages"] == {"numpy": "==1.26.4"}, str(req["packages"]))
+ck("and `pip` itself is not a conda package", "pip" not in req["conda"], str(req["conda"]))
+onlyconda = R.from_lock("dependencies:\n  - r-base=4.3.3\n")
+ck("a lock with no python and no pip is still a REQUIREMENT", onlyconda is not None,
+   "reading only the pip section made such a plugin invisible to the resolver, and the "
+   "builder then fell back to a private path nobody planned")
+
+print("\nconda match-specs are not pip specifiers")
+a = type("A", (), {"name": "a", "spec": {"requires": {"python": "==3.11",
+                                                      "conda": {"petsc4py": "3.20"}}}})()
+b = type("B", (), {"name": "b", "spec": {"requires": {"python": "==3.11",
+                                                      "conda": {"petsc4py": "3.21"}}}})()
+c = type("C", (), {"name": "c", "spec": {"requires": {"python": "==3.11",
+                                                      "conda": {"petsc4py": "3.20"}}}})()
+gs = R.group_by_compatibility([a, b])
+ck("two different conda specs isolate", len(gs) == 2, str([g.members for g in gs]))
+ck("and the reason names both", any("3.20" in (g.why_alone or "") and "3.21" in (g.why_alone or "")
+                                    for g in gs), str([g.why_alone for g in gs]))
+ck("identical conda specs share", len(R.group_by_compatibility([a, c])) == 1)
+ck("the group NAME covers conda, so two groups cannot claim one directory",
+   R.group_by_compatibility([a])[0].name != R.group_by_compatibility([b])[0].name)
+
+print("\na constraint is not a version, and the builder needs a version")
+ck("an exact pin is the answer", R.concrete_python(">=3.10,<3.13,==3.11") == "3.11")
+ck("a range resolves to the highest candidate that satisfies it",
+   R.concrete_python(">=3.10,<3.13") == "3.12", R.concrete_python(">=3.10,<3.13"))
+ck("an unconstrained interpreter is None", R.concrete_python("") is None)
+for bad in (">=4.0", "==3.11,<3.11"):
+    try:
+        R.concrete_python(bad)
+        ck(f"{bad} raises rather than guessing", False, "it returned a version")
+    except ValueError as e:
+        ck(f"{bad} raises rather than guessing", True)
+
 print("\nreport says what was decided and why")
 lines = []
 R.report(R.group_by_compatibility(mixed), log=lines.append)

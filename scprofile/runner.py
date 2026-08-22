@@ -98,6 +98,44 @@ def interpreter(kernel, prefix=None):
                   f"Fix: scprofile install {kernel.name} --prefix <dir>, or set the variable.")
 
 
+def build_spec(group, log=None):
+    """What the installer must build for a resolved GROUP, in the shape `lock_spec` returns.
+
+    THE BUILDER BUILDS WHAT THE RESOLVER RESOLVED. Until now it did not: resolution decided WHERE
+    the environment goes and the plugin's own `lock.yml` still decided WHAT went into it - so an
+    environment shared by four plugins was built from one of them, and the other three found a
+    directory that looked finished and did not contain their packages. Nothing said so, because
+    the shared directory existed and carried a stamp.
+
+    The group is built WHOLE, including the members that were not asked for. A shared environment
+    is not divisible: building one member's slice into it would leave a directory whose name
+    claims to satisfy four requirements and satisfies one.
+    """
+    from . import resolve as RS
+    py = RS.concrete_python(group.python)
+    spec = {"python": py,
+            "channels": list(group.channels) or ["conda-forge"],
+            # VERBATIM. conda's grammar is not pip's; see resolve.Group.conda.
+            "conda": [f"{n}={v}" if str(v).strip() else n
+                      for n, v in sorted(group.conda.items())],
+            "pip": [f"{n}{c}" for n, c in sorted(group.packages.items())],
+            "r": list(group.r)}
+    if spec["r"] and not any(c.split("=", 1)[0].strip() == "r-base" for c in spec["conda"]):
+        raise ValueError(
+            f"{group.name}: its requirement names R packages and pins no `r-base`. R is the "
+            f"interpreter those resolve against, exactly as the python minor version decides "
+            f"which wheels are built, so a requirement that omits it is not a requirement.")
+    if not py and not spec["conda"]:
+        raise ValueError(
+            f"{group.name}: this requirement pins no interpreter and names no conda package, so "
+            f"there is nothing to build an environment from.")
+    if log:
+        log(f"  requirement: python {group.python or 'unconstrained'} -> "
+            + (f"python {py}" if py else "no python (another language's environment)")
+            + f", {len(spec['pip'])} pip, {len(spec['conda'])} conda, {len(spec['r'])} r")
+    return spec
+
+
 def lock_fingerprint(kernel):
     """A short digest of `lock.yml`, so an env built from an older lock can be called STALE.
 
@@ -111,8 +149,26 @@ def lock_fingerprint(kernel):
     return hashlib.sha256(f.read_bytes()).hexdigest()[:12]
 
 
+def env_fingerprint(kernel, group=None):
+    """What the `.scprofile_lock` stamp must say for this environment to be the current one.
+
+    For a RESOLVED group that is the group's own content-addressed name, which is already a
+    digest of everything that decides what gets built - so a changed requirement is a different
+    directory rather than a stale one, and the stamp's job narrows to the one thing a directory
+    cannot say: that the build reached its last act.
+    """
+    return group.name if group is not None else lock_fingerprint(kernel)
+
+
 def env_state(kernel, prefix=None):
-    """`installed` / `missing` / `stale` / `override` / `host`, with a sentence and a fix."""
+    """`installed` / `missing` / `stale` / `override` / `host`, with a sentence and a fix.
+
+    IT LOOKS WHERE THE ENVIRONMENT ACTUALLY IS. This read the per-plugin path alone, so a plugin
+    whose environment had been RESOLVED into a shared directory - built, stamped and proved - was
+    reported `missing` by `doctor`, refused by `plan` as having no environment, and rejected by
+    `install` as a half-built directory belonging to somebody else. Every one of those is the
+    same bug: two functions in this file disagreeing about where a plugin's interpreter lives.
+    """
     over, src = config_override(kernel.name)
     if over:
         return ("override", f"{src} -> {over}", "")
@@ -121,15 +177,41 @@ def env_state(kernel, prefix=None):
     if not prefix:
         return ("missing", "no --prefix given",
                 f"scprofile install {kernel.name} --prefix <dir>")
-    p = env_prefix(kernel.name, prefix)
+    grp, gpath = env_for(kernel, prefix)
+    #: The resolved location first, then the per-plugin one - resolution must not invalidate an
+    #: environment somebody already has for a reason they did not cause.
+    tried = ([(gpath, grp)] if gpath is not None else []) + [(env_prefix(kernel.name, prefix),
+                                                             None)]
+    for p, g in tried:
+        st = state_at(p, kernel, g, prefix)
+        if st[0] != "missing":
+            shared = [m for m in (g.members if g is not None else []) if m != kernel.name]
+            if st[0] == "installed" and shared:
+                return ("installed", f"{p}, shared with {', '.join(shared)}", "")
+            return st
+    return state_at(tried[0][0], kernel, tried[0][1], prefix)
+
+
+def state_at(p, kernel, group, prefix):
+    """The state of ONE candidate directory, asked about directly.
+
+    Separated from `env_state`'s search because `install` must ask about the path IT IS BUILDING
+    and not about wherever an interpreter can be found. A half-built group directory has no
+    `bin/python`, so the search walks past it to the plugin's older per-plugin environment and
+    reports `installed` - correctly, by its own question - and `install` then read that as "the
+    directory I am about to build already matches", skipped the build, and proved the OLD
+    environment. Two different questions that had one function.
+    """
     exe = p / "bin" / ("Rscript" if kernel.language == "r" else "python")
     if not exe.exists():
-        return ("missing", f"nothing at {p}", f"scprofile install {kernel.name} --prefix {prefix}")
+        return ("missing", f"nothing at {p}",
+                f"scprofile install {kernel.name} --prefix {prefix}")
+    want = env_fingerprint(kernel, group)
     stamp = p / ".scprofile_lock"
-    want = lock_fingerprint(kernel)
     got = stamp.read_text(encoding="utf-8").strip() if stamp.exists() else ""
     if want and got != want:
-        return ("stale", f"built from lock {got or 'unknown'}, current lock is {want}",
+        word = "requirement" if group is not None else "lock"
+        return ("stale", f"built from {word} {got or 'unknown'}, current {word} is {want}",
                 f"scprofile install {kernel.name} --prefix {prefix} --force")
     return ("installed", str(p), "")
 
@@ -441,12 +523,19 @@ def machine(log=None):
     return out
 
 
-def install(kernel, prefix, *, force=False, log=print):
-    """Build a kernel's environment from its lock, then prove it with its own selftest.
+def install(kernel, prefix, *, force=False, log=print, dry_run=False):
+    """Build the environment this plugin RESOLVES TO, then prove it with every member's selftest.
 
     A selftest that runs at INSTALL time is the difference between finding out now and finding out
     after the models have trained. It is the kernel's own file, because only the kernel knows what
     importing successfully means for it.
+
+    THE UNIT OF INSTALLATION IS THE RESOLVED ENVIRONMENT, NOT THE PLUGIN. The resolver decides how
+    few environments satisfy every plugin's requirement; an environment shared by four of them is
+    built once, from the merged requirement, and PROVED FOR ALL FOUR - because an environment that
+    only one of its members has ever run is an environment the other three will discover inside
+    somebody's run. That is also why installing one member costs what it costs: a shared
+    environment is not divisible.
 
     Two kinds of plugin have nothing to install and are refused HERE rather than allowed to fall
     through to a message about a missing file. "no lock.yml" is true of both and explains neither,
@@ -461,7 +550,8 @@ def install(kernel, prefix, *, force=False, log=print):
             f"actually installed:  scprofile selftest {kernel.name}\n"
             f"  If it should have its own pinned environment, set `needs_env: true` in "
             f"{kernel.path / 'kernel.yml'} and write {kernel.path / 'lock.yml'}.")
-    if not (kernel.path / "lock.yml").exists():
+    grp, _gp = env_for(kernel, prefix)
+    if grp is None and not (kernel.path / "lock.yml").exists():
         raise FileNotFoundError(
             f"{kernel.name} needs an environment and has no {kernel.path / 'lock.yml'}, so there "
             f"is nothing to build from. It is `status: {kernel.status}`.\n"
@@ -471,12 +561,31 @@ def install(kernel, prefix, *, force=False, log=print):
                if kernel.status != "built" else "")
             + f"  A lock is captured from a resolve that WORKS, every line pinned; do not write "
               f"one from memory.")
-    grp, _gp = env_for(kernel, prefix)
     p = resolved_prefix(kernel, prefix, group=grp)
-    if grp and len(grp.members) > 1:
-        log(f"  environment {grp.name} is shared with "
-            f"{', '.join(m for m in grp.members if m != kernel.name)}")
-    spec = lock_spec(kernel)
+    members = list(grp.members) if grp is not None else [kernel.name]
+    if grp is not None:
+        log(f"  environment {grp.name}")
+        log(f"      shared by: {', '.join(members)}"
+            + ("" if len(members) > 1 else "   (alone: " + (grp.why_alone or "it is the only "
+               "plugin declaring a requirement") + ")"))
+        spec = build_spec(grp, log=log)
+    else:
+        # NO RESOLVED GROUP. A plugin the host cannot discover - handed in directly, or living
+        # outside every kernel root - is not part of any resolution, so its own lock is the only
+        # statement of what it needs and it is built alone at the per-plugin path.
+        log(f"  no resolved group for {kernel.name}; building from its own lock at {p}")
+        spec = lock_spec(kernel)
+    if dry_run:
+        # RESOLVE AND REPORT, BUILD NOTHING. The resolver proves that the DECLARED constraints do
+        # not contradict each other; it cannot prove that their transitive closure installs. That
+        # is a different claim and only a resolver with an index can make it, so this prints
+        # exactly what would be handed to one and stops.
+        log(f"  --dry-run: nothing was built. {p} " + ("exists" if p.exists() else "does not exist"))
+        for field in ("channels", "conda", "pip", "r"):
+            for item in spec[field]:
+                log(f"      {field:<9} {item}")
+        log(f"      selftests that would run: {', '.join(members)}")
+        return p
     if p.exists() and not force:
         # AN ENVIRONMENT THAT EXISTS IS NOT AN ENVIRONMENT THAT WAS FINISHED. `.scprofile_lock` is
         # written as the LAST act of a successful build, so its absence means a build got part of
@@ -489,7 +598,7 @@ def install(kernel, prefix, *, force=False, log=print):
         # selftest against an environment with none of the plugin's own packages in it - and that
         # selftest failure reads as a broken package rather than as a build that never finished.
         # env_state knew and install did not; they now read the same stamp.
-        state, detail, fix = env_state(kernel, prefix)
+        state, detail, fix = state_at(p, kernel, grp, prefix)
         if state != "installed":
             raise RuntimeError(
                 f"{p} exists but is {state}: {detail}." + "\n"
@@ -509,11 +618,14 @@ def install(kernel, prefix, *, force=False, log=print):
             # The name is checked before anything is removed. `env_prefix` always produces it, so
             # the check never fires today; it is here so a future caller passing some other path
             # cannot turn --force into an rmtree of it.
-            expected = ENV_DIRNAME.format(kernel=kernel.name)
-            if p.name != expected or p.is_symlink() or not p.is_dir():
+            expected = {ENV_DIRNAME.format(kernel=kernel.name)}
+            if grp is not None:
+                expected.add(grp.name)
+            if p.name not in expected or p.is_symlink() or not p.is_dir():
                 raise RuntimeError(
                     f"refusing to remove {p} for a --force rebuild: it is not a directory named "
-                    f"{expected!r}. Remove it yourself if that is what you meant.")
+                    f"{' or '.join(sorted(expected))!r}. Remove it yourself if that is what you "
+                    f"meant.")
             log(f"  --force: removing {p} first, so the rebuild cannot inherit packages the "
                 f"current lock does not name")
             shutil.rmtree(p)
@@ -570,9 +682,41 @@ def install(kernel, prefix, *, force=False, log=print):
             subprocess.run([str(pip), "install", "--no-input"] + spec["pip"], check=True)
         if spec["r"]:
             _install_r(p, spec["r"], log=log)
-        (p / ".scprofile_lock").write_text(lock_fingerprint(kernel), encoding="utf-8")
+        (p / ".scprofile_lock").write_text(env_fingerprint(kernel, grp), encoding="utf-8")
 
-    selftest(kernel, prefix=prefix, log=log)
+    # PROVE IT FOR EVERY MEMBER. An environment shared by four plugins and proved by one is an
+    # environment three of them meet for the first time inside a run - and the whole reason
+    # `install` ends in a selftest is that an environment nothing proved fails there instead.
+    #
+    # A member whose selftest fails does not make this a partial success: the directory's name is
+    # a claim to satisfy every member's requirement, so it is not built until it does.
+    from .kernels import discover
+    known = {kernel.name: kernel}
+    for n, k in discover().items():
+        known.setdefault(n, k)
+    proved, unproved, failed = [], [], []
+    for m in members:
+        mk = known.get(m)
+        if mk is None:
+            unproved.append(f"{m} (not discoverable from here)")
+            continue
+        try:
+            if selftest(mk, prefix=prefix, log=log):
+                proved.append(m)
+            else:
+                unproved.append(f"{m} (ships none)")
+        except RuntimeError as e:                                         # noqa: PERF203
+            failed.append(m)
+            log(f"  {m}: SELFTEST FAILED\n{e}")
+    if len(members) > 1:
+        log(f"  proved for {len(proved)} of {len(members)} member(s): "
+            + (", ".join(proved) or "none")
+            + (f";  unproven: {', '.join(unproved)}" if unproved else ""))
+    if failed:
+        raise RuntimeError(
+            f"{p} was built, and {', '.join(failed)} could not run in it. A shared environment "
+            f"is not built until every plugin that resolves to it can run there - the directory's "
+            f"name is a claim about all {len(members)}, not about the one that was asked for.")
     return p
 
 

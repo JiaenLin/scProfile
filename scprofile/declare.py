@@ -54,6 +54,35 @@ CAPABILITIES = {
 _TYPES = {"int": int, "float": float, "str": str, "bool": bool, "list": list}
 
 
+def available(cap, *, keys=None, obs=(), obsm=(), layers=(), var=(),
+              has_design=False, organism=None, derived=()):
+    """Is this capability available here? ONE answer, for the planner and for the run.
+
+    THE PLAN AND THE RUN MUST AGREE BY CONSTRUCTION. `inject` is the mechanism that replaced
+    prerequisite checking inside plugins, and it was implemented at run time only: the entrypoint
+    refused a plugin whose required capability was missing, and the PLANNER - whose whole job is
+    to say that before a queue slot is spent - did not know `inject` existed. A plugin requiring
+    an organism was planned as RUN on an object with no organism, and found out an hour later.
+
+    So the question is answered here, once, and both callers ask it. A second implementation
+    beside this one is the same bug wearing different clothes.
+    """
+    spec = CAPABILITIES.get(cap)
+    if spec is None:
+        return False
+    how = spec["resolve"]
+    if cap == "organism":
+        return bool(organism)
+    if how == "design":
+        return bool(has_design)
+    if how == "derived":
+        return cap in set(derived or ())
+    name = (keys or {}).get(cap)
+    if not name:
+        return False
+    return any(name in set(where) for where in (obs, layers, obsm, var))
+
+
 class DeclarationError(Exception):
     """The declaration is wrong. Said here, where it is cheap, not inside somebody's run."""
 
@@ -128,9 +157,19 @@ def check(spec, name="<plugin>"):
                     _RS.parse(s)
                 except ValueError as e:
                     out.append(("ERROR", f"requires.{label}: {e}"))
-            if not req.get("packages"):
+            for field, want in (("packages", dict), ("conda", dict),
+                                ("channels", list), ("r", list)):
+                v = req.get(field)
+                if v is not None and not isinstance(v, want):
+                    out.append(("ERROR", f"requires.{field} must be a {want.__name__}"))
+            if not (req.get("packages") or req.get("conda") or req.get("r")):
                 out.append(("WARN", "`requires` names no packages, so it constrains only the "
                                     "interpreter"))
+            if not req.get("python") and not (req.get("conda") or req.get("r")):
+                out.append(("ERROR", "`requires` pins no python and names nothing outside pip. "
+                                     "An environment has to be built at SOME interpreter version "
+                                     "- wheels are built per minor version - and a requirement "
+                                     "that names none cannot be built at all."))
             for name, s in sorted((req.get("packages") or {}).items()):
                 if str(s).startswith("==") and "," not in str(s):
                     out.append(("WARN", f"requires {name} {s} exactly. A pin says only THAT "

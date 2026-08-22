@@ -225,7 +225,7 @@ def test_unmet_names_the_fix():
     import types
     fake = types.SimpleNamespace(
         needs_obs=["phase"], needs_obsm=[], needs_layers=["spliced"], needs_kernels=[],
-        needs_design=False, can_source_layers=False, name="fake")
+        needs_design=False, can_source_layers=False, name="fake", injects_required=[])
     probs = unmet(fake, obs=set(), obsm=set(), layers=set(), ran=())
     check("a non-sourcing kernel is still blocked", len(probs) == 2, str(probs))
     check("and names its producer", any("cellcycle" in p for p in probs), " | ".join(probs))
@@ -373,7 +373,7 @@ def test_key_map_is_resolved():
 
     k = types.SimpleNamespace(
         needs_obs=["{label}"], needs_obsm=[], needs_layers=["{counts}"], needs_kernels=[],
-        needs_design=False, can_source_layers=False, name="x")
+        needs_design=False, can_source_layers=False, name="x", injects_required=[])
     check("resolved needs are satisfied",
           unmet(k, obs={"cell_type"}, layers={"counts"}, keys=keys) == [])
     got = unmet(k, obs=set(), layers=set(), keys=keys)
@@ -731,6 +731,175 @@ def test_every_data_capability_can_actually_be_delivered():
           "label" not in inputs.capability_keys({"label": (None, "absent")}))
 
 
+def test_the_builder_builds_what_the_resolver_resolved():
+    """An environment shared by four plugins was built from ONE of their locks.
+
+    Resolution decided WHERE the environment goes; the plugin's own `lock.yml` still decided what
+    went into it. So the first member built a directory whose content-addressed name claims to
+    satisfy four requirements, and the other three found something that looked finished and did
+    not contain their packages - with a stamp saying it was current.
+
+    Every check here is on the SPEC the builder would hand a package manager, because that is the
+    artefact the defect lived in and no unit test looked at it.
+    """
+    print("\nthe builder builds the group, not the plugin")
+    from scprofile import resolve as RS
+    from scprofile import runner
+    ks = discover()
+    groups = RS.group_by_compatibility(list(ks.values()))
+    shared = [g for g in groups if len(g.members) > 1]
+    check("the shipped set resolves to at least one SHARED environment", bool(shared),
+          str([(g.name, g.members) for g in groups]))
+    if not shared:
+        return
+    g = shared[0]
+    spec = runner.build_spec(g)
+    check("the resolved python is a VERSION, not a constraint",
+          bool(spec["python"]) and "," not in spec["python"] and ">" not in spec["python"],
+          str(spec["python"]))
+    pips = {x.split("=")[0].split(">")[0].split("<")[0] for x in spec["pip"]}
+    for m in g.members:
+        req = RS.requirement(ks[m])
+        missing = sorted(set(req["packages"]) - pips)
+        check(f"every package {m} requires is in the build", not missing, str(missing))
+        cmissing = sorted(set(req["conda"]) - {x.split("=")[0] for x in spec["conda"]})
+        check(f"and every conda package {m} requires", not cmissing, str(cmissing))
+    # A conda match-spec is not a pip specifier. `petsc4py=3.20` means 3.20.*; rewriting it as
+    # `==3.20` asks for a version that does not exist, and the build fails on a package the
+    # plugin pinned correctly.
+    for item in spec["conda"]:
+        check(f"conda spec {item!r} is carried verbatim", "==" not in item, item)
+    for m in ("cellchat", "scenic"):
+        if m in ks:
+            gm = [x for x in groups if m in x.members]
+            check(f"{m} takes part in resolution", len(gm) == 1,
+                  "a plugin that needs an environment and is invisible to the resolver gets a "
+                  "private path nobody planned")
+
+
+def test_an_environment_is_found_where_it_was_resolved_to():
+    """`env_state` read the per-plugin path alone, so a SHARED environment read as `missing`.
+
+    Built, stamped and proved - and `doctor` said MISSING, `plan` said NO ENVIRONMENT, and
+    `install` refused it as a half-built directory belonging to somebody else. One bug: two
+    functions in one file disagreeing about where a plugin's interpreter lives.
+    """
+    print("\nan installed environment is found where resolution put it")
+    from scprofile import resolve as RS
+    from scprofile import runner
+    ks = discover()
+    shared = [g for g in RS.group_by_compatibility(list(ks.values())) if len(g.members) > 1]
+    if not shared:
+        check("a shared group exists to test", False)
+        return
+    g = shared[0]
+    with tempfile.TemporaryDirectory() as td:
+        pref = Path(td)
+        k = ks[g.members[0]]
+        state, why, _fix = runner.env_state(k, pref)
+        check("nothing built yet reads as missing", state == "missing", f"{state}: {why}")
+        env = pref / g.name
+        (env / "bin").mkdir(parents=True)
+        (env / "bin" / "python").write_text("#!/bin/sh\n")
+        (env / ".scprofile_lock").write_text(runner.env_fingerprint(k, g))
+        for m in g.members:
+            state, why, _fix = runner.env_state(ks[m], pref)
+            check(f"{m} finds the shared environment", state == "installed", f"{state}: {why}")
+        check("and is told who it shares with",
+              "shared with" in runner.env_state(ks[g.members[0]], pref)[1],
+              runner.env_state(ks[g.members[0]], pref)[1])
+        # The stamp is the one thing a directory cannot say: that the build reached its last act.
+        (env / ".scprofile_lock").unlink()
+        state, why, fix = runner.env_state(ks[g.members[0]], pref)
+        check("a stampless shared environment is stale, not installed", state == "stale", why)
+        check("and the fix names --force", "--force" in fix, fix)
+
+        # THE SEARCH AND THE SPECIFIC DIRECTORY ARE DIFFERENT QUESTIONS. A half-built group
+        # directory has no interpreter, so the search walks past it to an older per-plugin
+        # environment and answers `installed` - and `install`, reading that, skipped the build it
+        # was about to do and proved the old environment instead.
+        import shutil as _sh
+        _sh.rmtree(env)
+        k = ks[g.members[0]]
+        old_env = runner.env_prefix(k.name, pref)
+        (old_env / "bin").mkdir(parents=True)
+        (old_env / "bin" / "python").write_text("#!/bin/sh\n")
+        (old_env / ".scprofile_lock").write_text(runner.lock_fingerprint(k))
+        (pref / g.name).mkdir(parents=True)            # started, never finished
+        check("the search still finds the usable interpreter",
+              runner.env_state(k, pref)[0] in ("installed", "stale"),
+              str(runner.env_state(k, pref)))
+        check("but the half-built group directory is missing when asked about DIRECTLY",
+              runner.state_at(pref / g.name, k, g, pref)[0] == "missing",
+              str(runner.state_at(pref / g.name, k, g, pref)))
+
+
+def test_install_does_not_demand_a_lock_from_a_plugin_that_declares_a_requirement():
+    """A one-file plugin declaring `requires` has no `lock.yml`, and could not be installed.
+
+    `install` looked for `kernel.path / "lock.yml"`, which for the one-file shape is a path
+    INSIDE a file - so the whole `requires` shape, the shape the layering was corrected to, had
+    no build path at all. The plugin was listable, plannable and unbuildable.
+    """
+    print("\ninstalling a plugin that declares a requirement rather than a lock")
+    from scprofile import runner
+    ks = discover()
+    one_file = [k for k in ks.values() if k.spec.get("requires") and not k.path.is_dir()]
+    check("the shipped set has a one-file plugin with a requirement", bool(one_file),
+          str(sorted(ks)))
+    if not one_file:
+        return
+    k = one_file[0]
+    check(f"{k.name} ships no lock.yml", not (k.path / "lock.yml").exists())
+    said = []
+    with tempfile.TemporaryDirectory() as td:
+        runner.install(k, Path(td), dry_run=True, log=said.append)
+    txt = "\n".join(said)
+    check("install resolves it rather than refusing", "environment scprofile-env-" in txt, txt)
+    check("and names every plugin the environment is shared by", "shared by:" in txt, txt)
+    check("and every member's selftest is what would prove it",
+          "selftests that would run:" in txt, txt)
+    check("and it builds NOTHING on a dry run", "nothing was built" in txt, txt)
+
+
+def test_a_required_capability_is_checked_before_the_run_not_inside_it():
+    """`inject` gated the RUN and was invisible to the PLAN.
+
+    The entrypoint refuses a plugin whose required capability is missing - correctly - and the
+    planner, whose entire job is to say that before a queue slot is spent, did not know `inject`
+    existed. A plugin requiring an organism was planned RUN against an object with none.
+
+    Both now ask `declare.available`, so they cannot disagree.
+    """
+    print("\na required capability reaches the planner")
+    from scprofile import declare as D
+    from scprofile.kernels import unmet
+    ks = discover()
+    withreq = [k for k in ks.values() if k.injects_required]
+    check("a shipped plugin declares required capabilities", bool(withreq),
+          str({n: k.injects_required for n, k in ks.items()}))
+    if not withreq:
+        return
+    k = sorted(withreq, key=lambda x: x.name)[0]
+    probs = unmet(k, obs=set(), obsm=set(), layers=set(), ran=set(), keys={}, organism=None)
+    check(f"{k.name} is blocked when its capabilities are absent", bool(probs), str(probs))
+    check("and each problem names the capability and a fix",
+          all("capability" in p and "Fix:" in p for p in probs), " | ".join(probs))
+    # Satisfied, it must not be blocked - a check that always fires is a check nobody keeps.
+    keys = {c: c for c in k.injects_required}
+    probs = unmet(k, obs=set(), obsm=set(), layers=set(k.injects_required), ran=set(),
+                  keys=keys, organism="mouse", has_design=True,
+                  derived=[c for c in k.injects_required])
+    check("and not blocked once they are available", not probs, str(probs))
+    check("organism resolves from the ORGANISM, never from a column",
+          D.available("organism", keys={"organism": "x"}, obs={"x"}) is False)
+    check("a derived capability resolves from what another plugin provides",
+          D.available("activity", derived=["activity"]) is True)
+    check("and an unknown capability is never available",
+          D.available("no_such_capability", keys={"no_such_capability": "x"},
+                      obs={"x"}) is False)
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -754,6 +923,10 @@ def main():
     test_scaffold_cannot_produce_a_running_noop()
     test_validate_catches_what_got_through()
     test_wrapping_plugins_record_upstream()
+    test_the_builder_builds_what_the_resolver_resolved()
+    test_an_environment_is_found_where_it_was_resolved_to()
+    test_install_does_not_demand_a_lock_from_a_plugin_that_declares_a_requirement()
+    test_a_required_capability_is_checked_before_the_run_not_inside_it()
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")

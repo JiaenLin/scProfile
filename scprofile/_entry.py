@@ -38,21 +38,21 @@ from scprofile.plugin import Context                                      # noqa
 
 
 def _has(ctx, cap, inp):
-    """Is this capability actually available? The host answers; the plugin never asks."""
-    spec = declare.CAPABILITIES.get(cap, {})
-    how = spec.get("resolve")
-    if cap == "organism":
-        return bool(ctx.organism)
-    if how == "design":
-        return bool(inp.get("design"))
-    if how == "derived":
-        return cap in (inp.get("upstream") or {}) or cap in (inp.get("provided") or [])
-    name = ctx.keys.get(cap)
-    if not name:
-        return False
+    """Is this capability actually available? The host answers; the plugin never asks.
+
+    The ANSWER lives in `declare.available`, so the planner and the run cannot disagree about
+    what a plugin will be given; this only reads the object into the shape it wants.
+    """
     A = ctx.adata
-    return (name in A.obs or name in A.layers or name in A.obsm
-            or name in getattr(A, "var", {}))
+    return declare.available(
+        cap, keys=ctx.keys,
+        obs=(A.obs.columns if A is not None else ()),
+        layers=(A.layers.keys() if A is not None else ()),
+        obsm=(A.obsm.keys() if A is not None else ()),
+        var=(getattr(A, "var", None).columns if A is not None and getattr(A, "var", None)
+             is not None else ()),
+        has_design=bool(inp.get("design")), organism=ctx.organism,
+        derived=list(inp.get("upstream") or {}) + list(inp.get("provided") or []))
 
 
 def load(path):

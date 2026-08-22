@@ -149,6 +149,17 @@ class Kernel:
         return [str(exe), str(st)] if st else None
 
     @property
+    def injects_required(self):
+        """The capabilities the host must supply or it will not call `run()`.
+
+        Read here so every consumer asks the kernel rather than reaching into `spec` - the
+        planner needs it as much as the entrypoint does, and reaching in is how one of them
+        came to be written without it.
+        """
+        inj = self.spec.get("inject") or {}
+        return list(inj.get("required") or []) if isinstance(inj, dict) else []
+
+    @property
     def needs_obs(self):
         return self._list("needs_obs")
 
@@ -571,13 +582,28 @@ def resolve_keys(items, keys):
     return out
 
 
-def unmet(kernel, *, obs=(), obsm=(), layers=(), ran=(), has_design=False, keys=None):
+def unmet(kernel, *, obs=(), obsm=(), layers=(), ran=(), has_design=False, keys=None,
+          organism=None, var=(), derived=()):
     """Everything `kernel` needs and does not have. One line per problem, each with its FIX.
 
     Checked before the kernel is launched. A prerequisite discovered inside a kernel is a
     prerequisite discovered after the environment was resolved and the object was read.
     """
+    from . import declare as _D
     problems = []
+    # REQUIRED CAPABILITIES, which the host resolves and the plugin therefore never checks. The
+    # entrypoint refuses without them; until this existed, nothing upstream of the run knew - so
+    # the plan said RUN and the refusal arrived an hour later, in a queue.
+    for cap in (kernel.injects_required or []):
+        if _D.available(cap, keys=keys, obs=obs, obsm=obsm, layers=layers, var=var,
+                        has_design=has_design, organism=organism, derived=derived):
+            continue
+        why = (_D.CAPABILITIES.get(cap) or {}).get("why", "the host cannot resolve it here")
+        how = (_D.CAPABILITIES.get(cap) or {}).get("resolve", "data")
+        fix = {"data": f"name it with a --{cap}-key style flag, or run whatever writes it",
+               "design": "pass --design",
+               "derived": f"run a plugin that provides {cap!r} first"}.get(how, "")
+        problems.append(f"capability {cap!r} is not available: {why}.  Fix: {fix}.")
     for c in resolve_keys(kernel.needs_obs, keys):
         if c not in obs:
             who = _who_produces(f"obs[{c}]")
