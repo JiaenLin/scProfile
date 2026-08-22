@@ -268,6 +268,55 @@ def test_the_plan_and_the_run_search_the_same_distance():
         check("size comes from the directory entry, not from opening it",
               all(s.size > 0 for s in got), str([s.size for s in got]))
 
+    # THE ATTACH ITSELF, on a synthetic object, because it had never run on a real one: velocity
+    # refused for want of counts in every previous cycle, so the cost and the correctness of this
+    # step were both unmeasured. Needs numpy/scipy/anndata, so it is skipped where they are absent
+    # - and SAID to be skipped, because a check that quietly does nothing reads as one that passed.
+    try:
+        import anndata as _ad, numpy as _np, pandas as _pd, scipy.sparse as _sp
+    except ImportError as e:                                              # noqa: BLE001
+        print(f"  SKIP attach: {e} (this host has no array stack; the cluster runs it)")
+    else:
+        obs = _pd.DataFrame({"sample": ["S1"] * 3 + ["S2"] * 3},
+                            index=["S1_AAACCCAAGAAACACT", "S1_AAACCCAAGAAACACC",
+                                   "S1_AAACCCAAGAAACACG", "S2_AAACCCAAGAAACACT",
+                                   "S2_AAACCCAAGAAACACC", "S2_AAACCCAAGAAACACA"])
+        A = _ad.AnnData(_np.zeros((6, 4), dtype="float32"), obs=obs,
+                        var=_pd.DataFrame(index=["Gene0", "Gene1", "Gene2", "Gene3"]))
+
+        class _Src:
+            def __init__(self, sample, val):
+                self.kind, self.path, self.sample, self.why, self.size = \
+                    "mtx", Path(f"/nowhere/{sample}"), sample, "", 1
+                self.val = val
+
+        payload = {}
+        for sample, val in (("S1", 5.0), ("S2", 7.0)):
+            bcs = [f"{b}-1" for b in ("AAACCCAAGAAACACT", "AAACCCAAGAAACACC",
+                                      "AAACCCAAGAAACACG" if sample == "S1"
+                                      else "AAACCCAAGAAACACA")]
+            m = _sp.csr_matrix(_np.full((3, 2), val, dtype="float32"))
+            payload[sample] = (bcs, ["Gene1", "Gene3"], [m, m * 2])
+        real_load = SRC.load
+        SRC.load = lambda src, log=print, names=SRC.DEFAULT_LAYERS: payload[src.sample]
+        try:
+            ok, note = SRC.attach(A, [_Src("S1", 5.0), _Src("S2", 7.0)], sample_key="sample",
+                                  log=lambda *_a: None)
+        finally:
+            SRC.load = real_load
+        check("it attaches", ok, note)
+        check("both layers land", {"spliced", "unspliced"} <= set(A.layers), str(list(A.layers)))
+        sp_dense = _np.asarray(A.layers["spliced"].todense())
+        check("every cell is covered", (sp_dense.sum(axis=1) > 0).all(), str(sp_dense))
+        check("counts land in the named genes only",
+              (sp_dense[:, [0, 2]] == 0).all() and (sp_dense[:, [1, 3]] > 0).all(), str(sp_dense))
+        # THE FAILURE THAT PRODUCES A FULL MATRIX AND A WRONG ANSWER: the same core barcode
+        # recurs across samples, so matching globally gives one animal's counts to another's cell.
+        check("a sample's counts stay in that sample",
+              (sp_dense[:3, 1] == 5.0).all() and (sp_dense[3:, 1] == 7.0).all(), str(sp_dense[:, 1]))
+        check("and the second layer is not the first",
+              (_np.asarray(A.layers["unspliced"].todense())[:3, 1] == 10.0).all())
+
 
 def test_the_core_share_reaches_the_thread_pools():
     """A plugin cannot honour its share for numpy. The host has to, and now does.

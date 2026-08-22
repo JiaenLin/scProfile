@@ -200,3 +200,116 @@ found:  nothing.
         restricted: `checked: all 2 known plugin(s) appear exactly once`.
 
 clean:  7 suites, validate 0 errors, on `fb0e7b4`.
+
+## 2026-08-22 — cycle 6 (PBS 677509 build, 677510 build, 677555 build, ...)
+
+The cycle that converted the last two plugins, and the one that found the most. Nothing here was
+looked for: every finding is something the conversion, or the first attempt to build all nine
+environments together, walked into.
+
+converted: `velocity` (5 files, 1,286 lines) and `cellcycle` (2 files, 329 lines) to one file
+        each. `kernels/` is nine `.py` files and no directories.
+
+**THE SHAPE HAD TO GROW TO TAKE THEM, TWICE, AND BOTH GAPS DELETE RATHER THAN REFUSE.**
+
+        [host] A ONE-FILE PLUGIN COULD NOT HAVE A GUARD. `guard_verdict` reached for
+              `kernel.path / "guard.py"`, which for this shape is a path inside a file and can
+              never exist - so converting a guarded plugin to the shape the host prefers removed
+              its check with no error, no line in the log, and the first dataset the guard existed
+              to refuse analysed and reported. `def guard(g)` in the file, launched by the SHAPE
+              through `_entry.py --guard`, exactly as `argv` and `selftest_argv` already were
+              → 5182ec6
+        [host] `produces` COULD NOT DESCRIBE VELOCITY'S OUTPUTS. `obs[latent_time]` exists only
+              in dynamical mode and `obsm[velocity_*]` is named at run time; `undeclared()`
+              understood the glob and `declaration_drift()` understood neither - two functions
+              reading one declaration and disagreeing. A correct run would have reported
+              `obsm[velocity_*]` TWICE, as a promise broken and as an output undeclared. `?` marks
+              an output whose absence is not drift, and both now glob on the NAME: in fnmatch
+              `[phase]` is a character class, so globbing `slot[name]` makes `obs[phase]` match
+              `obsp` and not itself → 5182ec6
+
+The layer search MOVED into the host rather than being rewritten: `scprofile/sources.py`, reached
+through `ctx.source_layers()`. It was never about velocity - any plugin needing what the ALIGNER
+produced is in the same position, and the host is the only party holding the upstream chain.
+
+found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two walks for one
+              question, in two layers. `plan` walks to depth 14 with 400,000 visits, pruning
+              anything whose name CONTAINS `__STARtmp`; the walk a plugin runs went to depth 3,
+              4,000 visits, and an exact-name skip list that `Aging1__STARtmp` does not match.
+              STARsolo delivers `<sample>_Solo.out/Velocyto/filtered/` at DEPTH 9, so the plan
+              could name the directory holding the spliced counts and the run, given exactly that
+              root, could not reach it. Depth, cap and prune list are one statement each now, and
+              `find` reports `exhausted` - the run side had never learned what the plan side
+              already knew, that a search which gave up and a project that has nothing return the
+              same empty list → e87e29e. Separately, `run` harvested fewer leads than `plan`:
+              the recorded chain but not the directories around the object → 5182ec6
+        [host] **THE WAVE STARTED EVERY INSTANCE AT ONCE.** `EXECUTION.md` §4 has stated
+              `min(budget / smallest_declared, ready)` since it was written and nothing
+              implemented it. `_budget` divides the share each instance is TOLD it has, which is
+              a different question from how many run. Nine plugins, three of them `per_unit`, ten
+              samples: 37 instances, 37 subprocesses, each opening a 3 GB object, on a node asked
+              for eight cores - every one correctly told `cores: 1` → 623d186
+        [host] **AND THE SHARE NEVER REACHED THE ONE POOL A PLUGIN CANNOT CONTROL.** numpy's BLAS
+              sizes itself from `OMP_NUM_THREADS` at import, before any plugin code runs, and
+              inherits what the job script exported for its own sake. Eight instances on sixteen
+              cores is 128 BLAS threads, with every instance correctly told `cores: 1`. The
+              runner sets all six thread variables from the manifest it just wrote → e4dfcf5
+        [host] **FIVE PLUGINS READ `(mask, groups)` AS `(populations, dropped)`.** That is one bad
+              affordance, not five mistakes: `len(pops)` becomes the CELL COUNT, so a refusal that
+              should fire never does and a headline claims a hundred thousand populations, and
+              `if dropped:` asks the truth value of an array and raises. liana, cellchat and
+              abundance would each have died before reaching their method. It still unpacks as
+              `(mask, groups)`, and it now carries `.names` and `.dropped`, which is what all five
+              were reaching for. `validate` refuses the wrong destructuring by name - and caught
+              the fifth, cellchat, within a minute of existing → 5584e3c
+        [host] `ctx.emit_figure` overrode the publication DPI with a hard 200 and never closed a
+              figure. Neither could be noticed: SEVEN one-file plugins had shipped and not one
+              drew anything, so the figure half of the contract was entirely unexercised until
+              the two plugins that draw were converted. With it, `ctx.plot()`, `ctx.figure` and
+              `ctx.layers()` - a plugin should not import a host module to draw, and
+              `list(adata.layers)` yields anndata's `None` alias for X → 5182ec6
+        [host] **A FAILED BUILD TAUGHT US NOTHING ABOUT THE OTHER EIGHT.** The R step of an
+              eight-member group failed; the pip half - 130 packages, 25 minutes - was complete,
+              and eight selftests would have taken a minute. `install` raised before any of them,
+              `doctor` reported all eight `stale`, and the job ended knowing nothing about eight
+              plugins never proved on this machine. That is one defect learned per job for however
+              many defects there are. The selftests now run anyway, reported as DIAGNOSTIC; no
+              stamp is written and `install` still refuses → adf7d32
+        [host] an aligner writes the same counts twice - `Velocyto/filtered/` beside
+              `Velocyto/raw/` - and `attach` read both: 22 GB of MatrixMarket text parsed and
+              discarded for identical cells. Cheapest first, from the size the walk already had,
+              and stop when every cell is covered → 5412b66
+
+        [declaration] **abundance, liana and cellchat each destructured `ctx.populations()`
+              wrongly** and would have crashed → 5584e3c. abundance was found by reading, cellchat
+              by the check that reading produced.
+        [declaration] **cellchat named five R packages; NMF, presto and CellChat need about
+              forty-five.** `remotes` runs with `dependencies = FALSE` so nothing is chosen at
+              install time, which makes a forgotten dependency a line to add rather than an
+              unpinned install nobody sees - and the install receipt named them:
+              `ERROR: dependencies 'registry', 'rngtools', ... are not available for package
+              'NMF'` → adf7d32
+        [declaration] **scenic started the node's worth of dask workers, once per sample.**
+              `client_or_address="local"` builds a LocalCluster sized from
+              `multiprocessing.cpu_count()`; scenic is `per_unit: sample`, so a ten-sample cohort
+              is ten times the machine in workers. `ctx.effect` is the mechanism and the example
+              in its own docstring → c49b3f1
+        [declaration] cellcycle grouped its per-population figure by the RAW label column, so an
+              annotator's refusal to call a cell type appeared as a population with a cycling
+              fraction. velocity's per-population table did the same, marked with an
+              `is_sentinel` column and sorted last. Both use `ctx.populations()` now → 5182ec6
+
+        [method] nothing yet.
+
+harness: the job script grew `ALL=1`, `SEARCH`, `CORES` and `MANAGER_PATH` → 2a28a40, 5f719d1.
+        `MANAGER_PATH` matters more than it looks: micromamba solved a 51-package conda-forge +
+        bioconda spec in seconds where the classic conda solver had taken minutes on 7. And the
+        line that added it was written as `[ -n "$X" ] && export ...`, which under `set -e` ends
+        the job when X is unset - before the live log is opened, so it looks exactly like a job
+        that produced nothing → b27ed62.
+
+format: the plugin FORMAT had to change twice, and both changes are the same lesson - **a shape
+        that cannot express something deletes it silently rather than refusing it.** Neither
+        change was needed by a plugin somebody else wrote; both were found by moving two plugins
+        the project already had into the shape the project already preferred, which is the
+        cheapest possible test of a format and had never been run.

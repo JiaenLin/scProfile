@@ -264,7 +264,17 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
     import scipy.sparse as sp
 
     n, g = A.n_obs, A.n_vars
-    dest = [sp.lil_matrix((n, g), dtype="float32") for _ in names]
+    # COO PIECES, ASSEMBLED ONCE. This built a `lil_matrix((n_obs, n_vars))` per layer and
+    # assigned each source into it with `D[np.ix_(dst_rows, dst_cols)] = M[...]`. That is correct
+    # and it does not survive a real object: a LIL is a Python list per row, so a hundred thousand
+    # cells by thirty-four thousand genes at ~150 million nonzeros per layer is tens of GB of
+    # interpreter objects, filled one source at a time through scipy's Python-level fancy-index
+    # assignment, and then converted. Nothing had ever run it - velocity refused for want of
+    # counts in every previous cycle - so the cost was unmeasured rather than accepted.
+    #
+    # Row, column and value arrays per source, concatenated once at the end, is the same result
+    # in numpy: int32 indices (n_obs and n_vars are both far below 2^31) and float32 values.
+    pieces = [[] for _ in names]
     filled = np.zeros(n, dtype=bool)
     var_pos = {str(v).upper(): i for i, v in enumerate(A.var_names)}
     obs_core = np.array([core(b) for b in A.obs_names])
@@ -302,12 +312,21 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
         want = {}
         for j, b in enumerate(bcs):
             want.setdefault(core(b), j)
-        rows = [(i, want[obs_core[i]]) for i in scope if obs_core[i] in want]
-        rate = len(rows) / max(1, len(scope))
-        log(f"    {src.kind}  {src.path.name}: {len(rows):,}/{len(scope):,} barcodes matched "
+        matched = [(i, want[obs_core[i]]) for i in scope if obs_core[i] in want]
+        rate = len(matched) / max(1, len(scope))
+        log(f"    {src.kind}  {src.path.name}: {len(matched):,}/{len(scope):,} barcodes matched "
             f"({100 * rate:.1f}%) {scope_why}")
         if rate < min_match:
             notes.append(f"{src.path.name} matched only {100 * rate:.1f}% and was NOT used")
+            continue
+        # A CELL IS FILLED ONCE, BY THE FIRST SOURCE THAT COVERS IT - which, given the ordering
+        # above, is the cheapest. The old code overwrote, so the winner was whichever source came
+        # last in an unspecified order; taking the first makes it deterministic AND means the
+        # concatenated pieces below hold no duplicate (row, column), which would otherwise be
+        # summed rather than replaced.
+        rows = [(i, j) for i, j in matched if not filled[i]]
+        if not rows:
+            notes.append(f"{src.path.name}: every cell it matched was already covered")
             continue
 
         gcols = [var_pos.get(str(gn).upper()) for gn in genes]
@@ -317,11 +336,13 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
             log(f"      no gene name overlapped the object - not used")
             continue
         src_cols = np.array([k for k, _ in keep])
-        dst_cols = np.array([c for _, c in keep])
+        dst_cols = np.array([c for _, c in keep], dtype="int32")
         src_rows = np.array([j for _, j in rows])
-        dst_rows = np.array([i for i, _ in rows])
-        for D, M in zip(dest, mats):
-            D[np.ix_(dst_rows, dst_cols)] = M[np.ix_(src_rows, src_cols)]
+        dst_rows = np.array([i for i, _ in rows], dtype="int32")
+        for bucket, M in zip(pieces, mats):
+            sub = M[np.ix_(src_rows, src_cols)].tocoo()
+            bucket.append((dst_rows[sub.row], dst_cols[sub.col],
+                           np.asarray(sub.data, dtype="float32")))
         filled[dst_rows] = True
         used += 1
         notes.append(f"{src.path.name}: {len(rows):,} cells, {len(keep):,} genes")
@@ -336,7 +357,14 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
     cov = float(filled.mean())
     log(f"  attached from {used} source(s): {filled.sum():,}/{n:,} cells "
         f"({100 * cov:.1f}%) have {'/'.join(names)} counts")
-    for w, D in zip(names, dest):
-        A.layers[w] = sp.csr_matrix(D)
+    for w, bucket in zip(names, pieces):
+        if bucket:
+            r = np.concatenate([x[0] for x in bucket])
+            c = np.concatenate([x[1] for x in bucket])
+            v = np.concatenate([x[2] for x in bucket])
+        else:
+            r = c = np.zeros(0, dtype="int32")
+            v = np.zeros(0, dtype="float32")
+        A.layers[w] = sp.coo_matrix((v, (r, c)), shape=(n, g), dtype="float32").tocsr()
     return True, (f"{used} source(s), {filled.sum():,}/{n:,} cells ({100 * cov:.1f}%) covered. "
                   + "; ".join(notes))

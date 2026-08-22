@@ -133,6 +133,16 @@ run)
     SEL=(--kernel "$KERNELS")
   fi
 
+  say "0. THE SUITES, WHERE THE ARRAYS ARE"
+  # A maintainer's workstation may have no numpy, pandas or anndata at all - this project's does
+  # not - so a check that needs them is skipped there and SAYS it was skipped. Running the same
+  # suites with the host interpreter is where those checks actually execute; seven suites green
+  # on a machine that cannot import an array is a weaker statement than it looks.
+  for t in "$TOOL"/tests/test_*.py; do
+    if $PY "$t" >/dev/null 2>&1; then echo "  ok   $(basename "$t")"
+    else echo "  FAIL $(basename "$t")"; $PY "$t" 2>&1 | tail -25 | sed 's/^/       /'; fi
+  done
+
   say "1. DECLARE"
   $PY -m scprofile.cli validate ${REFS:+--references "$REFS"} || echo "  validate exit $?"
 
