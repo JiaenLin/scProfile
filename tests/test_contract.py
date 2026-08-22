@@ -179,6 +179,47 @@ def test_velocity_declaration():
           str(undeclared(k, bad)))
 
 
+def test_the_plan_and_the_run_search_the_same_distance():
+    """Two walks for one question, in two layers, with different reach.
+
+    The PLANNER walks for missing layers so it can say "pass --search <this>"; the RUN walks the
+    leads it was given so a plugin can attach them. They were written separately: depth 14 with
+    400,000 visits and a substring prune on one side, depth 3 with 4,000 visits and an exact-name
+    skip list on the other. Measured on real aligner output, STARsolo delivers
+    `<sample>_Solo.out/Velocyto/filtered/` at DEPTH 9 below a project root - so the plan could
+    name the directory and the run, handed exactly that root, could not reach it, and would refuse
+    with a list of everywhere it had looked, none of it deep enough.
+    """
+    print("\nthe plan and the run reach the same distance")
+    from scprofile import provenance as PV, sources as SRC
+    check("the depth is one number", SRC.MAX_DEPTH == PV.WALK_DEPTH,
+          f"{SRC.MAX_DEPTH} vs {PV.WALK_DEPTH}")
+    check("so is the visit cap", SRC.MAX_DIRS == PV.WALK_CAP,
+          f"{SRC.MAX_DIRS} vs {PV.WALK_CAP}")
+    check("and it is deep enough for real aligner output", SRC.MAX_DEPTH >= 9,
+          "Velocyto/filtered sits at depth 9 below a project root")
+    check("the run prunes what the plan prunes", all(p in SRC.PRUNE for p in PV.PRUNE))
+    # SUBSTRING, NOT NAME. The directory is `<sample>__STARtmp`.
+    check("a STARsolo temp tree is pruned by substring", SRC._pruned("Aging1__STARtmp"))
+    check("and an ordinary directory is not", not SRC._pruned("Velocyto"))
+
+    # A SEARCH THAT GAVE UP MUST NOT LOOK LIKE ONE THAT FINISHED.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        deep = root
+        for i in range(4):
+            deep = deep / f"d{i}"
+        (deep / "Velocyto" / "filtered").mkdir(parents=True)
+        for n in ("spliced.mtx", "unspliced.mtx", "barcodes.tsv"):
+            (deep / "Velocyto" / "filtered" / n).write_text("x")
+        got = SRC.find([str(root)])
+        check("a triplet five levels down is found", len(got) == 1, str(got))
+        check("and the walk reports that it finished", not SRC.find.exhausted)
+        got = SRC.find([str(root)], max_depth=2)
+        check("a walk that stopped short says so", SRC.find.exhausted and not got,
+              f"found {len(got)}, exhausted={SRC.find.exhausted}")
+
+
 def test_the_core_share_reaches_the_thread_pools():
     """A plugin cannot honour its share for numpy. The host has to, and now does.
 
@@ -1308,6 +1349,7 @@ def main():
         test_a_plugin_is_launched_the_way_its_shape_requires(tmp)
     test_figure_conventions()
     test_velocity_declaration()
+    test_the_plan_and_the_run_search_the_same_distance()
     test_the_core_share_reaches_the_thread_pools()
     test_one_file_plugins_are_importable_by_the_host()
     test_a_one_file_plugin_can_have_a_guard()

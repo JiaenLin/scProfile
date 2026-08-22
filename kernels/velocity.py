@@ -709,8 +709,11 @@ def run(ctx):
                 "counts matrix, and the only route is to re-quantify from FASTQ or BAM in an "
                 "intron-aware mode.\n"
                 f"  Present layers: {sorted(have) or 'none'}.\n"
-                f"  Searched {len(ctx.searched)} lead(s) taken from the upstream chain:\n    "
-                + "\n    ".join(ctx.searched[:8] or ["(none recorded)"])
+                f"  Searched {len(ctx.searched)} lead(s) taken from the upstream chain"
+                + (", AND THE WALK DID NOT FINISH - it hit its depth or visit limit, so this is "
+                   "a fact about the search and not about your project" if ctx.search_exhausted
+                   else "")
+                + ":\n    " + "\n    ".join(ctx.searched[:8] or ["(none recorded)"])
                 + (f"\n  Candidates opened but not usable: {sourced_note}" if sourced_note else "")
                 + "\n  Fix: --search <dir> to point at the aligner output, or "
                   "--params '{\"spliced_source\": \"<dir>\"}'.")

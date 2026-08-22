@@ -178,8 +178,11 @@ class Context:
         self.caveats, self.absent = [], []
         #: So `populations()` says what it set aside ONCE however many tables a plugin writes.
         self._said_populations = False
-        #: Every directory `source_layers()` walked, so a refusal can name where it looked.
+        #: Every directory `source_layers()` walked, so a refusal can name where it looked -
+        #: and whether the walk FINISHED, because a search that gave up and a project that has
+        #: nothing return the same empty list, and only one of them is a fact about the data.
         self.searched = []
+        self.search_exhausted = False
         for d in ("tables", "figures", "obs", "arrays"):
             (self.out / d).mkdir(parents=True, exist_ok=True)
 
@@ -311,8 +314,11 @@ class Context:
                  + (f", {len(hints)} sample name(s) known" if hints else ""))
         cands = sources.find(roots, hints, log=self.log, names=tuple(names))
         self.searched = list(sources.find.looked)
-        self.log(f"  visited {sources.find.visited} director(ies), "
-                 f"found {len(cands)} candidate(s)")
+        self.search_exhausted = bool(sources.find.exhausted)
+        self.log(f"  visited {sources.find.visited:,} director(ies), "
+                 f"found {len(cands)} candidate(s)"
+                 + ("  (the walk hit its limit and did NOT finish)"
+                    if self.search_exhausted else ""))
         if not cands:
             return False, ""
         return sources.attach(self.adata, cands, sample_key=samp, min_match=float(min_match),

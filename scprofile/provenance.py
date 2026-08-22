@@ -150,8 +150,25 @@ _SOURCE_FILES = (("velocyto loom", ".loom"),)
 #: `<sample>__STARtmp` trees with thousands of entries; walking them exhausts any visit budget
 #: before the real output two levels away is reached. Pruning is not a shortcut here - it is what
 #: makes the budget mean anything.
-_PRUNE = ("__STARtmp", "_STARtmp", "STARtmp", ".git", ".snakemake", "__pycache__",
-          ".nextflow", "work", ".cache", "site-packages")
+#:
+#: MATCHED AS A SUBSTRING, not as a name: the directory is `<sample>__STARtmp`, so an exact-name
+#: skip list does not touch it.
+PRUNE = ("__STARtmp", "_STARtmp", "STARtmp", ".git", ".snakemake", "__pycache__",
+         ".nextflow", "work", ".cache", "site-packages")
+_PRUNE = PRUNE                       # the old private name, kept for anything still using it
+
+#: HOW FAR AND HOW WIDE THE WALK GOES. Measured against real aligner output rather than chosen:
+#: STARsolo delivers `<sample>_Solo.out/Velocyto/filtered/` at depth 9 below a project root, and
+#: its `__STARtmp` siblings exhaust a small budget long before that.
+#:
+#: NAMED, AND SHARED WITH `sources.py`, because the plan and the run must reach the SAME distance.
+#: They did not: the planner walked to depth 14 with these prunes and 400,000 visits, and the
+#: search a plugin runs at run time walked to depth 3 with 4,000 visits and no prune for
+#: `__STARtmp`. So the plan could say "your counts are at X, pass --search" and the run, given
+#: exactly that, could not reach X - a plan promising what the run cannot deliver, which is the
+#: one thing a plan must never do.
+WALK_DEPTH = 14
+WALK_CAP = 400_000
 
 
 def _cache_path(roots, wanted):
@@ -170,8 +187,8 @@ def _cache_path(roots, wanted):
     return os.path.join(d, f"layers_{key}.json")
 
 
-def find_layer_sources(roots, wanted=("spliced", "unspliced"), max_depth=14, cap=400_000,
-                       cache_seconds=3600):
+def find_layer_sources(roots, wanted=("spliced", "unspliced"), max_depth=WALK_DEPTH,
+                       cap=WALK_CAP, cache_seconds=3600):
     """Cached, because the PLANNER RUNS EVERY TIME and this walk is the expensive part.
 
     Measured on a real project: 42,891 directories to depth 14. That is seconds on a warm local
@@ -256,7 +273,7 @@ def find_layer_sources(roots, wanted=("spliced", "unspliced"), max_depth=14, cap
             for e in names.values():
                 if not e.is_dir(follow_symlinks=False) or e.name.startswith("."):
                     continue
-                if any(pat in e.name for pat in _PRUNE):
+                if any(pat in e.name for pat in PRUNE):
                     continue
                 if depth >= max_depth:
                     exhausted = True          # there was more tree and we stopped looking

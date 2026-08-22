@@ -47,19 +47,35 @@ import re
 from pathlib import Path
 
 from . import manifest
+from .provenance import PRUNE, WALK_CAP, WALK_DEPTH   # noqa: F401  (re-exported)
 
 #: 10x-style barcodes are ACGT runs. Pulling the longest one out of a name absorbs sample
 #: prefixes, `-1` suffixes and velocyto's trailing `x` in a single rule. A name with no such run
 #: falls back to itself, so non-10x data still matches when the strings agree exactly.
 _CORE = re.compile(r"[ACGTN]{8,}")
 
-#: Directories never worth descending into. Bounded because these leads point into run trees that
-#: can hold tens of thousands of files on a networked filesystem.
-_SKIP = {".git", "logs", "cache", "__pycache__", "figures", "reports", "report", "tmp"}
-
-MAX_DEPTH = 3
-MAX_DIRS = 4000
+#: Directories never worth descending into, and HOW FAR TO GO - both taken from `provenance`,
+#: which is where the PLANNER'S copy of this walk lives.
+#:
+#: THE PLAN AND THE RUN MUST REACH THE SAME DISTANCE, and they did not. The planner walked to
+#: depth 14 with 400,000 visits and pruned `<sample>__STARtmp` by substring; this walked to depth
+#: 3 with 4,000 visits and an exact-name skip list that `Aging1__STARtmp` does not match. Measured
+#: on real aligner output: STARsolo delivers `<sample>_Solo.out/Velocyto/filtered/` at depth 9
+#: below a project root, so `plan` could say "your spliced counts are here, pass --search <root>"
+#: and the run, given exactly that root, could not reach them - and would refuse with a list of
+#: everywhere it had looked, none of which was deep enough. A plan that promises what the run
+#: cannot deliver is worse than a plan that promises nothing.
+_SKIP = {"logs", "figures", "reports", "report", "tmp"}
+MAX_DEPTH = WALK_DEPTH
+MAX_DIRS = WALK_CAP
 MIN_MATCH = 0.5
+
+
+def _pruned(name):
+    """Substring, not name. The directory is `<sample>__STARtmp`, and an exact-name skip list
+    walks straight into it - which is what exhausts a visit budget before the real output two
+    levels away is reached."""
+    return name in _SKIP or any(pat in name for pat in PRUNE)
 
 #: The layer pair this was written for, and the only one any shipped plugin asks for today. It is
 #: a DEFAULT and not a definition: every function below takes `names`, so a plugin needing some
@@ -95,14 +111,19 @@ def find(search_paths, sample_hints=(), *, log=print, max_depth=MAX_DEPTH,
          names=DEFAULT_LAYERS):
     """Every source of the wanted layers under the given leads. Reports where it looked."""
     found, seen_dirs, visited = [], set(), 0
-    looked = []
+    looked, exhausted = [], False
     for root in search_paths:
         r = Path(root)
         if not r.is_dir():
             continue
         looked.append(str(r))
         stack = [(r, 0)]
-        while stack and visited < MAX_DIRS:
+        while stack:
+            if visited >= MAX_DIRS:
+                # A SEARCH THAT GAVE UP MUST NOT LOOK LIKE ONE THAT FINISHED. Returning the same
+                # empty list either way turns a fact about the SCAN into a fact about the project.
+                exhausted = True
+                break
             d, depth = stack.pop()
             rd = str(d.resolve())
             if rd in seen_dirs:
@@ -112,6 +133,8 @@ def find(search_paths, sample_hints=(), *, log=print, max_depth=MAX_DEPTH,
             try:
                 entries = list(os.scandir(d))
             except OSError:
+                # A directory that could not be READ is not a directory known to be empty.
+                exhausted = True
                 continue
             entry_names = {e.name for e in entries}
             # An mtx triplet: spliced/unspliced matrices beside a barcode list. This is what
@@ -130,16 +153,21 @@ def find(search_paths, sample_hints=(), *, log=print, max_depth=MAX_DEPTH,
                     elif e.name.endswith(".h5ad") and "velocity" not in e.name:
                         found.append(Source("h5ad", e.path, _sample_from(e.path, sample_hints),
                                             "an .h5ad - checked for the wanted layers"))
-                elif e.is_dir(follow_symlinks=False) and depth < max_depth \
-                        and e.name not in _SKIP and not e.name.startswith("."):
+                elif e.is_dir(follow_symlinks=False) and not _pruned(e.name) \
+                        and not e.name.startswith("."):
+                    if depth >= max_depth:
+                        exhausted = True      # there was more tree and we stopped looking
+                        continue
                     stack.append((Path(e.path), depth + 1))
     find.looked = looked
     find.visited = visited
+    find.exhausted = exhausted
     return found
 
 
 find.looked = []
 find.visited = 0
+find.exhausted = False
 
 
 def load(source, log=print, names=DEFAULT_LAYERS):
