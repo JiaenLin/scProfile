@@ -119,7 +119,7 @@ run)
   $PY -m scprofile.cli plan --h5ad "$OBJ" ${DES:+--design "$DES"} \
       ${ORGANISM:+--organism "$ORGANISM"} ${ASSAY:+--assay "$ASSAY"} \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
-      --kernel "$KERNELS" --audit 2>&1 | grep -E "AUDIT|checked:|ERROR|WARN|audit" \
+      --kernel "$KERNELS" --audit 2>&1 | grep -E "AUDIT|checked:|error\(s\)|ERROR|WARN" \
       || echo "  plan(restricted) exit $?"
 
   say "4. RUN"
