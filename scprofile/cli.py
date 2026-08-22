@@ -186,10 +186,46 @@ def _default_cores():
     return max(1, min(8, multiprocessing.cpu_count()))
 
 
+def _default_memory_gb():
+    """The memory this process was ALLOCATED, preferring the scheduler over the machine.
+
+    Same rule as `_default_cores` and for the same reason: a shared node reports every byte it
+    has, and sizing a wave from that is how a job gets killed for exceeding a request it never
+    knew about. PBS states the request in `PBS_VMEM`/`PBS_MEM` (bytes, or a suffixed string);
+    the cgroup limit is the next most truthful source, and the machine's RAM is the last resort.
+    """
+    for var in ("PBS_VMEM", "PBS_MEM", "SLURM_MEM_PER_NODE"):
+        v = (os.environ.get(var) or "").strip().lower()
+        if not v:
+            continue
+        mult = {"k": 1 / 1024**2, "m": 1 / 1024, "g": 1.0, "t": 1024.0}
+        try:
+            if v[-2:] in ("kb", "mb", "gb", "tb"):
+                return float(v[:-2]) * mult[v[-2]]
+            if v[-1] in mult:
+                return float(v[:-1]) * mult[v[-1]]
+            n = float(v)
+        except (ValueError, KeyError):
+            continue
+        # SLURM_MEM_PER_NODE is MB; a bare PBS value is bytes.
+        return n / 1024.0 if var.startswith("SLURM") else n / 1024.0**3
+    for f in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
+        try:
+            raw = open(f, encoding="utf-8").read().strip()
+            if raw.isdigit() and int(raw) < (1 << 60):
+                return int(raw) / 1024.0**3
+        except OSError:
+            pass
+    try:
+        return os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 1024.0**3
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
 def _run(a):
     from . import compat, inputs, manifest, merge, provenance, refs, report, runner
-    from .kernels import (CorePool, _budget, concurrency, discover, guard_verdict,
-                          log_escape, schedule,
+    from .kernels import (UNDECLARED_GB_PER_100K, ResourcePool, _budget, concurrency,
+                          demand, discover, guard_verdict, log_escape, schedule,
                           undeclared, unmet)
 
     try:
@@ -313,7 +349,12 @@ def _run(a):
     # describes the average of its conditions and may describe neither.
     sample_key = keys["sample"][0]
     units = (sorted(set(A.obs[sample_key].astype(str))) if sample_key else None)
+    # HOW BIG EACH UNIT ACTUALLY IS. Memory is charged per instance against the cells that
+    # instance touches, and units are not equal - assuming n_obs/len(units) would under-charge
+    # the largest sample, which is the one that decides whether the wave fits.
+    unit_cells = (A.obs[sample_key].astype(str).value_counts().to_dict() if sample_key else {})
     budget = int(getattr(a, "cores", 0) or _default_cores())
+    mem_budget = getattr(a, "memory_gb", None) or _default_memory_gb()
     waves = schedule(want, ks, budget_cores=budget, units=units)
     n_inst = sum(len(w) for w in waves)
     print(f"\nplan: {n_inst} instance(s) in {len(waves)} wave(s), {budget} core(s)"
@@ -493,15 +534,34 @@ def _run(a):
         # no single correct thread count. Each instance takes the cores it was allocated and
         # releases them when its subprocess exits, so the allocation stays full without ever
         # being oversubscribed - the two failures a fixed pool has to choose between.
-        pool = CorePool(budget)
+        pool = ResourcePool(budget, memory_gb=mem_budget)
+
+        # PER-INSTANCE MEMORY IS COMPUTED FROM THE CELLS THAT INSTANCE TOUCHES, not from the
+        # cohort. A per-unit instance sees its unit; charging it for the whole object would
+        # serialise a wave that fits comfortably.
+        need = {}
+        for inst, _k in prepared:
+            u = inst.get("unit")
+            n_cells = int(unit_cells.get(u, A.n_obs)) if u else A.n_obs
+            need[(inst["plugin"], u)] = demand(inst, ks[inst["plugin"]], n_cells)
+        assumed = sorted({i["plugin"] for i, _k in prepared
+                          if need[(i["plugin"], i.get("unit"))]["memory_assumed"]})
+        if assumed and mem_budget:
+            # SAID OUT LOUD, EVERY TIME. An assumed figure that is never printed is
+            # indistinguishable from a measured one, and the whole point of the field is that
+            # the plugin should state it.
+            print(f"  memory not declared by {', '.join(assumed)}; assuming "
+                  f"{UNDECLARED_GB_PER_100K:g} GB per 100k cells for scheduling. "
+                  f"Declare `memory_gb_per_100k` to replace the guess.", flush=True)
 
         def _gated(item):
             inst, _kout = item
-            n = pool.acquire(inst.get("cores", 1))
+            d = need[(inst["plugin"], inst.get("unit"))]
+            g = pool.acquire(d)
             try:
                 return _go(item)
             finally:
-                pool.release(n)
+                pool.release(g)
 
         # Threads block on permits before they spawn anything, so one per instance is cheap and
         # the pool decides what is resident. Sizing THIS to `at_once` would re-impose the count

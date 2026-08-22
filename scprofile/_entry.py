@@ -268,13 +268,36 @@ def main(argv):
             # `finally` somebody wrote inside it in a hurry.
             ctx._dispose(log=log)
 
+    # WHAT IT ACTUALLY COST, measured by the process that paid it. The allocator schedules on
+    # memory and eight of nine plugins declare no rate, so it assumes one - and an assumption
+    # nothing ever checks is how the core budget stayed wrong for every run. Every plugin now
+    # reports its own peak RSS beside the cell count it processed, which is exactly the number
+    # `memory_gb_per_100k` wants, so the declaration can be filled in from measurement rather
+    # than from somebody's estimate. This is the run -> declare edge doing its job.
+    peak_gb = None
+    try:
+        import resource
+        raw = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        # ru_maxrss is KILOBYTES on Linux and BYTES on macOS/BSD. Getting this wrong reports a
+        # 1024x error in whichever direction, and both directions look plausible.
+        peak_gb = raw / (1024.0**2 if sys.platform != "darwin" else 1024.0**3)
+    except (ImportError, OSError, ValueError):
+        pass
+    if peak_gb:
+        n = int(getattr(ctx, "n_obs", 0) or getattr(getattr(ctx, "adata", None), "n_obs", 0) or 0)
+        ctx.measured = {"peak_rss_gb": round(peak_gb, 3), "n_cells": n,
+                        "gb_per_100k": round(peak_gb * 100_000 / n, 2) if n else None}
+        log(f"  peak memory {peak_gb:.2f} GB over {n:,} cells"
+            + (f" = {ctx.measured['gb_per_100k']:.1f} GB per 100k" if n else ""))
+
     manifest.write_output(
         out, kernel=Path(plugin_path).stem,
         version=str((getattr(mod, "PLUGIN", {}) or {}).get("version", "0.1.0")),
         status=ctx.status, headline=ctx.headline,
         obs=ctx._obs, obsm=ctx._obsm, layers=ctx._layers,
         tables=ctx._tables, figures=ctx._figures, objects=ctx._objects,
-        absent=ctx.absent, caveats=ctx.caveats)
+        absent=ctx.absent, caveats=ctx.caveats,
+        measured=getattr(ctx, "measured", None))
     return 0
 
 

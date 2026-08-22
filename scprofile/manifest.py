@@ -184,7 +184,7 @@ def layer_names(adata):
 
 def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=None, layers=None,
                  tables=None, figures=None, objects=None, absent=None, caveats=None, headline="",
-                 contract=CONTRACT_VERSION):
+                 measured=None, contract=CONTRACT_VERSION):
     """Write `out.json` from inside a kernel. The only supported way for a kernel to report.
 
     `caveats` is not decoration and is not optional in spirit: it is what the report prints under
@@ -208,6 +208,10 @@ def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=Non
         "contract": contract,
         "kernel": kernel,
         "version": str(version),
+        # WHAT THIS INSTANCE ACTUALLY COST, from the process that paid it: peak RSS,
+        # the cells it processed, and the GB-per-100k the allocator wants declared.
+        # Absent when the platform could not report it, which is not zero.
+        "measured": dict(measured) if measured else None,
         "status": status,
         "headline": str(headline),
         "obs": {str(k): rel(v) for k, v in (obs or {}).items()},
@@ -303,7 +307,9 @@ def read_output(out_dir):
 
 def unknown_keys(payload):
     """Keys in a manifest the host does not act on. Reported, never silently accepted."""
-    known = {"contract", "kernel", "version", "status", "headline", "absent", "caveats"}
+    known = {"contract", "kernel", "version", "status", "headline", "absent", "caveats",
+             # what the instance cost, measured by the process that paid it
+             "measured"}
     return sorted(set(payload) - known - set(OUTPUT_SLOTS))
 
 

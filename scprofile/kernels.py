@@ -206,7 +206,11 @@ class Kernel:
         e = dict(e) if isinstance(e, dict) else {}
         return {"cost": e.get("cost", "medium"),
                 "cores": int(e.get("cores", 1) or 1),
-                "memory_gb_per_100k": e.get("memory_gb_per_100k")}
+                # None means UNDECLARED, and that is different from zero. The allocator assumes a
+                # conservative figure for it and says so; `declare` warns. It must never read as
+                # "this plugin needs no memory", which is what 0 would mean.
+                "memory_gb_per_100k": e.get("memory_gb_per_100k"),
+                "gpus": int(e.get("gpus", 0) or 0)}
 
     #: cost -> sort key. Longest pole first: a wave's wall-clock is its slowest member, and
     #: starting that member last adds its whole duration to the total.
@@ -466,8 +470,11 @@ class FileKernel(Kernel):
                              bool(self.spec.get("env") or self.spec.get("requires")))
         self.spec.setdefault("language", "python")
         self.spec.setdefault("status", "built" if self.spec else "planned")
-        self.spec.setdefault("executor", {"cost": self.spec.get("cost", "medium"),
-                                          "cores": self.spec.get("cores", 1)})
+        self.spec.setdefault("executor", {
+            "cost": self.spec.get("cost", "medium"),
+            "cores": self.spec.get("cores", 1),
+            "memory_gb_per_100k": self.spec.get("memory_gb_per_100k"),
+            "gpus": self.spec.get("gpus", 0)})
 
     @property
     def entry(self):
@@ -703,45 +710,145 @@ def concurrency(instances, budget):
     return max(1, n)
 
 
+#: What an instance is assumed to need per 100k cells when it DECLARES NOTHING. Conservative on
+#: purpose and reported every time it is used: the cost of over-estimating is idle memory, and the
+#: cost of under-estimating is a job killed at the end of its longest step, with no partial result
+#: and an error that names the plugin rather than the allocator. Measured against the one plugin
+#: that does declare (velocity, 12) and the one job that has been killed for memory (PBS 677891,
+#: ten scenic fits, 260 GB against a 200 GB request).
+UNDECLARED_GB_PER_100K = 12.0
+
+
+def demand(inst, kernel, n_cells):
+    """What ONE instance needs, in every dimension the pool admits on.
+
+    Memory is per-instance and scales with the cells that instance actually touches - a per-unit
+    instance sees its unit, not the cohort - so it is computed here, where the unit is known,
+    rather than declared as an absolute that would be wrong for every project but the one it was
+    measured on. That is the same reason `memory_gb_per_100k` is a RATE and not a number of GB.
+    """
+    e = kernel.executor if hasattr(kernel, "executor") else {"cores": 1}
+    rate = e.get("memory_gb_per_100k")
+    assumed = rate is None
+    rate = UNDECLARED_GB_PER_100K if assumed else float(rate)
+    return {"cores": int(inst.get("cores", e.get("cores", 1)) or 1),
+            "memory_gb": max(1.0, rate * max(1, int(n_cells or 0)) / 100_000.0),
+            "gpus": int(e.get("gpus", 0) or 0),
+            "memory_assumed": assumed}
+
+
+class ResourcePool:
+    """Admission on EVERY resource an instance needs, not just cores.
+
+    A cores-only pool is blind in the dimension that actually kills jobs. PBS 677891 died at
+    260 GB against a 200 GB request while its ten instances were each correctly holding one core;
+    the core budget was satisfied throughout and could not have prevented it. Cores bound how fast
+    a wave runs, memory bounds whether it runs at all, and a scheduler that models one of them
+    reports success for the case it cannot see.
+
+    `memory_gb_per_100k` has been a declared field since the executor block existed and NOTHING
+    EVER READ IT - the same defect as `reference_for_role()` and the core budget, three fields
+    over. A declaration nothing reads is worse than no field at all, because its presence is taken
+    for coverage.
+
+    Every request is capped at the pool's own totals before it is waited on, so an instance that
+    wants more than the whole allocation runs alone rather than waiting for permits that can never
+    exist. That cap is what keeps this deadlock-free in every dimension at once.
+    """
+
+    #: The dimensions admitted on. `memory_assumed` rides along in a demand and is not one.
+    DIMENSIONS = ("cores", "memory_gb", "gpus")
+
+    def __init__(self, cores, memory_gb=None, gpus=0):
+        import threading
+        self.total = {"cores": max(1, int(cores)),
+                      "memory_gb": float(memory_gb) if memory_gb else None,
+                      "gpus": max(0, int(gpus or 0))}
+        self.free = dict(self.total)
+        self._cv = threading.Condition()
+
+    def want(self, need):
+        """The permits this instance may ask for: capped at the pool, never below one core."""
+        out = {}
+        for d in self.DIMENSIONS:
+            t = self.total.get(d)
+            v = need.get(d, 0) or 0
+            if t is None:                      # this dimension is not being tracked
+                out[d] = 0
+                continue
+            out[d] = min(float(v), float(t))
+            if d == "cores":
+                out[d] = max(1.0, out[d])
+        return out
+
+    def _fits(self, w):
+        for d in self.DIMENSIONS:
+            if self.total.get(d) is None:
+                continue
+            if (self.free[d] or 0) < w[d]:
+                return False
+        return True
+
+    def acquire(self, need):
+        w = self.want(need)
+        with self._cv:
+            while not self._fits(w):
+                self._cv.wait()
+            for d in self.DIMENSIONS:
+                if self.total.get(d) is not None:
+                    self.free[d] -= w[d]
+        return w
+
+    def release(self, granted):
+        with self._cv:
+            for d in self.DIMENSIONS:
+                if self.total.get(d) is None:
+                    continue
+                self.free[d] = min(self.total[d], (self.free[d] or 0) + (granted.get(d, 0) or 0))
+            self._cv.notify_all()
+
+    def describe(self):
+        bits = [f"{int(self.total['cores'])} core(s)"]
+        if self.total["memory_gb"]:
+            bits.append(f"{self.total['memory_gb']:.0f} GB")
+        if self.total["gpus"]:
+            bits.append(f"{self.total['gpus']} GPU(s)")
+        return ", ".join(bits)
+
+
 class CorePool:
-    """Admission by CORES, not by count: a wave keeps the whole allocation busy.
+    """Cores only, for a wave whose instances declare nothing else.
 
-    `concurrency` answers "how many fit" as one number, and one number cannot schedule a wave
-    whose instances declare different core counts. A fixed pool of N threads either starves the
-    expensive plugin to make room for cheap ones or runs a single fat instance while the rest of
-    the node idles.
-
-    Permits fix both directions. An instance acquires the cores it was allocated, runs, and
-    releases them; anything that fits in the remainder starts immediately. A 16-core GRNBoost2
-    fit and eight 1-core instances share a 24-core allocation without either being throttled.
-
-    Cores are capped at the budget before acquisition, so an instance declaring more than the
-    whole allocation runs alone rather than waiting for permits that can never exist. That cap is
-    what makes this deadlock-free: every request is satisfiable by an empty pool.
+    COMPOSITION, NOT INHERITANCE, and that is not a style preference. This subclassed
+    `ResourcePool` and overrode `want()` to take and return an int where the parent takes and
+    returns a mapping - so the parent's own `acquire()`, calling `self.want()`, got an int back
+    and raised `'float' object is not subscriptable`. An override that changes a method's type
+    breaks every inherited method that calls it, and the failure surfaces in the parent, which is
+    the last place anyone looks. Holding a pool instead of being one keeps the two interfaces
+    honestly separate.
     """
 
     def __init__(self, budget):
-        import threading
-        self.budget = max(1, int(budget))
-        self.free = self.budget
-        self._cv = threading.Condition()
+        self._pool = ResourcePool(cores=budget)
+
+    @property
+    def budget(self):
+        return self._pool.total["cores"]
+
+    @property
+    def free(self):
+        return self._pool.free["cores"]
 
     def want(self, cores):
-        """The permits an instance may ask for: at least one, never more than the whole budget."""
         return max(1, min(int(cores or 1), self.budget))
 
     def acquire(self, cores):
         n = self.want(cores)
-        with self._cv:
-            while self.free < n:
-                self._cv.wait()
-            self.free -= n
+        self._pool.acquire({"cores": n, "memory_gb": 0, "gpus": 0})
         return n
 
     def release(self, n):
-        with self._cv:
-            self.free = min(self.budget, self.free + int(n))
-            self._cv.notify_all()
+        self._pool.release({"cores": n, "memory_gb": 0, "gpus": 0})
 
 
 def resolve_keys(items, keys):

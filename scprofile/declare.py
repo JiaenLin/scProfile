@@ -103,6 +103,18 @@ def check(spec, name="<plugin>"):
         out.append(("ERROR", f"declares api {api}; this host implements {API}. Refusing by name "
                              f"rather than calling it and failing somewhere inside."))
 
+    # MEMORY IS A SCHEDULING DIMENSION AND AN UNDECLARED ONE IS A GUESS. The allocator assumes a
+    # conservative rate when this is absent and prints that it is assuming - but a job killed for
+    # memory dies at the end of its longest step, with no partial result and an error naming the
+    # plugin rather than the scheduler. WARN and not ERROR: a plugin that cannot yet state its
+    # rate is still runnable, and blocking on it would stop people declaring anything at all.
+    _ex = spec.get("executor") if isinstance(spec.get("executor"), dict) else {}
+    if _ex.get("memory_gb_per_100k") is None and spec.get("memory_gb_per_100k") is None:
+        out.append(("WARN", "no `memory_gb_per_100k`. The allocator schedules on memory as well "
+                            "as cores and will assume a conservative rate for this plugin, which "
+                            "either wastes memory or - if the guess is low - gets the job killed. "
+                            "Measure it once on a real object and declare it."))
+
     if not spec.get("summary"):
         out.append(("ERROR", "no `summary`. It is what a user reads in the plan to decide "
                              "whether they want this at all."))

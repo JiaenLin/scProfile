@@ -554,6 +554,60 @@ ck(f"peak residency never exceeded the budget (peak {_peak})", _peak <= 8, f"pea
 ck("and every permit came back", _pool.free == 8, f"{_pool.free} free of 8")
 ck("an instance wanting more than the budget is capped, not deadlocked",
    CorePool(8).acquire(64) == 8)
+
+print("\nand the pool admits on MEMORY as well as cores — the dimension that kills jobs")
+# PBS 677891 died at 260 GB against a 200 GB request while each of its ten instances correctly
+# held one core. The core budget was satisfied throughout and could not have prevented it:
+# cores bound how fast a wave runs, memory bounds whether it runs at all.
+from scprofile.kernels import ResourcePool, demand, UNDECLARED_GB_PER_100K   # noqa: E402
+_rp = ResourcePool(cores=50, memory_gb=200)
+_h = {"c": 0.0, "m": 0.0}
+_pk = {"c": 0.0, "m": 0.0}
+_l2 = _th.Lock()
+
+
+def _work2(need):
+    g = _rp.acquire(need)
+    with _l2:
+        _h["c"] += g["cores"]; _h["m"] += g["memory_gb"]
+        _pk["c"] = max(_pk["c"], _h["c"]); _pk["m"] = max(_pk["m"], _h["m"])
+    _th.Event().wait(0.01)
+    with _l2:
+        _h["c"] -= g["cores"]; _h["m"] -= g["memory_gb"]
+    _rp.release(g)
+
+
+# scenic-shaped: cheap in cores, expensive in memory. Cores alone would admit all ten.
+_t2 = [_th.Thread(target=_work2, args=({"cores": 4, "memory_gb": 40, "gpus": 0},))
+       for _ in range(10)]
+for _t in _t2:
+    _t.start()
+for _t in _t2:
+    _t.join()
+ck(f"peak memory within the allocation (peak {_pk['m']:.0f} GB)", _pk["m"] <= 200, str(_pk))
+ck("and MEMORY was the binding constraint, not cores",
+   _pk["c"] < 40, f"cores peaked at {_pk['c']:.0f}; cores alone would have admitted all ten")
+ck("every permit came back in every dimension",
+   _rp.free["cores"] == 50 and _rp.free["memory_gb"] == 200, str(_rp.free))
+_big = ResourcePool(cores=8, memory_gb=16)
+_g = _big.acquire({"cores": 64, "memory_gb": 999, "gpus": 0})
+ck("an instance larger than the whole allocation runs alone, in every dimension",
+   _g["cores"] == 8 and _g["memory_gb"] == 16, str(_g))
+_big.release(_g)
+
+print("\nand memory is charged against the cells the instance actually touches")
+_km = _types.SimpleNamespace(executor={"cores": 8, "memory_gb_per_100k": 12, "gpus": 0})
+_whole = demand({"cores": 8}, _km, 100_713)
+_unit = demand({"cores": 8}, _km, 13_824)
+ck("a cohort instance is charged more than a per-unit one",
+   _whole["memory_gb"] > _unit["memory_gb"] * 6,
+   f"{_whole['memory_gb']:.1f} vs {_unit['memory_gb']:.1f} GB")
+_kn = _types.SimpleNamespace(executor={"cores": 4, "memory_gb_per_100k": None, "gpus": 0})
+_d = demand({"cores": 4}, _kn, 100_000)
+ck("an UNDECLARED rate is assumed, never read as zero",
+   _d["memory_gb"] >= UNDECLARED_GB_PER_100K and _d["memory_assumed"] is True, str(_d))
+ck("and the assumption is flagged so it can be printed",
+   _d["memory_assumed"] is True)
 # THE DOCUMENT MUST STATE THE RULE THE CODE IMPLEMENTS. This pinned the literal
 # "budget / smallest_declared_cores", which was the proportional rule replaced on 2026-08-22;
 # leaving it would have kept EXECUTION.md describing an allocator that no longer exists, and
