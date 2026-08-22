@@ -179,6 +179,26 @@ def test_velocity_declaration():
           str(undeclared(k, bad)))
 
 
+def test_a_plugin_gets_its_own_environments_bin_on_path():
+    """An environment is not only an interpreter; it provides BINARIES.
+
+    cellchat's method is R. It runs `Rscript`, found through PATH. Launching `<env>/bin/python`
+    by absolute path does not put `<env>/bin` on PATH - that is what `conda activate` does - so
+    the plugin found the system's Rscript, or none, and the failure reads as "R is not installed"
+    about an environment that contains R and a complete CellChat. `_install_r` learned this and
+    fixed it for the one subprocess it launches; the runner, which launches every plugin and
+    every selftest, did not.
+    """
+    print("\na plugin can reach the binaries its own environment provides")
+    from scprofile import runner
+    e = runner.with_env_bin("/some/env/bin/python", base={"PATH": "/usr/bin"})
+    check("its own bin comes first", e["PATH"].startswith("/some/env/bin"), e["PATH"])
+    check("and the rest of PATH survives", e["PATH"].endswith("/usr/bin"), e["PATH"])
+    src = inspect.getsource(runner)
+    check("the runner uses it when running a plugin", "with_env_bin(exe, manifest.env_for" in src)
+    check("and when running a selftest", "env=with_env_bin(exe))" in src)
+
+
 def test_a_failed_build_still_proves_what_it_can():
     """One defect learned per job is the whole cycle when a group has eight members.
 
@@ -1447,6 +1467,7 @@ def main():
         test_a_plugin_is_launched_the_way_its_shape_requires(tmp)
     test_figure_conventions()
     test_velocity_declaration()
+    test_a_plugin_gets_its_own_environments_bin_on_path()
     test_a_failed_build_still_proves_what_it_can()
     test_the_plan_and_the_run_search_the_same_distance()
     test_the_core_share_reaches_the_thread_pools()

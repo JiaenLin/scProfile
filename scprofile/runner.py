@@ -25,6 +25,26 @@ from . import manifest
 ENV_DIRNAME = "scprofile-{kernel}"
 
 
+def with_env_bin(exe, base=None):
+    """The subprocess environment for a plugin, with ITS OWN environment's `bin` on PATH.
+
+    AN ENVIRONMENT IS NOT ONLY AN INTERPRETER. It provides binaries, and a plugin whose method
+    lives in another language reaches them by name: cellchat runs `Rscript`, and `shutil.which`
+    inside it searches PATH. Launching `<env>/bin/python` by absolute path does NOT put
+    `<env>/bin` on PATH - that is what `conda activate` does and the host was not doing - so the
+    plugin found the system's Rscript, or none, and the failure reads as "R is not installed"
+    about an environment that contains R and a complete CellChat.
+
+    `_install_r` learned this at PBS 676357 and fixed it for the one subprocess it launches. The
+    RUNNER, which launches every plugin and every selftest, did not - the same door, one room
+    over.
+    """
+    e = dict(os.environ if base is None else base)
+    d = str(Path(exe).resolve().parent)
+    e["PATH"] = d + os.pathsep + e.get("PATH", "")
+    return e
+
+
 def env_prefix(kernel_name, prefix):
     """The PER-PLUGIN environment path. Kept, and kept at this signature.
 
@@ -770,7 +790,8 @@ def selftest(kernel, *, prefix=None, log=print, timeout=None):
         raise RuntimeError(f"{kernel.name}: no interpreter to run its selftest with. {why}")
     cmd = kernel.selftest_argv(exe)
     log(f"  selftest: {Path(cmd[-1]).name}  ({why})")
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+                       env=with_env_bin(exe))
     if r.returncode != 0:
         raise RuntimeError(
             f"{kernel.name}'s selftest FAILED, so the environment is not usable:\n"
@@ -818,7 +839,8 @@ def run(kernel, *, inp, out_dir, prefix=None, log=print, timeout=None):
               .get("cores"))
     with open(logf, "w", encoding="utf-8") as fh:
         r = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT,
-                           env=manifest.env_for_kernel(inp, cores=_cores), timeout=timeout)
+                           env=with_env_bin(exe, manifest.env_for_kernel(inp, cores=_cores)),
+                           timeout=timeout)
     if r.returncode != 0:
         tail = "".join(logf.read_text(encoding="utf-8", errors="replace").splitlines(True)[-15:])
         raise RuntimeError(
