@@ -349,6 +349,26 @@ this cycle: the previous attempt's R step failed and `install` raised before any
         forty-four R packages behind CellChat. All three surfaced in a selftest rather than in
         somebody's run, which is what the selftest is for.
 
+**AND THEN THE RUN** (PBS 677677, all ten plugins, `--all`, 100,713 cells, 12-core budget).
+
+        `plan --audit --report` over every plugin: `checked: all 10 known plugin(s) appear exactly
+        once`, `0 error(s), 0 warning(s)`, `wrote .../out/run_plan.html`. Every plugin `runnable`.
+        `plan: 37 instance(s) in 1 wave(s), 12 core(s), 10 unit(s)` and the wave line ends
+        **`[12 at a time of 27]`** - the concurrency cap 623d186 added, biting on a real wave.
+
+        [declaration] **scenic's environment had no anndata.** Ten instances, one line each:
+              `NOT RUN scenic[Aging1] - scenic's interpreter cannot read this object even
+              re-encoded`, and above them `the compatibility copy did not help either:
+              ModuleNotFoundError: No module named 'anndata'`. `_entry.py` reads the object before
+              a plugin is called, so an environment without anndata cannot run ANY plugin - and
+              the failure surfaces as a problem with the OBJECT → c7adf43
+        [host] and nothing declared or checked THE CONTRACT'S OWN DEPENDENCY. `_entry.py` read
+              with `scanpy.read_h5ad`, making scanpy an undeclared requirement of the contract
+              imposed on every plugin's environment; it reads with anndata now, and
+              `declare.check` refuses a requirement that brings python packages and does not name
+              it. The check found **two more**: abundance and de work only because they SHARE an
+              environment with plugins that do name anndata → c7adf43
+
         [method] nothing yet.
 
 harness: **three of my own, all in the job script or the suites, and all of the same family.**
