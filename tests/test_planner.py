@@ -8,6 +8,7 @@ scan that could not finish.
 Run: python tests/test_planner.py
 """
 import sys
+from html import escape as _e_html
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -335,7 +336,12 @@ _plan = {
     "audit": [],
 }
 with _tf.TemporaryDirectory() as _d:
-    f = PR.write(_d, _plan)
+    # THE REGISTRY IS PASSED, as the real caller passes it: the "what you get" column is read
+    # from each plugin's own declaration now, not from a table in the host that knew only the
+    # nine plugins it was written beside.
+    from scprofile.kernels import discover as _disc
+    _reg = _disc(str(Path(__file__).resolve().parents[1] / "kernels"))
+    f = PR.write(_d, _plan, kernels=_reg)
     html = Path(f).read_text()
     ck("it says nothing has run, first", "Nothing here has run yet" in html)
     ck("that warning precedes the plugin list",
@@ -347,10 +353,19 @@ with _tf.TemporaryDirectory() as _d:
     # ON A PLUGIN THAT WILL ACTUALLY RUN. The first version asserted velocity's text, and
     # velocity is BLOCKED in this fixture - the table covers what you GET, so a blocked plugin is
     # correctly absent from it. The test was wrong, not the page.
-    ck("each running plugin says what it yields", "phase call and two scores" in html)
-    ck("and what it cannot tell you", "cycling population is not a proliferating one" in html)
+    # ASSERTED AGAINST THE DECLARATION, not against prose that used to live in the host. If a
+    # plugin rewords its own summary this follows it, which is the point.
+    _cc = _reg["cellcycle"].spec
+    ck("each running plugin says what it yields, in its own declared words",
+       _e_html(_cc["summary"][:40]) in html, _cc["summary"][:60])
+    ck("and what it cannot tell you, from its own cannot_show",
+       _e_html(_cc["cannot_show"][0][:40]) in html, _cc["cannot_show"][0][:60])
     ck("a blocked plugin is NOT in the what-you-get table",
-       "direction of change per cell" not in html)
+       _e_html(_reg["velocity"].spec["summary"][:40]) not in html)
+    # and with no registry the column is EMPTY rather than filled from a stale list
+    _bare = Path(PR.write(_d, _plan, filename="bare.html")).read_text()
+    ck("with no registry the yield column is empty, not wrong",
+       _e_html(_cc["summary"][:40]) not in _bare)
     ck("the design table is shown with arm sizes", "smallest arm" in html)
     ck("the crossed pair is named", "interaction is estimable" in html)
     ck("waves are rendered", "Wave 1" in html and "Wave 2" in html)

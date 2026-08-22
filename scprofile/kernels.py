@@ -875,7 +875,7 @@ def resolve_keys(items, keys):
 
 
 def unmet(kernel, *, obs=(), obsm=(), layers=(), ran=(), has_design=False, keys=None,
-          organism=None, var=(), derived=()):
+          organism=None, var=(), derived=(), available=None):
     """Everything `kernel` needs and does not have. One line per problem, each with its FIX.
 
     Checked before the kernel is launched. A prerequisite discovered inside a kernel is a
@@ -898,7 +898,7 @@ def unmet(kernel, *, obs=(), obsm=(), layers=(), ran=(), has_design=False, keys=
         problems.append(f"capability {cap!r} is not available: {why}.  Fix: {fix}.")
     for c in resolve_keys(kernel.needs_obs, keys):
         if c not in obs:
-            who = _who_produces(f"obs[{c}]")
+            who = _who_produces(f"obs[{c}]", available)
             problems.append(f"obs[{c!r}] is absent." + (f"  Fix: run --kernel {who} first." if who
                                                         else "  It must be on the input object."))
     for c in resolve_keys(kernel.needs_obsm, keys):
@@ -988,17 +988,27 @@ def log_escape(path, kernel_name, reason, who=""):
     return p
 
 
-#: Which kernel writes which cell-level column, so an unmet prerequisite can name its own fix
-#: instead of leaving the user to work out where `phase` was supposed to come from.
-_PRODUCERS = {
-    "obs[phase]": "cellcycle",
-    "obs[S_score]": "cellcycle",
-    "obs[G2M_score]": "cellcycle",
-    "obs[pseudotime]": "pseudotime",
-    "obs[velocity_confidence]": "velocity",
-    "obs[velocity_pseudotime]": "velocity",
-}
+def _who_produces(slot, available=None):
+    """Which plugin writes this slot, READ FROM THE DECLARATIONS - never from a table here.
 
+    This was a hard-coded map of six slots to three of the nine plugins that happened to exist.
+    Every plugin already declares `produces`, so the table duplicated a declaration and could
+    only ever be right about the plugins someone had remembered to add: a tenth plugin writing
+    `obs[foo]` left the user with "obs['foo'] is absent" and no idea what writes it, which is
+    precisely the message this function exists to prevent.
 
-def _who_produces(slot):
-    return _PRODUCERS.get(slot)
+    A host that keeps its own list of what its plugins do is a host that is wrong about every
+    plugin it has not been told about, and is the shape of overfitting that survives review
+    because the list looks like configuration.
+    """
+    if not available:
+        return None
+    slot = str(slot).strip()
+    bare = slot[4:-1] if slot.startswith("obs[") and slot.endswith("]") else None
+    for name in sorted(available):
+        k = available[name]
+        for decl in (getattr(k, "produces", None) or []):
+            d = str(decl).strip().rstrip("?")
+            if d == slot or (bare is not None and d in (f"obs[{bare}]", bare)):
+                return name
+    return None

@@ -466,7 +466,7 @@ def _run(a):
                         f"declared but not built. `scprofile scaffold {name}` writes the "
                         f"skeleton; the method still has to be wrapped."]})
                 continue
-            probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers, ran=ran,
+            probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers, available=ks, ran=ran,
                           has_design=bool(a.design), keys=_km, organism=organism[0],
                           var=set(A.var.columns), derived=_provided)
             if probs and not a.force:
@@ -1051,7 +1051,7 @@ def _plan(a):
         if k.status != "built":
             planned.append((name, k))
             continue
-        probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers,
+        probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers, available=ks,
                       ran=set(want), has_design=bool(a.design), keys=_km,
                       organism=organism[0], var=set(A.var.columns), derived=_provided)
         state, why, fix = runner.env_state(k, a.prefix)
@@ -1101,7 +1101,7 @@ def _plan(a):
     if planned:
         print("\ndeclared, not built — what each WOULD need on this object")
         for name, k in planned:
-            probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers,
+            probs = unmet(k, obs=have_obs, obsm=have_obsm, layers=have_layers, available=ks,
                           ran={n for n, _ in planned} | set(runnable),
                           has_design=bool(a.design), keys=_km,
                           organism=organism[0], var=set(A.var.columns), derived=_provided)
@@ -1456,7 +1456,7 @@ def _plan(a):
         outp.mkdir(parents=True, exist_ok=True)
         (outp / "run_plan.json").write_text(_json.dumps(payload, indent=1, default=str),
                                             encoding="utf-8")
-        print(f"\nwrote {plan_report.write(outp, payload)}")
+        print(f"\nwrote {plan_report.write(outp, payload, kernels=ks)}")
         print(f"      {outp}/run_plan.json")
 
     # ---- the schedule -------------------------------------------------------------------------

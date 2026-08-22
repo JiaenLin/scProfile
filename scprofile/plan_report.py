@@ -29,46 +29,29 @@ from pathlib import Path
 
 from .report import CSS, _e
 
-#: What a reader gets out of each plugin, in the terms they would use in a paper. Written per
-#: plugin because "you get obsm[X_regulon_auc]" answers a question nobody asked; what they want to
-#: know is what the artifact lets them SAY, and what it does not.
-YIELD = {
-    "velocity": ("A direction of change per cell, and a per-population summary of where cells "
-                 "appear to be heading.",
-                 "Arrows are a direction, not a rate: length is not time and two datasets' "
-                 "lengths are not comparable."),
-    "cellcycle": ("A phase call and two scores per cell, and the check that a trajectory is not "
-                  "a cell-cycle axis wearing another name.",
-                  "Phase is SCORED from a gene set, not measured; a cycling population is not a "
-                  "proliferating one."),
-    "pseudotime": ("An ordering of cells along a progression, with fate probabilities toward each "
-                   "terminal state.",
-                   "An ordering is not a time. Which kernel produced it decides the answer, and "
-                   "it is recorded beside the result."),
-    "liana": ("A ranked ligand-receptor table per unit, and with a design, how those ranks differ "
-              "between conditions.",
-              "No interaction is observed. These are co-expression of a ligand and a receptor in "
-              "two populations, with no spatial information."),
-    "cellchat": ("A second, independent communication map to hold beside the first.",
-                 "Its database is its own; disagreement with another method is a finding about "
-                 "the databases as much as about the cells."),
-    "scenic": ("Regulon activity per cell and the target genes of each regulon, inferred from "
-               "this dataset rather than taken from a prior.",
-               "Co-expression with a motif is not regulation. Nothing here observes a "
-               "perturbation, so no edge is causal."),
-    "decoupler": ("Pathway and transcription-factor activity per cell, scored against curated "
-                  "priors rather than a network inferred here.",
-                  "The prior decides the answer; an activity score is a statement about the "
-                  "prior's gene set, not a measurement of a protein."),
-    "abundance": ("Whether the proportions of your populations differ across the design, with a "
-                  "model that accounts for the fact that proportions must sum to one.",
-                  "Compositional data cannot tell 'this went up' from 'everything else went "
-                  "down' without a reference, and the choice of reference is a decision."),
-    "de": ("Genes differing between the conditions your design defines, tested on pseudobulk so "
-           "the unit of replication is the sample and not the cell.",
-           "A per-cell test would treat thousands of cells from one animal as thousands of "
-           "independent observations, which is why this one does not."),
-}
+def _yield_for(kernel):
+    """What a reader gets, IN THE PLUGIN'S OWN WORDS. Never from a table in the host.
+
+    This was a hard-coded mapping of exactly the nine plugins that existed when it was written,
+    and a tenth plugin rendered two empty cells in the report - silently, because a blank table
+    cell looks like a plugin with nothing to say rather than a host that was never told about it.
+
+    Both halves already exist as REQUIRED declarations (`declare.check` errors without them), so
+    the table was duplicating them and could only be wrong. `cannot_show[0]` is the first limit
+    the plugin author chose to lead with, which is exactly the "what it cannot tell you" column.
+    """
+    if kernel is None:
+        return "", ""
+    spec = getattr(kernel, "spec", None) or {}
+    gives = str(spec.get("summary") or "").strip()
+    when = str(spec.get("when_to_use") or "").strip()
+    if when and len(gives) < 60:
+        joined = gives.rstrip()
+        if joined and joined[-1] not in ".!?":
+            joined += "."
+        gives = f"{joined} Use it when {when[0].lower()}{when[1:]}" if joined else when
+    limits = spec.get("cannot_show") or []
+    return gives, str(limits[0]).strip() if limits else ""
 
 
 def _card(title, body, kind=""):
@@ -76,8 +59,14 @@ def _card(title, body, kind=""):
     return f'<div class="{cls}"><b>{_e(title)}</b><br>{body}</div>'
 
 
-def write(out_dir, plan, *, filename="run_plan.html"):
-    """Render the plan. `plan` is the dict `scprofile plan --report` assembles."""
+def write(out_dir, plan, *, filename="run_plan.html", kernels=None):
+    """Render the plan. `plan` is the dict `scprofile plan --report` assembles.
+
+    `kernels` is the registry, so the "what you get" column can be read from each plugin's own
+    declaration rather than a table here. Optional, because a plan can be rendered from a saved
+    `run_plan.json` with no registry to hand - in which case the column is empty, which is
+    honest, rather than filled in from a list that knows only the plugins someone remembered.
+    """
     now = datetime.now(timezone.utc)
     d = plan.get("describe") or {}
     facts = plan.get("facts") or {}
@@ -137,7 +126,7 @@ def write(out_dir, plan, *, filename="run_plan.html"):
              'column is the part that matters when the figure is in a talk.</p>')
     rows = []
     for v in sorted(runs, key=lambda x: x["plugin"]):
-        gives, limit = YIELD.get(v["plugin"], ("", ""))
+        gives, limit = _yield_for((kernels or {}).get(v["plugin"]))
         rows.append(f"<tr><td><code>{_e(v['plugin'])}</code></td><td>{_e(gives)}</td>"
                     f"<td class='sub'>{_e(limit)}</td></tr>")
     B.append("<div class='wrap'><table><tr><th>plugin</th><th>what you get</th>"

@@ -639,9 +639,20 @@ def test_unmet_names_the_fix():
     fake = types.SimpleNamespace(
         needs_obs=["phase"], needs_obsm=[], needs_layers=["spliced"], needs_kernels=[],
         needs_design=False, can_source_layers=False, name="fake", injects_required=[])
-    probs = unmet(fake, obs=set(), obsm=set(), layers=set(), ran=())
+    # THE PRODUCER IS READ FROM THE REGISTRY, not from a table in the host. Passing `available`
+    # is what real callers do; a host that knew the answer without being handed the plugins would
+    # be a host with its own hard-coded list of what its plugins do, wrong about every plugin
+    # nobody had remembered to add.
+    from scprofile.kernels import discover as _discover
+    _reg = _discover(str(Path(__file__).resolve().parents[1] / "kernels"))
+    probs = unmet(fake, obs=set(), obsm=set(), layers=set(), ran=(), available=_reg)
     check("a non-sourcing kernel is still blocked", len(probs) == 2, str(probs))
-    check("and names its producer", any("cellcycle" in p for p in probs), " | ".join(probs))
+    check("and names its producer, derived from the declarations",
+          any("cellcycle" in p for p in probs), " | ".join(probs))
+    # and with no registry it degrades to a still-correct message rather than a wrong one
+    bare = unmet(fake, obs=set(), obsm=set(), layers=set(), ran=())
+    check("with no registry it says the column is absent without naming a producer",
+          len(bare) == 2 and not any("cellcycle" in p for p in bare), " | ".join(bare))
     check("and says spliced cannot be derived",
           any("aligner" in p.lower() for p in probs), " | ".join(probs))
 
