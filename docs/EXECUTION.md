@@ -161,6 +161,14 @@ One plugin failing must not take the wave with it.
   other three, which is invisible in an object and in a headline alike. The index says `ran, N
   unit(s) failed` and names the units; the README lists it under *Ran, but not on every unit*.
 
+**A per-unit plugin's ARRAYS cross units too, now that they carry their barcodes.** They used to
+be dropped with the sentence "an array carries no barcodes, so it cannot be concatenated across
+units" — which was never a property of arrays. `ctx.emit_obsm` writes the barcodes beside the
+`.npy`, so the pieces concatenate under the same disjointness check the obs columns already had:
+two units claiming one cell is refused, differing widths are refused, and a cell no unit covered
+is NaN. A **layer** still cannot cross units, and the reason is now stated: the barcodes name its
+rows and nothing names its columns, so two units' gene axes can differ without saying so.
+
 Per-unit results are folded for reporting, never collapsed. One plugin gets one page and one
 `report.json` entry, and that entry carries **every** unit — status, headline, caveats, figures and
 the unit-suffixed table names actually on disk. Keying a per-instance list on the plugin's name
