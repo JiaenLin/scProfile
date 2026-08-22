@@ -219,6 +219,25 @@ def test_the_plan_and_the_run_search_the_same_distance():
         check("a walk that stopped short says so", SRC.find.exhausted and not got,
               f"found {len(got)}, exhausted={SRC.find.exhausted}")
 
+    # AN ALIGNER WRITES THE SAME COUNTS TWICE. STARsolo delivers `Velocyto/filtered/` (every cell)
+    # beside `Velocyto/raw/` (every droplet); matched by barcode they give the identical answer
+    # for the cells in the object, and on a real ten-sample project the raw copies are 22 GB of
+    # MatrixMarket text read, parsed and discarded for nothing.
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td) / "Solo.out" / "Velocyto"
+        for sub, pad in (("filtered", 10), ("raw", 5000)):
+            d = root / sub
+            d.mkdir(parents=True)
+            (d / "barcodes.tsv").write_text("AAACCCAAGAAACACT-1\n")
+            for n in ("spliced.mtx", "unspliced.mtx"):
+                (d / n).write_text("x" * pad)
+        got = SRC.find([str(root)])
+        check("both copies are FOUND", len(got) == 2, str(got))
+        order = [s.path.name for s in sorted(got, key=lambda x: (x.size, str(x.path)))]
+        check("and the cheaper one is tried first", order[0] == "filtered", str(order))
+        check("size comes from the directory entry, not from opening it",
+              all(s.size > 0 for s in got), str([s.size for s in got]))
+
 
 def test_the_core_share_reaches_the_thread_pools():
     """A plugin cannot honour its share for numpy. The host has to, and now does.

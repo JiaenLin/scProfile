@@ -90,13 +90,29 @@ def core(name):
 
 
 class Source:
-    """One place velocity counts were found, and what is known about it before opening it."""
+    """One place the wanted layers were found, and what is known about it before opening it.
 
-    def __init__(self, kind, path, sample=None, why=""):
+    `size` is the bytes that would have to be read, taken from the directory entry rather than by
+    opening anything. It is what lets `attach` try the cheapest source first, which matters
+    because an aligner writes the SAME counts twice: STARsolo delivers `Velocyto/filtered/` beside
+    `Velocyto/raw/`, and the raw triplet is every droplet rather than every cell - 1.1 GB against
+    242 MB per matrix on a real run, for the identical cells once the barcodes are matched.
+    """
+
+    def __init__(self, kind, path, sample=None, why="", size=0):
         self.kind, self.path, self.sample, self.why = kind, Path(path), sample, why
+        self.size = int(size or 0)
 
     def __repr__(self):
         return f"<{self.kind} {self.path}{' sample=' + self.sample if self.sample else ''}>"
+
+
+def _size(entry):
+    """Bytes, from the directory entry. Never opens the file."""
+    try:
+        return entry.stat().st_size if entry is not None else 0
+    except OSError:
+        return 0
 
 
 def _sample_from(path, hints):
@@ -139,20 +155,23 @@ def find(search_paths, sample_hints=(), *, log=print, max_depth=MAX_DEPTH,
             entry_names = {e.name for e in entries}
             # An mtx triplet: spliced/unspliced matrices beside a barcode list. This is what
             # STARsolo's Velocyto output and several other quantifiers write.
+            by_name = {e.name: e for e in entries}
             mtx = [[n for n in entry_names if re.match(rf"^{re.escape(w)}\.mtx(\.gz)?$", n)]
                    for w in names]
             bc = [n for n in entry_names if re.match(r"^barcodes\.tsv(\.gz)?$", n)]
             if all(mtx) and bc:
                 found.append(Source("mtx", d, _sample_from(d, sample_hints),
-                                    " + ".join(f"{w}.mtx" for w in names) + " + barcodes.tsv"))
+                                    " + ".join(f"{w}.mtx" for w in names) + " + barcodes.tsv",
+                                    size=sum(_size(by_name.get(m[0])) for m in mtx)))
             for e in entries:
                 if e.is_file():
                     if e.name.endswith(".loom"):
                         found.append(Source("loom", e.path, _sample_from(e.path, sample_hints),
-                                            "a .loom, which velocyto writes"))
+                                            "a .loom, which velocyto writes", size=_size(e)))
                     elif e.name.endswith(".h5ad") and "velocity" not in e.name:
                         found.append(Source("h5ad", e.path, _sample_from(e.path, sample_hints),
-                                            "an .h5ad - checked for the wanted layers"))
+                                            "an .h5ad - checked for the wanted layers",
+                                            size=_size(e)))
                 elif e.is_dir(follow_symlinks=False) and not _pruned(e.name) \
                         and not e.name.startswith("."):
                     if depth >= max_depth:
@@ -251,9 +270,20 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
     obs_core = np.array([core(b) for b in A.obs_names])
     samples = (A.obs[sample_key].astype(str).values
                if sample_key and sample_key in A.obs else None)
-    notes, used = [], 0
+    notes, used, skipped = [], 0, 0
 
-    for src in sources:
+    # CHEAPEST FIRST, AND STOP WHEN EVERY CELL IS COVERED. An aligner writes the same counts
+    # twice - STARsolo's `Velocyto/raw/` is every droplet and `Velocyto/filtered/` is every cell,
+    # and once the barcodes are matched they give the identical answer for the cells in this
+    # object. On a real ten-sample project that is 22 GB of MatrixMarket text read, parsed and
+    # discarded for nothing, and it is the difference between this step taking minutes and taking
+    # an afternoon. Ordering by the size on the directory entry needs no pipeline's vocabulary and
+    # no filename convention: the smaller source that covers the same cells IS the cheaper correct
+    # answer. Ties break on the path so a run is reproducible.
+    for src in sorted(sources, key=lambda s: (s.size, str(s.path))):
+        if filled.all():
+            skipped += 1
+            continue
         loaded = load(src, log=log, names=names)
         if loaded is None:
             continue
@@ -299,6 +329,10 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
     if not used:
         return False, "; ".join(notes) if notes else "no source carried usable counts"
 
+    if skipped:
+        log(f"  {skipped} further candidate(s) not opened: every cell was already covered")
+        notes.append(f"{skipped} further candidate(s) were not opened - every cell was already "
+                     f"covered by a smaller source")
     cov = float(filled.mean())
     log(f"  attached from {used} source(s): {filled.sum():,}/{n:,} cells "
         f"({100 * cov:.1f}%) have {'/'.join(names)} counts")
