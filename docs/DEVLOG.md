@@ -428,6 +428,38 @@ harness: **three of my own, all in the job script or the suites, and all of the 
         the job when X is unset - before the live log is opened, so it looks exactly like a job
         that produced nothing → b27ed62.
 
+**THE SECOND RUN** (PBS 677757, after scenic was given anndata and de learned to check its
+design). `ran: ['abundance', 'cellchat', 'cellcycle', 'de', 'decoupler', 'liana', 'pseudotime',
+'scenic', 'silhouette', 'velocity']` - all ten, one merged object. `de ok 531s  779
+gene-population-term results below padj 0.05 across 10 population(s), formula ~ age + batch +
+diet`: chemistry dropped as aliased with age, and NAMED. Two refusals left, both this host's:
+
+        [host] **`ctx.reference_for_role()` COULD NEVER RETURN ANYTHING.** `Context` has accepted
+              `reference_specs` from the start and NOTHING EVER PASSED THEM - `in.json` carried
+              `{name: path}` and not the declarations behind them - so the search had an empty
+              mapping and answered None for every role, of every plugin, always. That is the whole
+              mechanism that keeps a SPECIES out of a plugin, failing closed: the mouse and human
+              entries of one reference are different FILES with different NAMES, so asking by name
+              would mean a plugin picking a species. scenic refused on all ten units with `the
+              cisTarget references are not available` while its own `in.json` listed all three of
+              them, verified, by absolute path → a5314fa
+        [host] and the gene-column fix BROKE THE SHAPE IT WAS FIXING. `genes` became a list per
+              FIELD of features.tsv, so `len(genes)` was 2, and the orientation check compared
+              34,290 against 2 and refused every source as `matches neither 15,046 barcodes nor 2
+              genes`. A fix that turned partial sourcing into none, found on the run that was
+              meant to prove it → a5314fa
+
+**THE THIRD RUN** (PBS 677891). velocity produces a real result on the real cohort for the first
+time in this project's history: `partial - velocity fitted on 2,000 genes (stochastic); median
+confidence 0.42; unspliced 23.9% of counts`, `wrote velocity.h5ad (98,627 x 2,000, velocity graph
+included)`, `transitions: 11 directed label transition(s)`. `partial` is the DECLARED behaviour
+below `min_confidence` 0.5, not a failure.
+
+observation, not a defect: ten `per_unit` GRNBoost2 fits on ONE node get one core each, because
+the budget is divided over a 37-instance wave. That is arithmetic, and `EXECUTION.md` §5 already
+names the answer - the `pbs` executor submits one job per instance, and wave 1 of this cohort is
+up to eighty independent jobs limited by the queue rather than by one node.
+
 conversion: **did the two plugins lose behaviour?** No, and what they GAINED is the point.
 
         cellcycle's converted form produces the same shape - `status ok`, `obs [phase, S_score,
