@@ -1006,7 +1006,8 @@ def _plan(a):
         else:
             runnable.append(name)
             e = k.executor
-            unit = f", per {k.per_unit}" if k.per_unit else ""
+            unit = (f", per {k.per_unit}" if k.per_unit else "") + (
+                " + one cohort fit" if k.per_unit and k.also_cohort else "")
             print(f"  runnable      {name}   cost {e['cost']}, {e['cores']} core(s){unit}")
             # `runnable` here means the prerequisite check did not block it. A plugin that
             # declares can_source_layers is NOT blocked on a missing layer - it goes and looks -
@@ -1046,7 +1047,8 @@ def _plan(a):
                           organism=organism[0], var=set(A.var.columns), derived=_provided)
             mark = "ready when built" if not probs else "would refuse"
             wraps = k.spec.get("plans_to_wrap") or "-"
-            unit = f", per {k.per_unit}" if k.per_unit else ""
+            unit = (f", per {k.per_unit}" if k.per_unit else "") + (
+                " + one cohort fit" if k.per_unit and k.also_cohort else "")
             print(f"  {mark:<16} {name:<12} wraps {wraps}{unit}")
             for pr in probs:
                 print(f"      {pr}")

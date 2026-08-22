@@ -490,6 +490,41 @@ ck("one instance declaring more than the budget runs alone",
    concurrency([{"plugin": "x", "cores": 8, "declared": 16}], 8) == 1)
 ck("an empty wave does not divide by zero", concurrency([], 8) == 1)
 
+print("\na plugin whose output vocabulary is INFERRED also gets one cohort fit")
+# SCENIC discovers its regulon set per fit, so two units' AUC columns are not the same quantity.
+# Measured on ten samples: 37-111 regulons, Jaccard 0.17 between two of them. The cohort fit is
+# the one comparable vocabulary; the per-unit fits are the only independent check on it, so it is
+# an EXTRA instance and never a replacement.
+import types as _types                                                        # noqa: E402
+from scprofile.kernels import schedule as _schedule                           # noqa: E402
+
+
+def _fake(name, per_unit=None, cohort=False):
+    return _types.SimpleNamespace(
+        name=name, needs_kernels=[], per_unit=per_unit,
+        also_cohort={"why": "vocabulary is inferred per fit"} if cohort else None,
+        executor={"cost": "medium", "cores": 2, "memory_gb_per_100k": None})
+
+
+_units = ["s1", "s2", "s3"]
+_ks = {"scenicish": _fake("scenicish", "sample", cohort=True),
+       "lianaish": _fake("lianaish", "sample"),
+       "wholeish": _fake("wholeish")}
+_w = _schedule(list(_ks), _ks, budget_cores=8, units=_units)[0]
+_by = {}
+for i in _w:
+    _by.setdefault(i["plugin"], []).append(i["unit"])
+ck("the inferred-vocabulary plugin gets every unit AND a cohort fit",
+   sorted(x or "COHORT" for x in _by["scenicish"]) == ["COHORT", "s1", "s2", "s3"],
+   str(_by["scenicish"]))
+ck("a fixed-vocabulary per-unit plugin gets NO extra cohort fit",
+   sorted(_by["lianaish"]) == ["s1", "s2", "s3"], str(_by["lianaish"]))
+ck("a whole-cohort plugin is unaffected", _by["wholeish"] == [None], str(_by["wholeish"]))
+ck("the declaration carries its reason",
+   "inferred" in (_ks["scenicish"].also_cohort or {}).get("why", ""))
+ck("and a plugin that declares nothing has no cohort scope",
+   _ks["lianaish"].also_cohort is None)
+
 print("\nand the pool never holds more cores than the allocation, under real threads")
 # The headline is an integer; the POOL is what schedules. This is the property that actually
 # protects the node, and no integer can express it for a wave of mixed core counts.

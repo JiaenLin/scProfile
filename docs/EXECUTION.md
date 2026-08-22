@@ -83,8 +83,40 @@ The same argument applies to regulon inference. Pooling arms and inferring one n
 network for the average of two conditions, which may describe neither.
 
 So `per_unit: sample` plugins fan out over samples — embarrassingly parallel, N× the throughput,
-and the only form of the result a downstream comparison can consume. A cohort-level run remains
-available as `--pooled` and says in its caveats that it cannot answer a between-condition question.
+and the only form of the result a downstream comparison can consume.
+
+### `also_cohort` — when per-unit results are not comparable to each other
+
+**The paragraph above is true of a method with a FIXED output vocabulary and false of one that
+INFERS it.** `liana` and `cellchat` score ligand–receptor pairs drawn from a reference resource, so
+every unit's table is indexed by the same pairs and the units really can be compared. SCENIC is not
+like that: each fit discovers its own regulon set, so two units' AUC columns are **not the same
+quantity** and a between-condition comparison built from them compares different things.
+
+Measured on ten samples of one heart study: **37 to 111 regulons per sample, and two samples shared
+17% of their transcription factors (Jaccard 0.17)** — with the counts separating almost perfectly by
+a design factor that is itself confounded with batch, which is what makes the naive reading
+dangerous rather than merely noisy.
+
+A plugin in that position declares `also_cohort` with its reason, and the scheduler emits **one
+extra instance with `unit: None` alongside the per-unit ones**. Both are kept because they answer
+different questions and check each other:
+
+| scope | question it answers | comparable? |
+|---|---|---|
+| per unit | what programme operates in *this* sample | within that sample only |
+| cohort | one vocabulary over every cell | across cells and conditions |
+
+The per-unit fits are the only **independent** check on the pooled one — a regulon recovered
+separately in most samples is far stronger evidence than one appearing in a single pooled fit that
+nothing corroborates. And the cohort fit carries the risk the per-unit fits do not: a pooled GRN has
+no notion of design and will encode batch-driven co-expression as regulation, so where the object
+records a constraint on use, the cohort fit reproduces it verbatim.
+
+There is no upstream guidance to defer to here. The SCENIC maintainers' thread on comparing AUC
+across runs is unanswered ([aertslab/SCENIC #317](https://github.com/aertslab/SCENIC/discussions/317)),
+and the single-cell best-practices GRN chapter demonstrates on one donor, explicitly *"due to batch
+integration considerations"*. The declaration exists because the guidance does not.
 
 ### The design table
 
@@ -257,7 +289,7 @@ across the design must use.
 |---|---|
 | speed | wall-clock of a full profile against the sum of its parts run serially |
 | no oversubscription | threads started never exceed the budget, measured, not assumed |
-| correctness | a `per_unit` plugin produces one result per unit, comparable across arms |
+| correctness | a `per_unit` plugin produces one result per unit — comparable across arms when its output vocabulary is fixed, and via its `also_cohort` fit when the vocabulary is inferred |
 | isolation | a deliberately failed plugin leaves every independent one intact |
 | upstream | a constrained embedding is refused; a bad flag digest is refused; NaN rows are handled |
 

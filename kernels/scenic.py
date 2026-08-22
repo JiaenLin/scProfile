@@ -39,6 +39,22 @@ PLUGIN = {
             "because downstream it reads as 'no regulons found'.",
             "The cisTarget rankings are organism-specific and this plugin refuses an organism it "
             "has no rankings for rather than pruning against the wrong species.",
+            "AUC IS A WITHIN-EXPERIMENT QUANTITY. The SCENIC protocol states that AUC values may "
+            "only be used to compare a regulon's activity across cells of the SAME experiment "
+            "(Van de Sande et al., Nat Protoc 2020), and the regulon set is itself inferred per "
+            "fit - so two per-sample fits do not even share a vocabulary. This plugin therefore "
+            "runs per sample AND once over the cohort, and each result says which it is.",
+            "There is no upstream guidance on the multi-sample case. The SCENIC maintainers' "
+            "thread on comparing AUC across sequencing runs is still unanswered "
+            "(aertslab/SCENIC discussion #317), and the single-cell best-practices GRN chapter "
+            "demonstrates on ONE donor, explicitly 'due to batch integration considerations' "
+            "(sc-best-practices.org). Absence of guidance is why the two scopes are declared "
+            "here rather than left to whoever runs it.",
+            "A COHORT FIT LEARNS THE BATCH. GRNBoost2 has no notion of design: pooled across "
+            "samples it will happily encode co-expression driven by batch or chemistry as "
+            "regulation. Where the object carries an upstream constraint on use, the cohort fit "
+            "reproduces it verbatim rather than refusing - the vocabulary is still correct for "
+            "every comparison the constraint does not name.",
         ],
     },
 
@@ -46,6 +62,20 @@ PLUGIN = {
     "provides": ["activity"],
     "produces": ["obsm[X_regulon_auc]", "tables/regulon_targets.csv"],
     "per_unit": "sample",
+    # AND ONCE OVER THE WHOLE COHORT, because a regulon set is INFERRED, not fixed. Each fit
+    # discovers its own vocabulary, so two units' AUC columns are not the same quantity and a
+    # between-condition comparison built from them compares different things. Measured on ten
+    # samples of one heart study: 37 to 111 regulons per sample, and two samples shared 17% of
+    # their transcription factors (Jaccard 0.17).
+    #
+    # The per-sample fits are KEPT and are not redundant - they are the only independent check on
+    # the pooled one, and a regulon recovered in most samples separately is far stronger evidence
+    # than one from a single pooled fit that nothing corroborates.
+    "also_cohort": {
+        "why": "regulon membership is inferred per fit, so per-sample AUC columns are not the "
+               "same quantity. One cohort fit yields ONE regulon vocabulary, which is what a "
+               "between-condition comparison of regulon activity requires.",
+    },
 
     # REFERENCE DATA, WITH ITS DIGESTS. Recovered from the directory shape rather than
     # re-derived: the vendor publishes no checksums, so each of these came from a completed
@@ -260,6 +290,36 @@ def run(ctx):
     ctx.caveat("The network was inferred from THIS data, so it is not comparable with one "
                "inferred from another dataset, and an absent regulon is not evidence of an "
                "inactive TF.")
+
+    # THE TWO SCOPES ANSWER DIFFERENT QUESTIONS AND EACH SAYS WHICH IT IS. A reader who mistakes
+    # one for the other draws a between-condition conclusion from columns that are not the same
+    # quantity - the failure this plugin runs twice to prevent.
+    if PLUGIN.get("per_unit") and ctx.unit is None:
+        ctx.caveat(
+            "THIS IS THE COHORT FIT: one regulon vocabulary over every cell, which is what makes "
+            "activity comparable BETWEEN cells and conditions. The per-sample fits beside it are "
+            "not interchangeable with it - each discovered its own regulon set, so their AUC "
+            "columns are not the same quantity.")
+        # A GRN POOLED ACROSS SAMPLES LEARNS WHATEVER CO-VARIES, INCLUDING THE BATCH. When the
+        # upstream tool has recorded that a factor never varies within a batch, co-expression
+        # driven by the batch is indistinguishable from co-expression driven by that factor, and
+        # a regulon-activity difference across it cannot be attributed to biology. Reported, not
+        # refused: the fit is still the right vocabulary for every comparison the constraint does
+        # not name.
+        if ctx.constraint:
+            ctx.caveat(
+                "An upstream CONSTRAINT ON USE applies to this object and it applies to this fit "
+                "in particular. A cohort GRN learns whatever co-varies across the pooled cells, "
+                "so where a design factor never varies within a batch, co-expression driven by "
+                "the batch enters the regulons themselves and a difference in regulon activity "
+                "across that factor cannot be separated from it. The constraint, verbatim: "
+                + ctx.constraint.strip()[:600])
+    elif PLUGIN.get("per_unit"):
+        ctx.caveat(
+            "THIS IS A PER-SAMPLE FIT and its regulon set was discovered from this sample alone. "
+            "Do NOT compare these AUC values with another sample's - use the cohort fit for that. "
+            "What these are good for is REPRODUCIBILITY: a regulon recovered independently in "
+            "many samples is far stronger evidence than one appearing in a single pooled fit.")
     ctx.caveat(f"Pruned against the {ctx.organism} cisTarget rankings. Motif enrichment is what "
                f"makes a module a regulon; without it these would be raw co-expression.")
 

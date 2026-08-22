@@ -737,7 +737,7 @@ def test_schedule():
 
     def fake(name, cost="medium", cores=1, needs=(), unit=None):
         return types.SimpleNamespace(
-            name=name, needs_kernels=list(needs), per_unit=unit,
+            name=name, needs_kernels=list(needs), per_unit=unit, also_cohort=None,
             executor={"cost": cost, "cores": cores, "memory_gb_per_100k": None})
 
     ks = {"a": fake("a", "trivial", 1),

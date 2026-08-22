@@ -224,6 +224,26 @@ class Kernel:
         return self.spec.get("per_unit")
 
     @property
+    def also_cohort(self):
+        """A per-unit plugin that ALSO needs one fit over the whole cohort, and why.
+
+        Some methods infer their own output vocabulary from the data they are given. SCENIC is the
+        clear case: each fit discovers its own regulon set, so two units' AUC columns are not the
+        same quantity and cannot be compared - measured on ten samples of one heart study, regulon
+        counts ran 37 to 111 and two samples shared 17% of their transcription factors (Jaccard
+        0.17). Per-unit fits answer "what operates in this animal"; only a cohort fit yields ONE
+        vocabulary, which is what a between-condition question needs.
+
+        Both are kept because they answer different questions and check each other: a regulon
+        recovered independently in most units is far stronger evidence than one from a single
+        pooled fit, and a pooled fit is the only thing whose columns are comparable.
+
+        Returns the declaration mapping (with its `why`), or None.
+        """
+        v = self.spec.get("also_cohort")
+        return dict(v) if isinstance(v, dict) else ({"why": ""} if v else None)
+
+    @property
     def design_aware(self):
         """True if it reports per arm without testing across the design.
 
@@ -597,6 +617,15 @@ def schedule(names, available, *, budget_cores=1, units=None):
         for n in ready:
             k = available[n]
             us = list(units or []) if k.per_unit else [None]
+            # THE COHORT FIT IS AN EXTRA INSTANCE, NOT A REPLACEMENT. A plugin declaring
+            # `also_cohort` produces output whose vocabulary is inferred per fit, so its per-unit
+            # results are not comparable to each other; the cohort fit supplies the one vocabulary
+            # a between-condition question needs. Dropping the per-unit fits to get it would throw
+            # away the only independent check on the pooled one.
+            # getattr, as `needs_design` is read: a kernel-like object reaches `schedule`
+            # from tests and from third-party registries as well as from `Kernel`.
+            if k.per_unit and getattr(k, "also_cohort", None) and us:
+                us = us + [None]
             for u in (us or [None]):
                 wave.append({"plugin": n, "unit": u, "cores": k.executor["cores"]})
         waves.append(_budget(wave, budget_cores))
