@@ -31,7 +31,10 @@ its absence is reported rather than assumed away.
 
 ## 1. Kernels
 
-Seven, each independently installable, each with its own environment.
+Seven, each independently installable. **Not each with its own environment** — a plugin declares
+what it NEEDS and the builder resolves every plugin's needs together into as few environments as
+satisfy them all, sharing where it can prove that is safe and isolating where it cannot. On the
+shipped set that is 6 plugins in 3 environments. See `docs/ARCHITECTURE.md` §1a.
 
 | kernel | what it produces | needs |
 |---|---|---|
@@ -106,12 +109,18 @@ kernels/<name>/
 ### Installing
 
 ```bash
-scprofile install scenic --prefix ~/envs      # builds from lock.yml, then runs selftest
+scprofile install scenic --prefix ~/envs --dry-run   # which environment, shared with whom
+scprofile install scenic --prefix ~/envs      # builds THAT environment, then runs the selftest
+                                              # of every plugin resolving to it
 scprofile doctor                              # which kernels are installed, missing, or STALE
 ```
 
-A kernel whose lock has changed since its env was built is **stale**, and that is a third state —
-neither present nor absent. Sites with existing environments override via config; `doctor` says
+The unit of installation is the resolved environment, not the plugin: it is built whole, from the
+merged requirement, and proved for every member — an environment shared by four and proved by one
+is one the other three meet for the first time inside a run.
+
+A kernel whose requirement has changed since its env was built is **stale**, and that is a third
+state — neither present nor absent. Sites with existing environments override via config; `doctor` says
 which route each kernel is using, so it is never ambiguous.
 
 ### The contract
