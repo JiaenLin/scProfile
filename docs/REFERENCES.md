@@ -16,8 +16,13 @@ visible to the tool**, and the rest are no less real for being invisible.
 | tier | pinned by | fetched by | verified by | appears in the report |
 |---|---|---|---|---|
 | **declared** | `references.yml`, with a `sha256` and a `size` | `scprofile fetch` | `validate --deep`, and again by `resolve()` before every run | yes, by name and digest |
-| **bundled** | the package version in `lock.yml` | the environment build | nothing | no |
+| **bundled** | the package version in the plugin's `requires` | the environment build | nothing | no |
 | **runtime** | nothing | the plugin, over the network, while it runs | nothing | no |
+
+`decoupler`'s CollecTRI prior is the **runtime** tier and is the only one here. It is an API call,
+not a file with a URL and a digest, so it cannot be moved up a tier: a run needs a route out of
+the compute node, and two runs weeks apart score against different priors. Its edge and regulator
+counts are written into the caveats because they are the only record of which prior was used.
 
 **Declared** is the only tier where a result can be traced to the exact bytes that produced it.
 
@@ -85,9 +90,9 @@ nothing else.
 ### `cellchat` — CellChatDB
 
 `CellChatDB.human` and `CellChatDB.mouse` are R data objects **inside the CellChat package**.
-They are pinned by the git commit in [`kernels/cellchat/lock.yml`](../kernels/cellchat/lock.yml)
-(`jinworks/CellChat@75253cd…`, DESCRIPTION version 2.2.0.9001), which was chosen for the
-*software* — the database is pinned as a side effect.
+They are pinned by the git commit in [`kernels/cellchat.py`](../kernels/cellchat.py)'s
+`requires.r` (`jinworks/CellChat@75253cd…`, DESCRIPTION version 2.2.0.9001), which was chosen for
+the *software* — the database is pinned as a side effect.
 
 **Source:** <https://github.com/jinworks/CellChat> · **Cite:** Jin *et al.*, *Nature
 Communications* 2021.
@@ -107,8 +112,10 @@ in a result records which CellChatDB produced it.
 
 ### `liana` — the consensus resources
 
-`consensus` (human) and `mouseconsensus` ship inside the wheel, pinned by `liana==1.4.0` in
-[`kernels/liana/lock.yml`](../kernels/liana/lock.yml). They are assembled from OmniPath.
+`consensus` (human) and `mouseconsensus` ship inside the wheel, constrained by `liana` in
+[`kernels/liana.py`](../kernels/liana.py)'s `requires`. They are assembled from OmniPath, and the
+constraint is a range — so which version of the resource a run used is recorded in the result's
+caveats and by nothing else.
 
 **Source:** <https://github.com/saezlab/liana-py> · **Cite:** Dimitrov *et al.*, *Nature
 Communications* 2022 (LIANA); Türei *et al.*, *Molecular Systems Biology* 2021 (OmniPath).
