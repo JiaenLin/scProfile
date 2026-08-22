@@ -317,9 +317,16 @@ ck("the README is written after the report", src.index("report.write_all") < src
 
 print("\nevery file that names a module imports it")
 import ast as _ast                                                             # noqa: E402
-_bad = []
-for _f in list(Path("scprofile").rglob("*.py")) + list(Path("tests").rglob("*.py")) \
-        + list(Path("kernels").rglob("*.py")):
+# ROOTED AT THE FILE, NOT AT THE WORKING DIRECTORY. `Path("scprofile").rglob(...)` returns
+# NOTHING when the suite is run from anywhere else, and this check then passes having opened zero
+# files - which is the failure `test_portability` guards its own scan against and this one did
+# not. It was never noticed because nothing had run the suites from outside the repository root
+# until the job script started doing it.
+_ROOT = Path(__file__).resolve().parents[1]
+_bad, _scanned = [], 0
+for _f in list((_ROOT / "scprofile").rglob("*.py")) + list((_ROOT / "tests").rglob("*.py")) \
+        + list((_ROOT / "kernels").rglob("*.py")):
+    _scanned += 1
     src = _f.read_text()
     tree = _ast.parse(src)
 
@@ -391,6 +398,9 @@ for _f in list(Path("scprofile").rglob("*.py")) + list(Path("tests").rglob("*.py
             if mod in used and mod not in _visible:
                 _bad.append(f"{_f}:{_where}() uses {mod}. without importing it")
 ck("no file uses a module it did not import", not _bad, "; ".join(_bad[:3]))
+# THE COUNT IS ASSERTED, NOT ASSUMED. This scan passed vacuously from any directory but the
+# repository root, and a clean report from a check that opened zero files is the worst kind.
+ck("and the scan actually opened the tree", _scanned >= 30, f"only {_scanned} files")
 
 print("\nlayer_names knows what list(adata.layers) does not")
 from scprofile import manifest                                                 # noqa: E402
@@ -401,9 +411,11 @@ class _Fake:
 ck("the None alias for X is not a layer", manifest.layer_names(_Fake()) == ["counts", "spliced"],
    str(manifest.layer_names(_Fake())))
 ck("an object with no layers gives []", manifest.layer_names(object()) == [])
+_hostsrc = list((_ROOT / "scprofile").glob("*.py"))
+ck("and the host was actually opened to check it", len(_hostsrc) >= 10, str(len(_hostsrc)))
 ck("nothing iterates layers raw any more",
-   not any("in A.layers if k" in Path(f).read_text() or "in adata.layers if k" in Path(f).read_text()
-           for f in Path("scprofile").glob("*.py")))
+   not any("in A.layers if k" in f.read_text() or "in adata.layers if k" in f.read_text()
+           for f in _hostsrc))
 
 print("\nthe smoke fixture is not a shipped plugin")
 from scprofile.kernels import discover                                         # noqa: E402
@@ -453,7 +465,7 @@ ck("one instance declaring more than the budget runs alone",
    concurrency([{"plugin": "x", "cores": 8, "declared": 16}], 8) == 1)
 ck("an empty wave does not divide by zero", concurrency([], 8) == 1)
 ck("and the rule is the one the document states",
-   "budget / smallest_declared_cores" in (Path("docs") / "EXECUTION.md").read_text())
+   "budget / smallest_declared_cores" in (_ROOT / "docs" / "EXECUTION.md").read_text())
 
 print("\nthe uns payload is writable, checked before write_h5ad")
 prov = merge.provenance(f, {"n_obs": 10, "compartment": None}, {"liana": ["x"]},

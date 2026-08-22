@@ -138,9 +138,14 @@ run)
   # not - so a check that needs them is skipped there and SAYS it was skipped. Running the same
   # suites with the host interpreter is where those checks actually execute; seven suites green
   # on a machine that cannot import an array is a weaker statement than it looks.
+  # CAPTURE, THEN PRINT. `$PY "$t" | tail | sed` in the failing branch is a PIPELINE, and under
+  # `set -o pipefail` its status is the failing python's - so the `if` returns non-zero, and with
+  # `set -e` the job ends on the first failing suite instead of reporting all seven. That is the
+  # exact trap the header of this file warns about, introduced by the block that was added to
+  # report suite failures.
   for t in "$TOOL"/tests/test_*.py; do
-    if $PY "$t" >/dev/null 2>&1; then echo "  ok   $(basename "$t")"
-    else echo "  FAIL $(basename "$t")"; $PY "$t" 2>&1 | tail -25 | sed 's/^/       /'; fi
+    if out=$($PY "$t" 2>&1); then echo "  ok   $(basename "$t")"
+    else echo "  FAIL $(basename "$t")"; echo "$out" | tail -25 | sed 's/^/       /'; fi
   done
 
   say "1. DECLARE"
