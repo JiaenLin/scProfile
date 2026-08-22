@@ -57,6 +57,11 @@ def validate_plugin(kernel):
     # Every check below was written against the directory shape and looked for siblings that a
     # one-file plugin does not have - so the shape the host now prefers failed its own validator.
     if not d.is_dir():
+        # ONE CHECK, SHARED. The builder refuses what validate refuses; a builder that accepts
+        # what validate rejects installs something nobody can maintain.
+        from . import declare
+        for lvl, msg in declare.check(spec, kernel.name):
+            f.append(Finding(lvl, msg.split(".")[0][:70], msg))
         src = d.read_text(encoding="utf-8", errors="replace")
         up_inline = spec.get("upstream") or {}
         if wraps and not up_inline:

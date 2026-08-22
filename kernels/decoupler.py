@@ -6,6 +6,7 @@ entrypoint, which applies the contract before this file sees anything.
 """
 
 PLUGIN = {
+    "api": 1,
     "version": "0.1.0",
     "summary": "regulatory activity per cell, from a curated prior",
     "when_to_use": "you want transcription-factor or pathway activity without inferring a "
@@ -14,11 +15,24 @@ PLUGIN = {
               "license": "GPL-3.0",
               "cite": "Badia-i-Mompel et al., Bioinformatics Advances 2022"},
 
-    # WHAT IT READS, BY ROLE. Never a column name: `{lognorm}` and `{label}` are resolved against
-    # whatever this project happens to call them.
-    "needs": {"layers": ["{lognorm}"]},
-    "sees": ["{lognorm}", "{label}", "var_names"],
+    # WHAT IT MUST BE GIVEN, and what it will use if present. The host resolves both and does
+    # NOT CALL run() when a required one is missing - so this file contains no prerequisite
+    # checking at all. `organism` is required because the prior is published per species and
+    # returns a small plausible table for the wrong one rather than failing.
+    "inject": {"required": ["lognorm", "organism"],
+               "optional": ["label"]},
+    # A CAPABILITY, not a plugin name. Anything needing per-cell activity injects `activity` and
+    # does not care that decoupler produced it.
+    "provides": ["activity"],
     "produces": ["obsm[X_tf_activity]", "tables/activity_by_label.csv"],
+
+    # TYPED, DEFAULTED AND RANGE-CHECKED BY THE HOST before run() is called. The plugin reads
+    # ctx.config and never validates it.
+    "config": {
+        "min_edges": {"type": "int", "default": 1000, "min": 1,
+                      "help": "refuse if the prior has fewer edges than this - a truncated "
+                              "download returns a smaller answer rather than an error"},
+    },
     "per_unit": None,
     "cost": "medium", "cores": 4,
 
@@ -66,22 +80,17 @@ PLUGIN = {
 def run(ctx):
     import decoupler as dc
 
-    # THE PRIOR IS CHOSEN BY ORGANISM, from what the host detected or was told. Guessing would
-    # return a full table of scores computed against the wrong species - a result-shaped hole,
-    # which is the third thing this plugin says it cannot show.
-    if not ctx.organism:
-        return ctx.refuse("activity scores",
-                          "no organism was determined, and the prior is organism-specific. "
-                          "Pass --organism.")
-
+    # NO PREREQUISITE CHECKING. `lognorm` and `organism` are declared as required injections, so
+    # the host did not call this without them - and it reported precisely which was missing to
+    # the planner, which is where a user can act on it.
     net = dc.get_collectri(organism=ctx.organism, split_complexes=False)
     ctx.log(f"prior: {len(net):,} edges, {net['source'].nunique():,} regulators "
             f"for {ctx.organism}")
-
-    if not ctx.keys.get("lognorm"):
-        ctx.caveat("No log-normalised layer was named, so X was used as it stands. An activity "
-                   "score computed on counts is not comparable with one computed on "
-                   "log-normalised values.")
+    if len(net) < ctx.config["min_edges"]:
+        return ctx.refuse("activity scores",
+                          f"the prior has {len(net):,} edges, below the declared minimum of "
+                          f"{ctx.config['min_edges']:,}. A truncated prior returns a smaller "
+                          f"answer rather than an error.")
 
     ctx.adata.X = ctx.X
     dc.run_ulm(mat=ctx.adata, net=net, source="source", target="target", weight="weight",

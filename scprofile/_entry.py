@@ -20,8 +20,26 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from scprofile import manifest                                            # noqa: E402
+from scprofile import declare, manifest                                   # noqa: E402
 from scprofile.plugin import Context                                      # noqa: E402
+
+
+def _has(ctx, cap, inp):
+    """Is this capability actually available? The host answers; the plugin never asks."""
+    spec = declare.CAPABILITIES.get(cap, {})
+    how = spec.get("resolve")
+    if cap == "organism":
+        return bool(ctx.organism)
+    if how == "design":
+        return bool(inp.get("design"))
+    if how == "derived":
+        return cap in (inp.get("upstream") or {}) or cap in (inp.get("provided") or [])
+    name = ctx.keys.get(cap)
+    if not name:
+        return False
+    A = ctx.adata
+    return (name in A.obs or name in A.layers or name in A.obsm
+            or name in getattr(A, "var", {}))
 
 
 def load(path):
@@ -119,14 +137,57 @@ def main(argv):
                                f"and are EXCLUDED here.")
             log(f"  excluded {nb:,} cells with NaN in {emb}")
 
+    mod = load(plugin_path)
+    spec = getattr(mod, "PLUGIN", {}) or {}
+
+    # THE CONTRACT VERSION, checked before anything else. A host that meets a plugin written
+    # against a contract it does not implement refuses it BY NAME, rather than calling it and
+    # failing somewhere inside where the cause is a traceback in a stranger's run.
+    api = spec.get("api", declare.API)
+    if api != declare.API:
+        manifest.write_output(out, kernel=Path(plugin_path).stem, status="refused",
+                              headline=f"plugin declares api {api}, host implements "
+                                       f"{declare.API}",
+                              absent=[{"what": "everything",
+                                       "why": f"contract mismatch: this plugin was written "
+                                              f"against api {api}."}])
+        return 0
+
+    # CONFIG: defaulted, typed and range-checked HERE, so a plugin never validates its own
+    # parameters and a bad --params fails before the work rather than inside it.
+    try:
+        config = declare.resolve_config(spec, inp.get("params"), Path(plugin_path).stem)
+    except declare.DeclarationError as e:
+        manifest.write_output(out, kernel=Path(plugin_path).stem, status="refused",
+                              headline="parameter refused",
+                              absent=[{"what": "everything", "why": str(e)}])
+        return 0
+
     ctx = Context(A, keys=keys, out=out, cores=cores, unit=unit,
                   organism=inp.get("organism"), assay=inp.get("assay"),
                   references=inp.get("references"), params=inp.get("params"),
-                  design=inp.get("design"), sentinels=sentinels, log=log)
+                  design=inp.get("design"), sentinels=sentinels, config=config, log=log)
     ctx.caveats.extend(pre_caveats)
 
-    mod = load(plugin_path)
-    mod.run(ctx)
+    # REQUIRED CAPABILITIES. The host either satisfies them or does not call run() - a plugin
+    # that opens with `if not ctx.organism: refuse(...)` is doing the host's job, and doing it
+    # once per plugin means doing it differently once per plugin.
+    missing = [c for c in ((spec.get("inject") or {}).get("required") or [])
+               if not _has(ctx, c, inp)]
+    if missing:
+        ctx.status = "refused"
+        ctx.headline = f"missing required capability: {', '.join(missing)}"
+        for c in missing:
+            ctx.absent.append({"what": c,
+                               "why": declare.CAPABILITIES.get(c, {}).get("why", "not available")})
+        log(f"  NOT CALLED: {ctx.headline}")
+    else:
+        try:
+            mod.run(ctx)
+        finally:
+            # ON EVERY EXIT PATH, including a raise. A plugin that raised did not reach the
+            # `finally` somebody wrote inside it in a hurry.
+            ctx._dispose(log=log)
 
     manifest.write_output(
         out, kernel=Path(plugin_path).stem,

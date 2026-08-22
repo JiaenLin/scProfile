@@ -21,7 +21,7 @@ Writing or updating a plugin is a **maintainer** job:
 **[docs/MAINTAINING_PLUGINS.md](docs/MAINTAINING_PLUGINS.md)**.
 
 📖 For users: **[Run plan](docs/RUN_PLAN.md)** · **[Reference data](docs/REFERENCES.md)**
-📖 For developers: **[Architecture](docs/ARCHITECTURE.md)** · **[Maintaining plugins](docs/MAINTAINING_PLUGINS.md)** · **[Execution](docs/EXECUTION.md)** · **[Design](DESIGN.md)** · **[Roadmap](ROADMAP.md)**
+📖 For developers: **[Plugin design](docs/PLUGIN_DESIGN.md)** · **[Architecture](docs/ARCHITECTURE.md)** · **[Maintaining plugins](docs/MAINTAINING_PLUGINS.md)** · **[Execution](docs/EXECUTION.md)** · **[Design](DESIGN.md)** · **[Roadmap](ROADMAP.md)**
 
 ---
 

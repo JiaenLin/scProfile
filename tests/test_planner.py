@@ -398,8 +398,11 @@ import importlib.util as _iu                                                    
 _pp = Path(__file__).resolve().parents[1] / "kernels" / "decoupler.py"
 _spec = _iu.spec_from_file_location("dcp", _pp)
 _mod = _iu.module_from_spec(_spec); _spec.loader.exec_module(_mod)
+# `needs` became `inject` when capabilities replaced free-text prerequisites: a plugin now says
+# what it must be GIVEN, and the host resolves it rather than the plugin checking.
 ck("it declares everything the builder needs",
-   {"env", "needs", "produces", "cannot_show", "upstream"} <= set(_mod.PLUGIN))
+   {"api", "env", "inject", "produces", "cannot_show", "upstream"} <= set(_mod.PLUGIN),
+   str(sorted(set(_mod.PLUGIN))))
 ck("it has a run(ctx)", callable(getattr(_mod, "run", None)))
 ck("it has a selftest(ctx) in the same file", callable(getattr(_mod, "selftest", None)))
 ck("its env pins a python version", bool(_mod.PLUGIN["env"].get("python")))

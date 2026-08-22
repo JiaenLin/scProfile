@@ -66,7 +66,8 @@ class Context:
     """
 
     def __init__(self, adata, *, keys, out, cores=1, unit=None, organism=None, assay=None,
-                 references=None, params=None, design=None, sentinels=(), log=print):
+                 references=None, params=None, design=None, sentinels=(),
+                 config=None, log=print):
         self.adata = adata
         #: {role: actual name in THIS object}. `ctx.keys["label"]`, never a literal column.
         self.keys = dict(keys or {})
@@ -83,6 +84,11 @@ class Context:
         self.sentinels = tuple(sentinels or ())
         self.log = log
 
+        #: Typed, defaulted and RANGE-CHECKED before run() was called. A plugin reads
+        #: `ctx.config["min_cells"]` and never validates it: a bad --params fails in the second
+        #: the plan is drawn, not an hour into a queue.
+        self.config = dict(config or {})
+        self._effects = []
         self.headline = ""
         self.status = "ok"
         self._obs, self._obsm, self._layers = {}, {}, {}
@@ -203,6 +209,33 @@ class Context:
         sc.pp.log1p(B)
         A.layers["lognorm"] = B.X.copy()
         return A
+
+    def effect(self, acquire, release=None):
+        """Acquire something that must be released, and register the release NOW.
+
+        Borrowed from Cordis, where everything a plugin registers is tied to its scope and undone
+        when the scope closes. A dask client, a temp directory, an R session, a memory-mapped
+        file: each is released whether the plugin returns, refuses, or raises - which is the case
+        a `finally` in a plugin gets wrong, because a plugin that raised did not reach its
+        `finally` in the version somebody wrote in a hurry.
+
+            client = ctx.effect(lambda: Client(n_workers=ctx.cores),
+                                lambda c: c.close())
+        """
+        obj = acquire() if callable(acquire) else acquire
+        if release is not None:
+            self._effects.append((obj, release))
+        return obj
+
+    def _dispose(self, log=None):
+        """Release every effect, newest first, and never let one failure hide another."""
+        for obj, release in reversed(self._effects):
+            try:
+                release(obj)
+            except Exception as e:                                        # noqa: BLE001
+                (log or self.log)(f"  effect release failed ({type(e).__name__}: {e}); "
+                                  f"continuing so the rest are still released")
+        self._effects.clear()
 
     def caveat(self, text):
         """Something true of this result that a reader must be told. Printed with the numbers."""
