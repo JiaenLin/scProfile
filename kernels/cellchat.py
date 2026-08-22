@@ -67,8 +67,38 @@ PLUGIN = {
         "r": ["NMF==0.28",
               "immunogenomics/presto@7eb75c4c0a0cf8fc49c705f0975bb3650c51e114",
               "jinworks/CellChat@75253cd0c9e68410e6e721a6d3a0419a1d7e358f"],
-        "conda": {"r-base": "4.3", "r-matrix": "", "r-ggplot2": "", "r-igraph": "",
-                  "r-remotes": ""},
+        # EVERY DIRECT DEPENDENCY OF EVERY `r:` ENTRY, BY NAME. `remotes` is called with
+        # `dependencies = FALSE` on purpose - so that nothing in this environment is chosen at
+        # install time - which means a dependency this list forgets is a package `R CMD INSTALL`
+        # refuses to build against. It named the first five itself:
+        #
+        #   ERROR: dependencies 'registry', 'rngtools', 'cluster', 'stringr', 'digest',
+        #   'gridBase', 'foreach', 'doParallel', 'reshape2', 'Biobase', 'codetools',
+        #   'BiocManager' are not available for package 'NMF'
+        #
+        # That is the mechanism working - a forgotten dependency surfaces by name, as a line to
+        # add here, rather than as an unpinned install nobody recorded. Version is left open for
+        # the same reason it is for the other four: `r-base=4.3` is the pin that decides what
+        # every `r-*` package resolves against, and inventing versions for forty of them from
+        # memory would be a worse claim than none.
+        "conda": {
+            "r-base": "4.3", "r-matrix": "", "r-ggplot2": "", "r-igraph": "", "r-remotes": "",
+            # NMF
+            "r-registry": "", "r-rngtools": "", "r-cluster": "", "r-stringr": "", "r-digest": "",
+            "r-gridbase": "", "r-foreach": "", "r-doparallel": "", "r-reshape2": "",
+            "r-codetools": "", "r-biocmanager": "", "bioconductor-biobase": "",
+            # presto
+            "r-rcpp": "", "r-data.table": "", "r-dplyr": "", "r-tidyr": "", "r-purrr": "",
+            "r-rcpparmadillo": "",
+            # CellChat
+            "r-future": "", "r-future.apply": "", "r-pbapply": "", "r-irlba": "",
+            "r-ggalluvial": "", "r-svglite": "", "r-ggrepel": "", "r-circlize": "",
+            "r-cowplot": "", "r-rspectra": "", "r-reticulate": "", "r-sna": "", "r-fnn": "",
+            "r-shape": "", "r-patchwork": "", "r-plyr": "", "r-ggpubr": "", "r-ggnetwork": "",
+            "r-plotly": "", "r-shiny": "", "r-bslib": "", "r-collapse": "", "r-rcppeigen": "",
+            "bioconductor-complexheatmap": "", "bioconductor-biocgenerics": "",
+            "bioconductor-biocneighbors": "",
+        },
         "channels": ["conda-forge", "bioconda"],
     },
 

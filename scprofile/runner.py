@@ -607,6 +607,7 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
                 "which is why this refuses rather than carrying on to the selftest.\n"
                 f"  Fix: {fix or f'scprofile install {kernel.name} --prefix {prefix} --force'}")
         log(f"  {p} exists and matches the current lock. Pass --force to rebuild.")
+        build_failure = None
     else:
         if p.exists():
             # --force MEANS BUILD IT AGAIN, and building again into a populated prefix is not
@@ -674,15 +675,34 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
                 f"          `doctor` will report that route, so nothing is ambiguous.")
 
         pip = p / "bin" / "pip"
-        if spec["pip"]:
-            # ONE resolve, all pins together. Installing them in sequence lets a later package
-            # quietly downgrade an earlier pin, and the environment then does not match the lock
-            # that the fingerprint says it was built from.
-            log(f"  applying {len(spec['pip'])} pinned package(s) in one resolve")
-            subprocess.run([str(pip), "install", "--no-input"] + spec["pip"], check=True)
-        if spec["r"]:
-            _install_r(p, spec["r"], log=log)
-        (p / ".scprofile_lock").write_text(env_fingerprint(kernel, grp), encoding="utf-8")
+        # A FAILURE HERE STILL PROVES WHAT IT CAN. Any of these steps can fail, and the
+        # environment is then NOT built - no stamp is written, so nothing treats it as one - but
+        # the members whose half of it did install can still be run, and running them costs a
+        # minute against a build that costs an hour.
+        #
+        # Measured on an eight-member group whose R step failed on a forgotten dependency: the
+        # pip half, 130 packages and 25 minutes, was complete, and eight selftests would have
+        # taken about a minute. Instead `install` raised, `doctor` reported all eight stale, and
+        # the job ended knowing nothing about any of them. That is one defect learned per job for
+        # however many defects there are, which on a first build of eight plugins is the cycle.
+        build_failure = None
+        try:
+            if spec["pip"]:
+                # ONE resolve, all pins together. Installing them in sequence lets a later
+                # package quietly downgrade an earlier pin, and the environment then does not
+                # match the lock that the fingerprint says it was built from.
+                log(f"  applying {len(spec['pip'])} pinned package(s) in one resolve")
+                subprocess.run([str(pip), "install", "--no-input"] + spec["pip"], check=True)
+            if spec["r"]:
+                _install_r(p, spec["r"], log=log)
+        except Exception as e:                                            # noqa: BLE001
+            build_failure = e
+            log(f"\n  BUILD FAILED: {e}")
+            log("  The environment is NOT built and no stamp is written, so nothing will treat "
+                "it as one. Every member's selftest still runs below, because what the finished "
+                "half of this environment can prove is worth more than a second job to find out.")
+        else:
+            (p / ".scprofile_lock").write_text(env_fingerprint(kernel, grp), encoding="utf-8")
 
     # PROVE IT FOR EVERY MEMBER. An environment shared by four plugins and proved by one is an
     # environment three of them meet for the first time inside a run - and the whole reason
@@ -712,6 +732,14 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
         log(f"  proved for {len(proved)} of {len(members)} member(s): "
             + (", ".join(proved) or "none")
             + (f";  unproven: {', '.join(unproved)}" if unproved else ""))
+    if build_failure is not None:
+        raise RuntimeError(
+            f"{p} was NOT built: {build_failure}\n"
+            f"  The selftests above ran against a HALF-BUILT environment and are diagnostic, not "
+            f"a claim that it works: {len(proved)} of {len(members)} member(s) could run there "
+            f"anyway"
+            + (f", and {', '.join(failed)} could not" if failed else "")
+            + ".\n  Fix what the build step named above, then install again with --force.")
     if failed:
         raise RuntimeError(
             f"{p} was built, and {', '.join(failed)} could not run in it. A shared environment "

@@ -179,6 +179,36 @@ def test_velocity_declaration():
           str(undeclared(k, bad)))
 
 
+def test_a_failed_build_still_proves_what_it_can():
+    """One defect learned per job is the whole cycle when a group has eight members.
+
+    An eight-member group whose R step failed on a forgotten dependency: the pip half - 130
+    packages, 25 minutes - was complete, and eight selftests would have taken about a minute.
+    `install` raised before any of them, `doctor` reported all eight `stale`, and the job ended
+    knowing nothing about any of them.
+
+    Running them changes NO outcome: no stamp is written, nothing treats the directory as
+    installed, and `install` still refuses. It only changes how much one job teaches. Asserted
+    against the branch, because reproducing it needs a real package manager and a real failure.
+    """
+    print("\na build that failed still reports what the finished half proved")
+    import inspect
+    from scprofile import runner
+    src = inspect.getsource(runner.install)
+    check("the build steps are caught rather than allowed to abort the function",
+          "build_failure = e" in src)
+    check("and the selftest loop is still reached",
+          src.index("build_failure = e") < src.index("for m in members"))
+    check("the stamp is written only when nothing failed",
+          ".scprofile_lock\").write_text" in src
+          and src.index("else:\n            (p / \".scprofile_lock\")") > src.index(
+              "build_failure = e"))
+    check("and it still REFUSES, naming the build failure",
+          "was NOT built" in src and "raise RuntimeError" in src)
+    check("saying the selftests were diagnostic, not a claim that it works",
+          "diagnostic, not" in src)
+
+
 def test_the_plan_and_the_run_search_the_same_distance():
     """Two walks for one question, in two layers, with different reach.
 
@@ -1368,6 +1398,7 @@ def main():
         test_a_plugin_is_launched_the_way_its_shape_requires(tmp)
     test_figure_conventions()
     test_velocity_declaration()
+    test_a_failed_build_still_proves_what_it_can()
     test_the_plan_and_the_run_search_the_same_distance()
     test_the_core_share_reaches_the_thread_pools()
     test_one_file_plugins_are_importable_by_the_host()
