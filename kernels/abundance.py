@@ -83,6 +83,12 @@ PLUGIN = {
         "COMPOSITION IS RELATIVE BY CONSTRUCTION. One population rising makes every other fall, "
         "and which one actually moved is not recoverable from shares alone - that is what the "
         "reference population is for, and it is named in the result.",
+        "A POPULATION LEFT OUT DOES NOT LEAVE A HOLE - ITS EFFECT MOVES. Where a cell type with a "
+        "real proportion change is absent from the analysis, its effect is misattributed to other, "
+        "highly correlated types rather than simply lost (Rau et al., post-MI cardiac remodeling, "
+        "2026). That applies directly to the annotator sentinels excluded here, and to any cell "
+        "type an upstream step withheld: the remaining shares are not the shares that would have "
+        "been measured with them present.",
         "Absolute cell numbers are not measured. A share is not a count of cells in a tissue: "
         "dissociation and QC both change what reaches the object, and neither is uniform across "
         "cell types.",

@@ -209,6 +209,17 @@ PLUGIN = {
     "cannot_show": [
         "Velocity is a DIRECTION, not a rate of change in real time. Arrow length is not speed in "
         "hours, and two datasets' arrow lengths are not comparable.",
+        "THE MODEL'S OWN ASSUMPTIONS CAN BE VIOLATED WITHOUT ANY ERROR. scVelo's authors state "
+        "that errors arise where a common splicing rate across genes, or the observation of full "
+        "splicing dynamics with steady-state mRNA levels, does not hold (Bergen et al., Nat "
+        "Biotechnol 2020). Neither is testable from the counts, so a violated assumption presents "
+        "as a confident field rather than as a failure.",
+        "UNSPLICED ABUNDANCE IS PARTLY A PROPERTY OF THE GENE, NOT THE CELL. It varies with the "
+        "amount of relevant intronic sequence per gene, and intronic reads are only a noisy "
+        "approximation of nascent transcription (Bergen et al., Mol Syst Biol 2021, citing Erhard "
+        "et al. 2019). Genes with little intronic sequence are underrepresented in the fit "
+        "regardless of how they are transcribed; metabolic labelling, not deeper sequencing, is "
+        "what resolves this.",
         "The validated single-nucleus use is DIRECTIONAL. Nucleus and cell velocities correlate "
         "0.94-0.99 on matched microglia (Sci Rep 2024), but that study projected vectors and "
         "measured cell speed - it did not derive a pseudotime from them. `velocity_pseudotime` "
