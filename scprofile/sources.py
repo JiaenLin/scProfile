@@ -291,14 +291,6 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
     # no filename convention: the smaller source that covers the same cells IS the cheaper correct
     # answer. Ties break on the path so a run is reproducible.
     for src in sorted(sources, key=lambda s: (s.size, str(s.path))):
-        if filled.all():
-            skipped += 1
-            continue
-        loaded = load(src, log=log, names=names)
-        if loaded is None:
-            continue
-        bcs, genes, mats = loaded
-
         # Restrict to this source's sample when it names one. The same core barcode legitimately
         # recurs across samples, and matching globally would give one animal's unspliced counts
         # to another's cell - which produces a full matrix and a wrong answer.
@@ -308,6 +300,20 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
         else:
             scope = np.arange(n)
             scope_why = "across all cells (the source names no sample)"
+
+        # DECIDED BEFORE OPENING IT. The scope comes from the source's PATH, so a source whose
+        # cells are already covered is skipped without being read - which is the whole saving,
+        # because an aligner writes `Velocyto/raw/` (every droplet, 1.1 GB per matrix) beside
+        # `Velocyto/filtered/` (every cell, 242 MB), the small one is tried first, and the large
+        # one adds nothing once its sample is complete. Scoped rather than global, so a sample
+        # the small copy did NOT cover still gets the large one tried.
+        if len(scope) == 0 or filled[scope].all():
+            skipped += 1
+            continue
+        loaded = load(src, log=log, names=names)
+        if loaded is None:
+            continue
+        bcs, genes, mats = loaded
 
         want = {}
         for j, b in enumerate(bcs):

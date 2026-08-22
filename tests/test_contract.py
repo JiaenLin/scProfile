@@ -334,6 +334,9 @@ def test_the_plan_and_the_run_search_the_same_distance():
         check("and the cheaper one is tried first", order[0] == "filtered", str(order))
         check("size comes from the directory entry, not from opening it",
               all(s.size > 0 for s in got), str([s.size for s in got]))
+        src = inspect.getsource(SRC.attach)
+        check("and a covered source is skipped BEFORE it is opened",
+              src.index("filled[scope].all()") < src.index("loaded = load("))
 
     # THE ATTACH ITSELF, on a synthetic object, because it had never run on a real one: velocity
     # refused for want of counts in every previous cycle, so the cost and the correctness of this
