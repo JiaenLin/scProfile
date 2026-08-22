@@ -317,6 +317,51 @@ class Kernel:
         return f"<Kernel {self.name}>"
 
 
+class FileKernel(Kernel):
+    """A plugin that is ONE FILE: a PLUGIN dict and a run(ctx). Nothing else is required.
+
+    The declaration is read WITHOUT importing the module, so discovery never executes plugin code
+    and never needs the plugin's own environment - a plugin pinned to numpy 1.23 must still be
+    listable by a host running numpy 2.
+    """
+
+    def __init__(self, path):
+        import ast
+        self.path = path
+        self.name = path.stem
+        self.spec = {}
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            return
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and any(
+                    getattr(tgt, "id", "") == "PLUGIN" for tgt in node.targets):
+                try:
+                    self.spec = ast.literal_eval(node.value)
+                except ValueError:
+                    self.spec = {}
+        # `needs` is one mapping here rather than four keys, because a plugin author should write
+        # what it needs in one place. Flattened to the names the rest of the host already uses.
+        needs = self.spec.get("needs") or {}
+        for role in ("obs", "obsm", "layers", "kernels"):
+            if needs.get(role):
+                self.spec[f"needs_{role}"] = needs[role]
+        if needs.get("design"):
+            self.spec["needs_design"] = True
+        env = self.spec.get("env")
+        self.spec.setdefault("needs_env", bool(env))
+        self.spec.setdefault("language", "python")
+        self.spec.setdefault("status", "built" if self.spec else "planned")
+        self.spec.setdefault("executor", {"cost": self.spec.get("cost", "medium"),
+                                          "cores": self.spec.get("cores", 1)})
+
+    @property
+    def entry(self):
+        """The file itself. The host runs it through scprofile._entry, never directly."""
+        return self.path
+
+
 def discover(root=None):
     """Every kernel that ships with the host, plus any under $SCPROFILE_KERNELS."""
     import os
@@ -330,8 +375,19 @@ def discover(root=None):
     for base in roots:
         if not base.is_dir():
             continue
+        # A PLUGIN IS ONE FILE. `kernels/myplugin.py` carrying a PLUGIN dict and a run(ctx) is
+        # the whole installation - see scprofile/plugin.py. The six-file directory shape below
+        # still loads, because nothing that worked should stop working; but it is the old shape,
+        # and a plugin host whose plugins take six files to declare is an assembly kit.
+        for f in sorted(base.glob("*.py")):
+            if f.name.startswith("_"):
+                continue
+            k = FileKernel(f)
+            if k.name in found:
+                shadowed.append((k.name, str(found[k.name].path), str(f)))
+            found[k.name] = k
         for d in sorted(base.iterdir()):
-            if (d / "kernel.yml").exists():
+            if d.is_dir() and (d / "kernel.yml").exists():
                 if d.name in found:
                     # A site kernel overriding a shipped one is legitimate and is the reason
                     # $SCPROFILE_KERNELS exists. Doing it SILENTLY is not: a run would use code

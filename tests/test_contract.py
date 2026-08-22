@@ -280,8 +280,20 @@ def test_wrapping_plugins_record_upstream():
         w = k.spec.get("wraps") or {}
         if not w:
             continue
-        up = k.path / "UPSTREAM.md"
-        check(f"{name}: UPSTREAM.md present", up.exists())
+        up = k.path / "UPSTREAM.md" if k.path.is_dir() else k.path
+        # EITHER SHAPE. A one-file plugin carries its upstream record in PLUGIN["upstream"],
+        # where it cannot drift from the code it describes; a directory plugin carries
+        # UPSTREAM.md beside the wrapper. What is checked is that the record EXISTS and says the
+        # things that matter - not which file it lives in.
+        inline = dict(k.spec.get("upstream") or {})
+        check(f"{name}: an upstream record exists", up.exists() or bool(inline))
+        if inline:
+            check(f"{name}: records the licence", bool(w.get("license")))
+            check(f"{name}: records a citation", bool(w.get("cite")))
+            check(f"{name}: links the upstream docs", bool(inline.get("docs")))
+            check(f"{name}: names the defaults it changes", bool(inline.get("defaults_changed")))
+            check(f"{name}: records what it does NOT use", bool(inline.get("not_used")))
+            continue
         if not up.exists():
             continue
         s = up.read_text(encoding="utf-8")

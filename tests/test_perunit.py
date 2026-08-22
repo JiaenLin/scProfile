@@ -219,7 +219,9 @@ _doc = _buf.getvalue()
 for _n in ("de", "decoupler", "abundance", "liana", "scenic", "cellchat", "pseudotime"):
     _line = next((l for l in _doc.splitlines() if f" {_n} " in l or f" {_n}  " in l), "")
     ck(f"doctor does not call {_n} ok", not _line.strip().startswith("ok"), _line.strip()[:90])
-ck("doctor marks unbuilt plugins TODO", _doc.count("TODO") >= 7)
+# The count moves as plugins are migrated to the one-file shape and become built. What must hold
+# is that an unbuilt plugin is marked TODO and never `ok`, not that there are seven of them.
+ck("doctor marks unbuilt plugins TODO", _doc.count("TODO") >= 1)
 ck("doctor still calls a built host plugin ok",
    any(l.strip().startswith("ok") and "cellcycle" in l for l in _doc.splitlines()))
 ck("doctor says how many are unbuilt", "DECLARED BUT NOT BUILT" in _doc)
