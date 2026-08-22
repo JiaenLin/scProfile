@@ -710,13 +710,20 @@ def concurrency(instances, budget):
     return max(1, n)
 
 
-#: What an instance is assumed to need per 100k cells when it DECLARES NOTHING. Conservative on
-#: purpose and reported every time it is used: the cost of over-estimating is idle memory, and the
-#: cost of under-estimating is a job killed at the end of its longest step, with no partial result
-#: and an error that names the plugin rather than the allocator. Measured against the one plugin
-#: that does declare (velocity, 12) and the one job that has been killed for memory (PBS 677891,
-#: ten scenic fits, 260 GB against a 200 GB request).
-UNDECLARED_GB_PER_100K = 12.0
+#: What an instance is assumed to need per 100k cells when it DECLARES NOTHING.
+#:
+#: THE TWO ERRORS ARE NOT SYMMETRIC AND THIS NUMBER IS SET ACCORDINGLY. Over-estimating costs
+#: idle memory and a slightly narrower wave - recoverable, and visible in the measured figures
+#: afterwards. Under-estimating gets the job KILLED, typically at the end of its longest step,
+#: with no partial result and an error that names the plugin rather than the allocator. PBS 677891
+#: is the worked example: 260 GB against a 200 GB request, four and a half hours spent, nothing
+#: kept. So when this number is a guess, it guesses HIGH.
+#:
+#: 24 is double the only measured declaration in the tree (velocity, 12). It is deliberately not
+#: an estimate of the typical plugin: it is the figure that makes a wave narrow rather than dead.
+#: Every use is printed, and every run now measures the truth, so it should be replaced by
+#: declarations rather than tuned.
+UNDECLARED_GB_PER_100K = 24.0
 
 
 def demand(inst, kernel, n_cells):

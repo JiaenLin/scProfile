@@ -1,8 +1,8 @@
 #!/bin/bash
 #PBS -N scprofile_cycle
-#PBS -q long
-#PBS -l select=1:ncpus=50:mem=200gb
-#PBS -l walltime=24:00:00
+#PBS -q super
+#PBS -l select=1:ncpus=64:mem=400gb
+#PBS -l walltime=72:00:00
 #PBS -j oe
 #PBS -o logs/
 
@@ -23,7 +23,18 @@
 # Override the resource request at submit time - `qsub -l select=... -l walltime=...` - rather than
 # editing this file for one cycle.
 #
-# THE DEFAULTS ARE THE `long` QUEUE'S CEILING (50 cores, 200 GB) AND THAT IS DELIBERATE. The budget
+# ESTIMATE HIGH. STANDING INSTRUCTION FROM THE PI, 2026-08-23. The two errors are not
+# symmetric: over-requesting costs queue time and some idle capacity, and under-requesting gets
+# the job killed - usually late, with nothing kept. `super` is used rather than `long` because
+# its memory ceiling is 400 GB against 200, and memory is what kills. PBS 677891 died at 260 GB
+# against a 200 GB request after 4h25m; PBS 679143 survived at 188.8 GB of 200, which is a 6%
+# margin and was luck rather than design.
+#
+# Cores are chosen differently from memory ON PURPOSE: 64 rather than the queue's 250, because
+# an over-large core request delays SCHEDULING and cores do not kill a job - they only make it
+# slower. Memory and walltime are the two that end a run, so those take the ceiling.
+#
+# THE DEFAULTS WERE PREVIOUSLY THE `long` QUEUE'S CEILING (50 cores, 200 GB). The budget
 # is what the allocator divides, so requesting half the queue caps every plugin's share at half -
 # and the expensive plugins are exactly the ones that scale. Leave `CORES` unset unless you mean to
 # run below the allocation: it defaults to `NCPUS`, and a budget smaller than the request is the
