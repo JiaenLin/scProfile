@@ -537,16 +537,18 @@ def selftest(kernel, *, prefix=None, log=print, timeout=None):
 
     Returns True if it ran, False if the plugin ships no selftest.
     """
-    st = kernel.path / "selftest.py"
-    if not st.exists():
-        st = kernel.path / "selftest.R"
-    if not st.exists():
+    # THE KERNEL ANSWERS. This looked for `kernel.path / "selftest.py"`, which for a ONE-FILE
+    # plugin is a path inside a file and can never exist - so every one-file plugin was reported
+    # as shipping no selftest, and the one check that would have caught the launch bug above was
+    # skipped for exactly the shape that had it.
+    if not kernel.has_selftest:
         return False
     exe, why = interpreter(kernel, prefix)
     if not exe:
         raise RuntimeError(f"{kernel.name}: no interpreter to run its selftest with. {why}")
-    log(f"  selftest: {st.name}  ({why})")
-    r = subprocess.run([exe, str(st)], capture_output=True, text=True, timeout=timeout)
+    cmd = kernel.selftest_argv(exe)
+    log(f"  selftest: {Path(cmd[-1]).name}  ({why})")
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if r.returncode != 0:
         raise RuntimeError(
             f"{kernel.name}'s selftest FAILED, so the environment is not usable:\n"
@@ -572,13 +574,18 @@ def run(kernel, *, inp, out_dir, prefix=None, log=print, timeout=None):
         raise RuntimeError(f"{kernel.name}: {src}")
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    entry = kernel.path / kernel.entry
-    if not entry.exists():
-        raise FileNotFoundError(f"{kernel.name} declares entry {kernel.entry!r}, which is absent")
-
-    cmd = [exe, str(entry), str(inp)]
+    # THE KERNEL SAYS HOW IT IS LAUNCHED. The runner used to build `[exe, path/entry, inp]`
+    # itself, which is right for the directory shape and silently wrong for every other. A
+    # one-file plugin has no `main()` - the whole point of the shape is that `_entry.py` does the
+    # argument parsing, the contract and the manifest once for everybody - so handing the file to
+    # an interpreter DEFINES TWO NAMES, EXITS 0 AND WRITES NOTHING. The host can only report that
+    # as a missing out.json, which is what the first third-party plugin to reach a real run did.
+    cmd = kernel.argv(exe, inp)
+    for part in cmd[1:-1]:
+        if not Path(part).exists():
+            raise FileNotFoundError(f"{kernel.name} is launched via {part}, which is absent")
     log(f"  interpreter: {exe}  ({src})")
-    log(f"  running: {' '.join(cmd[-2:])}", )
+    log(f"  running: {' '.join(cmd[1:])}", )
     logf = out / f"{kernel.name}.log"
     with open(logf, "w", encoding="utf-8") as fh:
         r = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT,

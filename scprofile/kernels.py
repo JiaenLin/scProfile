@@ -22,6 +22,11 @@ from pathlib import Path
 #: Where kernels live, relative to the package. Overridable so a site can add its own.
 KERNEL_DIRNAME = "kernels"
 
+#: The shared entrypoint, as a PATH rather than a module name. A one-file plugin is run by its own
+#: interpreter, in its own pinned environment, where the host is not installed - so it cannot be
+#: reached as `-m scprofile._entry`. `_entry.py` puts the host on sys.path itself.
+SHARED_ENTRY = Path(__file__).resolve().parent / "_entry.py"
+
 
 def _mini_yaml(text):
     """A deliberately small YAML subset: `key: value`, `key:` + `  - item`, and `#` comments.
@@ -117,6 +122,31 @@ class Kernel:
     @property
     def entry(self):
         return self.spec.get("entry") or ("run.R" if self.language == "r" else "run.py")
+
+    # ---- how it is LAUNCHED ----------------------------------------------------------------
+    #
+    # A plugin's SHAPE decides how its interpreter is invoked, so the shape answers - not the
+    # runner. The runner asks a kernel for its argv and knows nothing about directories, files
+    # or the shared entrypoint; a shape added later answers for itself and the runner is
+    # untouched.
+    def argv(self, exe, inp):
+        """The command that runs this plugin. The directory shape has its own `main()`."""
+        return [str(exe), str(self.path / self.entry), str(inp)]
+
+    @property
+    def has_selftest(self):
+        return bool(self._selftest_file())
+
+    def _selftest_file(self):
+        for n in ("selftest.py", "selftest.R"):
+            if (self.path / n).exists():
+                return self.path / n
+        return None
+
+    def selftest_argv(self, exe):
+        """The command that runs this plugin's selftest, or None if it ships none."""
+        st = self._selftest_file()
+        return [str(exe), str(st)] if st else None
 
     @property
     def needs_obs(self):
@@ -360,6 +390,38 @@ class FileKernel(Kernel):
     def entry(self):
         """The file itself. The host runs it through scprofile._entry, never directly."""
         return self.path
+
+    # THE SHARED ENTRYPOINT IS THE WHOLE POINT OF THIS SHAPE. A one-file plugin is a PLUGIN dict
+    # and a `run(ctx)`; it has no `main()`, no argument parsing and no manifest handling, because
+    # `_entry.py` does all of that once for every plugin that will ever exist. Handing the file
+    # straight to an interpreter therefore does not fail - it DEFINES two names, exits 0 and
+    # writes nothing, which the host can only report as a missing out.json. That is what happened
+    # to the first third-party plugin to reach a real run.
+    #
+    # `_entry.py` is invoked BY PATH rather than as `-m scprofile._entry`, because the
+    # interpreter running it is the PLUGIN'S, in the plugin's own pinned environment, where the
+    # host is not installed and must not have to be. `_entry.py` puts the host on its own
+    # sys.path as its first act.
+    def argv(self, exe, inp):
+        return [str(exe), str(SHARED_ENTRY), str(self.path), str(inp)]
+
+    @property
+    def has_selftest(self):
+        """Read from the SOURCE, not from a neighbouring file - there is no neighbouring file.
+
+        `selftest` used to be looked for at `kernel.path / "selftest.py"`. For this shape
+        `kernel.path` is the plugin itself, so that test could never be true and every one-file
+        plugin was reported as shipping no selftest - by name, in a list headed `not considered`,
+        which reads exactly like a plugin that was checked.
+        """
+        try:
+            return "def selftest(" in self.path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return False
+
+    def selftest_argv(self, exe):
+        return [str(exe), str(SHARED_ENTRY), "--selftest", str(self.path)] if self.has_selftest \
+            else None
 
 
 def discover(root=None):

@@ -644,6 +644,62 @@ def test_a_half_built_environment_is_not_a_built_one():
         check("and that path is untouched", stray.exists())
 
 
+def test_a_plugin_is_launched_the_way_its_shape_requires(tmp):
+    """A ONE-FILE PLUGIN HAS NO `main()`, so handing the file to an interpreter is a no-op.
+
+    The runner built `[exe, kernel.path / kernel.entry, in.json]` for everything. For the
+    directory shape that is a `run.py` with its own `main()` and it is right. For the one-file
+    shape - the shape the format is FOR - `kernel.path` IS the plugin, so the interpreter
+    imported it, defined `PLUGIN` and `run`, exited 0 and wrote nothing.
+
+    Exit 0 with no `out.json` is the one failure mode the host cannot tell from a plugin that
+    finished with no results, and it is what the first plugin supplied from outside this
+    repository did on a real cohort: 0 seconds, an empty log, no traceback anywhere.
+
+    So the SHAPE says how it is launched, and this asserts both shapes rather than the one that
+    happened to work.
+    """
+    print("\nlaunch")
+    from scprofile.kernels import FileKernel, Kernel, SHARED_ENTRY
+
+    check("the shared entrypoint exists", SHARED_ENTRY.exists(), str(SHARED_ENTRY))
+
+    one = tmp / "onefile.py"
+    one.write_text("PLUGIN = {'api': 1, 'summary': 's', 'cannot_show': ['c']}\n"
+                   "def run(ctx):\n    pass\n"
+                   "def selftest(ctx):\n    pass\n", encoding="utf-8")
+    fk = FileKernel(one)
+    argv = fk.argv("PY", "IN")
+    check("a one-file plugin goes THROUGH the shared entrypoint",
+          argv[1] == str(SHARED_ENTRY), " ".join(argv))
+    check("and the plugin is an argument to it, not the thing executed",
+          argv[2] == str(one) and argv[0] == "PY" and argv[-1] == "IN", " ".join(argv))
+    check("its selftest is read from the file, not from a neighbouring one",
+          fk.has_selftest and fk.selftest_argv("PY")[2] == "--selftest")
+
+    quiet = tmp / "quiet.py"
+    quiet.write_text("PLUGIN = {'api': 1}\ndef run(ctx):\n    pass\n", encoding="utf-8")
+    check("a one-file plugin with no selftest(ctx) says so",
+          FileKernel(quiet).has_selftest is False)
+
+    d = tmp / "dirshape"
+    (d).mkdir(exist_ok=True)
+    (d / "kernel.yml").write_text("name: dirshape\nsummary: s\n", encoding="utf-8")
+    (d / "run.py").write_text("", encoding="utf-8")
+    (d / "selftest.py").write_text("", encoding="utf-8")
+    dk = Kernel(d)
+    check("the directory shape still runs its own entry directly",
+          dk.argv("PY", "IN") == ["PY", str(d / "run.py"), "IN"])
+    check("and its selftest is still the neighbouring file",
+          dk.has_selftest and dk.selftest_argv("PY") == ["PY", str(d / "selftest.py")])
+
+    # EVERY SHAPE ANSWERS. A shape added later that does not is a shape the runner would have to
+    # learn about, which is the arrangement this replaced.
+    for name, k in sorted(discover().items()):
+        check(f"{name} answers argv()", isinstance(k.argv("PY", "IN"), list) and
+              len(k.argv("PY", "IN")) >= 3)
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
@@ -652,6 +708,7 @@ def main():
         test_objects_slot(tmp)
         test_captioned_figures(tmp)
         test_declared_but_absent_is_refused(tmp)
+        test_a_plugin_is_launched_the_way_its_shape_requires(tmp)
     test_figure_conventions()
     test_velocity_declaration()
     test_lock_is_read_not_delegated()

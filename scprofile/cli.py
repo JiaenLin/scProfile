@@ -626,8 +626,10 @@ def _selftest(a):
     from . import runner
     from .kernels import discover
     ks = discover()
-    shipped = [n for n in sorted(ks)
-               if (ks[n].path / "selftest.py").exists() or (ks[n].path / "selftest.R").exists()]
+    # ASK THE KERNEL, do not guess from its path. A one-file plugin's selftest is a function in
+    # the file, not a neighbouring `selftest.py`, and probing for the file put every one-file
+    # plugin in the `not considered` list - which reads exactly like a plugin that was checked.
+    shipped = [n for n in sorted(ks) if ks[n].has_selftest]
     names = _split(a.name or "") or shipped
     if not a.name:
         absent = [n for n in sorted(ks) if n not in shipped]
