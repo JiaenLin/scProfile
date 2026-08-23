@@ -786,6 +786,58 @@ def test_schedule():
           solo[0][0]["cores"] == 8, str(solo))
 
 
+def test_the_tool_cannot_change_under_a_running_run():
+    """Two mechanisms, because one of them is a job script somebody else may not use.
+
+    A run reads its code at EVERY subprocess launch. A `git pull` into the tool directory while a
+    three-hour run is spawning instances is picked up by everything launched after it: the run
+    uses two versions and reports one, since the banner records the commit once at the start.
+    Both versions are correct alone - the MIXTURE is what is wrong - so nothing else catches it
+    and the report names a commit that never produced those results in full.
+
+    DETECT in the host, so it protects anyone running scProfile however they launch it.
+    PREVENT in the job template, so the race cannot arise at all for anyone using it.
+    """
+    from scprofile.kernels import fingerprint_drift, tool_fingerprint
+    root = Path(__file__).resolve().parents[1]
+
+    fp = tool_fingerprint(root)
+    check("the fingerprint covers the host and the plugins", len(fp) > 10, f"{len(fp)} files")
+    check("__pycache__ is excluded - a .pyc is written by RUNNING the code, not changing it",
+          not any("__pycache__" in k for k in fp))
+    check("an unchanged tree shows no drift", fingerprint_drift(fp, tool_fingerprint(root))
+          == ([], [], []))
+
+    # a single moved file must be visible, because that is all a bad pull needs to be
+    import os
+    victim = root / "kernels" / "cellcycle.py"
+    st = victim.stat()
+    try:
+        os.utime(victim, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000_000))
+        changed, _added, _removed = fingerprint_drift(fp, tool_fingerprint(root))
+        check("one touched file is detected", changed == ["kernels/cellcycle.py"], str(changed))
+    finally:
+        os.utime(victim, ns=(st.st_atime_ns, st.st_mtime_ns))
+    check("and restoring it clears the drift",
+          fingerprint_drift(fp, tool_fingerprint(root)) == ([], [], []))
+
+    # DETECT: the run re-checks before every instance, not once at the start
+    src = (root / "scprofile" / "cli.py").read_text()
+    check("the run takes a fingerprint at the start", "_tool_at_start = tool_fingerprint" in src)
+    check("and re-checks it inside the per-instance launch",
+          "fingerprint_drift(_tool_at_start" in src and
+          src.index("def _go(item)") < src.index("fingerprint_drift(_tool_at_start"),
+          "the check is not on the launch path")
+
+    # PREVENT: the job template runs from a copy
+    pbs = (root / "setup" / "dev_cycle.pbs").read_text()
+    check("the job template snapshots the tool", 'TOOL="$_SNAP"' in pbs)
+    check("and the snapshot precedes PYTHONPATH, so everything runs from it",
+          pbs.index('TOOL="$_SNAP"') < pbs.index('export PYTHONPATH="$TOOL"'))
+    check("and it can be opted out of for iterating against a running job",
+          "SNAPSHOT:-1" in pbs)
+
+
 def test_no_undefined_names():
     """A name a function reads that nothing defines is a NameError waiting for the right branch.
 
@@ -799,7 +851,13 @@ def test_no_undefined_names():
     """
     import builtins as _b
     import symtable as _st
-    known_builtins = set(dir(_b))
+    # THE MODULE DUNDERS PYTHON PROVIDES. They are module globals, not builtins, so symtable
+    # reports them as unresolved - `__file__` inside a function is correct code that this check
+    # called undefined. A check that fires on correct code is one somebody switches off.
+    known_builtins = set(dir(_b)) | {
+        "__file__", "__name__", "__doc__", "__package__", "__spec__", "__loader__",
+        "__builtins__", "__debug__", "__path__",
+    }
     root = Path(__file__).resolve().parents[1]
     files = sorted(list((root / "kernels").glob("*.py"))
                    + list((root / "scprofile").glob("*.py")))
@@ -1677,6 +1735,7 @@ def main():
     test_unmet_names_the_fix()
     test_ordering()
     test_schedule()
+    test_the_tool_cannot_change_under_a_running_run()
     test_no_undefined_names()
     test_every_ctx_attribute_a_plugin_uses_exists()
     test_key_map_is_resolved()

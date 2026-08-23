@@ -913,6 +913,46 @@ class CorePool:
         self._pool.release({"cores": n, "memory_gb": 0, "gpus": 0})
 
 
+def tool_fingerprint(root=None):
+    """An identity for the code that is about to run: {relative path: (mtime_ns, size)}.
+
+    A RUN READS ITS CODE AT EVERY SUBPROCESS LAUNCH, not once at the start. A three-hour run
+    spawns instances across three hours, so a `git pull` into the tool directory at hour one is
+    picked up by everything launched after it. The run then used two versions of the code and
+    reports one: the banner records the commit once, at the beginning, and nothing re-checks.
+
+    That failure is silent and unattributable. Both versions are correct on their own - it is the
+    MIXTURE that is wrong - so no test can catch it, and the resulting report names a commit that
+    never produced those results in full.
+
+    Cheap on purpose: a stat per file over two directories, so it can be taken again before every
+    instance rather than once where it would prove nothing.
+    """
+    import os
+    root = Path(root or Path(__file__).resolve().parent.parent)
+    out = {}
+    for sub in ("scprofile", "kernels"):
+        d = root / sub
+        if not d.is_dir():
+            continue
+        for f in sorted(d.rglob("*.py")):
+            if "__pycache__" in f.parts:
+                continue                  # a .pyc is written by running the code, not by changing it
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            out[str(f.relative_to(root))] = (st.st_mtime_ns, st.st_size)
+    return out
+
+
+def fingerprint_drift(before, after):
+    """What changed between two fingerprints: (changed, added, removed), each a sorted list."""
+    b, a = dict(before or {}), dict(after or {})
+    changed = sorted(k for k in (b.keys() & a.keys()) if b[k] != a[k])
+    return changed, sorted(a.keys() - b.keys()), sorted(b.keys() - a.keys())
+
+
 def resolve_keys(items, keys):
     """Substitute `{label}`, `{counts}` and the rest through the key map.
 

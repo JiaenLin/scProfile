@@ -225,7 +225,7 @@ def _default_memory_gb():
 def _run(a):
     from . import compat, inputs, manifest, merge, provenance, refs, report, runner
     from .kernels import (UNDECLARED_GB_PER_100K, ResourcePool, _budget, concurrency,
-                          fit_memory_model,
+                          fingerprint_drift, fit_memory_model, tool_fingerprint,
                           demand, discover, guard_verdict, log_escape, schedule,
                           undeclared, unmet)
 
@@ -354,6 +354,10 @@ def _run(a):
     # instance touches, and units are not equal - assuming n_obs/len(units) would under-charge
     # the largest sample, which is the one that decides whether the wave fits.
     unit_cells = (A.obs[sample_key].astype(str).value_counts().to_dict() if sample_key else {})
+    # WHAT THE CODE LOOKED LIKE WHEN THIS RUN STARTED. Re-checked before every instance.
+    _tool_root = Path(__file__).resolve().parent.parent
+    _tool_at_start = tool_fingerprint(_tool_root)
+
     budget = int(getattr(a, "cores", 0) or _default_cores())
     mem_budget = getattr(a, "memory_gb", None) or _default_memory_gb()
     waves = schedule(want, ks, budget_cores=budget, units=units)
@@ -519,6 +523,20 @@ def _run(a):
             inst, kout = item
             lbl = inst["plugin"] + (f"[{inst['unit']}]" if inst["unit"] else "")
             t0 = _time.perf_counter()
+            # THE CODE IS READ AT THIS LAUNCH, not at the start of the run. If the tool directory
+            # moved underneath us - a `git pull` while a three-hour run is spawning instances -
+            # everything after that point runs different code from everything before it, and the
+            # run reports one commit for both. Refusing here turns a silent, unattributable
+            # mixture into a loud failure naming the files that moved.
+            _ch, _add, _rm = fingerprint_drift(_tool_at_start, tool_fingerprint(_tool_root))
+            if _ch or _rm:
+                _what = ", ".join((_ch + _rm)[:4]) + (" ..." if len(_ch + _rm) > 4 else "")
+                return inst, kout, None, _time.perf_counter() - t0, (
+                    f"{lbl}: THE TOOL CHANGED WHILE THIS RUN WAS IN PROGRESS ({_what}). "
+                    f"Instances launched before this point ran different code, and a run that "
+                    f"used two versions would report one. Refusing rather than producing a "
+                    f"result nobody can attribute. Let the run finish or kill it before "
+                    f"updating {_tool_root}.")
             try:
                 pl = runner.run(ks[inst["plugin"]], inp=kout / "in.json", out_dir=kout,
                                 prefix=a.prefix, log=lambda *_a, **_k: None,

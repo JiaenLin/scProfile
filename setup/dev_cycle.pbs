@@ -84,6 +84,29 @@ module load "${CONDA_MODULE:-anaconda3/3.0.0}" 2>/dev/null || true
 # the statement and ends the job - silently, before the live log is even opened, so a run with
 # MANAGER_PATH unset would have looked exactly like a job that produced nothing.
 if [ -n "${MANAGER_PATH:-}" ]; then export PATH="${MANAGER_PATH}:$PATH"; fi
+
+# ---- RUN FROM A SNAPSHOT, NOT FROM THE LIVE CHECKOUT ---------------------------------------
+# The code is read at EVERY subprocess launch, not once at the start. A three-hour run spawns
+# instances across three hours, so a `git pull` into $TOOL at hour one is picked up by everything
+# launched after it: the run uses two versions and reports one, because the banner below records
+# the commit once. Both versions are correct on their own - it is the MIXTURE that is wrong, so
+# no test catches it and the report names a commit that never produced those results in full.
+#
+# A snapshot removes the race rather than asking anyone to remember. It is a few MB of Python,
+# copied once, and it also means the run directory holds exactly the code that produced it.
+#
+# SNAPSHOT=0 opts out, for interactively iterating on the tool against a running job.
+if [ "${SNAPSHOT:-1}" = "1" ]; then
+  _SNAP="${OUT:-$PWD}/.tool"
+  rm -rf "$_SNAP"; mkdir -p "$_SNAP"
+  for _part in scprofile kernels tests HEAD.txt; do
+    [ -e "$TOOL/$_part" ] && cp -a "$TOOL/$_part" "$_SNAP/" || true
+  done
+  # `git` is absent on a compute node, so the commit is carried in HEAD.txt and copied above.
+  TOOL="$_SNAP"
+  echo "snapshot : running from $_SNAP (a pull into the live checkout cannot reach this run)"
+fi
+
 export PYTHONPATH="$TOOL"
 export MPLCONFIGDIR="$PWD/.mpl"
 # A plugin supplied from OUTSIDE the shipped set, to test the FORMAT rather than the tool.
