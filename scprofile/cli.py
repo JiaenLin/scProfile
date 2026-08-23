@@ -1212,9 +1212,15 @@ def _plan(a):
         # REFERENCE DATA IS AN INPUT LIKE ANY OTHER, and the plan ignored it entirely. A plugin
         # whose motif database has not been fetched was reported runnable and refused at run time
         # - the plan's whole job is to find that out before a queue slot is spent.
-        if k.reference_organisms():
+        # THE GATE IS "DOES IT DECLARE ANY REFERENCE", not "does it declare an organism-specific
+        # one". `reference_organisms()` is empty for a plugin whose references carry no organism -
+        # a prior fetched per-organism at run time, say - so gating on it skipped the check
+        # entirely and the plan reported nothing about references the plugin had just declared.
+        # Measured on PBS 682089: decoupler's two runtime priors were invisible.
+        if k.references():
             org = organism[0]
-            if org and str(org).lower() not in k.reference_organisms():
+            if k.reference_organisms() and org \
+                    and str(org).lower() not in k.reference_organisms():
                 need["reference data"] = False        # a species it cannot serve: BLOCKED
             elif not a.references:
                 need["reference data"] = None         # NOT DETERMINED - nowhere was checked

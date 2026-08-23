@@ -497,5 +497,23 @@ import inspect as _insp                                                        #
 ck("and --build knows how to fetch, not only install",
    "refs.fetch(" in _insp.getsource(_cli._plan), "plan --build cannot fetch")
 
+print("\na reference with no organism is still a reference the plan must see")
+# `reference_organisms()` is EMPTY for a plugin whose references carry no organism - a prior
+# fetched per-organism at run time. Gating the reference check on that set skipped the whole
+# check, so a plugin's freshly declared references were invisible to the plan that was supposed
+# to report them. Measured on PBS 682089.
+from scprofile import kernels as _K                                            # noqa: E402
+_ks = _K.discover(str(Path(__file__).resolve().parents[1] / "kernels"))
+_orgless = [n for n, k in _ks.items() if k.references() and not k.reference_organisms()]
+ck("at least one shipped plugin declares organism-less references",
+   bool(_orgless), "nothing exercises this path")
+ck("and the plan gates on `references()`, not on `reference_organisms()`",
+   "if k.references():" in _insp.getsource(_cli._plan),
+   "the gate still skips organism-less references")
+for _n in _orgless:
+    ck(f"{_n}'s references survive organism filtering",
+       len(_ks[_n].references("mouse")) == len(_ks[_n].references()),
+       f"{len(_ks[_n].references('mouse'))} of {len(_ks[_n].references())} survive")
+
 print("\n" + ("the report holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
