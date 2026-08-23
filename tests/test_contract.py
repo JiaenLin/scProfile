@@ -786,6 +786,45 @@ def test_schedule():
           solo[0][0]["cores"] == 8, str(solo))
 
 
+def test_no_undefined_names():
+    """A name a function reads that nothing defines is a NameError waiting for the right branch.
+
+    `ctx.constraint` cost 3,867 seconds of finished work because nothing read the code for
+    names before running it. This reads every plugin and every host module with `symtable`:
+    a name referenced inside a function, resolved globally, that the module never defines and
+    Python does not provide, cannot work.
+
+    It catches the branch that only executes on real data - which is the branch a selftest on a
+    small fixture never reaches.
+    """
+    import builtins as _b
+    import symtable as _st
+    known_builtins = set(dir(_b))
+    root = Path(__file__).resolve().parents[1]
+    files = sorted(list((root / "kernels").glob("*.py"))
+                   + list((root / "scprofile").glob("*.py")))
+    bad = []
+    for f in files:
+        try:
+            table = _st.symtable(f.read_text(), str(f), "exec")
+        except SyntaxError as e:
+            bad.append(f"{f.name}: SYNTAX {e}")
+            continue
+        module = {sym.get_name() for sym in table.get_symbols()}
+
+        def walk(t):
+            for sym in t.get_symbols():
+                n = sym.get_name()
+                if sym.is_referenced() and sym.is_global() \
+                        and n not in module and n not in known_builtins:
+                    bad.append(f"{f.name}:{t.get_name()}: {n}")
+            for c in t.get_children():
+                walk(c)
+        walk(table)
+    check(f"no undefined names in {len(files)} plugin and host file(s)",
+          not bad, "; ".join(bad[:6]))
+
+
 def test_every_ctx_attribute_a_plugin_uses_exists():
     """A plugin naming an attribute `Context` does not have fails AT RUN TIME, and late.
 
@@ -1638,6 +1677,7 @@ def main():
     test_unmet_names_the_fix()
     test_ordering()
     test_schedule()
+    test_no_undefined_names()
     test_every_ctx_attribute_a_plugin_uses_exists()
     test_key_map_is_resolved()
     test_every_data_capability_can_actually_be_delivered()

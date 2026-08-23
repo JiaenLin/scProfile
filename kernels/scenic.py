@@ -385,10 +385,18 @@ def run(ctx):
     # the replicate; there is no reason regulon activity should not.
     if PLUGIN.get("per_unit") and ctx.unit is None and "sample" in ctx.keys:
         samp = ctx.obs("sample").astype(str).to_numpy()
-        by = auc.copy()
-        by.index = samp[:len(by)] if len(samp) >= len(by) else samp
-        by = by.groupby(level=0).mean()
-        by.index.name = "sample"
+        # LENGTHS MUST MATCH EXACTLY. This truncated the longer of the two and carried on, which
+        # pairs cells with the wrong samples from the first mismatched row onward and produces a
+        # full, plausible table. There is no correct behaviour on a mismatch except to stop.
+        if len(samp) != auc.shape[0]:
+            return ctx.refuse(
+                "regulon activity",
+                f"{len(samp):,} sample labels for {auc.shape[0]:,} scored cells. Aggregating "
+                f"these would pair cells with the wrong samples and return a full table.")
+        # groupby on an ALIGNED SERIES, not set_axis: `set_axis` semantics and its `copy`
+        # keyword have moved across pandas versions, and this plugin is pinned to an older,
+        # self-consistent island where that matters.
+        by = auc.groupby(pd.Series(samp, index=auc.index, name="sample")).mean()
         ctx.emit_table("regulon_activity_by_sample", by)
         ctx.caveat(
             f"tables/regulon_activity_by_sample.csv is the MEAN AUC per regulon per sample, and "
@@ -400,8 +408,14 @@ def run(ctx):
         [{"regulon": r.name, "n_targets": len(r.genes),
           "targets": ";".join(sorted(r.genes))} for r in regulons]).set_index("regulon"))
 
-    ctx.headline = (f"{len(regulons)} regulon(s) over {ex.shape[0]:,} cells, "
-                    f"inferred from this {'unit' if ctx.unit else 'dataset'}")
+    # THE HEADLINE MUST NOT REPORT THE FIT SIZE AS THE RESULT SIZE. `ex` is the subsample for a
+    # cohort fit, so this read "over 25,000 cells" for a result covering 98,627 of them.
+    if ex.shape[0] != auc.shape[0]:
+        ctx.headline = (f"{len(regulons)} regulon(s), inferred from {ex.shape[0]:,} cells and "
+                        f"scored on {auc.shape[0]:,}")
+    else:
+        ctx.headline = (f"{len(regulons)} regulon(s) over {auc.shape[0]:,} cells, "
+                        f"inferred from this {'unit' if ctx.unit else 'dataset'}")
     ctx.caveat("The network was inferred from THIS data, so it is not comparable with one "
                "inferred from another dataset, and an absent regulon is not evidence of an "
                "inactive TF.")
