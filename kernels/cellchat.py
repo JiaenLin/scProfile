@@ -60,6 +60,24 @@ PLUGIN = {
                  "help": "trimmed mean fraction for computeCommunProb"},
     },
 
+    # DECLARED SO THE TOOL CAN SEE IT. These are R data objects INSIDE the CellChat package,
+    # pinned by the commit in `requires.r` - which was chosen for the software, so the database
+    # is pinned as a side effect. Nothing here downloads them and nothing can verify them; the
+    # point of declaring them is that a plan, a report and `doctor` can name what decided the
+    # answer instead of the tool believing this plugin consults nothing.
+    "references": {
+        "cellchatdb_human": {"tier": "bundled", "organism": "human", "role": "interactions",
+                             "package": "CellChat", "cite": "Jin et al., Nat Commun 2021",
+                             "source": "https://github.com/jinworks/CellChat",
+                             "note": "CellChatDB.human ships inside the CellChat package and is "
+                                     "pinned by its commit, not by anything this tool records"},
+        "cellchatdb_mouse": {"tier": "bundled", "organism": "mouse", "role": "interactions",
+                             "package": "CellChat", "cite": "Jin et al., Nat Commun 2021",
+                             "source": "https://github.com/jinworks/CellChat",
+                             "note": "CellChatDB.mouse ships inside the CellChat package and is "
+                                     "pinned by its commit, not by anything this tool records"},
+    },
+
     "requires": {
         "python": ">=3.10,<3.13",
         "packages": {"anndata": ">=0.10,<0.12", "pandas": ">=2.0,<3", "scipy": ">=1.10"},

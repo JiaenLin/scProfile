@@ -44,6 +44,20 @@ PLUGIN = {
     # Constraints, not pins, wherever the tool genuinely tolerates a range - a pin is a claim
     # that only THIS version works, and claiming it where it is untrue is what forces an
     # environment nobody can share.
+    # FETCHED OVER THE NETWORK WHILE IT RUNS. Nothing pins these, nothing checksums them, and
+    # the fetch needs outbound HTTPS FROM A COMPUTE NODE - which is the failure a batch job
+    # discovers after its queue slot is spent. Declaring them is what lets `plan` say so first.
+    "references": {
+        "collectri": {"tier": "runtime", "role": "prior", "source": "OmniPath",
+                      "cite": "Muller-Dott et al., Nucleic Acids Res 2023",
+                      "note": "TF-target prior, fetched from OmniPath on first use. Needs "
+                              "outbound HTTPS at RUN time; nothing here pins the version"},
+        "progeny": {"tier": "runtime", "role": "prior", "source": "OmniPath",
+                    "cite": "Schubert et al., Nat Commun 2018",
+                    "note": "pathway-response prior, fetched from OmniPath on first use. Needs "
+                            "outbound HTTPS at RUN time; nothing here pins the version"},
+    },
+
     "requires": {
         "python": ">=3.10,<3.13",
         "packages": {

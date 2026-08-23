@@ -1192,6 +1192,8 @@ def _plan(a):
     #: read when readiness is computed, so a fetchable reference reports as work to do rather
     #: than as a property of the data.
     _refs_state = {}
+    #: {plugin: [reference names]} fetched over the network AT RUN TIME
+    _runtime_refs = {}
 
     for name in sorted(want):
         k, need = ks[name], {}
@@ -1220,13 +1222,23 @@ def _plan(a):
             else:
                 try:
                     st = refs.status(k, a.references, org)
-                    ok = bool(st) and all(v[0] == "present" for v in st.values())
+                    # BUNDLED AND RUNTIME COUNT AS SATISFIED. Nothing here can download them, so
+                    # treating them as missing would report a gap no command closes and send
+                    # `--build` after a file that does not exist.
+                    ok = bool(st) and all(v[0] in ("present", "bundled", "runtime")
+                                          for v in st.values())
                     # DECLARED FOR THIS ORGANISM BUT NOT ON DISK IS NOT A BLOCKED VERDICT. The
                     # plugin can serve this species; the files have simply not been downloaded
                     # here, which is readiness and is repaired by `--build`. Reporting it as
                     # BLOCKED told a new user their data could not support the method.
                     need["reference data"] = True if not ok else ok
                     _refs_state[k.name] = "present" if ok else "missing"
+                    # A RUNTIME FETCH IS A DEPENDENCY ON THE NETWORK AT RUN TIME, and a batch
+                    # node routinely has no outbound route. Said in the plan, it costs nothing;
+                    # discovered in the run, it costs the queue slot.
+                    net = sorted(n for n, v in st.items() if v[0] == "runtime")
+                    if net:
+                        _runtime_refs[k.name] = net
                 except Exception:                                         # noqa: BLE001
                     need["reference data"] = None
         for c in _rk(k.needs_layers, _km):
@@ -1357,6 +1369,12 @@ def _plan(a):
             print(f"      {w}")
 
     # ---- --build: repair what the plan found, then plan again ---------------------------------
+    if _runtime_refs:
+        print("\n  NEEDS THE NETWORK WHEN IT RUNS - not now, and not on this machine unless this")
+        print("  is where the job runs. A compute node with no outbound route fails at run time:")
+        for _n, _r in sorted(_runtime_refs.items()):
+            print(f"    {_n:<12} fetches {', '.join(_r)} on first use")
+
     fixable = PL.fixable_builds(verdicts)
     pend = [v for v in verdicts if v.readiness]
     if pend and not getattr(a, "build", False):

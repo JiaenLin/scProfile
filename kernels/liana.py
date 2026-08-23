@@ -59,6 +59,23 @@ PLUGIN = {
                           "table is the honest artifact; this is for a figure"},
     },
 
+    # BUNDLED IN THE WHEEL, and constrained by a RANGE in `requires` - so which version of the
+    # resource a run used is recorded in the result's caveats and by nothing else. Declared so
+    # the tool can say that, rather than reporting a plugin that consults no reference data.
+    "references": {
+        "consensus": {"tier": "bundled", "organism": "human", "role": "interactions",
+                      "package": "liana", "cite": "Dimitrov et al., Nat Commun 2022; "
+                                                  "Turei et al., Mol Syst Biol 2021",
+                      "source": "https://github.com/saezlab/liana-py",
+                      "note": "assembled from OmniPath, ships in the wheel, loads offline - "
+                              "which is what lets this plugin run in a batch job"},
+        "mouseconsensus": {"tier": "bundled", "organism": "mouse", "role": "interactions",
+                           "package": "liana", "cite": "Dimitrov et al., Nat Commun 2022; "
+                                                       "Turei et al., Mol Syst Biol 2021",
+                           "source": "https://github.com/saezlab/liana-py",
+                           "note": "assembled from OmniPath, ships in the wheel, loads offline"},
+    },
+
     "requires": {
         "python": ">=3.10,<3.13",
         "packages": {"liana": ">=1.3,<2", "scanpy": ">=1.10,<1.11",

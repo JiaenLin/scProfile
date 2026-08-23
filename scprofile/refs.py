@@ -103,6 +103,27 @@ def status(kernel, dest, organism=None, verify=False):
     """
     out = {}
     for name, spec in kernel.references(organism).items():
+        # THREE TIERS, AND ONLY ONE OF THEM IS A FILE THIS TOOL PUTS ON DISK. The declaration
+        # shape assumed a downloadable file - url, sha256, size - so a reference that ships
+        # inside a package or is fetched by the wrapped tool at run time could not be declared at
+        # all. Eight of nine plugins therefore declared nothing while three of them consult
+        # reference data, and the planner was blind to it.
+        #
+        # `bundled` is pinned by the package version and by nothing else; `runtime` is fetched
+        # when the tool runs and NEEDS THE NETWORK THEN - which is the one a batch job on a node
+        # with no outbound route discovers after its queue slot is spent.
+        tier = str(spec.get("tier") or "fetch")
+        if tier == "bundled":
+            out[name] = ("bundled", "", spec.get("note")
+                         or f"ships with {spec.get('package', 'the wrapped package')}; "
+                            f"pinned by its version and by nothing else")
+            continue
+        if tier == "runtime":
+            out[name] = ("runtime", "", spec.get("note")
+                         or f"fetched from {spec.get('source', 'the network')} when the plugin "
+                            f"runs; nothing here pins it, and a node with no outbound route "
+                            f"fails at run time")
+            continue
         fn = spec.get("filename") or Path(str(spec.get("url", name))).name
         p = Path(dest).expanduser() / kernel.name / fn
         want_bytes = _declared_bytes(spec)
@@ -134,7 +155,10 @@ def status(kernel, dest, organism=None, verify=False):
 def plan_fetch(kernel, dest, organism=None):
     """What a fetch would download, how much, and whether it fits. Downloads nothing."""
     st = status(kernel, dest, organism)
-    todo = {k: v for k, v in st.items() if v[0] != "present"}
+    # BUNDLED AND RUNTIME REFERENCES ARE NOT DOWNLOADS. They are real dependencies and they are
+    # reported - but nothing here can fetch them, and counting them as "missing" would make
+    # `fetch` promise a download it cannot perform and `plan` report a gap no command closes.
+    todo = {k: v for k, v in st.items() if v[0] not in ("present", "bundled", "runtime")}
     refs = kernel.references(organism)
     total = sum(_declared_bytes(refs[k]) for k in todo)
     # The free space of the FILESYSTEM THE FILES WILL LAND ON. The previous version fell back to
@@ -183,7 +207,12 @@ def resolve(kernel, dest, organism=None):
     """
     require_supported(kernel, organism)
     st = status(kernel, dest, organism, verify=True)
-    bad = {k: v for k, v in st.items() if v[0] != "present"}
+    # A BUNDLED OR RUNTIME REFERENCE HAS NO PATH TO HAND OVER, and demanding one would refuse
+    # every plugin that consults a database it does not download. The plugin reaches those
+    # through its own package or its own network call; declaring them is about VISIBILITY - a
+    # plan, a report and `doctor` naming what decided the answer - not about this tool
+    # delivering a file it never had.
+    bad = {k: v for k, v in st.items() if v[0] not in ("present", "bundled", "runtime")}
     if bad:
         lines = [f"  {k}: {v[0]} at {v[1]}\n      {v[2]}" for k, v in bad.items()]
         raise FileNotFoundError(
@@ -191,7 +220,7 @@ def resolve(kernel, dest, organism=None):
             + "\n".join(lines)
             + f"\n  Fix: scprofile fetch {kernel.name} --to {dest}\n"
               f"  Running without them would return a smaller result that looks like a real one.")
-    return {k: v[1] for k, v in st.items()}
+    return {k: v[1] for k, v in st.items() if v[0] == "present"}
 
 
 class _DirLock:

@@ -145,5 +145,38 @@ for _n, _k in sorted(_disc().items()):
     if (_k.spec.get("requires") or {}).get("packages"):
         ck(f"{_n} declares it", "anndata" in _k.spec["requires"]["packages"])
 
+print("\nthe MAKER produces a plugin the tool accepts, on the first generation")
+# THE PLUGIN IS WRITTEN ONCE AND SHIPS PREBUILT, so what the maker emits decides what the builder
+# and planner get to read for the life of that plugin. A skeleton that starts with gaps is a
+# skeleton whose gaps are inherited: eight of the nine plugins here declared no memory rate, and
+# the allocator guessed for all eight.
+import ast as _ast                                                             # noqa: E402
+from scprofile.onefile import render as _render                                # noqa: E402
+_src = _render("mymethod", "what it gives you", "mytool")
+_ast.parse(_src)
+_ns = {}
+exec(compile(_src, "generated", "exec"), _ns)                                  # noqa: S102
+_P = _ns.get("PLUGIN") or {}
+ck("the generated plugin is valid Python", bool(_P))
+ck("and passes the declaration check with no ERROR",
+   not [m for lv, m in declare.check(_P, "mymethod") if lv == "ERROR"],
+   str(declare.check(_P, "mymethod")))
+ck("and no WARN either - it starts declaration-complete",
+   not declare.check(_P, "mymethod"), str(declare.check(_P, "mymethod")))
+for _f in ("api", "summary", "cannot_show", "inject", "produces", "requires",
+           "cores", "memory_gb_per_100k"):
+    ck(f"the skeleton declares {_f}", _f in _P)
+ck("run and selftest are both present", callable(_ns.get("run")) and callable(_ns.get("selftest")))
+# and they REFUSE rather than returning nothing, so an unfinished plugin cannot look like one
+# that ran and found no result
+for _fn in ("run", "selftest"):
+    try:
+        _ns[_fn](None)
+        ck(f"{_fn} refuses until it is written", False, "it returned instead of raising")
+    except NotImplementedError:
+        ck(f"{_fn} refuses until it is written", True)
+    except Exception as _e:                                                    # noqa: BLE001
+        ck(f"{_fn} refuses until it is written", False, f"raised {type(_e).__name__}")
+
 print("\n" + ("the declaration holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
