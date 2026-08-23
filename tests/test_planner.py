@@ -472,5 +472,30 @@ ck("the caller audits the plan it drew",
    "PL.audit(verdicts, sorted(want)" in _in3.getsource(_cli._plan),
    "the audit's `known` must be the set the verdicts were built from")
 
+print("\na reference that has not been downloaded is READINESS, not a blocked verdict")
+# It was reported BLOCKED - the same word as "your data has no spliced counts" - which tells a
+# new user their dataset cannot support the method when one command fixes it. An organism the
+# plugin has NO reference for stays BLOCKED, because there is nothing to download and that IS a
+# fact about the project.
+import types as _t                                                             # noqa: E402
+_k = _t.SimpleNamespace(name="scenic", status="built", needs_env=True)
+_miss = P.build_state(_k, "ok", prefix="/e", refs="missing", refdir="/r", organism="mouse")
+ck("a missing reference is a readiness defect", _miss and _miss["kind"] == "refs_missing", str(_miss))
+ck("and it is fixable", _miss["fixable"] is True)
+ck("and the fix is the command that fixes it",
+   "fetch scenic" in _miss["fix"] and "/r" in _miss["fix"] and "mouse" in _miss["fix"],
+   _miss["fix"])
+ck("present references are not a defect",
+   P.build_state(_k, "ok", prefix="/e", refs="present") is None)
+ck("with no --references it is UNKNOWN and not auto-fixable",
+   P.build_state(_k, "ok", prefix="/e", refs="unknown")["kind"] == "refs_unknown")
+ck("an unknown reference state is not silently repaired",
+   P.build_state(_k, "ok", prefix="/e", refs="unknown")["fixable"] is False)
+ck("a missing ENVIRONMENT still takes precedence over a missing reference",
+   P.build_state(_k, "missing", prefix="/e", refs="missing")["kind"] == "env_missing")
+import inspect as _insp                                                        # noqa: E402
+ck("and --build knows how to fetch, not only install",
+   "refs.fetch(" in _insp.getsource(_cli._plan), "plan --build cannot fetch")
+
 print("\n" + ("the report holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

@@ -138,10 +138,23 @@ BUILD_DEFECTS = {
     "env_unknown": {"fixable": False,
                     "why": "no --prefix was given, so nowhere was checked for its environment",
                     "fix": "pass --prefix <dir>"},
+    # A REFERENCE THAT HAS NOT BEEN DOWNLOADED IS A FACT ABOUT THIS INSTALLATION. It was reported
+    # as BLOCKED - the same word as "your data does not contain spliced counts" - which tells a
+    # new user their dataset cannot support the method when the truth is that one command fixes
+    # it. That is exactly the conflation the readiness axis exists to prevent, one field over.
+    #
+    # An organism the plugin has NO reference for stays BLOCKED, and correctly: there is nothing
+    # to download, and that IS a fact about the project.
+    "refs_missing": {"fixable": True,
+                     "why": "its reference data has not been downloaded here",
+                     "fix": "scprofile fetch {name} --to {refdir} --organism {organism}"},
+    "refs_unknown": {"fixable": False,
+                     "why": "no --references was given, so nowhere was checked for them",
+                     "fix": "pass --references <dir>"},
 }
 
 
-def build_state(k, state, *, prefix=None):
+def build_state(k, state, *, prefix=None, refs=None, refdir=None, organism=None):
     """The plugin's READINESS in this installation, or None if it is ready. NEVER A VERDICT.
 
     READINESS IS A SECOND AXIS, NOT A BLOCKER, and collapsing it into the verdict was a design
@@ -170,11 +183,19 @@ def build_state(k, state, *, prefix=None):
         kind = "env_stale"
     elif state is None:
         kind = "env_unknown"
+    # THE ENVIRONMENT FIRST, then references. Both can be missing at once and readiness is one
+    # answer; the environment is the prerequisite for running at all, and `--build` re-derives the
+    # plan after repairing, so the second pass reports what the first one fixed its way past.
+    if not kind and refs == "missing":
+        kind = "refs_missing"
+    elif not kind and refs == "unknown":
+        kind = "refs_unknown"
     if not kind:
         return None
     d = BUILD_DEFECTS[kind]
     return {"kind": kind, "fixable": d["fixable"], "why": d["why"],
-            "fix": d["fix"].format(name=k.name, prefix=prefix or "<dir>")}
+            "fix": d["fix"].format(name=k.name, prefix=prefix or "<dir>",
+                                   refdir=refdir or "<dir>", organism=organism or "<organism>")}
 
 
 def fixable_builds(verdicts):

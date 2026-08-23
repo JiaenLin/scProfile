@@ -1188,6 +1188,11 @@ def _plan(a):
                        + provenance.ancestry_roots(a.h5ad)
                        + _split(getattr(a, "search", "") or "")))
     present = {}
+    #: {plugin: "present"|"missing"|"unknown"} - filled while the prerequisites are checked and
+    #: read when readiness is computed, so a fetchable reference reports as work to do rather
+    #: than as a property of the data.
+    _refs_state = {}
+
     for name in sorted(want):
         k, need = ks[name], {}
         # A REQUIRED CAPABILITY IS AN INPUT LIKE ANY OTHER, and until now the plan did not read
@@ -1211,11 +1216,17 @@ def _plan(a):
                 need["reference data"] = False        # a species it cannot serve: BLOCKED
             elif not a.references:
                 need["reference data"] = None         # NOT DETERMINED - nowhere was checked
+                _refs_state[k.name] = "unknown"
             else:
                 try:
                     st = refs.status(k, a.references, org)
-                    need["reference data"] = bool(st) and all(v[0] == "present"
-                                                              for v in st.values())
+                    ok = bool(st) and all(v[0] == "present" for v in st.values())
+                    # DECLARED FOR THIS ORGANISM BUT NOT ON DISK IS NOT A BLOCKED VERDICT. The
+                    # plugin can serve this species; the files have simply not been downloaded
+                    # here, which is readiness and is repaired by `--build`. Reporting it as
+                    # BLOCKED told a new user their data could not support the method.
+                    need["reference data"] = True if not ok else ok
+                    _refs_state[k.name] = "present" if ok else "missing"
                 except Exception:                                         # noqa: BLE001
                     need["reference data"] = None
         for c in _rk(k.needs_layers, _km):
@@ -1262,7 +1273,10 @@ def _plan(a):
             k = ks[n]
             v = PL.plan_kernel(k, present=present, facts=facts, searched=roots,
                                ran=will, constraint=constraint)
-            v.readiness = PL.build_state(k, _build_state(k), prefix=a.prefix)
+            v.readiness = PL.build_state(
+                k, _build_state(k), prefix=a.prefix,
+                refs=_refs_state.get(k.name), refdir=a.references,
+                organism=organism[0])
             v.settings = PL.settings_for(
                 k, keys={**{r_: kv[0] for r_, kv in keys.items()},
                          "organism": organism[0]},
@@ -1362,7 +1376,19 @@ def _plan(a):
             print(f"\n  {name}: {d['kind']}")
             print(f"    {d['fix']}")
             try:
-                runner.install(ks[name], a.prefix, force=(d["kind"] == "env_stale"), log=print)
+                if d["kind"] == "refs_missing":
+                    # THE DIRECTORY THE USER ALREADY NAMED. `--build` downloads only into the
+                    # `--references` directory they passed, never a location this tool picks:
+                    # reference sets run to hundreds of megabytes and where they land is the
+                    # user's decision, not a default worth guessing.
+                    if not a.references:
+                        raise RuntimeError(
+                            "no --references directory given, so there is nowhere to download "
+                            "to. Pass --references <dir>.")
+                    refs.fetch(ks[name], a.references, organism[0], log=print)
+                else:
+                    runner.install(ks[name], a.prefix,
+                                   force=(d["kind"] == "env_stale"), log=print)
                 repaired.append(name)
             except Exception as e:                                        # noqa: BLE001
                 # TROUBLESHOOT, do not just report. A build failure has a small number of causes
