@@ -60,7 +60,9 @@ PLUGIN = {
 
     "inject": {"required": ["counts", "organism"], "optional": ["label", "sample"]},
     "provides": ["activity"],
-    "produces": ["obsm[X_regulon_auc]", "tables/regulon_targets.csv",
+    # `?` on both: the cell-level block comes from the COHORT fit and the per-cell table from a
+    # PER-SAMPLE fit, so each run makes one of them and never both.
+    "produces": ["obsm[X_regulon_auc]?", "tables/regulon_auc.csv?", "tables/regulon_targets.csv",
                  # cohort fit only - the aggregate a between-condition test should read
                  "tables/regulon_activity_by_sample.csv?"],
     "per_unit": "sample",
@@ -370,7 +372,23 @@ def run(ctx):
                           f"AUC has {auc.shape[0]:,} rows for an object of {ctx.adata.n_obs:,} "
                           f"cells. An obsm block must have one row per cell; emitting this would "
                           f"misalign every regulon score with the wrong cell.")
-    ctx.emit_obsm("X_regulon_auc", auc.to_numpy())
+    # ONLY THE COHORT FIT CONTRIBUTES THE CELL-LEVEL BLOCK, and the reason is the same one this
+    # plugin runs twice for. `obsm` is one array over the whole object: the per-sample fits each
+    # discovered their own regulon set, so stacking their AUC columns into one block would place
+    # values that are not the same quantity in the same column - the exact misuse every
+    # per-sample caveat here warns against.
+    #
+    # The merger caught it rather than doing it: with a cohort fit present the two scopes claim
+    # the same cells and it refused the lot ("the units are not disjoint"), and without one the
+    # per-sample widths disagreed. Both refusals were right, and neither is fixable by the
+    # merger - the plugin has to stop asking.
+    #
+    # A per-sample fit keeps its AUC as a table in its own directory, where it is per-sample and
+    # reads as such.
+    if ctx.unit is None:
+        ctx.emit_obsm("X_regulon_auc", auc.to_numpy())
+    else:
+        ctx.emit_table("regulon_auc", auc)
 
     # THE UNIT OF REPLICATION IS THE SAMPLE, NOT THE CELL, and the cohort fit is where that gets
     # got wrong. Its AUC columns ARE comparable between cells - that is the whole point of fitting
