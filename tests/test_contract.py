@@ -786,6 +786,44 @@ def test_schedule():
           solo[0][0]["cores"] == 8, str(solo))
 
 
+def test_every_ctx_attribute_a_plugin_uses_exists():
+    """A plugin naming an attribute `Context` does not have fails AT RUN TIME, and late.
+
+    `kernels/scenic.py` used `ctx.constraint` because `constraint` is set in `plugin.py` a few
+    lines above `Context` - on `Guard`. Nothing caught it: not the declaration check, not the
+    selftest, not the plan. It surfaced 3,867 seconds into a run, after GRNBoost2, motif pruning
+    and AUC over every cell had all completed, and threw the lot away while writing a caveat.
+
+    That is the worst shape a bug can have here - maximum cost, minimum signal - and it is
+    entirely preventable by reading the attribute names out of the source.
+    """
+    import ast as _ast
+    src = (Path(__file__).resolve().parents[1] / "scprofile" / "plugin.py").read_text()
+    tree = _ast.parse(src)
+    ctx_cls = next(n for n in tree.body
+                   if isinstance(n, _ast.ClassDef) and n.name == "Context")
+    known = {n.name for n in ctx_cls.body if isinstance(n, (_ast.FunctionDef,))}
+    for n in _ast.walk(ctx_cls):
+        # `self.x = ...` in __init__ and anywhere else in the class
+        if isinstance(n, _ast.Attribute) and isinstance(n.value, _ast.Name) \
+                and n.value.id == "self" and isinstance(n.ctx, _ast.Store):
+            known.add(n.attr)
+    # attributes a plugin is allowed to SET on ctx (the contract's output slots)
+    settable = {"headline", "status", "measured"}
+    known |= settable
+
+    bad = []
+    for f in sorted((Path(__file__).resolve().parents[1] / "kernels").glob("*.py")):
+        t = _ast.parse(f.read_text())
+        for n in _ast.walk(t):
+            if isinstance(n, _ast.Attribute) and isinstance(n.value, _ast.Name) \
+                    and n.value.id == "ctx" and n.attr not in known \
+                    and not n.attr.startswith("_"):
+                bad.append(f"{f.name}: ctx.{n.attr}")
+    check(f"every ctx.<attr> used by a plugin exists on Context ({len(known)} known)",
+          not bad, "; ".join(sorted(set(bad))))
+
+
 def test_key_map_is_resolved():
     """`needs` names KEYS, so every consumer of it must resolve them.
 
@@ -1600,6 +1638,7 @@ def main():
     test_unmet_names_the_fix()
     test_ordering()
     test_schedule()
+    test_every_ctx_attribute_a_plugin_uses_exists()
     test_key_map_is_resolved()
     test_every_data_capability_can_actually_be_delivered()
     test_scaffold_cannot_produce_a_running_noop()

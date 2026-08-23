@@ -449,7 +449,8 @@ def _run(a):
             params=json.loads(a.params) if a.params else {},
             upstream=flat, upstream_units={k_: v_ for k_, v_ in per.items() if v_},
             sentinels=sentinels,
-            provenance=prov, resources={"cores": cores}, unit=unit)
+            provenance=prov, resources={"cores": cores}, unit=unit,
+            constraint=constraint)
         return kout
 
     for wi, wave in enumerate(waves, 1):

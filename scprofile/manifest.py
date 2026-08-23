@@ -62,7 +62,8 @@ DEFAULT_SENTINELS = ("EXCLUDED", "UNRESOLVED")
 def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=None,
                 references=None, reference_specs=None, params=None, upstream=None,
                 upstream_units=None, sentinels=DEFAULT_SENTINELS,
-                provenance=None, resources=None, unit=None, contract=CONTRACT_VERSION):
+                provenance=None, resources=None, unit=None, constraint="",
+                contract=CONTRACT_VERSION):
     """Write `in.json`. Every path is made ABSOLUTE first.
 
     A kernel runs with its own working directory - a different interpreter, sometimes a different
@@ -96,6 +97,12 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
         "organism": organism,
         "assay": assay,
         "design": str(Path(design).resolve()) if design else None,
+        # THE UPSTREAM CONSTRAINT ON USE, verbatim. `_entry.py` has read `d["constraint"]` to
+        # build the plugin's Guard since guard mode existed, and NOTHING EVER WROTE IT - so a
+        # guard that consults the constraint has been reading None in every run, and a guard that
+        # would have refused was silently permissive. Third field in this contract with that
+        # shape, after the reference specs and the core budget.
+        "constraint": str(constraint or ""),
         "references": {k: str(Path(v).resolve()) for k, v in (references or {}).items()},
         # THE DECLARATIONS BEHIND THOSE PATHS, so a plugin can ask for one BY ROLE. Without them
         # `ctx.reference_for_role` has nothing to search and returns None for every role, for

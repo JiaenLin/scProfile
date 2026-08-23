@@ -181,7 +181,7 @@ class Context:
 
     def __init__(self, adata, *, keys, out, cores=1, unit=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
-                 sentinels=(), provenance=None,
+                 sentinels=(), provenance=None, constraint="",
                  config=None, log=print):
         self.adata = adata
         #: {role: actual name in THIS object}. `ctx.keys["label"]`, never a literal column.
@@ -191,6 +191,12 @@ class Context:
         #: per plugin, and four concurrent plugins then start four times the node.
         self.cores = int(cores or 1)
         self.unit = unit
+        #: The upstream tool's constraint on use, verbatim, or "" when the object carries none.
+        #: `Guard` has had this since it existed and `Context` did not, so a plugin that wanted to
+        #: REPRODUCE the constraint in its own caveats - rather than merely be refused by it - had
+        #: nothing to read. An absent constraint is "", never None: a plugin testing it should not
+        #: have to distinguish "no constraint" from "the host forgot to pass one".
+        self.constraint = str(constraint or "")
         self.organism = (organism or "").lower() or None
         self.assay = (assay or "").lower() or None
         self.references = dict(references or {})
