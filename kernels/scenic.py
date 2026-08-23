@@ -136,6 +136,12 @@ PLUGIN = {
                                           "three genes is a correlation, not a module"},
         "seed": {"type": "int", "default": 0,
                  "help": "GRNBoost2 is stochastic; this is what makes a run reproducible"},
+        "cohort_max_cells": {"type": "int", "default": 25000, "min": 0,
+                             "help": "the COHORT fit infers its network from at most this many "
+                                     "cells, balanced across samples. GRNBoost2 holds the matrix "
+                                     "dense and thrashes above ~50k; the estimate stabilises far "
+                                     "below that. 0 fits on all cells. Per-sample fits ignore "
+                                     "this - they are already small"},
         "min_cells_per_gene": {"type": "int", "default": 3, "min": 0,
                                "help": "a gene detected in fewer cells than this is not offered "
                                        "as a TARGET. It is never removed from the object, never "
@@ -171,6 +177,13 @@ PLUGIN = {
     },
 
     "cost": "high", "cores": 16,
+    # DERIVED FROM THE MATRIX THIS METHOD HOLDS, then rounded UP. GRNBoost2 keeps the expression
+    # frame DENSE: 100k cells x ~28k retained genes x 4 bytes is ~11 GB, and dask's task graph,
+    # its scatter copies and the garbage it generates carry that to roughly 3-4x in practice.
+    # 40 is that arithmetic rounded up, not a measurement, and it is deliberately generous - PBS
+    # 680454 showed what the other direction costs: six hours at 85% of CPU in garbage
+    # collection, eight lines of progress, nothing kept.
+    "memory_gb_per_100k": 40,
 
     "cannot_show": [
         "CO-EXPRESSION WITH A MOTIF IS NOT REGULATION. Nothing here observes a perturbation, so "
@@ -209,8 +222,51 @@ def run(ctx):
 
     counts = ctx.counts()
     genes = np.asarray(ctx.adata.var_names).astype(str)
+    obs_names = np.asarray(ctx.adata.obs_names).astype(str)
     tfs = [l.strip() for l in open(tf_path, encoding="utf-8") if l.strip()]
     present = [t for t in tfs if t in set(genes)]
+
+    # THE COHORT FIT SUBSAMPLES, AND IT HAS TO. GRNBoost2 holds the expression matrix DENSE and
+    # ships it through a dask graph: 98,627 cells x 27,812 genes is an 11 GB frame, and measured
+    # on PBS 680454 the fit spent SIX HOURS at 85% of CPU time in garbage collection, producing
+    # eight lines of progress. It does not fail - it thrashes, which is worse, because a job that
+    # is 3% productive looks exactly like a job that is merely slow.
+    #
+    # A regulatory relationship is estimated from co-expression ACROSS cells and the estimate
+    # stabilises long before 100k of them; the per-sample fits recovered 37-111 regulons from
+    # 13,824 cells apiece in about 52 minutes. The cap is therefore a tractability choice with a
+    # statistical justification, not a shortcut, and `cohort_max_cells: 0` disables it.
+    #
+    # BALANCED BY SAMPLE, not proportional. The cohort fit exists to produce ONE vocabulary that
+    # every condition is scored against; sampling proportionally would let whichever animal
+    # yielded most nuclei write more of that vocabulary than the others. Every sample contributes
+    # the same number of cells, and the ones with fewer contribute all they have.
+    cap = int(ctx.config["cohort_max_cells"])
+    fit_rows = None                       # None = fit on every cell, which is the per-unit case
+    if PLUGIN.get("per_unit") and ctx.unit is None and cap and counts.shape[0] > cap:
+        rng = np.random.default_rng(ctx.config["seed"])
+        if "sample" in ctx.keys:
+            samp = ctx.obs("sample").astype(str).to_numpy()
+            groups = sorted(set(samp))
+            per = max(1, cap // len(groups))
+            pick = []
+            for g in groups:
+                idx = np.flatnonzero(samp == g)
+                pick.append(idx if len(idx) <= per
+                            else rng.choice(idx, size=per, replace=False))
+            take = np.sort(np.concatenate(pick))
+            how = f"balanced across {len(groups)} sample(s), up to {per:,} cells each"
+        else:
+            take = np.sort(rng.choice(counts.shape[0], size=cap, replace=False))
+            how = "at random; no sample key was available to balance across"
+        fit_rows = take
+        ctx.log(f"  cohort fit subsampled {counts.shape[0]:,} -> {len(take):,} cells ({how})")
+        ctx.caveat(
+            f"THE COHORT NETWORK WAS INFERRED FROM A SUBSAMPLE: {len(take):,} of "
+            f"{counts.shape[0]:,} cells, {how}, seed {ctx.config['seed']}. No cell was removed "
+            f"from the object and AUC IS SCORED FOR EVERY CELL - only the network INFERENCE saw "
+            f"the subsample. A regulon absent here may be one the subsample had too few cells to "
+            f"support. Set cohort_max_cells to 0 to fit on all cells.")
 
     # TARGETS ONLY, AND REGULATORS ARE NEVER DROPPED. A gene detected in a handful of cells cannot
     # support a boosted regression over thousands of them, and GRNBoost2 fits EVERY column as a
@@ -221,18 +277,22 @@ def run(ctx):
     # A TF is exempt whatever its detection rate: it is a REGRESSOR, dropping it removes an
     # explanation rather than a cost, and nothing downstream could recover the regulon it would
     # have carried.
-    detected = np.asarray((counts > 0).sum(axis=0)).ravel()
+    # DETECTION IS COUNTED ON THE CELLS THAT WILL BE FIT. Counting it on cells the regression
+    # never sees would offer targets the fit has no evidence for.
+    fit_counts = counts if fit_rows is None else counts[fit_rows, :]
+    fit_names = obs_names if fit_rows is None else obs_names[fit_rows]
+    detected = np.asarray((fit_counts > 0).sum(axis=0)).ravel()
     floor = int(ctx.config["min_cells_per_gene"])
     keep = detected >= floor if floor else np.ones(len(genes), bool)
     keep |= np.isin(genes, list(present))
     dropped = int((~keep).sum())
 
-    sub = counts[:, keep]
+    sub = fit_counts[:, keep]
     kept_genes = genes[keep]
     # float32 HALVES the graph dask ships to its workers. GRNBoost2 splits on ordering, and no
     # split in a boosted tree over UMI counts turns on the 8th decimal place.
     dense = np.asarray(sub.todense() if hasattr(sub, "todense") else sub, dtype=np.float32)
-    ex = pd.DataFrame(dense, index=ctx.adata.obs_names.astype(str), columns=kept_genes)
+    ex = pd.DataFrame(dense, index=pd.Index(fit_names, name="cell"), columns=kept_genes)
     ctx.log(f"{ex.shape[0]:,} cells x {ex.shape[1]:,} genes; "
             f"{len(present):,} of {len(tfs):,} declared TFs present")
     if dropped:
@@ -281,7 +341,35 @@ def run(ctx):
                           f"{ctx.config['min_genes_per_regulon']} targets")
     ctx.log(f"  {len(regulons)} regulon(s) after motif pruning")
 
-    auc = aucell(ex, regulons, num_workers=ctx.cores, seed=ctx.config["seed"])
+    # SCORED FOR EVERY CELL, INCLUDING THE ONES THE FIT NEVER SAW. `X_regulon_auc` is an obsm
+    # block and must have one row per cell of the object; scoring only the fit subsample would
+    # emit a 25k-row array for a 98k-row object, and the caveat above promises otherwise.
+    #
+    # CHUNKED, because building one dense frame over every cell is the 11 GB allocation that made
+    # the fit thrash in the first place - and doing it here would move the failure rather than
+    # fix it. AUCell ranks genes WITHIN each cell independently, so a chunk boundary cannot
+    # change a cell's score: this is exact, not an approximation.
+    if fit_rows is None:
+        auc = aucell(ex, regulons, num_workers=ctx.cores, seed=ctx.config["seed"])
+    else:
+        parts, step = [], 20_000
+        for start in range(0, counts.shape[0], step):
+            stop = min(start + step, counts.shape[0])
+            blk = counts[start:stop, :][:, keep]
+            blk = np.asarray(blk.todense() if hasattr(blk, "todense") else blk, dtype=np.float32)
+            parts.append(aucell(
+                pd.DataFrame(blk, index=pd.Index(obs_names[start:stop], name="cell"),
+                             columns=kept_genes),
+                regulons, num_workers=ctx.cores, seed=ctx.config["seed"]))
+            del blk
+        auc = pd.concat(parts)
+        ctx.log(f"  AUC scored for all {auc.shape[0]:,} cells in "
+                f"{len(parts)} chunk(s), from a network fitted on {ex.shape[0]:,}")
+    if auc.shape[0] != ctx.adata.n_obs:
+        return ctx.refuse("regulon activity",
+                          f"AUC has {auc.shape[0]:,} rows for an object of {ctx.adata.n_obs:,} "
+                          f"cells. An obsm block must have one row per cell; emitting this would "
+                          f"misalign every regulon score with the wrong cell.")
     ctx.emit_obsm("X_regulon_auc", auc.to_numpy())
 
     # THE UNIT OF REPLICATION IS THE SAMPLE, NOT THE CELL, and the cohort fit is where that gets
