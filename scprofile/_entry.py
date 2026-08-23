@@ -289,10 +289,18 @@ def main(argv):
         pass
     if peak_gb:
         n = int(getattr(ctx, "n_obs", 0) or getattr(getattr(ctx, "adata", None), "n_obs", 0) or 0)
-        ctx.measured = {"peak_rss_gb": round(peak_gb, 3), "n_cells": n,
-                        "gb_per_100k": round(peak_gb * 100_000 / n, 2) if n else None}
-        log(f"  peak memory {peak_gb:.2f} GB over {n:,} cells"
-            + (f" = {ctx.measured['gb_per_100k']:.1f} GB per 100k" if n else ""))
+        # THE RAW PAIR, AND NOT A RATE. `peak / n * 100_000` reads as "GB per 100k cells" and is
+        # not one: memory is a BASELINE plus a per-cell term - interpreter, imports and the
+        # object are paid once, whatever n is - and dividing by n attributes all of that fixed
+        # cost to the per-cell slope. On instances of 10-25k cells it produced 157 GB/100k for a
+        # plugin whose real per-cell demand is a fraction of that, which is wrong in the
+        # dangerous direction for the small instances and the safe one for the large.
+        #
+        # ONE MEASUREMENT CANNOT SEPARATE THE TWO. Two at different sizes can, and a per-unit
+        # plugin produces one per unit for free - so the host fits them afterwards
+        # (`kernels.fit_memory_model`) and this reports only what it actually observed.
+        ctx.measured = {"peak_rss_gb": round(peak_gb, 3), "n_cells": n}
+        log(f"  peak memory {peak_gb:.2f} GB over {n:,} cells")
 
     manifest.write_output(
         out, kernel=Path(plugin_path).stem,

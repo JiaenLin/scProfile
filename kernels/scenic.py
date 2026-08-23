@@ -185,7 +185,12 @@ PLUGIN = {
     # 40 is that arithmetic rounded up, not a measurement, and it is deliberately generous - PBS
     # 680454 showed what the other direction costs: six hours at 85% of CPU in garbage
     # collection, eight lines of progress, nothing kept.
-    "memory_gb_per_100k": 40,
+    # TWO TERMS. The 40 declared before was a pure rate, which charges a 13k-cell per-sample fit
+    # for a baseline it pays anyway and charges the cohort fit as though it did not. The dense
+    # frame is the per-cell half; the interpreter, dask's scheduler and the loaded rankings are
+    # the fixed half. Still rounded up - see `UNDECLARED_GB_BASE` on why the two directions are
+    # not symmetric.
+    "memory_gb_base": 8, "memory_gb_per_100k": 32,
 
     "cannot_show": [
         "CO-EXPRESSION WITH A MOTIF IS NOT REGULATION. Nothing here observes a perturbation, so "

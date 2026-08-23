@@ -596,12 +596,44 @@ ck("an instance larger than the whole allocation runs alone, in every dimension"
 _big.release(_g)
 
 print("\nand memory is charged against the cells the instance actually touches")
-_km = _types.SimpleNamespace(executor={"cores": 8, "memory_gb_per_100k": 12, "gpus": 0})
+# MEMORY IS A BASELINE PLUS A PER-CELL TERM. This asserted the cohort instance cost more than
+# SIX TIMES the per-unit one, which is only true if the baseline is zero - the very model that
+# made a 15 GB measurement on a 10k-cell instance read as 150 GB per 100k. Both instances pay the
+# baseline, so the ratio compresses; what must hold is that the DIFFERENCE is the per-cell term
+# times the difference in cells.
+_km = _types.SimpleNamespace(executor={"cores": 8, "memory_gb_per_100k": 12,
+                                       "memory_gb_base": 6, "gpus": 0})
 _whole = demand({"cores": 8}, _km, 100_713)
 _unit = demand({"cores": 8}, _km, 13_824)
 ck("a cohort instance is charged more than a per-unit one",
-   _whole["memory_gb"] > _unit["memory_gb"] * 6,
+   _whole["memory_gb"] > _unit["memory_gb"],
    f"{_whole['memory_gb']:.1f} vs {_unit['memory_gb']:.1f} GB")
+_expected = 12 * (100_713 - 13_824) / 100_000
+ck("and the difference is exactly the per-cell term over the extra cells",
+   abs((_whole["memory_gb"] - _unit["memory_gb"]) - _expected) < 0.01,
+   f"{_whole['memory_gb'] - _unit['memory_gb']:.2f} vs {_expected:.2f} GB")
+ck("and both pay the baseline, so neither is charged from zero",
+   _unit["memory_gb"] > 6, f"{_unit['memory_gb']:.1f} GB for 13,824 cells")
+
+print("\nand the two-term model is FITTED from the run, never divided from one point")
+from scprofile.kernels import fit_memory_model                                 # noqa: E402
+_truth_b, _truth_r = 6.0, 12.0
+_pts = [(n, _truth_b + _truth_r * n / 100_000) for n in (7_296, 10_837, 13_824, 25_000)]
+_b, _r = fit_memory_model(_pts)
+ck("the fit recovers a known baseline", abs(_b - _truth_b) < 0.01, f"{_b} vs {_truth_b}")
+ck("and a known per-cell rate", abs(_r - _truth_r) < 0.01, f"{_r} vs {_truth_r}")
+_n0, _g0 = _pts[0]
+ck("the OLD single-point rate would have been many times the truth",
+   (_g0 * 100_000 / _n0) > _truth_r * 5,
+   f"{_g0 * 100_000 / _n0:.1f} GB/100k against a true {_truth_r}")
+ck("one point cannot separate the terms and reports no rate",
+   fit_memory_model([_pts[0]])[1] is None)
+ck("nor can several points all at the same size",
+   fit_memory_model([(10_000, 8.0), (10_000, 8.2)])[1] is None)
+ck("noise implying NEGATIVE memory per cell is clamped, not reported",
+   fit_memory_model([(10_000, 9.0), (50_000, 4.0)])[1] is None)
+ck("and no points at all is not an answer",
+   fit_memory_model([]) == (None, None))
 _kn = _types.SimpleNamespace(executor={"cores": 4, "memory_gb_per_100k": None, "gpus": 0})
 _d = demand({"cores": 4}, _kn, 100_000)
 ck("an UNDECLARED rate is assumed, never read as zero",

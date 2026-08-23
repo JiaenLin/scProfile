@@ -225,6 +225,7 @@ def _default_memory_gb():
 def _run(a):
     from . import compat, inputs, manifest, merge, provenance, refs, report, runner
     from .kernels import (UNDECLARED_GB_PER_100K, ResourcePool, _budget, concurrency,
+                          fit_memory_model,
                           demand, discover, guard_verdict, log_escape, schedule,
                           undeclared, unmet)
 
@@ -735,7 +736,36 @@ def _run(a):
               f"of\n  {a.h5ad}\nunder a name that says it was profiled. The reports below still "
               f"describe what happened and why.")
 
+    # WHAT EACH PLUGIN ACTUALLY COST, fitted rather than divided. Every instance reported its
+    # peak RSS and the cells it processed; a per-unit plugin gives several points at different
+    # sizes, which is exactly what separates the fixed baseline from the per-cell slope. One
+    # point cannot, and the fit says so instead of inventing a rate from it.
+    memory_model = {}
+    _by_plugin = {}
+    for _pl in payloads:                       # the RAW per-instance list; `folded` drops measured
+        _m = _pl.get("measured")
+        if isinstance(_m, dict) and _m.get("n_cells") and _m.get("peak_rss_gb"):
+            _by_plugin.setdefault(_pl["kernel"], []).append(
+                (_m["n_cells"], _m["peak_rss_gb"]))
+    for _n, _pts in sorted(_by_plugin.items()):
+        _b, _r = fit_memory_model(_pts)
+        if _b is None:
+            continue
+        memory_model[_n] = {"base_gb": _b, "gb_per_100k": _r, "points": len(_pts),
+                            "declared_per_100k": ks[_n].executor.get("memory_gb_per_100k")
+                            if _n in ks else None,
+                            "declared_base_gb": ks[_n].executor.get("memory_gb_base")
+                            if _n in ks else None}
+    if memory_model:
+        print("\n  measured memory, fitted as baseline + per-cell (declare these):")
+        for _n, _m in sorted(memory_model.items()):
+            _rate = (f"{_m['gb_per_100k']:.1f} GB/100k" if _m["gb_per_100k"] is not None
+                     else "per-cell term indeterminate from "
+                          f"{_m['points']} point(s) at one size")
+            print(f"    {_n:<12} {_m['base_gb']:>6.1f} GB fixed + {_rate}")
+
     payload = {"version": _v(), "input": str(a.h5ad), "describe": describe,
+               "memory_model": memory_model,
                "constraint_on_use": constraint, "constraint_source": csrc,
                "ran": ran, "skipped": skipped,
                "status": {n: ks[n].status for n in sorted(ks)},

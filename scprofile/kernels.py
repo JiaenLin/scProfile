@@ -210,6 +210,8 @@ class Kernel:
                 # conservative figure for it and says so; `declare` warns. It must never read as
                 # "this plugin needs no memory", which is what 0 would mean.
                 "memory_gb_per_100k": e.get("memory_gb_per_100k"),
+                # the FIXED half of the model - see `demand()`
+                "memory_gb_base": e.get("memory_gb_base"),
                 "gpus": int(e.get("gpus", 0) or 0)}
 
     #: cost -> sort key. Longest pole first: a wave's wall-clock is its slowest member, and
@@ -474,6 +476,7 @@ class FileKernel(Kernel):
             "cost": self.spec.get("cost", "medium"),
             "cores": self.spec.get("cores", 1),
             "memory_gb_per_100k": self.spec.get("memory_gb_per_100k"),
+            "memory_gb_base": self.spec.get("memory_gb_base"),
             "gpus": self.spec.get("gpus", 0)})
 
     @property
@@ -725,23 +728,75 @@ def concurrency(instances, budget):
 #: declarations rather than tuned.
 UNDECLARED_GB_PER_100K = 24.0
 
+#: The fixed cost assumed for a plugin that declares no baseline: interpreter, imports and the
+#: object, paid once whatever the cell count. Every plugin pays something, so zero is never the
+#: right assumption - and on a wave of many small instances the baseline, not the slope, is what
+#: fills the node.
+UNDECLARED_GB_BASE = 4.0
+
 
 def demand(inst, kernel, n_cells):
     """What ONE instance needs, in every dimension the pool admits on.
 
-    Memory is per-instance and scales with the cells that instance actually touches - a per-unit
-    instance sees its unit, not the cohort - so it is computed here, where the unit is known,
-    rather than declared as an absolute that would be wrong for every project but the one it was
-    measured on. That is the same reason `memory_gb_per_100k` is a RATE and not a number of GB.
+    MEMORY IS A BASELINE PLUS A PER-CELL TERM:
+
+        peak_gb  ~=  memory_gb_base  +  memory_gb_per_100k * n_cells / 100_000
+
+    The interpreter, the imports and the object are paid ONCE whatever n is; only the working
+    matrices scale. Modelling this as a pure rate - `rate * n`, through the origin - is what made
+    a measured 15 GB on a 10k-cell instance read as 150 GB per 100k cells, which then predicts
+    ten times the truth for a small instance and, worse, can under-predict a large one whose
+    baseline was folded into the slope.
+
+    Both terms are optional and both have conservative defaults, because the failure directions
+    are not symmetric: over-estimating narrows a wave, under-estimating gets the job killed.
     """
     e = kernel.executor if hasattr(kernel, "executor") else {"cores": 1}
     rate = e.get("memory_gb_per_100k")
+    base = e.get("memory_gb_base")
     assumed = rate is None
     rate = UNDECLARED_GB_PER_100K if assumed else float(rate)
+    base = UNDECLARED_GB_BASE if base is None else float(base)
+    n = max(1, int(n_cells or 0))
     return {"cores": int(inst.get("cores", e.get("cores", 1)) or 1),
-            "memory_gb": max(1.0, rate * max(1, int(n_cells or 0)) / 100_000.0),
+            "memory_gb": max(1.0, base + rate * n / 100_000.0),
             "gpus": int(e.get("gpus", 0) or 0),
             "memory_assumed": assumed}
+
+
+def fit_memory_model(points):
+    """(base_gb, gb_per_100k) from [(n_cells, peak_gb), ...] - the two terms, separated.
+
+    ONE MEASUREMENT CANNOT SEPARATE A BASELINE FROM A SLOPE, and reporting `peak / n` as though
+    it could is how a rate ends up ten times too large. Two measurements at different sizes can,
+    and a per-unit plugin produces one per unit for nothing - so the fit uses what the run
+    already collected instead of asking anyone to measure twice.
+
+    Least squares on two parameters. With one point, or with every point at the same size, the
+    slope is indeterminate: the whole peak is attributed to the BASELINE and the rate is reported
+    as None, which is the conservative reading - it says "this much, regardless of size" rather
+    than inventing a per-cell cost from a single observation.
+    """
+    pts = [(float(n), float(g)) for n, g in points if n and g]
+    if not pts:
+        return (None, None)
+    xs = [n / 100_000.0 for n, _ in pts]
+    ys = [g for _, g in pts]
+    n_obs = len(pts)
+    mx = sum(xs) / n_obs
+    my = sum(ys) / n_obs
+    sxx = sum((x - mx) ** 2 for x in xs)
+    if n_obs < 2 or sxx <= 1e-12:
+        return (round(max(ys), 3), None)          # indeterminate slope: it is all baseline
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx
+    base = my - slope * mx
+    # A NEGATIVE TERM IS AN ARTEFACT OF NOISE, not a discovery that memory is returned to the
+    # machine as cells are added. Clamp, and let the other term carry it.
+    if slope < 0:
+        return (round(max(ys), 3), None)
+    if base < 0:
+        return (0.0, round(slope, 3))
+    return (round(base, 3), round(slope, 3))
 
 
 class ResourcePool:

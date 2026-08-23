@@ -64,14 +64,17 @@ PLUGIN = {
     },
 
     # WHAT THE ALLOCATOR NEEDS. `cores` is what the method can actually use — the host passes a
-    # share and the plugin must use that, never the machine's count. `memory_gb_per_100k` is a
-    # RATE, because memory scales with the cells an instance touches; an absolute number would be
-    # wrong for every project but the one it was measured on.
+    # share and the plugin must use that, never the machine's count.
     #
-    # MEASURE IT ONCE AND DECLARE IT. Left out, the allocator assumes a conservative rate and
+    # MEMORY IS TWO TERMS, a fixed cost plus a per-cell one:
+    #     peak_gb  ~=  memory_gb_base  +  memory_gb_per_100k * n_cells / 100_000
+    # The interpreter, the imports and the object are paid once whatever n is. Modelling this as
+    # a pure rate makes a 15 GB measurement on a 10k-cell instance read as 150 GB per 100k.
+    #
+    # MEASURE THEM ONCE AND DECLARE THEM. Left out, the allocator assumes conservative values and
     # prints that it is guessing — which either wastes memory or, if the guess is low, gets the
-    # job killed. Every run reports each plugin's peak memory and cell count for exactly this.
-    "cost": "medium", "cores": 4, "memory_gb_per_100k": 8,
+    # job killed. Every run FITS both terms from its own instances and prints them ready to paste.
+    "cost": "medium", "cores": 4, "memory_gb_base": 4, "memory_gb_per_100k": 8,
 
     # REFERENCE DATA DECIDES ANSWERS AS MUCH AS THE ALGORITHM DOES. Declare everything this
     # method consults that did not come from the user's object — including what you cannot
