@@ -19,7 +19,7 @@ provenance and reports, and knows nothing about velocity, regulons or ligand–r
 | assuming an organism | every reference is organism-keyed; mouse and human at minimum |
 | assuming cells rather than nuclei | it changes the **caveats**, not the code. Velocity on nuclei is not velocity on cells |
 | assuming a design shape | 2×2, paired, time-course and single-group must all work — or no design at all |
-| naming a cell type anywhere in the source | a tool that mentions `Cardiomyocyte` is a tool for one tissue |
+| naming a cell type anywhere in the source | a tool that mentions a named cell type is a tool for one tissue |
 | requiring scIntegrate | a dataset may stop after scAnno. Integration output is **read if present, named if absent** |
 | requiring spliced/unspliced | most datasets do not have them. The velocity kernel refuses by name; nothing else notices |
 

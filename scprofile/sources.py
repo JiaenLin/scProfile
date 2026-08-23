@@ -59,7 +59,7 @@ _CORE = re.compile(r"[ACGTN]{8,}")
 #:
 #: THE PLAN AND THE RUN MUST REACH THE SAME DISTANCE, and they did not. The planner walked to
 #: depth 14 with 400,000 visits and pruned `<sample>__STARtmp` by substring; this walked to depth
-#: 3 with 4,000 visits and an exact-name skip list that `Aging1__STARtmp` does not match. Measured
+#: 3 with 4,000 visits and an exact-name skip list that `S1__STARtmp` does not match. Measured
 #: on real aligner output: STARsolo delivers `<sample>_Solo.out/Velocyto/filtered/` at depth 9
 #: below a project root, so `plan` could say "your spliced counts are here, pass --search <root>"
 #: and the run, given exactly that root, could not reach them - and would refuse with a list of

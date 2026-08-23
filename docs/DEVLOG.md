@@ -235,7 +235,7 @@ produced is in the same position, and the host is the only party holding the ups
 found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two walks for one
               question, in two layers. `plan` walks to depth 14 with 400,000 visits, pruning
               anything whose name CONTAINS `__STARtmp`; the walk a plugin runs went to depth 3,
-              4,000 visits, and an exact-name skip list that `Aging1__STARtmp` does not match.
+              4,000 visits, and an exact-name skip list that `S1__STARtmp` does not match.
               STARsolo delivers `<sample>_Solo.out/Velocyto/filtered/` at DEPTH 9, so the plan
               could name the directory holding the spliced counts and the run, given exactly that
               root, could not reach it. Depth, cap and prune list are one statement each now, and
@@ -357,7 +357,7 @@ this cycle: the previous attempt's R step failed and `install` raised before any
         **`[12 at a time of 27]`** - the concurrency cap 623d186 added, biting on a real wave.
 
         [declaration] **scenic's environment had no anndata.** Ten instances, one line each:
-              `NOT RUN scenic[Aging1] - scenic's interpreter cannot read this object even
+              `NOT RUN scenic[S1] - scenic's interpreter cannot read this object even
               re-encoded`, and above them `the compatibility copy did not help either:
               ModuleNotFoundError: No module named 'anndata'`. `_entry.py` reads the object before
               a plugin is called, so an environment without anndata cannot run ANY plugin - and
@@ -373,7 +373,7 @@ this cycle: the previous attempt's R step failed and `install` raised before any
         half of velocity that had never run on anything:
 
             visited 20,064 director(ies), found 503 candidate(s)
-            mtx  filtered: 13,824/13,824 barcodes matched (100.0%) within sample Aging1   [x10]
+            mtx  filtered: 13,824/13,824 barcodes matched (100.0%) within sample S1   [x10]
             141 further candidate(s) not opened: every cell was already covered
             attached from 10 source(s): 98,627/98,627 cells (100.0%) have spliced/unspliced counts
 
@@ -501,7 +501,7 @@ The run the whole cycle was for, at `bc4a356`, over 100,713 cells and ten sample
 
 Every plugin, including the third-party one, produced a result:
 
-    scenic[Young1]   ok  3149s  111 regulon(s) over 10,837 cells, inferred from this unit  [x10]
+    scenic[S1]   ok  3149s  111 regulon(s) over 10,837 cells, inferred from this unit  [x10]
     de               ok   609s  779 gene-population-term results below padj 0.05 across 10
                                 population(s), formula ~ age + batch + diet
     velocity         partial 530s  velocity fitted on 2,000 genes (stochastic); median
@@ -519,7 +519,7 @@ field is reported as unresolved rather than presented as a direction.
 
 And the one thing that did NOT reach the object was refused for a reason worth reading:
 
-    NOT MERGED: unit 'Aging1' obsm['X_regulon_auc'] came back with different widths across
+    NOT MERGED: unit 'S1' obsm['X_regulon_auc'] came back with different widths across
     units ([37, 42, 48, 57, 65, 73, 88, 111]), so the columns are not the same quantity and
     stacking them would invent one.
 

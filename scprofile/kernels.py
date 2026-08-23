@@ -233,7 +233,7 @@ class Kernel:
 
         Some methods infer their own output vocabulary from the data they are given. SCENIC is the
         clear case: each fit discovers its own regulon set, so two units' AUC columns are not the
-        same quantity and cannot be compared - measured on ten samples of one heart study, regulon
+        same quantity and cannot be compared - measured on a ten-sample cohort, regulon
         counts ran 37 to 111 and two samples shared 17% of their transcription factors (Jaccard
         0.17). Per-unit fits answer "what operates in this animal"; only a cohort fit yields ONE
         vocabulary, which is what a between-condition question needs.

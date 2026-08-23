@@ -30,7 +30,15 @@ def ck(name, cond, detail=""):
 
 print("\nno project, person, machine or cohort appears anywhere")
 BAD = re.compile(r"\bsambo\b|wangyb|duke-nus|hn-10-03|aging[_ ]?hfd|young[_ ]?hfd"
-                 r"|/data/wangyb|scratch/2026", re.I)
+                 r"|/data/wangyb|scratch/2026"
+                 # BARE SAMPLE NAMES. The list above caught `aging_hfd` and missed `Aging1`,
+                 # which is the same cohort's other arm - so a dozen of them reached docs, host
+                 # code and two test files before anyone noticed. A leak guard that covers some
+                 # of a cohort's names is a guard that reports clean while the tree is not.
+                 r"|\b(?:aging|young)[ _]?\d+\b"
+                 # and the tissue the cohort came from: naming it identifies the study as
+                 # surely as naming a sample does.
+                 r"|heart study|myocard|cardiomyocyte", re.I)
 #: Two exemptions, both narrow, because a check that fires on correct code is a check somebody
 #: switches off. A repository URL contains its owner's account name and is not a leak; and the
 #: OTHER leak guard has to contain the strings it looks for.
@@ -155,7 +163,15 @@ for _c in ("validate", "selftest", "scaffold"):
     ck(f"{_c} is marked for the maintainer", f'"{_c}", help="[maintainer]' in _cli)
 _rt = Path(__file__).resolve().parents[1]
 _rm = (_rt / "README.md").read_text()
-ck("the README says who it is for", "for people running an analysis" in _rm)
+# THE INTENT, NOT ONE SENTENCE. This pinned the literal phrase "for people running an analysis",
+# so rewording the README broke it while the property it guards - that a reader can tell which
+# half is addressed to them - was still true.
+ck("the README tells a user they never write a plugin",
+   "never write a wrapper" in _rm.lower() or "you never open a plugin" in _rm.lower())
+ck("and names the maintainer path", "maintainer" in _rm.lower()
+   and "MAINTAINING_PLUGINS.md" in _rm)
+ck("and splits its documentation by audience",
+   "**Users:**" in _rm and "**Maintainers:**" in _rm)
 ck("and points maintainers elsewhere", "MAINTAINING_PLUGINS" in _rm)
 _mg = _rt / "docs" / "MAINTAINING_PLUGINS.md"
 ck("the maintainer guide exists", _mg.exists())

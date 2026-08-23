@@ -1716,8 +1716,8 @@ def main(argv=None):
     pl.add_argument("--prefix", default=None)
     pl.add_argument("--design", default=None)
     # THE SAME DEFAULT AS `run`, AND IT HAS TO BE. A hard-coded 8 made `plan` describe a machine
-    # nobody was using: on PBS 679143 the plan printed `scenic[Aging1](8c)` and the run, given the
-    # allocation, did `scenic[Aging1](16c)`. The plan is the document a person reads BEFORE
+    # nobody was using: on PBS 679143 the plan printed `scenic[S1](8c)` and the run, given the
+    # allocation, did `scenic[S1](16c)`. The plan is the document a person reads BEFORE
     # committing a job, so a plan that understates the budget understates every share in it - and
     # two documents of one run disagreeing is how the last core-allocation bug was found.
     pl.add_argument("--cores", type=int, default=None, metavar="N",

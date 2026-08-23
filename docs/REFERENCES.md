@@ -1,17 +1,26 @@
-# Reference data: where every byte comes from
+# Reference data
 
-A **reference** here is any data a plugin consults that did not come from your object. A motif
-ranking, a ligand–receptor database, a regulatory prior, a gene set. They decide answers as much
-as the algorithm does — two runs of the same method against two versions of the same database
-disagree, and neither one is wrong.
+A **reference** is any data a method consults that did not come from your object: a motif
+ranking, a ligand–receptor database, a regulatory prior, a gene set. These decide answers as much
+as the algorithm does — the same method against two versions of the same database gives two
+results, and neither is wrong.
 
-This document is the register: what each plugin uses, who published it, under what terms, how it
-is pinned, and whether anything checks it. It exists because **only one plugin's references are
-visible to the tool**, and the rest are no less real for being invisible.
+This is the register. For every method: what it uses, who published it, under what terms, how it
+is pinned, and whether scProfile can check it.
+
+```bash
+scprofile fetch scenic --to ~/refs --organism mouse --dry-run   # size, and whether it fits
+scprofile fetch scenic --to ~/refs --organism mouse             # resumable, verified
+scprofile validate scenic --references ~/refs --deep            # hashes what is on disk
+```
+
+**Only one method's references are visible to the tool.** The rest are pinned by a package
+version or fetched at runtime, and are no less real for being invisible — which is what the three
+tiers below are about.
 
 ---
 
-## The three tiers, and why the difference matters
+## The three tiers
 
 | tier | pinned by | fetched by | verified by | appears in the report |
 |---|---|---|---|---|
@@ -85,7 +94,7 @@ nothing else.
 
 ---
 
-## Bundled references — real, pinned, and invisible to this tool
+## Bundled references
 
 ### `cellchat` — CellChatDB
 
@@ -130,7 +139,7 @@ run in a batch job at all.
 
 ---
 
-## Runtime references — not pinned by anything
+## Runtime references
 
 ### `decoupler` — CollecTRI and PROGENy
 

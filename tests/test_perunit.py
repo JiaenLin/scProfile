@@ -307,7 +307,7 @@ ck("the budget is redivided over what launches",
 
 # PLAN AND RUN MUST ANSWER THE SAME QUESTION ABOUT THE SAME MACHINE. `plan` hard-coded
 # `--cores 8` while `run` defaulted to the scheduler's allocation, so on PBS 679143 the plan
-# printed `scenic[Aging1](8c)` and the run did `scenic[Aging1](16c)`. The plan is what a person
+# printed `scenic[S1](8c)` and the run did `scenic[S1](16c)`. The plan is what a person
 # reads BEFORE committing a job; one that understates the budget understates every share in it.
 _parser = cli._parser() if hasattr(cli, "_parser") else None
 _plansrc = inspect.getsource(cli._plan)

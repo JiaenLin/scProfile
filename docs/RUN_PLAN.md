@@ -1,46 +1,43 @@
-# Designing a run plan
+# The run plan
 
-A run plan answers one question for every plugin the build knows about: **should this run on this
-project, at what depth, and if not, why not.**
+`scprofile plan` answers one question for every method: **should this run on your data, at what
+depth, and if not, why not.**
 
-It is a document before it is a command. A plan that says "7 plugins will run" is not a plan; a
-plan that says *why the other two will not, in terms a reader can check against the data*, is.
+```bash
+scprofile plan --h5ad cohort.h5ad --design design.csv --all --audit --report plan/
+```
+
+It runs nothing and takes seconds. Read it before you spend a run.
 
 ---
 
-## 0. Two axes, and the plan must not confuse them
+## Two answers, not one
 
-Every plugin gets **two** answers, and they are about different things:
+Each method gets a **verdict** and a **readiness**, and they are about different things.
 
-| axis | question | example |
+| | question | example |
 |---|---|---|
-| **verdict** | what would this do **on this project**? | RUN (full) over 10 samples |
-| **readiness** | what stands between **this installation** and running it? | its wrapper is not written yet |
+| **verdict** | what would this do on *your data*? | RUN (full) over 10 samples |
+| **readiness** | what stands between *this installation* and running it? | its environment is not built |
 
-**A plugin that is not built here is not a limitation of the user's data.** Collapsing the two
-cost exactly that: a plan on a healthy ten-sample project reported seven of nine plugins BLOCKED,
-in the same column and the same word as *"your spliced counts are missing"*, because their
-wrappers had not been written in that checkout. A user installing the tool and running the planner
-would conclude their dataset could not be analysed — when every one of those plugins would run on
-it.
-
-So the plan leads with the verdict, because that is the question the user asked, and reports
-readiness beside it as work to be done — most of it by `plan --build`. The headline says both:
+A method that is not installed here is not a limitation of your data. The plan leads with the
+verdict — the question you asked — and reports readiness beside it as work to be done, most of
+which `plan --build` does for you.
 
 ```
-ON THIS PROJECT:       7 of 9 plugin(s) would run.
-IN THIS INSTALLATION:  2 ready now, 7 need building first.
+plugin       verdict         readiness
+scenic       RUN (full)      ready
+velocity     BLOCKED         ready          spliced/unspliced not found
+abundance    RUN (full)      env not built  -> plan --build
 ```
 
----
-
-## 1. The four verdicts, and why there must be four
+## The four verdicts
 
 Every plugin gets exactly one:
 
 | verdict | means | who decides |
 |---|---|---|
-| **RUN** | the data is there and the design supports it | the plan, with a capacity level (§3) |
+| **RUN** | the data is there and the design supports it | the plan, with a capacity level (see Capacity) |
 | **SKIP** | the **design** genuinely cannot support it | the plan, and it must cite a design fact |
 | **BLOCKED** | the **data** is absent and cannot be produced from what exists | the plan, and it must name every place it looked |
 | **UNRESOLVED** | the scan **could not determine** whether the data is there | nobody — this is a defect in the plan |
@@ -54,10 +51,10 @@ Three of these are answers. The fourth is an admission, and it is the whole poin
 > indistinguishable downstream from the experiment genuinely lacking the data.
 
 **A plan containing any UNRESOLVED is not a plan.** It is a list of things to go and find out. The
-audit (§5) fails it, and it must be resolved — by searching harder, by being told where to look
+audit (see The audit) fails it, and it must be resolved — by searching harder, by being told where to look
 (`--search`), or by a human recording that the data does not exist — into one of the other three.
 
-### The difference between SKIP and BLOCKED, stated positively
+### SKIP or BLOCKED
 
 **SKIP** requires a positive statement about the experiment:
 
@@ -75,7 +72,7 @@ it is a missing input, and the verdict is BLOCKED, not SKIP.
 
 ---
 
-## 2. Knowing what is actually available
+## What is actually available
 
 The plan's first job is to know the project's data **exhaustively**, because everything downstream
 inherits its blind spots.
@@ -115,7 +112,7 @@ UNRESOLVED instead of BLOCKED.
 
 ---
 
-## 3. Capacity: run it at the depth the project can support
+## Capacity
 
 A plugin that runs is not automatically running *well*. Each has a ladder, and the plan states
 which rung it is on **and why not the one above** — otherwise a degraded run is indistinguishable
@@ -142,7 +139,7 @@ Three rules govern the ladder:
 
 ---
 
-## 4. What legitimately justifies a SKIP — and it is very little
+## What justifies a SKIP
 
 **The default answer is RUN.** A skip means the design cannot phrase the question *at all*, and
 there are only two ways that happens:
@@ -168,7 +165,7 @@ weakens an attribution, it does not make a number unworthy of being computed.**
 
 ---
 
-## 4a. The plan prescribes, it does not merely permit
+## The plan prescribes
 
 A verdict of RUN is not a plan. For every plugin that runs, the plan states:
 
@@ -186,7 +183,7 @@ A verdict of RUN is not a plan. For every plugin that runs, the plan states:
 
 ---
 
-## 4b. Readiness is repaired, never reported as a refusal
+## Readiness is repaired
 
 If a plugin is not built in this installation, **that is the plan's problem to solve, not the
 user's problem to be told about.** The plan still gives it a full verdict against the project —
@@ -207,7 +204,7 @@ leaves the user to work out which one they hit.
 
 ---
 
-## 5. The audit
+## The audit
 
 The plan is checked before it is believed, by rules that do not repeat the plan's own reasoning.
 
@@ -229,7 +226,7 @@ passes cannot be told from an audit that did not run.**
 
 ---
 
-## 6. Stability
+## Stability
 
 The same project must produce the same plan.
 
@@ -243,7 +240,7 @@ The same project must produce the same plan.
 
 ---
 
-## 7. What this is not allowed to assume
+## What the plan never assumes
 
 No organism. No assay. No column name. No design shape — not 2×2, not paired, not time-course. No
 minimum sample count. No particular upstream tool.

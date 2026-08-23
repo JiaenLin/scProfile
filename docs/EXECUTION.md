@@ -93,7 +93,7 @@ every unit's table is indexed by the same pairs and the units really can be comp
 like that: each fit discovers its own regulon set, so two units' AUC columns are **not the same
 quantity** and a between-condition comparison built from them compares different things.
 
-Measured on ten samples of one heart study: **37 to 111 regulons per sample, and two samples shared
+Measured on a ten-sample cohort: **37 to 111 regulons per sample, and two samples shared
 17% of their transcription factors (Jaccard 0.17)** — with the counts separating almost perfectly by
 a design factor that is itself confounded with batch, which is what makes the naive reading
 dangerous rather than merely noisy.
@@ -161,7 +161,7 @@ for the presence of instances that had not started. On any wave larger than the 
 arithmetic collapsed to one core each: 37 instances declaring 313 cores against a budget of 12 gave
 `scenic` `int(16 x 12 / 313)` = 0, floored to 1. Measured on PBS 677891 — ten GRNBoost2 fits, each
 declaring 16 cores, each running on one, still unfinished after 4h23m of a 12h timeout while the
-plan printed `scenic[Aging1](1c)` and nothing printed the 16. **A declaration read and then
+plan printed `scenic[S1](1c)` and nothing printed the 16. **A declaration read and then
 discarded is worse than one never read**, because the plan prints its consequence and never prints
 the declaration.*
 

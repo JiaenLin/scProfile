@@ -297,7 +297,7 @@ def test_the_plan_and_the_run_search_the_same_distance():
           "Velocyto/filtered sits at depth 9 below a project root")
     check("the run prunes what the plan prunes", all(p in SRC.PRUNE for p in PV.PRUNE))
     # SUBSTRING, NOT NAME. The directory is `<sample>__STARtmp`.
-    check("a STARsolo temp tree is pruned by substring", SRC._pruned("Aging1__STARtmp"))
+    check("a STARsolo temp tree is pruned by substring", SRC._pruned("S1__STARtmp"))
     check("and an ordinary directory is not", not SRC._pruned("Velocyto"))
 
     # A SEARCH THAT GAVE UP MUST NOT LOOK LIKE ONE THAT FINISHED.

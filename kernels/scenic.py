@@ -67,7 +67,7 @@ PLUGIN = {
     # AND ONCE OVER THE WHOLE COHORT, because a regulon set is INFERRED, not fixed. Each fit
     # discovers its own vocabulary, so two units' AUC columns are not the same quantity and a
     # between-condition comparison built from them compares different things. Measured on ten
-    # samples of one heart study: 37 to 111 regulons per sample, and two samples shared 17% of
+    # a ten-sample cohort: 37 to 111 regulons per sample, and two samples shared 17% of
     # their transcription factors (Jaccard 0.17).
     #
     # The per-sample fits are KEPT and are not redundant - they are the only independent check on
