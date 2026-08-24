@@ -191,5 +191,23 @@ ck("and the sentinel rule with it", "sentinel_as_population(" in src)
 ck("findings reach report.json", '"diagnoses"' in src)
 ck("and which plugins were repaired", '"repaired"' in src)
 
+print("\na tool that moved mid-run is neither the plugin nor its environment")
+# Measured on PBS 683096: six instances refused because the tool directory moved mid-run, and
+# every one was classified `[method] ... the plugin is the place to start`. The plugin was
+# untouched. A diagnosis that names the wrong layer is worse than none, because it is acted on.
+_d = FB.diagnose("cellchat",
+                "cellchat[S1]: THE TOOL CHANGED WHILE THIS RUN WAS IN PROGRESS "
+                "(kernels/cellchat.py, scprofile/plugin.py)")
+_layer = _d.get("layer") if isinstance(_d, dict) else getattr(_d, "layer", None)
+_rep = _d.get("repairable") if isinstance(_d, dict) else getattr(_d, "repairable", None)
+_why = str(_d.get("why") if isinstance(_d, dict) else getattr(_d, "why", ""))
+ck("it is classified as a HOST failure", _layer == FB.HOST, str(_layer))
+ck("and not as the method's", _layer != FB.METHOD)
+ck("it is NOT auto-repairable - rebuilding an environment fixes nothing here", _rep is False)
+ck("and it says outright not to debug the plugin",
+   "not debug" in _why.lower() or "NOT a fault in the plugin" in _why, _why[:80])
+ck("and names the remedy: finish or kill the run before updating",
+   "before updating" in _why, _why[:80])
+
 print("\n" + ("the loop holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

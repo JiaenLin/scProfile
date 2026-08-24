@@ -36,6 +36,18 @@ ENVIRONMENT, DECLARATION, METHOD, HOST = "environment", "declaration", "method",
 #: Signatures, most specific first. Each maps a failure to the LAYER that owns it, and says what
 #: to do - never a guess, and never a traceback handed back to the user.
 SIGNATURES = (
+    # FIRST, because it is the one failure that is NOBODY'S plugin and NOBODY'S environment, and
+    # the default classification sends the reader to exactly the wrong place. Measured on PBS
+    # 683096: six instances refused because the tool directory moved mid-run, and every one was
+    # reported as `[method] ... the plugin is the place to start`. The plugin was untouched; a
+    # `git pull` was not.
+    (r"THE TOOL CHANGED WHILE THIS RUN WAS IN PROGRESS", HOST, False,
+     "the tool's own code changed while this run was in progress, so instances launched before "
+     "that point ran different code from the ones after it. NOT a fault in the plugin, its "
+     "environment or its declaration - do not debug any of them. The run refused rather than "
+     "producing a result nobody could attribute to a version. Let a run finish, or kill it, "
+     "before updating the checkout it is reading; the job template's snapshot removes the race "
+     "entirely and this fires only when it is switched off."),
     (r"ModuleNotFoundError|No module named", ENVIRONMENT, True,
      "a package the plugin imports is not in its environment. Either the requirement does not "
      "name it or the environment was not built from the current requirement - and those have "
