@@ -109,8 +109,18 @@ what this object is, and how each was decided:
   assay          nucleus            unspliced is 71% of counts, the nuclear pattern
 ```
 
-Methods run in waves, several at a time. Each gets a share of the allocation — cores and memory —
-sized from what it declared and from how many cells it will actually touch.
+Methods run in waves, several at a time. Each gets a share of the allocation — cores, memory and
+GPUs — sized from what it declared and from how many cells it will actually touch. Memory is a
+fixed cost plus a per-cell one, so a method processing one sample is not charged as though it were
+processing the cohort.
+
+Every run measures what each method actually cost and prints the two terms fitted from its own
+instances, ready to paste into a declaration. A method that declares no memory is scheduled on a
+conservative assumption and the run says so, every time.
+
+The run also **cannot change underneath itself**: it copies the tool into the run directory and
+runs from there, so updating your checkout mid-run cannot reach it, and the host refuses any
+instance whose code has moved since the run began.
 
 ## Output
 
@@ -167,6 +177,18 @@ scprofile validate scenic --references ~/refs --deep            # hashes what is
 directory. A method whose references are unusable **refuses to run** — a missing motif database
 does not fail loudly, it returns a smaller answer that looks like a real one.
 
+Not every reference is a file you download. A method declares which kind each one is, so the plan
+can tell you before you spend a queue slot:
+
+| tier | meaning |
+|---|---|
+| `fetch` | downloadable and checksummed — scProfile gets it and verifies it |
+| `bundled` | ships inside a package, pinned by that version and nothing else |
+| `runtime` | fetched by the tool **while it runs** — needs network on the compute node |
+
+That last one matters on a cluster: `plan` names every method that will reach the network mid-run,
+so a batch node with no outbound route is a problem you find in the plan rather than an hour in.
+
 [docs/REFERENCES.md](docs/REFERENCES.md) lists every reference, its publisher, its terms, and
 which of them scProfile can verify.
 
@@ -196,7 +218,7 @@ PLUGIN = {
     "inject": {"required": ["counts", "label"], "optional": ["sample"]},
     "produces": ["obs[my_score]", "tables/my_result.csv"],
     "requires": {"python": ">=3.10,<3.13", "packages": {"scanpy": ">=1.10,<1.11"}},
-    "cores": 4, "memory_gb_per_100k": 8,
+    "cores": 4, "memory_gb_base": 4, "memory_gb_per_100k": 8,
     "cannot_show": ["what a reader must not conclude from this"],
 }
 

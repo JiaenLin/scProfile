@@ -44,16 +44,83 @@ Within a wave, start by **declared cost, descending**. A `trivial` plugin that f
 must never sit in front of a `high` one that runs for hours; the wave's wall-clock is its slowest
 member, and starting that member last adds its whole duration to the total.
 
-```yaml
-executor:
-  cost: high            # trivial | low | medium | high
-  cores: 8              # what one instance can actually use
-  memory_gb_per_100k: 12
+```python
+"cost": "high",              # trivial | low | medium | high — orders the wave
+"cores": 8,                  # what one instance can actually use
+"memory_gb_base": 11.4,      # paid once, whatever the cell count
+"memory_gb_per_100k": 19.8,  # and this much again per 100k cells
+"gpus": 0,
 ```
 
-`cost` orders. `cores` and `memory_gb_per_100k` are what the budget divides. A plugin that declares
-nothing is assumed `medium` and one core — the pessimistic reading, so an undeclared plugin is
-under-served rather than allowed to swamp the node.
+`cost` orders. The rest are what the allocator divides, on **every** dimension — not cores alone.
+
+### Memory is two terms
+
+```
+peak_gb  ≈  memory_gb_base  +  memory_gb_per_100k × n_cells / 100_000
+```
+
+The interpreter, the imports and the object are paid **once**, whatever `n` is; only the working
+matrices scale. Modelling memory as a pure rate makes a 15 GB measurement on a 10,000-cell
+instance read as 150 GB per 100k, which over-predicts small instances by an order of magnitude and
+can under-predict large ones — and under-predicting is the one that kills a job.
+
+**Measure both terms; do not estimate them.** Every run reports each instance's peak RSS and cell
+count, fits the two terms per plugin, and prints them ready to paste into a declaration. A
+per-unit plugin gives one point per unit for nothing, which is exactly what separates a baseline
+from a slope.
+
+**One point cannot separate them**, and the fit says so: it attributes the whole peak to the
+**rate** and reports no baseline. That is the direction that fails safe. Attributing it to the
+baseline is exact at the size measured and under-predicts every larger one — 7.2 GB seen at 98,627
+cells would charge 7.2 GB for 500,000, where the truth is nearer 36. Attributing it to the rate
+over-charges the smaller instances instead, where the error is bounded by the baseline and nothing
+dies.
+
+A plugin that declares no memory is scheduled on a conservative assumption **and the run says it
+is guessing**, every time. `declare` warns, so the gap is visible where it can be fixed.
+
+### Admission is by resources, not by count
+
+`ResourcePool` admits an instance when **every** dimension it needs is free. A cores-only pool is
+blind in the dimension that actually ends runs: a job died at 260 GB against a 200 GB request
+while each of its ten instances was correctly holding one core. The core budget was satisfied
+throughout and could not have prevented it.
+
+Every request is capped at the pool's own totals before it is waited on, so an instance wanting
+more than the whole allocation runs alone rather than waiting for permits that can never exist.
+
+### Estimate high
+
+The two failure directions are not symmetric. Over-requesting costs queue time and some idle
+capacity — visible, recoverable, measurable afterwards. Under-requesting gets the job **killed**,
+usually at the end of its longest step, with no partial result and an error naming the plugin
+rather than the request. Memory and walltime take the ceiling; cores take what schedules promptly,
+because an over-large core request delays scheduling and cores do not kill a job.
+
+---
+
+## 2a. The tool cannot change under a running run
+
+A run reads its code at **every subprocess launch**, not once at the start. A three-hour run spawns
+instances across three hours, so a `git pull` into the tool directory at hour one is picked up by
+everything launched after it. The run then uses two versions and reports one, because the banner
+records the commit at the beginning and nothing re-checks.
+
+That failure is silent and unattributable: both versions are correct on their own — the *mixture*
+is what is wrong — so no test catches it, and the report names a commit that never produced those
+results in full.
+
+Two mechanisms, because one of them is a job script somebody else may not use:
+
+| | where | what it does |
+|---|---|---|
+| **detect** | the host | fingerprints the tool tree at run start and **re-checks before every instance**. A launch whose tool has moved refuses and names the files. |
+| **prevent** | the job template | copies the tool into the run directory and runs from there, so a pull cannot reach a live job at all. `SNAPSHOT=0` opts out. |
+
+The snapshot also means the run directory holds exactly the code that produced it. `__pycache__`
+is excluded from the fingerprint: a `.pyc` is written by *running* the code, not by changing it,
+and counting it would make every run report drift against itself.
 
 ---
 

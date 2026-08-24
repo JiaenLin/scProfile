@@ -530,3 +530,74 @@ output nobody keeps.
 
 clean:  7 suites green on the cluster, `validate` 0 errors over all ten plugins, 10 selftests
         passed, audit 0/0.
+
+---
+
+## 2026-08-24 — the allocator learns memory, and the tool stops moving underneath a run
+
+Five defects, each of the same shape: a field that was declared, read, and then discarded.
+
+**The core budget was divided proportionally across a whole wave**, as though every instance in it
+ran at once. Only a resident subset does. On any wave larger than the budget the arithmetic
+collapsed — 37 instances declaring 313 cores against a budget of 12 gave a plugin declaring 16
+`int(16 × 12 / 313)` = 0, floored to 1. Ten GRN fits ran on one core each for 4h23m of a 12h
+timeout, while the plan printed `(1c)` and nothing anywhere printed the 16.
+
+**A declaration read and then discarded is worse than one never read**, because the plan prints
+its consequence and never prints the declaration. That is the third time the same sentence has
+been written in this log about a different field.
+
+**The allocator was blind to memory entirely.** `memory_gb_per_100k` had existed since the
+executor block and nothing ever read it. A job died at 260 GB against a 200 GB request while each
+of its ten instances correctly held one core: the core budget was satisfied throughout and could
+not have prevented it. `ResourcePool` now admits on cores, memory and GPUs.
+
+**And the memory metric was wrong in the dangerous direction.** `peak / n × 100_000` reads as a
+rate and is not one — memory is a baseline plus a per-cell term, and dividing by `n` charges the
+fixed cost to the slope. On a fixture with a known 6 GB baseline and 12 GB per 100k it reported
+94 GB per 100k off a 7,296-cell instance, eight times the truth.
+
+Worse, the fix's own first version failed the wrong way: with one point it attributed the whole
+peak to the *baseline* and the docstring called that conservative. It is conservative only at the
+size measured. 7.2 GB at 98,627 cells would charge 7.2 GB for 500,000, where the truth is nearer
+36 — a five-fold under-request, which is precisely the failure that kills a job at the end of its
+longest step. It now attributes to the rate, which over-charges the smaller instances instead,
+where the error is bounded by the baseline and nothing dies.
+
+All nine plugins now declare measured values, fitted from their own instances. The estimate they
+replaced for the most expensive plugin was wrong in **both** terms.
+
+**A cohort fit was added without checking it was tractable.** A method that infers its own output
+vocabulary produces per-unit results that are not comparable with each other — measured: two
+samples shared 17% of their transcription factors — so a shared fit is needed to compare them.
+Added, and then it thrashed: 8,929 garbage-collection warnings and eight lines of progress over
+six hours on an 11 GB dense frame. It does not fail, it thrashes, which is worse — a job that is
+3% productive looks exactly like one that is merely slow. It now infers from a balanced subsample
+and still scores every cell, in chunks, because building one dense frame over all of them is the
+same allocation that caused the thrash.
+
+Then the same fit died after 3,867 seconds of *completed* work, writing a caveat, on
+`ctx.constraint` — a name set on `Guard`, thirty lines above `Context` in the same file. Maximum
+cost, minimum signal. Two static checks now make that class impossible: every `ctx.<attr>` a
+plugin names must exist, and no module may read a name nothing defines. Both were verified to
+bite by planting a fault — which mattered, because the first version of the second check filtered
+on `not sym.is_global()`, which excludes exactly the case it was hunting, and reported clean on a
+file with a planted undefined name.
+
+**The tool could change underneath a running run.** Code is read at every subprocess launch, so a
+pull at hour one of a three-hour run is picked up by everything after it: two versions used, one
+reported. Silent and unattributable, because both versions are correct alone and only the mixture
+is wrong. Handling it by checking `qstat` first is discipline, not a mechanism. Now: the host
+fingerprints the tool and re-checks before every instance, and the job runs from a snapshot so
+the race cannot arise.
+
+**Overfitting found in two places the leak guard cannot see.** It looks for project names;
+restricting a user to the shapes one project happens to have is quieter. `--assay` carried
+`choices=[None, "cell", "nucleus"]`, so argparse refused the flag before the tool could reason
+about it — the identical defect `--organism` was fixed for one flag away, with the reasoning
+written directly above it. And a reference check warned on any organism outside a list of six. A
+list of what this tool knows is not a list of what is valid.
+
+clean:  7 suites green, 415 checks in the contract suite alone; all nine plugins declare memory
+        and pass `declare.check` with no ERROR and no WARN; a run of all ten plugins at 38/38
+        instances, 0 failures, 0 merge refusals, 0 tool-drift refusals.
