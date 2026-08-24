@@ -122,6 +122,9 @@ PLUGIN = {
 
     "cost": "medium", "cores": 4,
 
+    # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
+    # Fitted from ten per-sample instances.
+    "memory_gb_base": 3.1, "memory_gb_per_100k": 5.7,
     "cannot_show": [
         "NO INTERACTION IS OBSERVED, for the same reason as any expression-only method: this is "
         "co-expression of a ligand and a receptor in two populations.",

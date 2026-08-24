@@ -79,6 +79,9 @@ PLUGIN = {
 
     "cost": "medium", "cores": 4,
 
+    # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
+    # Fitted from one instance; the split is indeterminate.
+    "memory_gb_per_100k": 7.2,
     "cannot_show": [
         "COMPOSITION IS RELATIVE BY CONSTRUCTION. One population rising makes every other fall, "
         "and which one actually moved is not recoverable from shares alone - that is what the "

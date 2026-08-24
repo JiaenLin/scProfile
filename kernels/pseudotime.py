@@ -67,6 +67,9 @@ PLUGIN = {
 
     "cost": "high", "cores": 8,
 
+    # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
+    # Fitted from one instance; the split is indeterminate.
+    "memory_gb_per_100k": 7.3,
     "cannot_show": [
         "AN ORDERING IS NOT A TIME. It is a position along a manifold, and it says nothing about "
         "how long anything took.",

@@ -75,6 +75,9 @@ PLUGIN = {
 
     "cost": "medium", "cores": 4,
 
+    # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
+    # Fitted from one instance; the split is indeterminate.
+    "memory_gb_per_100k": 7.3,
     "cannot_show": [
         "A gene absent from the object was not tested, and its absence is not evidence of no "
         "change.",

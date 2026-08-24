@@ -36,6 +36,9 @@ PLUGIN = {
     "per_unit": None,
     "cost": "medium", "cores": 4,
 
+    # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
+    # Fitted from one instance; the split is indeterminate.
+    "memory_gb_per_100k": 7.5,
     # WHAT IT NEEDS, NOT WHAT TO BUILD. A plugin cannot know what else is installed, so it must
     # not decide its own environment: three plugins wanting this same stack used to get three
     # 1.5 GB copies of it. The BUILDER resolves these constraints across every plugin and builds

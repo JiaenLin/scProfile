@@ -764,6 +764,20 @@ def demand(inst, kernel, n_cells):
             "memory_assumed": assumed}
 
 
+def _safe_rate(xs, ys):
+    """The indeterminate answer: a rate that covers every observation, and no baseline.
+
+    Bounded ON PURPOSE. Dividing the largest peak by the SMALLEST size gives the largest implied
+    rate and is unusable - two contradictory points, 9 GB at 10k and 4 GB at 50k, produce 90 GB
+    per 100k off a 9 GB observation, and nothing would ever schedule. Dividing the largest peak by
+    the LARGEST size gives a model that still covers every point actually seen and stays within
+    reach of reality.
+    """
+    if not xs or max(xs) <= 0:
+        return (round(max(ys), 3) if ys else None, None)
+    return (None, round(max(ys) / max(xs), 3))
+
+
 def fit_memory_model(points):
     """(base_gb, gb_per_100k) from [(n_cells, peak_gb), ...] - the two terms, separated.
 
@@ -772,10 +786,18 @@ def fit_memory_model(points):
     and a per-unit plugin produces one per unit for nothing - so the fit uses what the run
     already collected instead of asking anyone to measure twice.
 
-    Least squares on two parameters. With one point, or with every point at the same size, the
-    slope is indeterminate: the whole peak is attributed to the BASELINE and the rate is reported
-    as None, which is the conservative reading - it says "this much, regardless of size" rather
-    than inventing a per-cell cost from a single observation.
+    Least squares on two parameters. With one point, or every point at one size, the split is
+    indeterminate - one equation, two unknowns - and the whole peak is attributed to the RATE.
+
+    THAT CHOICE IS ABOUT WHICH WAY IT FAILS. Attributing it to the baseline is exact at the size
+    measured and under-predicts every larger one: 7.2 GB observed at 98,627 cells would charge
+    7.2 GB for 500,000 cells, where the truth is nearer 36 - a five-fold under-request, which is
+    the failure that kills a job at the end of its longest step. Attributing it to the rate
+    over-charges the smaller instances instead, where the error is bounded by the baseline and
+    nothing dies.
+
+    An earlier version of this function did the opposite and called it conservative. It was
+    conservative only at the one size it had seen.
     """
     pts = [(float(n), float(g)) for n, g in points if n and g]
     if not pts:
@@ -787,13 +809,17 @@ def fit_memory_model(points):
     my = sum(ys) / n_obs
     sxx = sum((x - mx) ** 2 for x in xs)
     if n_obs < 2 or sxx <= 1e-12:
-        return (round(max(ys), 3), None)          # indeterminate slope: it is all baseline
+        # INDETERMINATE: attribute it to the rate, which errs high on larger data. `None` for the
+        # baseline says the split is unknown, not that the baseline is zero.
+        return _safe_rate(xs, ys)
     slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx
     base = my - slope * mx
     # A NEGATIVE TERM IS AN ARTEFACT OF NOISE, not a discovery that memory is returned to the
     # machine as cells are added. Clamp, and let the other term carry it.
     if slope < 0:
-        return (round(max(ys), 3), None)
+        # Noise, not a discovery that memory falls as cells are added. Fall back to the safe
+        # attribution rather than reporting a negative per-cell cost.
+        return _safe_rate(xs, ys)
     if base < 0:
         return (0.0, round(slope, 3))
     return (round(base, 3), round(slope, 3))

@@ -179,18 +179,9 @@ PLUGIN = {
     },
 
     "cost": "high", "cores": 16,
-    # DERIVED FROM THE MATRIX THIS METHOD HOLDS, then rounded UP. GRNBoost2 keeps the expression
-    # frame DENSE: 100k cells x ~28k retained genes x 4 bytes is ~11 GB, and dask's task graph,
-    # its scatter copies and the garbage it generates carry that to roughly 3-4x in practice.
-    # 40 is that arithmetic rounded up, not a measurement, and it is deliberately generous - PBS
-    # 680454 showed what the other direction costs: six hours at 85% of CPU in garbage
-    # collection, eight lines of progress, nothing kept.
-    # TWO TERMS. The 40 declared before was a pure rate, which charges a 13k-cell per-sample fit
-    # for a baseline it pays anyway and charges the cohort fit as though it did not. The dense
-    # frame is the per-cell half; the interpreter, dask's scheduler and the loaded rankings are
-    # the fixed half. Still rounded up - see `UNDECLARED_GB_BASE` on why the two directions are
-    # not symmetric.
-    "memory_gb_base": 8, "memory_gb_per_100k": 32,
+    # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
+    # Fitted from ten per-sample instances plus the cohort fit.
+    "memory_gb_base": 11.4, "memory_gb_per_100k": 19.8,
 
     "cannot_show": [
         "CO-EXPRESSION WITH A MOTIF IS NOT REGULATION. Nothing here observes a perturbation, so "

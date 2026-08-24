@@ -626,12 +626,29 @@ _n0, _g0 = _pts[0]
 ck("the OLD single-point rate would have been many times the truth",
    (_g0 * 100_000 / _n0) > _truth_r * 5,
    f"{_g0 * 100_000 / _n0:.1f} GB/100k against a true {_truth_r}")
-ck("one point cannot separate the terms and reports no rate",
-   fit_memory_model([_pts[0]])[1] is None)
-ck("nor can several points all at the same size",
-   fit_memory_model([(10_000, 8.0), (10_000, 8.2)])[1] is None)
-ck("noise implying NEGATIVE memory per cell is clamped, not reported",
-   fit_memory_model([(10_000, 9.0), (50_000, 4.0)])[1] is None)
+# ONE POINT CANNOT SPLIT THE TWO, and which way it fails is the whole question. Attributing it
+# to the BASELINE is exact at the size measured and under-predicts every larger one - 7.2 GB seen
+# at 98,627 cells would charge 7.2 GB for 500,000, where the truth is nearer 36. That is the
+# five-fold under-request that kills a job at the end of its longest step. Attributing it to the
+# RATE over-charges smaller instances instead, where the error is bounded by the baseline and
+# nothing dies. An earlier version did the opposite and called it conservative; it was
+# conservative only at the one size it had seen.
+_b1, _r1 = fit_memory_model([(98_627, 7.2)])
+ck("one point is attributed to the RATE, not the baseline", _b1 is None and _r1 is not None,
+   f"base={_b1} rate={_r1}")
+ck("and that rate reproduces the observation at the size it was measured",
+   abs(_r1 * 0.98627 - 7.2) < 0.05, f"{_r1 * 0.98627:.2f} vs 7.2 GB")
+ck("so a larger dataset is charged MORE, not the same",
+   _r1 * 5.0 > 7.2 * 3, f"{_r1 * 5.0:.1f} GB at 500k cells")
+ck("several points at ONE size are equally indeterminate",
+   fit_memory_model([(10_000, 8.0), (10_000, 8.2)])[0] is None)
+# and the indeterminate rate is BOUNDED: largest peak over the LARGEST size, not the smallest.
+# Dividing by the smallest gives the largest implied rate - 9 GB at 10k against 4 GB at 50k
+# produced 90 GB per 100k, and nothing would ever schedule.
+_b2, _r2 = fit_memory_model([(10_000, 9.0), (50_000, 4.0)])
+ck("contradictory points give a bounded rate, not an unusable one", _r2 <= 20, f"{_r2} GB/100k")
+ck("and that rate still covers every peak actually observed", _r2 * 0.5 >= 9.0 - 0.01,
+   f"{_r2 * 0.5:.1f} GB at the largest size seen, against a 9.0 GB peak")
 ck("and no points at all is not an answer",
    fit_memory_model([]) == (None, None))
 _kn = _types.SimpleNamespace(executor={"cores": 4, "memory_gb_per_100k": None, "gpus": 0})

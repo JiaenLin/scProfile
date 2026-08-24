@@ -126,7 +126,14 @@ PLUGIN = {
     },
 
     "per_unit": None,
-    "cost": "high", "cores": 8, "memory_gb_per_100k": 12,
+    "cost": "high", "cores": 8,
+    # Measured, not estimated: fitted from this plugin's own instance in one run on a 10-sample
+    # mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point
+    # that is right for scheduling, not a universal constant. Every run re-fits and prints its
+    # own. One instance, so the split between baseline and per-cell is indeterminate and the
+    # whole peak is attributed to the RATE: that over-charges a smaller dataset, where the error
+    # is bounded, rather than under-requesting a larger one, which is what kills a job.
+    "memory_gb_per_100k": 14.6,
     "design_aware": True,
 
     # WHAT IT NEEDS, NOT WHAT TO BUILD. These are exact, and `exact_pins_why` says so once rather
