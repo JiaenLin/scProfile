@@ -266,10 +266,18 @@ def validate_references(kernel, dest=None, organism=None, deep=False):
         if not spec.get("size"):
             f.append(Finding("WARN", f"reference {name!r} declares no size",
                              "the fetch cannot report the total or check it fits before starting"))
-        if spec.get("organism") and str(spec["organism"]).lower() not in (
-                "human", "mouse", "rat", "zebrafish", "fly", "worm", "any"):
-            f.append(Finding("WARN", f"reference {name!r} organism {spec['organism']!r} "
-                                     f"is not one the profile recognises"))
+        # A LIST OF WHAT THIS TOOL HAPPENS TO KNOW IS NOT A LIST OF WHAT IS VALID. Six species
+        # were listed and every other one drew a warning - on a correct declaration, for a
+        # correct organism, which is how a check trains people to ignore it. It stays only to
+        # catch a typo in a name that is nearly one of these, and says which it is.
+        _org = str(spec.get("organism") or "").lower()
+        _known = ("human", "mouse", "rat", "zebrafish", "fly", "worm", "any")
+        if _org and _org not in _known:
+            import difflib
+            _near = difflib.get_close_matches(_org, _known, n=1, cutoff=0.8)
+            if _near:
+                f.append(Finding("WARN", f"reference {name!r} organism {spec['organism']!r} "
+                                         f"looks like a typo for {_near[0]!r}"))
 
     if dest:
         from . import refs as R

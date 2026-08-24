@@ -221,6 +221,21 @@ missing = {f for f in ("label-key", "sample-key", "batch-key", "counts-layer", "
            if f not in plan_flags}
 ck("plan takes the same key overrides as run", not missing, str(sorted(missing)))
 
+print("\nwhat the tool REASONS about is not what a user may DECLARE")
+# `--organism` had its `choices` removed because argparse refused the flag before the tool could
+# refuse the analysis - a user of any other species could not even say what they had. `--assay`
+# was left with `choices=[None, "cell", "nucleus"]`: the same defect, one flag over.
+_cli_src = (Path(__file__).resolve().parents[1] / "scprofile" / "cli.py").read_text()
+ck("--assay does not restrict what can be declared",
+   'choices=[None, "cell", "nucleus"]' not in _cli_src)
+ck("--organism does not either", 'choices=[None, "mouse", "human"]' not in _cli_src)
+ck("but an unrecognised assay is REPORTED, so the caveats that will not fire are named",
+   _cli_src.count("is not an assay this tool reasons about") >= 2,
+   "the plan and the run must both say it")
+_val = (Path(__file__).resolve().parents[1] / "scprofile" / "validate.py").read_text()
+ck("and validate does not warn on every unlisted organism, only on a likely typo",
+   "get_close_matches" in _val)
+
 print("\nthe constraint on use is read from ANY upstream tool, not one toolchain")
 # A SAFETY MECHANISM THAT FIRES ONLY FOR ITS AUTHOR'S PIPELINE IS WORSE THAN NONE. This read
 # `uns['scintegrate']['constraint_on_use']` and nothing else, so for every object produced by

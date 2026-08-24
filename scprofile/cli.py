@@ -303,6 +303,11 @@ def _run(a):
         print(f"  {role:<14} {str(name or '(none)'):<26} {why}")
     print(f"  {'organism':<14} {str(organism[0] or '(unknown)'):<26} {organism[1]}")
     print(f"  {'assay':<14} {str(assay[0] or '(unknown)'):<26} {assay[1]}")
+    if assay[0] and str(assay[0]).lower() not in ("cell", "nucleus"):
+        # SAID, NOT REFUSED. The value is carried through to every plugin; what the user needs to
+        # know is that the caveats keyed on it will not fire.
+        print(f"      {assay[0]!r} is not an assay this tool reasons about (cell, nucleus), so "
+              f"assay-specific caveats will NOT be applied. It is carried through as declared.")
     print(f"  {'constraint':<14} {(csrc or 'ABSENT'):<26} "
           + ("read from the object" if csrc else
              "no upstream constraint on use - kernels that need one will say so"))
@@ -992,6 +997,11 @@ def _plan(a):
         print(f"  {role:<14} {str(name or '(none)'):<30} {why}")
     print(f"  {'organism':<14} {str(organism[0] or '(unknown)'):<30} {organism[1]}")
     print(f"  {'assay':<14} {str(assay[0] or '(unknown)'):<30} {assay[1]}")
+    if assay[0] and str(assay[0]).lower() not in ("cell", "nucleus"):
+        # THE PLAN SAYS IT TOO. This warning existed only on the run path, so the document a
+        # person reads BEFORE committing a job was the one that did not mention it.
+        print(f"      {assay[0]!r} is not an assay this tool reasons about (cell, nucleus), so "
+              f"assay-specific caveats will NOT be applied. It is carried through as declared.")
     print(f"  {'constraint':<14} {(csrc or 'ABSENT'):<30} "
           + ("read from the object" if csrc else "no upstream constraint recorded"))
 
@@ -1778,8 +1788,17 @@ def main(argv=None):
     r.add_argument("--organism", default=None, metavar="NAME",
                    help="the species. Detected from gene-symbol casing when it can be "
                         "(mouse/human only); anything you pass is taken as declared")
-    r.add_argument("--assay", default=None, choices=[None, "cell", "nucleus"],
-                   help="does not change what is computed; changes what each kernel may claim")
+    # NO `choices` HERE EITHER, and for the reason written above `--organism`: argparse refusing
+    # the flag stops a user DECLARING what they have, before the tool has a chance to reason
+    # about it. The same defect, one flag over - `--organism` was opened up and this was left.
+    #
+    # `cell` and `nucleus` are what the tool REASONS about, not what is valid to say. Anything
+    # else is accepted and reported as unrecognised, so a user knows the assay-specific caveats
+    # will not fire rather than finding a plugin silently skipped them.
+    r.add_argument("--assay", default=None, metavar="NAME",
+                   help="does not change what is computed; changes what each kernel may claim. "
+                        "'cell' and 'nucleus' are reasoned about; anything else is taken as "
+                        "declared and reported as unrecognised")
     r.add_argument("--design", default=None, type=Path,
                    help="CSV keyed on the sample column, carrying the experimental factors")
     r.add_argument("--params", default=None, help="JSON passed through to every kernel")
