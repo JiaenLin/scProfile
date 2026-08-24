@@ -601,3 +601,30 @@ list of what this tool knows is not a list of what is valid.
 clean:  7 suites green, 415 checks in the contract suite alone; all nine plugins declare memory
         and pass `declare.check` with no ERROR and no WARN; a run of all ten plugins at 38/38
         instances, 0 failures, 0 merge refusals, 0 tool-drift refusals.
+
+### The same day, after the entry above
+
+**The drift check was proven, and the diagnosis it produced pointed at the wrong thing.** A run
+deliberately started with the snapshot disabled, so it read the live checkout; two files touched
+while its wave was in progress. Six instances refused, each in 0s, naming exactly the two files
+that moved, while the four launched before the touch completed normally. An unfired safety check
+is indistinguishable from a broken one, and this one is no longer unfired.
+
+It also classified every refusal `[method] … the plugin is the place to start`. The plugin was
+untouched; a `git pull` was not. Now `host`, not repairable, saying outright not to debug the
+plugin.
+
+**And the closing run caught a regression in the fix above it.** The memory report listed three
+plugins where the previous run listed ten. `if _b is None: continue` was written when a `None`
+baseline meant "no usable measurement"; making the one-point case attribute to the rate gave it a
+second meaning, and every plugin that produced a single instance was silently dropped from the
+report — the ones with the least data and the most need of it.
+
+That is the fourth defect of one shape in this round: **a sentinel value gained a meaning and not
+every reader was re-checked.** The others were the core budget, the reference specs and the
+constraint. It is worth naming, because the fix is never local — changing what a value means is a
+change to every place that reads it, and the compiler will not say so.
+
+clean:  PBS 683117 — all ten plugins, 38/38 instances, 0 failures, 0 merge refusals, 0 tool-drift
+        refusals, Exit_status 0. The fitted memory figures reproduced the previous run's to within
+        a rounding step, which is the measurement being repeated rather than carried forward.

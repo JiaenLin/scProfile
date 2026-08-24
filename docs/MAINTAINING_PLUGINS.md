@@ -27,6 +27,31 @@ You own it against a moving target. The wrapped tool releases, renames a keyword
 default, moves a result key, drops a python version. **None of that reaches the user as a bug in
 their data if you are doing this job**, and all of it does if you are not.
 
+### You also own what the host would otherwise have to guess
+
+Your plugin is written once and ships prebuilt. The builder and the planner run again on every
+machine and every project, so a field you leave out is not neutral — it becomes an assumption made
+later, elsewhere, about a method you wrote and they did not.
+
+| declare | or the host will | and the cost |
+|---|---|---|
+| `memory_gb_base`, `memory_gb_per_100k` | assume a conservative rate, and print that it is guessing | over-provisioned waves, or a killed job if the guess is low |
+| `references` with a `tier` | see no reference at all | the plan cannot warn, the report cannot name what decided the answer |
+| `per_unit` / `also_cohort` | run one pooled fit | an answer describing the average of the conditions, which may describe none of them |
+| `gpus` | assume none | |
+
+**Measure the memory, do not estimate it.** Every run fits both terms from your plugin's own
+instances and prints them ready to paste. The estimate this project's most expensive plugin
+carried was wrong in *both* terms against its first real measurement. A per-unit plugin gives one
+point per unit for nothing, which is exactly what separates a baseline from a slope; a plugin that
+runs once per cohort gives one point, which cannot — the fit says so and charges the whole peak to
+the rate, the direction that over-provisions rather than under-requests.
+
+**Declare a reference you cannot verify.** `bundled` (inside a package, pinned by its version) and
+`runtime` (fetched while the tool runs) exist so the tool can *name* them. Declaring them costs you
+nothing and buys a user the one warning that matters on a cluster: this method will reach the
+network from a compute node.
+
 ---
 
 ## When a plugin needs attention

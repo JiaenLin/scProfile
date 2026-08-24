@@ -28,22 +28,34 @@ it, and each has a different remedy.
 
 ## 1. The plugin declares everything about itself
 
-A plugin directory is **self-describing**. The builder does not go looking; it reads.
+A plugin is **self-describing**. The builder does not go looking; it reads. One file,
+`kernels/<name>.py`:
 
-| file | declares |
+| declares | what |
 |---|---|
-| `kernel.yml` | what it needs, produces, sees, cannot show; whether it runs per unit; its cost and cores; what tool it wraps |
-| `recipe.py` | **the method call, and only that** |
-| `lock.yml` | its environment, pinned |
-| `references.yml` | reference data, with URL, organism, digest and size |
-| `selftest.py` / `.R` | proof the call is well-formed against the installed versions |
-| `guard.py` | whether this DATASET is one where the result would mean what the report says |
-| `UPSTREAM.md` | what the wrapped tool's own documentation says, and which of its defaults are wrong here |
+| `inject`, `provides`, `produces` | what it needs, what it offers, what it will write |
+| `cannot_show` | what a reader must not conclude, however the result looks |
+| `requires` | a REQUIREMENT, never an environment — see §1a |
+| `cores`, `memory_gb_base`, `memory_gb_per_100k`, `gpus` | what the allocator schedules on, in every dimension |
+| `per_unit`, `also_cohort` | the scope the method is meaningful at |
+| `references` | every reference it consults, each with a `tier` — downloadable, bundled in a package, or fetched at run time |
+| `config` | typed and defaulted, validated before anything runs |
+| `upstream` | what the wrapped tool's docs say, and which of its defaults are wrong here |
+| `run(ctx)`, `selftest(ctx)`, `guard(g)` | the method call, proof it works, and whether this dataset is one where the result would mean what the report says |
 
-In the one-file shape every row above is a key of `PLUGIN` or a function in the file — including
-the guard, which is `def guard(g)`. **A shape that cannot express one of these silently deletes
-it**: the one-file shape had no guard, so converting a guarded plugin to it removed the check with
-no error, no log line, and the first dataset the guard existed to refuse analysed and reported.
+The directory layout — `kernel.yml`, `recipe.py`, `lock.yml`, `references.yml` and the rest —
+still loads, and is what a plugin written outside Python uses. It is not the shape to start a new
+plugin in, and `scaffold` no longer writes it by default.
+
+**A shape that cannot express one of these silently deletes it.** The one-file shape had no guard
+at first, so converting a guarded plugin to it removed the check with no error, no log line, and
+the first dataset the guard existed to refuse was analysed and reported.
+
+**And a field the shape can express but the plugin omits is a guess made elsewhere.** The plugin
+is written once and ships prebuilt; the builder and the planner run again on every machine and
+every project. Four of the rows above were added after the host was caught guessing — memory,
+GPUs, reference tiers and cohort scope — and in each case the guess was invisible until it was
+wrong.
 
 **Nothing in a plugin may name a project's vocabulary** — not a column, a layer, an organism or a
 sample. Those arrive at run time through `keys` and `organism`. The compiler refuses a recipe that
@@ -193,6 +205,22 @@ again after a clean rebuild is explicitly **not** blamed on its environment.
 
 **An unmatched failure is not guessed at.** A wrong layer sends somebody to the wrong file, which
 costs more than saying the layer is not established.
+
+> **And a failure belonging to none of the four is the one most likely to be misfiled.** When the
+> tool's own code changes mid-run, the host refuses every instance launched afterwards — that is
+> not the plugin, its environment or its declaration, and the default reading sent the reader to
+> all three: *"no known failure signature matched … the plugin is the place to start."* Six
+> instances were reported that way in the run that proved the check works. It is classified
+> `host` now, marked not-repairable, and says outright not to debug the plugin. A diagnosis
+> naming the wrong layer is worse than none, because it is acted on.
+
+**The tool cannot change underneath a run.** A run reads its code at every subprocess launch, not
+once at the start, so a `git pull` at hour one of a three-hour run is picked up by everything
+launched after it — two versions used, one reported, and no test can catch it because both
+versions are correct alone and only the mixture is wrong. Two mechanisms: the host fingerprints
+the tool and re-checks before every instance, and the job template runs from a snapshot so the
+race cannot arise. Both, because the host check protects anyone however they launch, and the
+snapshot removes the race for anyone using the template rather than detecting it afterwards.
 
 **Drift is checked on every success**, not only on failure: what the plugin emitted against what
 its `produces` declares. It is the cheapest edge in the loop — the run has happened and the

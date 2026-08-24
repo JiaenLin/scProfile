@@ -58,7 +58,19 @@ PLUGIN = {
         "min_cells": {"type": "int", "default": 10, "min": 1,
                       "help": "populations smaller than this are not scored"},
     },
-    "requires": {...}, "references": {...}, "upstream": {...}, "cannot_show": [...],
+    "requires": {...},                       # what the BUILDER resolves into environments
+
+    # what the ALLOCATOR schedules on
+    "cost": "high", "cores": 8,
+    "memory_gb_base": 11.4,                  # paid once, whatever the cell count
+    "memory_gb_per_100k": 19.8,              # and this much again per 100k cells
+    "gpus": 0,
+
+    # SCOPE: is this meaningful per unit, over the cohort, or both?
+    "per_unit": "sample",
+    "also_cohort": {"why": "..."},           # only when the output vocabulary is INFERRED
+
+    "references": {...}, "upstream": {...}, "cannot_show": [...],
 }
 ```
 
@@ -80,6 +92,53 @@ can act on.
 
 **`config` is validated before anything runs.** A bad `--params` should fail in the second the
 plan is drawn, not an hour into a queue.
+
+### What the builder and planner may not work out for themselves
+
+A plugin is written **once** and ships prebuilt. The builder and the planner run again on every
+new machine and every new project — so anything they have to discover is a guess made later, on
+somebody else's machine, about a method they did not write. Four fields exist for that reason,
+and each was added after the host had been caught guessing.
+
+**`memory_gb_base` + `memory_gb_per_100k`.** Memory is a fixed cost plus a per-cell one:
+
+```
+peak_gb  ≈  memory_gb_base  +  memory_gb_per_100k × n_cells / 100_000
+```
+
+The interpreter, the imports and the object are paid once whatever `n` is. Declaring a pure rate
+makes a 15 GB measurement on a 10,000-cell instance read as 150 GB per 100k. **Measure both, do
+not estimate them:** every run fits them from its own instances and prints them ready to paste,
+and a per-unit plugin produces one point per unit for nothing. A plugin declaring neither is
+scheduled on a conservative assumption *and the run says it is guessing*, every time.
+
+**`gpus`.** Nothing ships declaring one; the point is that the next method needing a GPU does not
+require a scheduler change.
+
+**`references` carry a `tier`.** The declaration used to assume a downloadable file — `url`,
+`sha256`, `size` — so a database shipped inside a package or fetched at run time could not be
+declared at all. One plugin of nine declared references while four consulted them.
+
+| tier | meaning | what the host can do |
+|---|---|---|
+| `fetch` | downloadable, checksummed | get it, verify it, refuse without it |
+| `bundled` | ships in a package, pinned by that version | name it in the report; nothing else |
+| `runtime` | fetched by the tool **while it runs** | warn that the compute node needs network |
+
+The last one is why this matters on a cluster: a batch node with no outbound route fails *inside*
+the run, after the queue slot is spent, and the plugin is the only party that knew it would reach
+the network. **A reference you do not declare is one the plan cannot warn about and the report
+cannot name.**
+
+**`per_unit` and `also_cohort`.** `per_unit` says a pooled answer would describe the average of
+the conditions and may describe none of them. `also_cohort` says something narrower and rarer:
+this method **infers its own output vocabulary**, so two per-unit results are not comparable with
+*each other* and one shared fit is needed to compare them.
+
+A method drawing from a fixed reference resource does not need it — every unit's table is indexed
+by the same entries. A method that discovers its vocabulary from the data does: measured across
+ten samples, two of them shared 17% of their inferred features, and stacking those columns into
+one array would place values that are not the same quantity in the same column.
 
 ---
 
