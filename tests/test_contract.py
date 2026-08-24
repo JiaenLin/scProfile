@@ -836,6 +836,13 @@ def test_the_tool_cannot_change_under_a_running_run():
           pbs.index('TOOL="$_SNAP"') < pbs.index('export PYTHONPATH="$TOOL"'))
     check("and it can be opted out of for iterating against a running job",
           "SNAPSHOT:-1" in pbs)
+    # AND THE MESSAGE REACHES THE LOG A READER OPENS. It was echoed before stdout was attached to
+    # the live log, so the one line saying the run is isolated went to the PBS job file - written
+    # at exit, and not where anyone looks while a run is going.
+    check("the snapshot message is held until the live log is attached",
+          "_SNAP_MSG=" in pbs and pbs.index("_SNAP_MSG=") < pbs.index('exec > >(tee -a "$LIVE")'))
+    check("and emitted after it", pbs.index('exec > >(tee -a "$LIVE")')
+          < pbs.index('echo "$_SNAP_MSG"'))
 
 
 def test_no_undefined_names():

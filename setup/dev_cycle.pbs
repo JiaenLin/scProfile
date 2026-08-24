@@ -104,7 +104,10 @@ if [ "${SNAPSHOT:-1}" = "1" ]; then
   done
   # `git` is absent on a compute node, so the commit is carried in HEAD.txt and copied above.
   TOOL="$_SNAP"
-  echo "snapshot : running from $_SNAP (a pull into the live checkout cannot reach this run)"
+  # HELD, NOT ECHOED. stdout is not attached to the live log until further down, so echoing here
+  # sent the one line that says the run is isolated to the PBS job file - which is written at
+  # exit, and is not where anyone looks while a run is going.
+  _SNAP_MSG="snapshot : running from $_SNAP (a pull into the live checkout cannot reach this run)"
 fi
 
 export PYTHONPATH="$TOOL"
@@ -130,6 +133,8 @@ export MKL_NUM_THREADS="${NCPUS:-1}"
 # invisible from the machine you are sitting on.
 LIVE="${LIVE_LOG:-$PWD/logs/live_${PHASE}.log}"
 exec > >(tee -a "$LIVE") 2>&1
+# now that stdout reaches the live log, say what was decided before it did
+[ -n "${_SNAP_MSG:-}" ] && echo "$_SNAP_MSG"
 echo "live log : $LIVE"
 
 echo "job      : ${PBS_JOBID:-none}"
