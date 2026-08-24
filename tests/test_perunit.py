@@ -651,6 +651,17 @@ ck("and that rate still covers every peak actually observed", _r2 * 0.5 >= 9.0 -
    f"{_r2 * 0.5:.1f} GB at the largest size seen, against a 9.0 GB peak")
 ck("and no points at all is not an answer",
    fit_memory_model([]) == (None, None))
+# AND THE REPORT MUST DISTINGUISH THOSE TWO. `base is None` used to mean "no data"; after the
+# fail-safe change it ALSO means "one point, charged to the rate". Skipping on the baseline alone
+# dropped every single-instance plugin from the run's report - the ones with the least data and
+# the most need of it.
+import inspect as _i2                                                          # noqa: E402
+from scprofile import cli as _cli2                                             # noqa: E402
+_rsrc = _i2.getsource(_cli2._run)
+ck("the report skips only when BOTH terms are unknown",
+   "_b is None and _r is None" in _rsrc, "it still skips on the baseline alone")
+ck("and says so when no baseline could be separated",
+   "no baseline separated" in _rsrc)
 _kn = _types.SimpleNamespace(executor={"cores": 4, "memory_gb_per_100k": None, "gpus": 0})
 _d = demand({"cores": 4}, _kn, 100_000)
 ck("an UNDECLARED rate is assumed, never read as zero",

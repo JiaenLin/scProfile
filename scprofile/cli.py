@@ -772,7 +772,11 @@ def _run(a):
                 (_m["n_cells"], _m["peak_rss_gb"]))
     for _n, _pts in sorted(_by_plugin.items()):
         _b, _r = fit_memory_model(_pts)
-        if _b is None:
+        # BOTH None means no usable measurement. A None BASELINE alone means the split was
+        # indeterminate and the whole peak went to the rate - which is a result, and the one
+        # belonging to the plugins that produced a single instance. This skipped on the baseline
+        # alone and so dropped exactly those from the report: least data, most in need of it.
+        if _b is None and _r is None:
             continue
         memory_model[_n] = {"base_gb": _b, "gb_per_100k": _r, "points": len(_pts),
                             "declared_per_100k": ks[_n].executor.get("memory_gb_per_100k")
@@ -782,10 +786,16 @@ def _run(a):
     if memory_model:
         print("\n  measured memory, fitted as baseline + per-cell (declare these):")
         for _n, _m in sorted(memory_model.items()):
-            _rate = (f"{_m['gb_per_100k']:.1f} GB/100k" if _m["gb_per_100k"] is not None
-                     else "per-cell term indeterminate from "
-                          f"{_m['points']} point(s) at one size")
-            print(f"    {_n:<12} {_m['base_gb']:>6.1f} GB fixed + {_rate}")
+            if _m["base_gb"] is None:
+                # one point, or all at one size: the split is unknown and the whole peak is
+                # charged to the rate, which is the direction that over-charges rather than
+                # under-requests. Said, so nobody reads it as a measured baseline of zero.
+                print(f"    {_n:<12} {_m['gb_per_100k']:>6.1f} GB/100k, no baseline separated "
+                      f"({_m['points']} instance(s) at one size)")
+            else:
+                _rate = (f"{_m['gb_per_100k']:.1f} GB/100k" if _m["gb_per_100k"] is not None
+                         else "per-cell term indeterminate")
+                print(f"    {_n:<12} {_m['base_gb']:>6.1f} GB fixed + {_rate}")
 
     payload = {"version": _v(), "input": str(a.h5ad), "describe": describe,
                "memory_model": memory_model,
