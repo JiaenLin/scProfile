@@ -367,6 +367,19 @@ def check(spec, name="<plugin>"):
 
     _check_report(spec, out)
 
+    # MATPLOTLIB IS A CONTRACT DEPENDENCY OF DRAWING, on the same terms as anndata is of reading.
+    # `ctx.plot()` imports it inside the plugin's own interpreter, so a plugin that declares
+    # panels and does not name it either fails at the first figure or works by accident because
+    # it SHARES an environment with a plugin that does - which is how anndata went unnoticed on
+    # three plugins until ten instances failed at once. Five of the nine declared it and four did
+    # not, on the run that added figures to all of them.
+    if report_figures(spec) and (spec.get("requires") or {}).get("packages"):
+        if "matplotlib" not in spec["requires"]["packages"]:
+            out.append(("ERROR", "declares figures in `report.figures` and does not require "
+                                 "`matplotlib`. `ctx.plot()` imports it in this plugin's own "
+                                 "interpreter; without it the first panel raises, or the plugin "
+                                 "works only because another plugin in its environment named it."))
+
     w = spec.get("wraps") or {}
     if w and not (spec.get("upstream") or {}).get("docs"):
         out.append(("ERROR", "wraps a tool and records no `upstream.docs`. The record of having "

@@ -60,7 +60,13 @@ PLUGIN = {
     # Pin exactly only where the tool needs it, and say why in `exact_pins_why`.
     "requires": {
         "python": ">=3.10,<3.13",
-        "packages": {"__TOOL__": ">=1.0,<2", "anndata": ">=0.10,<0.12"},
+        # `anndata` because the host reads the object with it inside YOUR interpreter before
+        # `run` is called; `matplotlib` because `ctx.plot()` imports it inside yours too. Both are
+        # contract dependencies rather than yours, and both are ERRORs to omit - a plugin missing
+        # either works only for as long as it happens to share an environment with one that
+        # names it.
+        "packages": {"__TOOL__": ">=1.0,<2", "anndata": ">=0.10,<0.12",
+                     "matplotlib": ">=3.6,<4"},
     },
 
     # WHAT THE ALLOCATOR NEEDS. `cores` is what the method can actually use — the host passes a

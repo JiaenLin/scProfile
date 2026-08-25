@@ -149,7 +149,7 @@ PLUGIN = {
 
     "requires": {
         "python": ">=3.10,<3.13",
-        "packages": {"cellrank": ">=2.0,<3", "scanpy": ">=1.10,<1.11",
+        "packages": {"matplotlib": ">=3.6,<4", "cellrank": ">=2.0,<3", "scanpy": ">=1.10,<1.11",
                      "anndata": ">=0.10,<0.12", "numpy": ">=1.24,<2", "pandas": ">=2.0,<3"},
         # {name: match-spec}, VERBATIM. conda's `=3.20` means 3.20.* where pip's `==3.20`
         # means a version that does not exist, so these are never translated.
