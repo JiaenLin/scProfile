@@ -235,6 +235,44 @@ def figure_drift(kernel, payload):
     return out
 
 
+def metric_drift(kernel, payload):
+    """What the plugin MEASURED per unit, against what `report.unit_metrics` said it would.
+
+    The twin of `figure_drift`, on the half of the page a per-unit plugin cannot draw for
+    itself. A declared metric that never arrives leaves the across-unit comparison short a
+    column with nothing saying so, and an undeclared one arrives with no question attached -
+    a number on a shared axis whose meaning a reader has to guess.
+
+    A refusal produced nothing by design; a PARTIAL run produced results and a page, and is
+    held to the declaration for the same reason it is for figures.
+    """
+    out = []
+    declared = [d for d in ((kernel.report_spec or {}).get("unit_metrics") or [])
+                if isinstance(d, dict)]
+    if not declared or payload.get("status") == "refused":
+        return out
+    ids = {str(d.get("id") or "") for d in declared} - {""}
+    got = set()
+    for u in (payload.get("units") or [{}]):
+        got |= {str(k) for k in (u.get("metrics") or {})}
+    if not (payload.get("units") or []):
+        got |= {str(k) for k in (payload.get("metrics") or {})}
+    for mid in sorted(ids - got):
+        out.append(Diagnosis(
+            DECLARATION,
+            f"declares unit metric {mid!r} and recorded it for no unit, so the across-unit "
+            f"comparison is missing the column it promised and the page does not say why.",
+            action=f"call ctx.metric({mid!r}, value) on every unit, or remove it from "
+                   f"`report.unit_metrics`"))
+    for mid in sorted(got - ids):
+        out.append(Diagnosis(
+            DECLARATION,
+            f"recorded unit metric {mid!r}, which `report.unit_metrics` does not declare, so it "
+            f"reaches a shared axis with no question attached.",
+            action=f"add {mid!r} to `report.unit_metrics` with the question it answers"))
+    return out
+
+
 def sentinel_as_population(out_dir, payload, sentinels):
     """Did this plugin report an annotator's refusal as though it were a cell type?
 

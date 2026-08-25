@@ -179,6 +179,13 @@ PLUGIN = {
     #
     # `shows` is the whole of the reporter's knowledge. It knows no id here and never will.
     "report": {
+        # WHAT MAKES THE UNITS COMPARABLE. Every figure on this page describes ONE unit; these
+        # are the numbers the host puts on a shared axis, so a reader sees whether the units
+        # agree before reading any single unit's panel as a finding.
+        "unit_metrics": [
+            {"id": "interactions", "question": "how many interactions did this unit yield, and how far apart are the units?"},
+            {"id": "populations", "question": "how many populations passed min_cells in this unit? A unit contributing fewer populations can only produce fewer interactions."},
+        ],
         "figures": [
             {"id": "F1_resource_coverage", "shows": "diagnostic", "required": True,
              "question": "how much of the ligand-receptor resource could this object ever have "
@@ -935,6 +942,10 @@ def run(ctx):
 
     # ------------------------------------------------------------ caveats, from the data
     top = full.nsmallest(3, "magnitude_rank")
+    # ON A SHARED AXIS WITH THE OTHER UNITS. Declared in `report.unit_metrics`; the host
+    # draws the comparison, so this is the whole of what this plugin owes for one.
+    ctx.metric("interactions", len(full))
+    ctx.metric("populations", len(kept))
     ctx.headline = (f"{len(full):,} interactions over {len(kept)} populations"
                     + (f"; strongest {top.iloc[0]['source']} -> {top.iloc[0]['target']} "
                        f"({top.iloc[0]['ligand_complex']}:{top.iloc[0]['receptor_complex']})"

@@ -468,6 +468,7 @@ def fold_payloads(payloads, failed=None):
                           "headline": pl.get("headline", ""),
                           "caveats": list(pl.get("caveats") or []),
                           "absent": list(pl.get("absent") or []),
+                          "metrics": dict(pl.get("metrics") or {}),
                           "dir": base, "n_figures": len(pl.get("figures") or [])})
 
         # UNITS THAT FAILED HAVE NO PAYLOAD, so folding only what came back described a plugin

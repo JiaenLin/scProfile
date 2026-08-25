@@ -503,7 +503,7 @@ ck("every plugin that rotates them shortens them through the shared rule",
 # one plugin whose headline that constraint forbids. At a call site an unset flag and an unmet
 # condition are the same three characters.
 # ---------------------------------------------------------------------------------------------
-from scprofile import feedback as _FB, planner as _PL                           # noqa: E402
+from scprofile import declare as _DECL, feedback as _FB, planner as _PL         # noqa: E402
 from scprofile import kernels as _KN                                            # noqa: E402
 from scprofile.kernels import producer_edges as _pe                             # noqa: E402
 
@@ -583,6 +583,69 @@ ck("the binding is decided by the host and carried in the payload",
 ck("the constraint defect asks what a plugin TESTS, not what container it reads",
    "needs_obsm" not in inspect.getsource(cli).split("design defects")[1][:4000],
    "a claim is bounded by the factor it crosses")
+
+# ---------------------------------------------------------------------------------------------
+# A PER-UNIT PLUGIN MUST PUT ITS UNITS ON ONE AXIS.
+#
+# It runs separately on every unit, and its page is that many single-unit reports in sequence.
+# Every panel is true; the question a cohort study asks - do the units agree? - is answered
+# nowhere, because the numbers never share an axis. Measured on a ten-animal cohort: one
+# plugin's per-unit count ran 8,194 to 38,895 across ten animals of one tissue, in ten separate
+# figures, and a reader taking the first unit's strongest result as a finding had nothing on the
+# page to warn them.
+# ---------------------------------------------------------------------------------------------
+print("\na per-unit plugin puts its units on one axis")
+_pu = {n: k for n, k in _K.items() if k.per_unit}
+ck("some plugin runs per unit, or this section proves nothing", bool(_pu))
+for _n, _k in sorted(_pu.items()):
+    _ums = (_k.report_spec or {}).get("unit_metrics") or []
+    ck(f"{_n} declares what makes its units comparable", bool(_ums))
+    ck(f"{_n}'s metrics each carry a question",
+       all(str(m.get("id") or "").strip() and str(m.get("question") or "").strip()
+           for m in _ums), str(_ums))
+    _src = _KSRC.get(f"{_n}.py", "")
+    _missing = [str(m.get("id")) for m in _ums
+                if f'ctx.metric("{m.get("id")}"' not in _src
+                and f"ctx.metric('{m.get('id')}'" not in _src]
+    ck(f"{_n} records every metric it declares", not _missing, str(_missing))
+ck("the declaration check REFUSES a per-unit plugin that declares none",
+   any(lvl == "ERROR" and "unit_metrics" in msg
+       for lvl, msg in _DECL.check({**next(iter(_pu.values())).spec,
+                                    "report": {"figures": [], "unit_metrics": []}})),
+   "a per-unit plugin with no unit_metrics must be an ERROR, not a WARN")
+
+print("\nthe host draws that comparison, so no plugin writes its own version of it")
+_units = [{"unit": f"u{i}", "metrics": {"m": v}} for i, v in enumerate([8194, 17957, 38895])]
+_html = _RP._across_units(_units, [{"id": "m", "question": "how many?"}])
+ck("it renders from the units alone, with no plotting library",
+   "<svg" in _html and "matplotlib" not in inspect.getsource(_RP))
+ck("it states the range rather than judging it",
+   "4.75x" in _html and "too" not in _html.lower().split("across units")[1][:400])
+ck("it names the extremes so a reader can go to the unit",
+   "u0" in _html and "u2" in _html)
+ck("a per-unit plugin that recorded nothing is NAMED as uncomparable, not omitted",
+   "cannot be put on one axis" in _RP._across_units([{"unit": "a"}, {"unit": "b"}], []))
+ck("one unit is not a comparison",
+   "cannot be put on one axis" in _RP._across_units([{"unit": "a", "metrics": {"m": 1}}], []))
+ck("counts are not rendered in scientific notation",
+   _RP._num(38895) == "38,895" and "e+" not in _RP._num(23543.5))
+ck("the comparison is placed BEFORE the per-unit panels",
+   inspect.getsource(_RP.write_kernel).index("_across_units")
+   < inspect.getsource(_RP.write_kernel).index("_figure_section"))
+
+print("\nthe run is held to what it declared, in both directions")
+_kk = next(iter(_pu.values()))
+ck("a declared metric that never arrives is a finding",
+   any("recorded it for no unit" in d.why
+       for d in _FB.metric_drift(_kk, {"status": "ok", "units": [{"metrics": {}}]})))
+ck("a metric nobody declared is a finding",
+   any("does not declare" in d.why
+       for d in _FB.metric_drift(_kk, {"status": "ok",
+                                       "units": [{"metrics": {"invented": 1.0}}]})))
+ck("a refusal produced nothing by design and is exempt",
+   not _FB.metric_drift(_kk, {"status": "refused", "units": []}))
+ck("a PARTIAL run wrote a page and is NOT exempt",
+   bool(_FB.metric_drift(_kk, {"status": "partial", "units": [{"metrics": {}}]})))
 
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

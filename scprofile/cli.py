@@ -710,7 +710,8 @@ def _run(a):
             # THE run -> declare EDGE, the cheapest in the loop: the run has happened and the
             # declaration is right there. A plugin whose `produces` no longer matches what it
             # emits has drifted, and the next person to read the declaration will believe it.
-            for dd in FB.declaration_drift(ks[name], pl) + FB.figure_drift(ks[name], pl):
+            for dd in (FB.declaration_drift(ks[name], pl) + FB.figure_drift(ks[name], pl)
+                       + FB.metric_drift(ks[name], pl)):
                 print(f"      [{dd.layer}] {dd.why}")
                 diagnoses.append(dd)
             # AND THE RULE THE HOST STATES BUT CANNOT APPLY. Only the plugin knows what it groups

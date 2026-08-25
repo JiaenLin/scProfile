@@ -30,7 +30,10 @@ from pathlib import Path
 #: 1.2 added `upstream_units`. 1.1 added `upstream`, `sentinels` and the `objects` slot. Only the
 #: MAJOR is compared, so a
 #: kernel written against 1.0 still runs - it simply does not read the new fields.
-CONTRACT_VERSION = "1.2"
+# 1.3 adds the optional `metrics` key: one comparable number per instance, so a per-unit
+# plugin's units can be put on one axis. A MINOR bump because compatibility is gated on
+# the major version and a reader that does not know the key ignores it.
+CONTRACT_VERSION = "1.3"
 
 #: What a kernel may declare it produced. Anything else in `out.json` is ignored with a warning -
 #: silently accepting unknown keys is how two versions of a contract drift into three.
@@ -191,7 +194,7 @@ def layer_names(adata):
 
 def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=None, layers=None,
                  tables=None, figures=None, objects=None, absent=None, caveats=None, headline="",
-                 measured=None, contract=CONTRACT_VERSION):
+                 measured=None, metrics=None, contract=CONTRACT_VERSION):
     """Write `out.json` from inside a kernel. The only supported way for a kernel to report.
 
     `caveats` is not decoration and is not optional in spirit: it is what the report prints under
@@ -213,6 +216,8 @@ def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=Non
 
     payload = {
         "contract": contract,
+        # ONE NUMBER PER INSTANCE, comparable across units. See Context.metric.
+        "metrics": {str(k): float(v) for k, v in (metrics or {}).items()},
         "kernel": kernel,
         "version": str(version),
         # WHAT THIS INSTANCE ACTUALLY COST, from the process that paid it: peak RSS,
@@ -328,7 +333,9 @@ def unknown_keys(payload):
     """Keys in a manifest the host does not act on. Reported, never silently accepted."""
     known = {"contract", "kernel", "version", "status", "headline", "absent", "caveats",
              # what the instance cost, measured by the process that paid it
-             "measured"}
+             "measured",
+             # one comparable number per instance, so a per-unit plugin's units share an axis
+             "metrics"}
     return sorted(set(payload) - known - set(OUTPUT_SLOTS))
 
 

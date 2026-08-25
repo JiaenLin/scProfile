@@ -300,6 +300,13 @@ PLUGIN = {
     # the reference do any work, are these one finding or several, and only then the answer - and
     # the reporter enforces `diagnostic` before `result` whatever order they are written in.
     "report": {
+        # WHAT MAKES THE UNITS COMPARABLE. Every figure on this page describes ONE unit; these
+        # are the numbers the host puts on a shared axis, so a reader sees whether the units
+        # agree before reading any single unit's panel as a finding.
+        "unit_metrics": [
+            {"id": "regulons", "question": "how many regulons survived in this unit? The network is inferred per unit, so this is a property of the unit and not only of the biology."},
+            {"id": "cells_scored", "question": "how many cells were scored in this unit? Regulon count depends on it."},
+        ],
         "figures": [
             {"id": "F1_ranking_depth", "shows": "diagnostic", "required": True,
              "question": "do cells have enough detected genes for the AUC cut-off to mean "
@@ -1257,6 +1264,10 @@ def run(ctx):
 
     # THE HEADLINE MUST NOT REPORT THE FIT SIZE AS THE RESULT SIZE. `ex` is the subsample for a
     # cohort fit, so this read "over 25,000 cells" for a result covering 98,627 of them.
+    # ON A SHARED AXIS WITH THE OTHER UNITS. Declared in `report.unit_metrics`; the host
+    # draws the comparison, so this is the whole of what this plugin owes for one.
+    ctx.metric("regulons", len(regulons))
+    ctx.metric("cells_scored", int(auc.shape[0]))
     if ex.shape[0] != auc.shape[0]:
         ctx.headline = (f"{len(regulons)} regulon(s), inferred from {ex.shape[0]:,} cells and "
                         f"scored on {auc.shape[0]:,}")

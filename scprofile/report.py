@@ -210,6 +210,117 @@ def _constraint_block(constraint, binds):
             + "</blockquote></div>")
 
 
+def _num(v):
+    """A number a reader can read. `:,.4g` renders 38,895 as `3.89e+04`, which is a count.
+
+    Counts are the commonest thing a plugin reports per unit, and scientific notation on a
+    count is not a rounding choice - it makes two numbers a reader is meant to compare look
+    like different kinds of thing.
+    """
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    if f != f or f in (float("inf"), float("-inf")):
+        return "-"
+    if abs(f) >= 1e12 or (f and abs(f) < 1e-4):
+        return f"{f:.4g}"
+    if abs(f - round(f)) < 1e-9:
+        return f"{round(f):,d}"
+    # `.4g` counts SIGNIFICANT digits, so 23543.5 comes out as 2.354e+04 - the same defect one
+    # decimal place further on. Above 1, fix the decimals; below it, significant digits are what
+    # a reader wants.
+    return f"{f:,.2f}" if abs(f) >= 1 else f"{f:.4g}"
+
+
+def _svg_strip(values, labels, *, width=560, height=96):
+    """One axis, one dot per unit, drawn as inline SVG.
+
+    Inline because the reporter has no plotting library and must not acquire one: a comparison
+    that only exists when an optional dependency is installed is a comparison that will be
+    missing from somebody's report. Everything here is arithmetic and string formatting.
+    """
+    lo, hi = min(values), max(values)
+    span = (hi - lo) or 1.0
+    pad, top = 46, 30
+    w = width - 2 * pad
+    pts, ticks = [], []
+    for v, lab in zip(values, labels):
+        x = pad + w * (v - lo) / span
+        pts.append(f'<circle cx="{x:.1f}" cy="{top}" r="5" fill="currentColor" '
+                   f'fill-opacity="0.55"><title>{_e(lab)}: {_num(v)}</title></circle>')
+    for v in (lo, (lo + hi) / 2, hi):
+        x = pad + w * (v - lo) / span
+        ticks.append(f'<line x1="{x:.1f}" y1="{top + 12}" x2="{x:.1f}" y2="{top + 18}" '
+                     f'stroke="currentColor" stroke-opacity="0.4"/>'
+                     f'<text x="{x:.1f}" y="{top + 32}" font-size="11" text-anchor="middle" '
+                     f'fill="currentColor" fill-opacity="0.7">{_num(v)}</text>')
+    return (f'<svg viewBox="0 0 {width} {height}" width="100%" role="img" '
+            f'style="max-width:{width}px">'
+            f'<line x1="{pad}" y1="{top + 12}" x2="{width - pad}" y2="{top + 12}" '
+            f'stroke="currentColor" stroke-opacity="0.25"/>'
+            + "".join(ticks) + "".join(pts) + "</svg>")
+
+
+def _across_units(units, declared):
+    """THE UNITS ON ONE AXIS. Drawn by the host, once, for every per-unit plugin.
+
+    A per-unit plugin runs separately on each unit and its page is that many single-unit
+    reports in sequence. Every panel on it is true, and the one question a cohort study asks -
+    do the units agree? - is answered nowhere, because the numbers never share an axis.
+    Measured on a ten-animal cohort: one plugin's per-unit interaction count ran from 8,194 to
+    38,895, a 4.7-fold range across ten animals of one tissue, and a reader taking the strongest
+    interaction off the first unit's panel had nothing on the page to warn them.
+
+    So the host renders it rather than each plugin: one implementation, no per-plugin drawing
+    code to drift, and it appears for a plugin written next year without that plugin doing
+    anything but calling `ctx.metric`.
+
+    The spread is DESCRIBED, never judged. A fold-range is a fact about the cohort; whether it
+    is too large is a question about the biology and the reader's, not this function's.
+    """
+    named = {str(d.get("id")): d for d in (declared or []) if isinstance(d, dict)}
+    rows, blocks = [], []
+    keys = []
+    for u in units:
+        for k in (u.get("metrics") or {}):
+            if k not in keys:
+                keys.append(k)
+    for k in keys:
+        pairs = [(str(u.get("unit")), float(u["metrics"][k])) for u in units
+                 if isinstance((u.get("metrics") or {}).get(k), (int, float))]
+        if len(pairs) < 2:
+            continue
+        pairs.sort(key=lambda t: t[1])
+        labs = [a for a, _ in pairs]
+        vals = [b for _, b in pairs]
+        n = len(vals)
+        med = vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2
+        fold = (vals[-1] / vals[0]) if vals[0] > 0 else float("inf")
+        q = (named.get(k) or {}).get("question") or ""
+        rows.append(f"<tr><td><code>{_e(k)}</code></td><td>{_num(vals[0])}</td>"
+                    f"<td>{_num(med)}</td><td>{_num(vals[-1])}</td>"
+                    f"<td>{'-' if fold != fold or fold == float('inf') else f'{fold:,.2f}x'}</td>"
+                    f"<td class='sub'>{_e(labs[0])} lowest, {_e(labs[-1])} highest</td></tr>")
+        blocks.append(f'<figure><figcaption><b>{_e(k)}</b>'
+                      + (f' — {_e(q)}' if q else "")
+                      + f' Each dot is one unit; hover for its name. '
+                        f'{n} unit(s), {_num(vals[0])} to {_num(vals[-1])}.</figcaption>'
+                      + _svg_strip(vals, labs) + "</figure>")
+    if not rows:
+        return ('<h2>Across units</h2><div class="bad">This plugin ran once per unit and '
+                'recorded no comparable number, so its units cannot be put on one axis. Every '
+                'panel below describes a single unit, and whether the units agree is not '
+                'answered anywhere on this page.</div>')
+    return ("<h2>Across units</h2><p class='sub'>Every panel further down describes ONE unit. "
+            "This is the only place the units are compared, and the spread here is the context "
+            "for reading any single-unit panel as a finding.</p>"
+            + "".join(blocks)
+            + "<div class='wrap'><table><tr><th>metric</th><th>min</th><th>median</th>"
+              "<th>max</th><th>range</th><th>extremes</th></tr>"
+            + "".join(rows) + "</table></div>")
+
+
 def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
                  spec=None, constraint="", binds=()):
     """One kernel's own page. Ends in its own limits, not a shared block."""
@@ -248,8 +359,12 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
         body.append("<h2>What it could not produce</h2><div class='bad'><ul>"
                     + "".join(f"<li><b>{_e(a.get('what', '?'))}</b> — {_e(a.get('why', ''))}</li>"
                               for a in absent) + "</ul></div>")
-    body.append(_figure_section(p.get("figures") or [], spec))
+    # BEFORE THE PANELS, NOT AFTER THEM. Every panel below describes one unit, and a reader who
+    # meets the first unit's panel before meeting the spread has already formed the finding.
     units = p.get("units") or []
+    if p.get("per_unit") and units:
+        body.append(_across_units(units, (spec or {}).get("unit_metrics")))
+    body.append(_figure_section(p.get("figures") or [], spec))
     if p.get("per_unit") and units:
         # Nine of ten unit payloads used to be discarded by a dict comprehension keyed on the
         # plugin name, and the survivor was rendered under that name as though it described the

@@ -222,6 +222,13 @@ class Context:
         self._obs, self._obsm, self._layers = {}, {}, {}
         self._tables, self._figures, self._objects = [], [], {}
         self.caveats, self.absent = [], []
+        #: ONE NUMBER PER INSTANCE, so a per-unit plugin's units can be put on one axis.
+        #: A per-unit plugin delivers N single-sample reports; without a scalar the host can
+        #: compare, the page is those N reports stapled together and the cohort statement is
+        #: left to the reader's arithmetic. Measured on a ten-animal cohort: one plugin's
+        #: interaction count ran 8,194 to 38,895 across the ten, and nothing on its page put
+        #: the ten numbers on the same axis.
+        self._metrics = {}
         #: So `populations()` says what it set aside ONCE however many tables a plugin writes.
         self._said_populations = False
         #: Every directory `source_layers()` walked, so a refusal can name where it looked -
@@ -681,3 +688,24 @@ class Context:
     def caveat(self, text):
         """Something true of this result that a reader must be told. Printed with the numbers."""
         self.caveats.append(text)
+
+    def metric(self, name, value):
+        """Record ONE headline number for this instance, comparable across units.
+
+        Declared in `report.unit_metrics` and checked against what is emitted, exactly as
+        figures are: a number nobody declared cannot be compared, and a declared number that
+        never arrives leaves a gap that reads like a plugin nobody asked for a comparison from.
+
+        The host draws the across-unit comparison itself, once, for every per-unit plugin -
+        so this is the whole of what a plugin has to do to get one, and no plugin writes its
+        own version of the same picture.
+        """
+        try:
+            v = float(value)
+        except (TypeError, ValueError):
+            self.log(f"  metric {name!r} is not a number ({value!r}); not recorded")
+            return
+        if v != v:                                        # NaN compares unequal to itself
+            self.log(f"  metric {name!r} is NaN; not recorded")
+            return
+        self._metrics[str(name)] = v

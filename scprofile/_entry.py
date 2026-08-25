@@ -309,6 +309,7 @@ def main(argv):
         obs=ctx._obs, obsm=ctx._obsm, layers=ctx._layers,
         tables=ctx._tables, figures=ctx._figures, objects=ctx._objects,
         absent=ctx.absent, caveats=ctx.caveats,
+        metrics=getattr(ctx, "_metrics", None),
         measured=getattr(ctx, "measured", None))
     return 0
 

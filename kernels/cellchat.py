@@ -241,6 +241,13 @@ PLUGIN = {
     #
     # `shows` is the whole of the reporter's knowledge. It knows no id here and never will.
     "report": {
+        # WHAT MAKES THE UNITS COMPARABLE. Every figure on this page describes ONE unit; these
+        # are the numbers the host puts on a shared axis, so a reader sees whether the units
+        # agree before reading any single unit's panel as a finding.
+        "unit_metrics": [
+            {"id": "significant_edges", "question": "how many edges survived the permutation test in this unit?"},
+            {"id": "populations", "question": "how many populations did this unit contribute? Edge count scales with the number of ordered pairs, which is quadratic in this."},
+        ],
         "figures": [
             # OPTIONAL, and its absence is the loudest thing on the page. Drawing it needs
             # CellChat's database read out interaction by interaction; if that could not be done
@@ -1093,6 +1100,10 @@ def run(ctx):
     # a headline puts an arbitrary sender -> receiver pair where a reader looks for the finding.
     n_inter = (int(df["interaction_name"].astype(str).nunique())
                if "interaction_name" in df.columns else None)
+    # ON A SHARED AXIS WITH THE OTHER UNITS. Declared in `report.unit_metrics`; the host
+    # draws the comparison, so this is the whole of what this plugin owes for one.
+    ctx.metric("significant_edges", len(df))
+    ctx.metric("populations", len(names))
     ctx.headline = (f"{len(df):,} significant edges"
                     + (f" over {n_inter:,} ligand-receptor interaction(s)"
                        if n_inter is not None else "")

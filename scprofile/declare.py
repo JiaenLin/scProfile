@@ -252,6 +252,41 @@ def check(spec, name="<plugin>"):
     if not spec.get("summary"):
         out.append(("ERROR", "no `summary`. It is what a user reads in the plan to decide "
                              "whether they want this at all."))
+
+    # A PER-UNIT PLUGIN MUST DECLARE WHAT MAKES ITS UNITS COMPARABLE.
+    #
+    # It runs separately on every unit and its page is that many single-unit reports in
+    # sequence. Each panel is true and the question a cohort study asks - do the units agree? -
+    # is answered nowhere, because the numbers never share an axis. Measured on a ten-animal
+    # cohort: one plugin's per-unit count ran 8,194 to 38,895, a 4.7-fold range across ten
+    # animals of one tissue, and its page put those ten numbers in ten separate figures.
+    #
+    # The host draws the comparison itself for any plugin that records the number, so this
+    # declaration is the whole of what a plugin owes - and it is checked against what the run
+    # emits, exactly as figures are, because a number nobody declared cannot be compared and a
+    # declared number that never arrives leaves a gap that reads like nobody wanted one.
+    if spec.get("per_unit"):
+        ums = (spec.get("report") or {}).get("unit_metrics")
+        if not ums:
+            out.append(("ERROR", "runs per unit and declares no `report.unit_metrics`, so its "
+                                 "units cannot be put on one axis and its page is N single-unit "
+                                 "reports in sequence. Declare at least one scalar and record "
+                                 "it with `ctx.metric(name, value)`."))
+        elif not isinstance(ums, list):
+            out.append(("ERROR", "`report.unit_metrics` must be a list of mappings"))
+        else:
+            for i, m in enumerate(ums):
+                at = f"report.unit_metrics[{i}]"
+                if not isinstance(m, dict):
+                    out.append(("ERROR", f"{at} must be a mapping"))
+                    continue
+                if not str(m.get("id") or "").strip():
+                    out.append(("ERROR", f"{at} declares no `id`; the id is the name passed to "
+                                         f"`ctx.metric` and is how the two are matched"))
+                if not str(m.get("question") or "").strip():
+                    out.append(("ERROR", f"{at} declares no `question`. A number on a shared "
+                                         f"axis with no question attached is a number a reader "
+                                         f"must guess the meaning of."))
     if not spec.get("cannot_show"):
         out.append(("ERROR", "no `cannot_show`. A result whose limits were never written down "
                              "reads exactly as authoritative as one whose limits were thought "
