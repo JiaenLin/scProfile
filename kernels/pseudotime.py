@@ -422,7 +422,11 @@ def _fig_stability(ctx, coarse_T, source, terminal, threshold, method):
     ax = axs[0][0]
     im = ax.imshow(M, cmap="RdYlBu_r", vmin=0, vmax=1, aspect="auto")
     ax.set_xticks(np.arange(len(names)))
-    ax.set_xticklabels(names, rotation=90)
+    # Shortened to the shortest unambiguous tail: these are annotation PATHS, and rotated
+    # ninety degrees the full ones take more height than the data. The source table keeps
+    # the whole path.
+    _short = F.short_labels(list(names))
+    ax.set_xticklabels([_short[n] for n in names], rotation=90)
     ax.set_yticks(np.arange(len(names)))
     ax.set_yticklabels(names)
     ax.set_xlabel("to")

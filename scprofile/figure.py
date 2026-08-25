@@ -164,6 +164,55 @@ def basis_label(name, axis=1):
     algo, of = split_basis(name)
     return f"{algo.upper()} {int(axis)}" + (f"  (of {of})" if of and int(axis) == 1 else "")
 
+def short_labels(labels, sep="/", pair=" -> "):
+    """`{label: shortened}` - hierarchical names cut to their shortest UNAMBIGUOUS tail.
+
+    Returns a mapping and never a list, so a caller can put the short form on the axis and the
+    full form in the source table, and a reader who needs the whole path can open it.
+
+    WHY THIS IS NOT COSMETIC. An annotation like `Endothelial/Lymphatic endothelial` is a path,
+    and a communication panel's categories are PAIRS of them - `A/B -> C/D`, sixty characters
+    before any real name is reached. Rotated ninety degrees those labels took three quarters of
+    the figure height on two shipped panels, squeezing the data into a strip at the top and, on
+    one of them, leaving the colourbar drawn straight through the label text.
+
+    SHORTENED ONLY AS FAR AS STAYS UNIQUE, one segment at a time. `Endothelial/Endocardial` and
+    `Stromal/Fibroblast` both cut to their last segment; `Stromal/Mural/Pericyte` and
+    `Stromal/Mural/Smooth muscle` do too, because those tails already differ. Where two labels
+    WOULD collide, both keep another segment - so a shortened label always names exactly one
+    thing, which an abbreviation chosen by truncation cannot promise.
+
+    `pair` is applied on both sides of an arrow, because a pair of paths is the ordinary shape of
+    a cell-cell communication category and shortening only one half helps by half.
+    """
+    labs = [str(x) for x in labels]
+
+    def _sides(x):
+        return x.split(pair) if pair and pair in x else [x]
+
+    # Every distinct path across every side, shortened together: two sides of one arrow must not
+    # disagree about how far a name can be cut.
+    paths = sorted({p for x in labs for p in _sides(x)})
+    depth = {p: 1 for p in paths}
+    for _ in range(12):
+        cut = {p: sep.join(p.split(sep)[-depth[p]:]) for p in paths}
+        seen = {}
+        for p, c in cut.items():
+            seen.setdefault(c, []).append(p)
+        clash = [ps for ps in seen.values() if len(ps) > 1]
+        if not clash:
+            break
+        for ps in clash:
+            for p in ps:
+                if depth[p] < len(p.split(sep)):
+                    depth[p] += 1
+        else:
+            if all(depth[p] >= len(p.split(sep)) for ps in clash for p in ps):
+                break
+    cut = {p: sep.join(p.split(sep)[-depth[p]:]) for p in paths}
+    return {x: (pair.join(cut[p] for p in _sides(x)) if pair and pair in x else cut[x])
+            for x in labs}
+
 def rasterize_points(ax):
     """Mark scatter collections raster, leaving text and axes vector."""
     for c in ax.collections:

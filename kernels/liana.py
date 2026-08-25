@@ -684,7 +684,12 @@ def _fig_dotplot(ctx, full):
                      c=mag, s=size, cmap="viridis", linewidths=0)
     F.rasterize_points(ax)
     ax.set_xticks(range(len(xs)))
-    ax.set_xticklabels(xs, rotation=90)
+    # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL. These categories are PAIRS of
+    # annotation paths, sixty characters before a real name is reached, and rotated
+    # ninety degrees they took three quarters of the figure height - squeezing the
+    # data into a strip. The full path stays in the source table.
+    _short = F.short_labels(list(xs))
+    ax.set_xticklabels([_short[x] for x in xs], rotation=90)
     ax.set_yticks(range(len(ys)))
     ax.set_yticklabels(ys)
     ax.set_xlim(-0.6, len(xs) - 0.4)
@@ -692,7 +697,7 @@ def _fig_dotplot(ctx, full):
     ax.tick_params(length=0)
     for s in ax.spines.values():
         s.set_visible(False)
-    cb = fig.colorbar(pts, ax=ax, orientation="horizontal", fraction=0.05, pad=0.02)
+    cb = fig.colorbar(pts, ax=ax, orientation="horizontal", location="top", fraction=0.05, pad=0.04)
     cb.outline.set_visible(False)
     cb.set_label("-log10 magnitude_rank  (expression strength)")
     import matplotlib.lines as ml
@@ -744,9 +749,14 @@ def _fig_sender_receiver(ctx, full, names):
     fig, ax = plt.subplots(figsize=(min(F.DOUBLE, side + 1.0), side), layout="constrained")
     im = ax.imshow(mat.values, cmap="viridis", vmin=0)
     ax.set_xticks(range(n))
-    ax.set_xticklabels(mat.columns, rotation=90)
+    # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL. These categories are PAIRS of
+    # annotation paths, sixty characters before a real name is reached, and rotated
+    # ninety degrees they took three quarters of the figure height - squeezing the
+    # data into a strip. The full path stays in the source table.
+    _short = F.short_labels(list(mat.columns) + list(mat.index))
+    ax.set_xticklabels([_short[c] for c in mat.columns], rotation=90)
     ax.set_yticks(range(n))
-    ax.set_yticklabels(mat.index)
+    ax.set_yticklabels([_short[i] for i in mat.index])
     ax.set_xlabel("receiver")
     ax.set_ylabel("sender")
     if n <= 12:

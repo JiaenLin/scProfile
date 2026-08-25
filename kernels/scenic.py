@@ -714,7 +714,11 @@ def _fig_activity_by_population(ctx, by, n_aside=0):
     lim = float(np.nanmax(np.abs(Z))) or 1.0
     im = ax.imshow(Z, aspect="auto", cmap="RdBu_r", vmin=-lim, vmax=lim)
     ax.set_xticks(np.arange(len(cols)))
-    ax.set_xticklabels(cols, rotation=90)
+    # Shortened to the shortest unambiguous tail: these are annotation PATHS, and rotated
+    # ninety degrees the full ones take more height than the data. The source table keeps
+    # the whole path.
+    _short = F.short_labels(list(cols))
+    ax.set_xticklabels([_short[c] for c in cols], rotation=90)
     ax.set_yticks(np.arange(len(rows)))
     ax.set_yticklabels(rows)
     ax.tick_params(length=0)

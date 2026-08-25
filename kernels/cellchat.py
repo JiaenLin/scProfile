@@ -735,8 +735,13 @@ def _fig_network(ctx, edges, names):
                    vmin=0, vmax=max(1, int(counts.to_numpy().max())))
     ax.set_xticks(np.arange(n))
     ax.set_yticks(np.arange(n))
-    ax.set_xticklabels(names, rotation=90)
-    ax.set_yticklabels(names)
+    # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL. These categories are PAIRS of
+    # annotation paths, sixty characters before a real name is reached, and rotated
+    # ninety degrees they took three quarters of the figure height - squeezing the
+    # data into a strip. The full path stays in the source table.
+    _short = F.short_labels(names)
+    ax.set_xticklabels([_short[n] for n in names], rotation=90)
+    ax.set_yticklabels([_short[n] for n in names])
     ax.set_xlabel("receiver")
     ax.set_ylabel("sender")
     ax.tick_params(length=0)
@@ -846,7 +851,12 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
                      c=sub["prob"].to_numpy(), s=size, cmap="viridis", linewidths=0)
     F.rasterize_points(ax)
     ax.set_xticks(np.arange(len(cols)))
-    ax.set_xticklabels(cols, rotation=90)
+    # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL. These categories are PAIRS of
+    # annotation paths, sixty characters before a real name is reached, and rotated
+    # ninety degrees they took three quarters of the figure height - squeezing the
+    # data into a strip. The full path stays in the source table.
+    _short = F.short_labels(cols)
+    ax.set_xticklabels([_short[c] for c in cols], rotation=90)
     ax.set_yticks(np.arange(len(rows)))
     ax.set_yticklabels(rows)
     ax.set_xlim(-0.6, len(cols) - 0.4)
@@ -856,7 +866,7 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
         sp.set_visible(False)
     # HORIZONTAL, so the right-hand margin is free for the size key. A colourbar and a legend both
     # anchored right is two things in one place under `constrained`.
-    cb = fig.colorbar(pts, ax=ax, orientation="horizontal", fraction=0.05, pad=0.02)
+    cb = fig.colorbar(pts, ax=ax, orientation="horizontal", location="top", fraction=0.05, pad=0.04)
     cb.outline.set_visible(False)
     cb.set_label("communication probability")
     if smax is not None:

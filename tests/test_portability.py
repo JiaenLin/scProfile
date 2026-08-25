@@ -468,5 +468,30 @@ ck("it knows a multi-word algorithm from a provenance",
 ck("and an unrecognised basis is printed whole rather than guessed at",
    _fg.split_basis("X_somebodyelses") == ("somebodyelses", ""))
 
+print("\nhierarchical labels are shortened by one rule, and the rule keeps them unambiguous")
+# A THIRD CONVENTION THAT HAD DRIFTED PER PLUGIN. Annotation labels are PATHS, and a
+# communication panel's categories are pairs of them - sixty characters before a real name is
+# reached. Rotated ninety degrees they took three quarters of two shipped panels' height and, on
+# one, the colourbar was drawn through the label text.
+_sl = _fg.short_labels
+_g = _sl(["A/one -> B/two", "C/three -> B/two"])
+ck("a pair of paths is shortened on BOTH sides",
+   _g["A/one -> B/two"] == "one -> two", str(_g))
+ck("a flat label is left alone", _sl(["alpha", "beta"], pair=None)["alpha"] == "alpha")
+_c = _sl(["A/x", "B/x", "A/y"], pair=None)
+ck("two labels that would collide BOTH keep another segment",
+   _c["A/x"] == "A/x" and _c["B/x"] == "B/x", str(_c))
+ck("...while one that would not is still shortened", _c["A/y"] == "y", str(_c))
+ck("it returns a MAPPING, so the full path can stay in the source table",
+   isinstance(_sl(["A/b"]), dict))
+ck("a label with no separator survives", _sl(["plain"], pair=None)["plain"] == "plain")
+ck("it terminates on a label that cannot be made unique",
+   _sl(["same", "same"], pair=None)["same"] == "same")
+_users = [n for n, s in _KSRC.items() if "set_xticklabels" in _code(s) and "rotation=90" in _code(s)]
+ck("some plugin rotates category labels, or this check proves nothing", bool(_users), str(_users))
+ck("every plugin that rotates them shortens them through the shared rule",
+   all("short_labels" in _KSRC[n] for n in _users),
+   str([n for n in _users if "short_labels" not in _KSRC[n]]))
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

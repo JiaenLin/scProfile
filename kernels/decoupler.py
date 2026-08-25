@@ -626,7 +626,11 @@ def _fig_by_population(ctx, sub, ranked_by, n_ranked):
     im = ax.imshow(vals, aspect="auto", cmap="coolwarm", vmin=-lim, vmax=lim,
                    interpolation="nearest")
     ax.set_xticks(np.arange(sub.shape[1]))
-    ax.set_xticklabels(list(sub.columns), rotation=90)
+    # Shortened to the shortest unambiguous tail: these are annotation PATHS, and rotated
+    # ninety degrees the full ones take more height than the data. The source table keeps
+    # the whole path.
+    _short = F.short_labels(list(sub.columns))
+    ax.set_xticklabels([_short[c] for c in sub.columns], rotation=90)
     ax.set_yticks(np.arange(sub.shape[0]))
     ax.set_yticklabels(list(sub.index))
     ax.tick_params(length=0)
