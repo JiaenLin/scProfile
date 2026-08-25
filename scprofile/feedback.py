@@ -202,8 +202,15 @@ def figure_drift(kernel, payload):
     declared = report_figures(kernel.spec)
     if not declared:
         return out
-    if payload.get("status") in ("refused", "partial"):
-        return out          # a refusal is allowed to draw nothing; it said why
+    # REFUSED ONLY, and the difference from `declaration_drift` above is not an oversight. A
+    # refusal produced nothing by design and said why. A PARTIAL run produced results, wrote a
+    # page and drew figures - and `partial` is the ordinary status of a method that fitted on a
+    # subset or scored below its own threshold, which is most real runs. Exempting it meant the
+    # first real run of this check was silent on a plugin whose nine panels had all lost their
+    # ids. A panel that genuinely cannot be drawn on some data is what `required: False` and
+    # `when_absent` are for; the status is the wrong place to say it.
+    if payload.get("status") == "refused":
+        return out
 
     drew = {str(f.get("id") or "") for f in (payload.get("figures") or []) if isinstance(f, dict)}
     for d in declared:

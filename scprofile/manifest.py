@@ -243,14 +243,26 @@ def _figure(v, rel):
     it is being written, and grow the caption and the source table later. The report renders
     whichever it is given, and says so when a figure arrives with no source data - "the numbers
     behind this figure are not on disk" is a fact a reader is entitled to.
+
+    THE ID IS CARRIED, and it was not. This function builds a fresh mapping from a fixed list of
+    keys, written before `report.figures` existed, so every panel arrived at the host with its id
+    stripped - the join between what a plugin DECLARED and what it DREW, severed at serialisation
+    with nothing at either end to notice. Measured on the first real run: nine panels emitted with
+    their ids, nine recorded as `null`, and the drift check that exists to catch exactly that
+    reported clean.
+
+    For the bare-path form the id is the file's stem, which is what `emit_figure` names it after
+    anyway - so a plugin that declares `{"id": "confidence"}` and writes `confidence.png` joins up
+    whichever form it used.
     """
     if isinstance(v, dict):
-        e = {"path": rel(v["path"]), "caption": str(v.get("caption") or "")}
+        e = {"id": str(v.get("id") or Path(str(v["path"])).stem),
+             "path": rel(v["path"]), "caption": str(v.get("caption") or "")}
         for k in ("vector", "source"):
             if v.get(k):
                 e[k] = rel(v[k])
         return e
-    return {"path": rel(v), "caption": ""}
+    return {"id": Path(str(v)).stem, "path": rel(v), "caption": ""}
 
 
 def figure_paths(payload):

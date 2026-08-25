@@ -343,5 +343,51 @@ ck("a panel drawn and not declared is a finding", any("surprise" in d.why for d 
 ck("a refusal is allowed to draw nothing",
    _fb.figure_drift(_K({"report": _spec}), {"status": "refused", "figures": []}) == [])
 
+print("\nthe id survives the round trip a real run makes")
+# THE JOIN IS THE WHOLE MECHANISM, and it was severed at serialisation. `manifest._figure` builds
+# a fresh mapping from a fixed key list written before `report.figures` existed, so nine panels
+# emitted with their ids arrived at the host as nine `null`s - and the drift check that exists to
+# catch exactly that reported clean, because it was reading ids that were no longer there.
+# Measured on PBS 688878. A check whose input has been silently emptied is worse than no check.
+import json as _json                                                           # noqa: E402
+import tempfile as _tf                                                         # noqa: E402
+from scprofile import manifest as _mf                                          # noqa: E402
+
+with _tf.TemporaryDirectory() as _d:
+    _o = Path(_d)
+    (_o / "figures").mkdir()
+    for _n in ("declared", "bare"):
+        (_o / "figures" / f"{_n}.png").write_bytes(b"x")
+    _pl = _mf.write_output(
+        _o, kernel="k", status="ok", headline="h", caveats=["c"],
+        figures=[{"id": "declared", "path": _o / "figures" / "declared.png", "caption": "c"},
+                 _o / "figures" / "bare.png"])
+    _back = _json.loads((_o / "out.json").read_text())
+    _ids = [f.get("id") for f in _back["figures"]]
+    ck("a declared id survives into out.json", _ids[0] == "declared", str(_ids))
+    ck("and the one-line form gets the file's stem, so both forms join up",
+       _ids[1] == "bare", str(_ids))
+
+    # END TO END, because both halves passed on their own and the pair did not.
+    _spec2 = {"figures": [{"id": "declared", "shows": "result", "question": "q",
+                           "source": "s", "required": True},
+                          {"id": "never_drawn", "shows": "diagnostic", "question": "q2",
+                           "source": "s", "required": True}]}
+    _f = _fb.figure_drift(_K({"report": _spec2}), _back)
+    ck("a panel that WAS drawn is not reported missing",
+       not any("'declared'" in x.why for x in _f), str([x.why[:50] for x in _f]))
+    ck("...and one that was not IS", any("never_drawn" in x.why for x in _f),
+       str([x.why[:50] for x in _f]))
+
+print("\na partial run drew a page and is checked like any other")
+# `partial` is the ordinary status of a method that fitted on a subset or scored below its own
+# threshold - most real runs - and it was exempted from the figure check by a guard copied from
+# `declaration_drift`, where it belongs. The first real run of this check was silent for that
+# reason on top of the one above.
+ck("a partial run is held to its declaration",
+   len(_fb.figure_drift(_K({"report": _spec}), {"status": "partial", "figures": []})) > 0)
+ck("a refusal is still exempt",
+   _fb.figure_drift(_K({"report": _spec}), {"status": "refused", "figures": []}) == [])
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
