@@ -40,7 +40,11 @@ PLUGIN = {
         ],
     },
 
-    "inject": {"required": ["embedding"], "optional": ["velocity", "label"]},
+    # `embedding` IS THE REPRESENTATION and is required: the kernels are built on a neighbour
+    # graph and `sc.pp.neighbors(use_rep=...)` needs a space where distances mean something.
+    # `layout` is optional and is only for drawing - two columns, and never the first two of the
+    # representation, whose axes carry no ordering.
+    "inject": {"required": ["embedding"], "optional": ["velocity", "label", "layout"]},
     "provides": ["ordering"],
     "produces": ["obs[pseudotime]", "obsm[fate_probabilities]",
                  "tables/terminal_states.csv"],

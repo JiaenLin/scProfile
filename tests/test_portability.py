@@ -389,5 +389,51 @@ ck("a partial run is held to its declaration",
 ck("a refusal is still exempt",
    _fb.figure_drift(_K({"report": _spec}), {"status": "refused", "figures": []}) == [])
 
+print("\na representation and a layout are two roles, resolved by rule and not by product name")
+# THE DEFECT THIS REPLACES: `embedding` was used for both, so a 30-column scANVI latent was
+# handed to a plugin to DRAW on. The rule below must work for a toolchain nobody here has heard
+# of, which is why it derives the layout from the chosen representation rather than listing keys.
+_pl = inputs.pick_layout
+
+_int = {"X_pca": 50, "X_someintegrator": 30, "X_umap_someintegrator": 2, "X_umap": 2}
+_got, _why = _pl(_int, embedding="X_someintegrator")
+ck("the layout DERIVED from the representation wins, whatever the tool is called",
+   _got == "X_umap_someintegrator", f"{_got} - {_why}")
+ck("...and the reason says so, without naming a product", "derived from the representation" in _why)
+ck("a plain object falls back to its only conventional layout",
+   _pl({"X_pca": 50, "X_umap": 2}, embedding="X_pca")[0] == "X_umap")
+ck("a 2-column key under a name nobody knows is still found",
+   _pl({"X_zzz": 2}, embedding=None)[0] == "X_zzz")
+ck("a representation alone yields NONE, not its first two columns",
+   _pl({"X_pca": 50}, embedding="X_pca")[0] is None)
+ck("...and the reason names what to compute",
+   "sc.tl.umap" in _pl({"X_pca": 50}, embedding="X_pca")[1])
+try:
+    _pl({"X_pca": 50}, override="X_pca")
+    ck("a wide key named with --layout is REFUSED", False, "it was accepted")
+except inputs.Refuse as e:
+    ck("a wide key named with --layout is REFUSED", "50 columns" in str(e), str(e)[:60])
+ck("no host module hard-codes a layout key of one toolchain",
+   not any(re.search(r"X_umap_[a-z]+", s) for n, s in _HOST.items() if n != "inputs.py"),
+   "a derived-layout key is spelled out somewhere it should be derived")
+_lay_src = inspect.getsource(inputs.pick_layout)
+ck("and the rule itself names no integration tool",
+   not any(w in _lay_src for w in ("scanvi", "scvi", "harmony", "bbknn")),
+   "the rule names a specific integrator")
+
+print("\nthe palette does not silently repeat itself")
+from scprofile import figure as _fg                                            # noqa: E402
+
+ck("more hues than Okabe-Ito alone", len(_fg.CATEGORY_COLOURS) > len(_fg.OKABE_ITO))
+_many = [f"pop{i:02d}" for i in range(14)]
+ck("fourteen categories get fourteen colours",
+   len(set(_fg.palette(_many).values())) == 14, str(len(set(_fg.palette(_many).values()))))
+ck("no collision at fourteen", _fg.palette_collisions(_many) == [])
+_too_many = [f"pop{i:02d}" for i in range(len(_fg.CATEGORY_COLOURS) + 3)]
+_cl = _fg.palette_collisions(_too_many)
+ck("past the palette's end the collisions are ANSWERABLE, not silent", len(_cl) == 3, str(_cl))
+ck("...and each names the labels that share the hue",
+   all(len(labs) == 2 for _c, labs in _cl), str(_cl))
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

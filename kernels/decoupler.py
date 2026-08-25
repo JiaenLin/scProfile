@@ -32,6 +32,15 @@ PLUGIN = {
         "min_edges": {"type": "int", "default": 1000, "min": 1,
                       "help": "refuse if the prior has fewer edges than this - a truncated "
                               "download returns a smaller answer rather than an error"},
+        # DECOUPLER'S OWN DEFAULT, DECLARED RATHER THAN INHERITED. `run_ulm(min_n=5)` drops any
+        # source with fewer than five targets present in the matrix, because an activity fitted
+        # on three genes is noise with a t-value. It was being taken silently, so the report
+        # could not say what the filter had been - and a source scored on 5 targets and one
+        # scored on 50 are not the same measurement.
+        "min_targets": {"type": "int", "default": 5, "min": 1,
+                        "help": "a regulator with fewer than this many of its targets present "
+                                "in the matrix is dropped rather than scored. decoupler's own "
+                                "default is 5"},
     },
     "per_unit": None,
     "cost": "medium", "cores": 4,
@@ -145,6 +154,7 @@ def run(ctx):
 
     ctx.adata.X = ctx.X
     dc.run_ulm(mat=ctx.adata, net=net, source="source", target="target", weight="weight",
+               min_n=ctx.config["min_targets"],
                use_raw=False, verbose=False)
     acts = ctx.adata.obsm["ulm_estimate"]
     ctx.emit_obsm("X_tf_activity", acts.values)
