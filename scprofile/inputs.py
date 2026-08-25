@@ -350,6 +350,44 @@ def read_constraint(adata):
             " + ".join(src for _, src in found))
 
 
+# THE PROHIBITION IS ONE SENTENCE, and it ends at the first sentence break or newline. Reading a
+# whole paragraph instead reached past the prohibition into the REMEDY that follows it - "for
+# that, use the uncorrected X_pca ... Differential expression on per-sample counts is unaffected"
+# - and returned `sample` as a bound factor from a clause that exists to say what is still
+# ALLOWED. A rule that reports the permission as a prohibition is worse than no rule: it is the
+# kind of false positive that gets the whole check switched off.
+_SENTENCE_END = re.compile(r"\.\s|\n")
+
+
+def constraint_binds(constraint, factors):
+    """Which of these design factors does the constraint FORBID a claim across?
+
+    A constraint is prose written by an upstream tool, and the one thing in it that can be
+    matched reliably is a factor name, because both sides name the same column of the same
+    design table. So the rule is deliberately narrow: a factor is BOUND when it is named inside
+    the prohibition - the text from a `must NOT` to the end of its paragraph - and by nothing
+    else. The permission half is not parsed at all; a constraint exists for its prohibition.
+
+    Matching is on word boundaries. Twice already a substring match has fired on prose - a
+    plugin named `de` inside the word "declared" - and a factor called `age` sits inside
+    "average", "damage" and "usage".
+
+    Returns a sorted list; empty is the honest answer for a constraint about an axis this
+    cohort does not vary, and it must not be read as "no constraint applies".
+    """
+    txt = str(constraint or "")
+    if "must NOT" not in txt:
+        return []
+    windows = []
+    for m in re.finditer(r"must NOT", txt):
+        rest = txt[m.start():]
+        end = _SENTENCE_END.search(rest)
+        windows.append(rest[:end.start()] if end else rest)
+    hay = " ".join(windows)
+    return sorted({f for f in (factors or [])
+                   if re.search(rf"\b{re.escape(str(f))}\b", hay)})
+
+
 def describe(adata, keys, organism, assay, constraint_src):
     """The provenance block: what was found, and whether it was told or guessed."""
     return {

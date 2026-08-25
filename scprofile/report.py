@@ -187,8 +187,31 @@ def _figure_section(figs, spec):
                    "the panel was drawn from.</p>")
     return "".join(out)
 
+def _constraint_block(constraint, binds):
+    """The upstream prohibition, ON THE PAGE THAT MAKES THE CLAIM IT BOUNDS.
+
+    A constraint on the index bounds the index. Measured on the run that motivated this: the
+    constraint reached `README.md` and `index.html` and none of the nine plugin pages - and the
+    page it most needed to reach carried, as its headline and with nothing beside it, exactly the
+    kind of claim the constraint forbids. Nobody quotes a cover page.
+
+    It is placed ABOVE the numbers rather than under them. A limit printed after a result is read
+    after the result has been believed, and the panels below are what a reader screenshots.
+    """
+    if not (constraint and binds):
+        return ""
+    return ('<div class="bad"><b>The upstream constraint binds this page.</b> Its numbers cross '
+            + _e(", ".join(binds))
+            + ', and a claim across ' + ("that factor" if len(binds) == 1 else "those factors")
+            + ' is what the object\'s own constraint on use forbids. Read it before the results, '
+              'not after them:<blockquote>'
+            + "".join(f"<p>{_e(line.strip())}</p>"
+                      for line in str(constraint).splitlines() if line.strip())
+            + "</blockquote></div>")
+
+
 def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
-                 spec=None):
+                 spec=None, constraint="", binds=()):
     """One kernel's own page. Ends in its own limits, not a shared block."""
     p = payload or {}
     caveats = p.get("caveats") or []
@@ -196,7 +219,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     body = [f"<h1>{_e(name)}</h1>",
             f'<p class="sub">{_e(summary)}</p>',
             f'<p class="lede">status <b>{_e(p.get("status", "?"))}</b> · '
-            f'{_e(p.get("headline", ""))}</p>']
+            f'{_e(p.get("headline", ""))}</p>',
+            _constraint_block(constraint, binds)]
     if caveats:
         body.append('<div class="warn"><b>Read these with the numbers, not after them</b><ul>'
                     + "".join(f"<li>{_e(c)}</li>" for c in caveats) + "</ul></div>")
@@ -407,7 +431,13 @@ def write_all(out_dir, payload):
     # from report.json alone; reading the declaration live would describe what the plugin promises
     # today over numbers it produced some other day.
     rs = payload.get("report_spec") or {}
+    # FROM THE PAYLOAD for the same reason as `report_spec`: the host decided which plugins the
+    # constraint binds while it held both the constraint and every plugin's contrast, and a
+    # reporter re-deriving that months later would be re-deciding it against a different design.
+    con = payload.get("constraint_on_use") or ""
+    cb = payload.get("constraint_binds") or {}
     for name, p in (payload.get("kernels") or {}).items():
         write_kernel(out_dir, name, p, cs.get(name, []), sm.get(name, ""),
-                     merged=mg.get(name), spec=rs.get(name))
+                     merged=mg.get(name), spec=rs.get(name),
+                     constraint=con, binds=cb.get(name) or [])
     return write_index(out_dir, payload)

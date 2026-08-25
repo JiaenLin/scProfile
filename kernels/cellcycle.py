@@ -64,7 +64,9 @@ PLUGIN = {
     # property of the gene names rather than of a capability the host can resolve - so it is
     # checked in `run` and answered with a refusal that says which names were looked for.
     "inject": {"required": [], "optional": ["lognorm", "label"]},
-    "provides": [],
+    # Same omission as velocity's: it writes obs[phase], and `phase` is a declared capability
+    # another plugin may ask for. A producer that does not say so is not a producer.
+    "provides": ["phase"],
     "produces": ["obs[phase]", "obs[S_score]", "obs[G2M_score]"],
 
     # WHAT WAS SHOWN TO IT - the honest list, which the plan reports so a user can see which of

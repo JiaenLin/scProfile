@@ -68,7 +68,11 @@ PLUGIN = {
     # drawn on the layout. Declaring only one is how it came to draw on the other.
     "inject": {"required": [],
                "optional": ["counts", "label", "sample", "embedding", "layout"]},
-    "provides": [],
+    # IT PROVIDES THE CAPABILITY IT PRODUCES. This said `[]` while the plugin wrote a fitted
+    # velocity field into obsm, so `pseudotime`, which declares `velocity` as an input it can
+    # use, could never be given one: the host resolves a derived capability to whoever DECLARES
+    # it, not to whoever happens to write a matching key.
+    "provides": ["velocity"],
     "produces": ["obs[velocity_confidence]",
                  "obs[velocity_length]",
                  "obs[velocity_pseudotime]",

@@ -493,5 +493,96 @@ ck("every plugin that rotates them shortens them through the shared rule",
    all("short_labels" in _KSRC[n] for n in _users),
    str([n for n in _users if "short_labels" not in _KSRC[n]]))
 
+# ---------------------------------------------------------------------------------------------
+# A REQUIREMENT IS STATED ONCE, AND EVERY DECISION READS THE PLACE IT IS STATED.
+#
+# `inject.required` is what the runner enforces; `needs_*` is what six DECISIONS read. The two
+# drifted apart in the one direction nothing can see: `needs_design` and `needs_obsm` were unset
+# on every shipped plugin, so six conditions took their False branch on every run of every
+# cohort. Nothing refused, no contrast was ever planned, and the constraint check exempted the
+# one plugin whose headline that constraint forbids. At a call site an unset flag and an unmet
+# condition are the same three characters.
+# ---------------------------------------------------------------------------------------------
+from scprofile import feedback as _FB, planner as _PL                           # noqa: E402
+from scprofile import kernels as _KN                                            # noqa: E402
+from scprofile.kernels import producer_edges as _pe                             # noqa: E402
+
+_K = discover()
+
+print("\na requirement is stated once, and no decision reads a flag nobody sets")
+_dead = _FB.dead_predicates(_K)
+ck("no kernel predicate is falsy for every installed plugin",
+   not _dead, str([a for a, _ in _dead]))
+ck("every exemption from that check carries a written reason",
+   all(str(v).strip() for v in _FB.PREDICATE_EXEMPT.values()),
+   str([k for k, v in _FB.PREDICATE_EXEMPT.items() if not str(v).strip()]))
+ck("needs_design is DERIVED from inject, not declared beside it",
+   all(k.needs_design == ("design" in k.injects_required or bool(k.spec.get("needs_design")))
+       for k in _K.values())
+   and any(k.needs_design for k in _K.values()),
+   "a kernel injecting `design` must report needs_design")
+_dk = next((k for k in _K.values() if k.requires_role("design")), None)
+_probs = _KN.unmet(_dk, obs=(), obsm=(), layers=(), available=_K, ran=set(),
+                   has_design=False, keys={}, organism=None, var=(), derived=()) if _dk else []
+ck("a kernel requiring a design reports that lack ONCE, not once per statement of it",
+   len([x for x in _probs if "design" in str(x).lower()]) == 1,
+   str([x for x in _probs if "design" in str(x).lower()]))
+
+print("\na plugin names a capability, never a peer")
+_named = {n: [c for c in (k.spec.get("needs_kernels") or [])] for n, k in _K.items()}
+ck("no plugin declares another plugin by name",
+   not any(_named.values()), str({n: v for n, v in _named.items() if v}))
+_unprov = _FB.unprovidable_capabilities(_K)
+ck("every capability a plugin asks for has an installed provider",
+   not _unprov, str([a for a, _ in _unprov]))
+ck("the wave graph has at least one edge, or it is not a graph",
+   bool(_pe(_K)), "producer_edges resolved nothing across the installed set")
+
+print("\nthe plan and the run make the same decisions, by calling the same function")
+_facts = {"has_design": True, "crossed_pairs": [["f1", "f2"]], "testable": ["f1", "f2"]}
+ck("decisions_for is what the planner records",
+   "decisions_for(" in inspect.getsource(_PL.settings_for),
+   "the planner must not compute a decision inline")
+_clisrc = inspect.getsource(cli)
+ck("decisions_for is what the run delivers",
+   "_PL.decisions_for(" in _clisrc,
+   "the run path must call the same function the plan calls")
+ck("the run merges those decisions into the params the plugin is handed",
+   "params=_params_for(name)" in _clisrc)
+ck("user --params override a planned decision, and the run says which it used",
+   "OVERRIDES the plan" in _clisrc)
+ck("a design-testing plugin is planned a contrast on any crossed design",
+   all(_PL.decisions_for(k, _facts).get("contrast", {}).get("kind") == "interaction"
+       for k in _K.values() if k.needs_design),
+   "a crossed pair with replication must yield an interaction, whatever the factors are called")
+ck("and main effects where nothing is crossed",
+   all(_PL.decisions_for(k, {"has_design": True, "crossed_pairs": [],
+                             "testable": ["f1"]}).get("contrast", {}).get("kind")
+       == "main effects" for k in _K.values() if k.needs_design))
+
+print("\nan upstream constraint reaches the page whose claim it bounds")
+_c = ("It may carry clustering. It must NOT carry an abundance claim across f1, f2 - for that, "
+      "use the uncorrected representation and say so. Per-sample counts are unaffected.")
+ck("the factors a constraint binds are read from the prohibition, not the whole text",
+   inputs.constraint_binds(_c, ["f1", "f2", "f3", "sample"]) == ["f1", "f2"],
+   str(inputs.constraint_binds(_c, ["f1", "f2", "f3", "sample"])))
+ck("a factor named only in the remedy is not reported as bound",
+   "sample" not in inputs.constraint_binds(_c, ["sample"]))
+ck("matching is on word boundaries",
+   inputs.constraint_binds("it must NOT average over usage", ["age", "use"]) == [])
+ck("no prohibition binds nothing",
+   inputs.constraint_binds("this object carries no prohibition", ["f1"]) == [])
+from scprofile import report as _RP                                             # noqa: E402
+ck("a bound page renders the constraint",
+   bool(_RP._constraint_block(_c, ["f1"])))
+ck("an unbound page does not",
+   not _RP._constraint_block(_c, []))
+ck("the binding is decided by the host and carried in the payload",
+   '"constraint_binds"' in _clisrc and "constraint_binds" in inspect.getsource(_RP.write_all),
+   "the reporter must not re-derive it from a live declaration")
+ck("the constraint defect asks what a plugin TESTS, not what container it reads",
+   "needs_obsm" not in inspect.getsource(cli).split("design defects")[1][:4000],
+   "a claim is bounded by the factor it crosses")
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

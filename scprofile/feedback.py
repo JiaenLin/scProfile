@@ -282,6 +282,91 @@ def sentinel_as_population(out_dir, payload, sentinels):
     return out
 
 
+# Properties that are legitimately falsy across a shipped set and are NOT dead branches. Every
+# entry needs its reason written here, because an unexplained exemption is how a check gets
+# emptied one line at a time until it passes by containing nothing.
+PREDICATE_EXEMPT = {
+    # These three are falsy across the shipped set BY DESIGN, not by omission, and each reason is
+    # written out because an unexplained exemption is indistinguishable from the defect.
+    "needs_obs": "a requirement is declared as a ROLE in `inject`, and the host resolves the role "
+                 "to a column name at run time. A key list cannot be written at declaration "
+                 "time without hard-coding one project's column names into a tool.",
+    "needs_obsm": "the same: `embedding` and `layout` are roles, resolved to obsm keys by the "
+                  "host. Ask `needs_representation`, which is derived from the roles.",
+    "needs_kernels": "A PLUGIN MUST NEVER NAME ANOTHER PLUGIN - it names a capability, and "
+                     "`producer_edges` resolves which installed plugin provides it. Naming a "
+                     "peer would bake one site's toolbox into a portable declaration.",
+}
+
+
+def unprovidable_capabilities(kernels):
+    """A derived capability no installed plugin provides can never be satisfied. Reported.
+
+    `pseudotime` declared that it can use a `velocity` field and the velocity plugin declared
+    `provides: []`, so the capability existed in the vocabulary, was asked for by name, and had
+    no producer anywhere - the request resolved to nothing on every run and the optional input
+    was simply never delivered. An unprovidable capability reads, at the asking end, exactly like
+    one the user chose not to run.
+    """
+    from .declare import CAPABILITIES
+    ks = list(kernels.values()) if isinstance(kernels, dict) else list(kernels)
+    provided = {c for k in ks for c in (k.spec.get("provides") or [])}
+    wanted = {c for k in ks for c in k.needs_capabilities}
+    out = []
+    for cap in sorted(wanted - provided):
+        if CAPABILITIES.get(cap, {}).get("resolve") != "derived":
+            continue
+        who = sorted(k.name for k in ks if cap in k.needs_capabilities)
+        out.append((cap, f"asked for by {', '.join(who)} and provided by no installed plugin, so "
+                         f"it can never be delivered and its absence looks like a choice"))
+    return out
+
+
+def dead_predicates(kernels):
+    """A kernel property falsy for EVERY installed plugin is a dead branch, and is reported.
+
+    Not a style check, and not a lint. FIVE decisions - the refusal to run without a design, two
+    design-defect reports, a plan entry, and the planner's whole choice of contrast - were
+    guarded by `needs_design`; a sixth, the one that applies the upstream constraint, was guarded
+    by `needs_obsm`. No shipped plugin set either. Every one of those conditions read False on
+    every plugin of every run, so each took its silent branch permanently: no plugin ever
+    refused, no contrast was ever planned, and the constraint check exempted the very plugin
+    whose headline the constraint forbids.
+
+    None of it was visible at a call site. `if k.needs_design:` taking its False branch looks
+    exactly the same whether the flag is unset or the condition is genuinely not met, and the
+    difference only becomes visible across the whole installed set at once - which is here.
+
+    The property list is INTROSPECTED, not enumerated, so a property added tomorrow is covered
+    without anyone remembering to add it.
+    """
+    from .kernels import Kernel
+    ks = list(kernels.values()) if isinstance(kernels, dict) else list(kernels)
+    if not ks:
+        return []
+    out = []
+    for attr in sorted(n for n, v in vars(Kernel).items()
+                       if isinstance(v, property) and not n.startswith("_")):
+        if attr in PREDICATE_EXEMPT:
+            continue
+        vals = []
+        for k in ks:
+            try:
+                vals.append(getattr(k, attr))
+            except Exception:                                             # noqa: BLE001
+                vals = None
+                break
+        if vals is None:
+            continue
+        if not any(bool(v) for v in vals):
+            out.append((attr, f"falsy for all {len(ks)} installed plugins. Any decision guarded "
+                              f"by it has only ever taken its False branch, and that is "
+                              f"indistinguishable at the call site from a condition that was "
+                              f"checked and not met. Either a plugin should be declaring it, or "
+                              f"the decisions reading it are dead and should say so."))
+    return out
+
+
 def report(diagnoses, log=print):
     """Print the loop's findings grouped by the layer that owns them, and what each needs."""
     if not diagnoses:

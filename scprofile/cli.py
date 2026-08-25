@@ -369,6 +369,42 @@ def _run(a):
     _tool_root = Path(__file__).resolve().parent.parent
     _tool_at_start = tool_fingerprint(_tool_root)
 
+    # THE PLAN'S DECISIONS, COMPUTED HERE BY THE PLAN'S OWN FUNCTION - not read back from a plan
+    # file. A run may be launched without one, and a decision recovered from a stale file would
+    # be a decision about a different object. Same function, same inputs, same answer is the only
+    # construction under which the plan and the run cannot disagree; anything else is two pieces
+    # of code that happen to match today.
+    from . import planner as _PL
+    _run_facts = {"has_design": False}
+    if a.design:
+        try:
+            _dtab, _dkey, _dfactors = inputs.read_design(a.design, units or [])
+            _run_facts = _PL.design_facts(_dtab, _dfactors, sample_key, units or [])
+        except Exception as e:
+            print(f"  WARNING: design table unreadable, so the plan's decisions cannot be made "
+                  f"or delivered: {e}")
+    _decisions_said = set()
+
+    def _params_for(name):
+        """`--params` over the plan's decisions, and the run SAYS which it used.
+
+        A decision delivered silently is one nobody can audit, and one overridden silently is
+        worse: the plan's page still shows the formula that did not run.
+        """
+        user = json.loads(a.params) if a.params else {}
+        dec = _PL.decisions_for(ks[name], _run_facts)
+        out = dict(dec)
+        out.update(user)
+        if dec and name not in _decisions_said:
+            _decisions_said.add(name)
+            for key, val in sorted(dec.items()):
+                shown = val.get("formula") if isinstance(val, dict) else val
+                if key in user:
+                    print(f"  {name}: --params {key} OVERRIDES the plan's {shown}")
+                else:
+                    print(f"  {name}: {key} {shown}  (decided from the design, by the planner)")
+        return out
+
     budget = int(getattr(a, "cores", 0) or _default_cores())
     mem_budget = getattr(a, "memory_gb", None) or _default_memory_gb()
     waves = schedule(want, ks, budget_cores=budget, units=units)
@@ -462,7 +498,7 @@ def _run(a):
             keys=_km,
             organism=organism[0], assay=assay[0], design=a.design, references=ctx["refs"],
             reference_specs=ks[name].references(organism[0]),
-            params=json.loads(a.params) if a.params else {},
+            params=_params_for(name),
             upstream=flat, upstream_units={k_: v_ for k_, v_ in per.items() if v_},
             sentinels=sentinels,
             provenance=prov, resources={"cores": cores}, unit=unit,
@@ -806,6 +842,20 @@ def _run(a):
     payload = {"version": _v(), "input": str(a.h5ad), "describe": describe,
                "memory_model": memory_model,
                "constraint_on_use": constraint, "constraint_source": csrc,
+               # WHICH PLUGINS THE CONSTRAINT BINDS, AND ON WHICH FACTORS - decided by the host,
+               # which is the only party that holds both the constraint and every plugin's
+               # contrast, and written here so the reporter never has to. Measured on the run
+               # that motivated it: the constraint reached the README and the index and NONE of
+               # the nine plugin pages, including the one whose headline it forbids outright. A
+               # bound placed only on the cover of a document does not bind anything a reader
+               # quotes out of it.
+               "constraint_binds": {
+                   n: sorted(set(((_PL.decisions_for(ks[n], _run_facts).get("contrast") or {})
+                                  .get("terms") or []))
+                             & set(inputs.constraint_binds(
+                                 constraint, sorted((_run_facts.get("factors") or {})))))
+                   for n in sorted(ks)
+                   if ks[n].needs_design or ks[n].needs_representation},
                "ran": ran, "skipped": skipped,
                "status": {n: ks[n].status for n in sorted(ks)},
                "schedule": [[{kk: vv for kk, vv in i.items()} for i in w] for w in waves],
@@ -1233,6 +1283,22 @@ def _plan(a):
                              f"scprofile scaffold {name}   # manifest exists; lock, selftest, "
                              f"run.py and UPSTREAM.md do not"))
 
+    # THE DESIGN FACTS, COMPUTED BEFORE ANYTHING JUDGES THE DESIGN. They used to be derived a
+    # hundred lines below the section that reports design defects, so the defect section could
+    # only ever ask about a plugin's declared properties - never about what the plugin would
+    # actually test. A verdict on a study needs the study's own numbers in scope first.
+    from . import planner as PL
+    units = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
+             if keys["sample"][0] else [])
+    dtab, dfactors = None, []
+    if a.design:
+        try:
+            dtab, _dkey, dfactors = inputs.read_design(a.design, units)
+        except Exception:                                                 # noqa: BLE001
+            dtab, dfactors = None, []          # already reported above, as a refusal
+    facts = PL.design_facts(dtab, dfactors, keys["sample"][0], units)
+    facts["units"] = units
+
     # ---- design defects: the ONLY legitimate reason to skip a plugin ------------------------
     #
     # Everything else that stops a plugin - a missing environment, an unbuilt implementation, an
@@ -1252,13 +1318,30 @@ def _plan(a):
                                           f" — below 3 replicates, so an effect is estimable but"
                                           f" weakly powered, and an interaction across two such"
                                           f" levels is the weakest term in the model"))
-    if constraint and "must NOT" in str(constraint):
+    # WHICH FACTORS THE CONSTRAINT ACTUALLY NAMES, against what each plugin actually tests.
+    # This asked `k.needs_design and k.needs_obsm` - two properties no plugin set - so it was
+    # false for every plugin of every run, and the plugin whose headline the constraint forbids
+    # outright was exempted along with all the others. A claim is bounded because of the FACTOR
+    # it crosses, not because of the container the factor arrived in.
+    bound = inputs.constraint_binds(constraint, sorted(design_levels))
+    if bound:
         for name in sorted(want):
             k = ks[name]
-            if k.needs_design and k.needs_obsm:
-                defects.append((name, "the upstream constraint forbids a claim across the tested "
-                                      "factor on the chosen embedding; it must use the "
-                                      "uncorrected one and say so"))
+            if not (k.needs_design or k.needs_representation):
+                continue
+            terms = (PL.decisions_for(k, facts).get("contrast") or {}).get("terms") or []
+            hit = sorted(set(terms) & set(bound))
+            if hit:
+                defects.append((name, f"the upstream constraint forbids a claim across "
+                                      f"{', '.join(hit)}, and this plugin's contrast tests "
+                                      f"{', '.join(terms)}. Use the uncorrected representation "
+                                      f"and say so, or a test that models the factor rather than "
+                                      f"removing it - and either way the page must carry the "
+                                      f"constraint beside the number"))
+            elif k.needs_representation:
+                defects.append((name, f"the upstream constraint forbids a claim across "
+                                      f"{', '.join(bound)} on the corrected representation, and "
+                                      f"this plugin reads one"))
     if defects:
         print("\ndesign limits — the only legitimate reason to skip a plugin")
         for name, why in defects:
@@ -1285,19 +1368,7 @@ def _plan(a):
     # docs/RUN_PLAN.md. The section above reports prerequisites; this one commits to a verdict and
     # has to justify it. The two are separate because a prerequisite list is a set of observations
     # and a plan is a decision, and only the decision can be audited.
-    from . import planner as PL
     from .kernels import resolve_keys as _rk
-
-    units = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
-             if keys["sample"][0] else [])
-    dtab, dfactors = None, []
-    if a.design:
-        try:
-            dtab, _dkey, dfactors = inputs.read_design(a.design, units)
-        except Exception:                                                 # noqa: BLE001
-            dtab, dfactors = None, []          # already reported above, as a refusal
-    facts = PL.design_facts(dtab, dfactors, keys["sample"][0], units)
-    facts["units"] = units
 
     roots = sorted(set(list((prov or {}).get("search_paths") or [])
                        + provenance.ancestry_roots(a.h5ad)

@@ -160,6 +160,30 @@ class Kernel:
         return list(inj.get("required") or []) if isinstance(inj, dict) else []
 
     @property
+    def injects_optional(self):
+        """Capabilities the host supplies WHEN IT HAS THEM. Absence is not a refusal."""
+        inj = self.spec.get("inject") or {}
+        return list(inj.get("optional") or []) if isinstance(inj, dict) else []
+
+    def requires_role(self, role):
+        """Does this kernel REFUSE to run without `role`? Asked of the declaration, once.
+
+        `inject.required` is the single statement of what a kernel must be given, and the
+        entrypoint enforces it. The same fact used to be written a SECOND time as a `needs_*`
+        flag, which is what five DECISION sites read - the refusal in `run`, two defect
+        reports, the plan's `sees` entry and the planner's choice of contrast. The two
+        statements drifted in the only direction that makes no sound: `needs_design` and
+        `needs_obsm` were left unwritten by every shipped plugin, so all five decisions took
+        their False branch on every plugin of every run. Nothing refused, nothing warned, and
+        no contrast was ever planned - and at each call site that is indistinguishable from a
+        condition that was checked and not met.
+
+        `inject` replaced prerequisite checking in the RUNNER; the migration was never finished
+        in the DECIDERS. Ask this, not the spec.
+        """
+        return role in self.injects_required
+
+    @property
     def needs_obs(self):
         return self._list("needs_obs")
 
@@ -276,7 +300,42 @@ class Kernel:
 
     @property
     def needs_design(self):
-        return bool(self.spec.get("needs_design"))
+        """DERIVED from `inject`, not declared beside it.
+
+        A kernel that has `design` injected as required cannot run without one; stating that a
+        second time is exactly how the two came to disagree. The legacy flag is still honoured,
+        so a kernel that reaches a design by some route other than injection can declare it -
+        it may only ADD to what `inject` already says, never contradict it.
+        """
+        return self.requires_role("design") or bool(self.spec.get("needs_design"))
+
+    @property
+    def needs_capabilities(self):
+        """The capabilities of another plugin that this one reads - required or optional.
+
+        A PLUGIN MUST NEVER NAME ANOTHER PLUGIN. It names a capability, and the host resolves
+        which installed plugin provides it. That is what stops a declaration from encoding one
+        site's particular toolbox: `pseudotime` says it can use a velocity field, not that it
+        runs after a plugin called `velocity`, and a site that swaps in a different velocity
+        implementation changes nothing in pseudotime.
+
+        Which is why `needs_kernels` is empty for every shipped plugin and correctly so - see
+        `producer_edges`, which builds the ordering the old flag was supposed to carry.
+        """
+        from .declare import CAPABILITIES
+        derived = {r for r, v in CAPABILITIES.items() if v.get("resolve") == "derived"}
+        return sorted((set(self.injects_required) | set(self.injects_optional)) & derived)
+
+    @property
+    def needs_representation(self):
+        """Does it refuse without an embedding or a layout? NOT `needs_obsm`, which names KEYS.
+
+        A role is resolved to a key by the host at run time, so a role requirement can never be
+        expressed as a list of keys and `needs_obsm` can never be the way to ask. The check that
+        applies the upstream constraint asked `needs_obsm` - a key list no plugin sets - and so
+        exempted every plugin, including the ones whose headline claims the constraint bounds.
+        """
+        return any(self.requires_role(r) for r in ("embedding", "layout"))
 
     @property
     def produces(self):
@@ -1056,7 +1115,13 @@ def unmet(kernel, *, obs=(), obsm=(), layers=(), ran=(), has_design=False, keys=
         if d not in ran:
             problems.append(f"kernel {d!r} has not been run.  Fix: --kernel {d} first, or "
                             f"--kernel {d},{kernel.name}.")
-    if kernel.needs_design and not has_design:
+    # ONLY FOR THE LEGACY FLAG. `needs_design` is now derived from `inject`, so a kernel that
+    # injects `design` has already had this reported above, by capability, with the same fix
+    # attached - and reporting it twice makes one missing input look like two problems. The
+    # clause survives for a kernel that reaches a design by some other route and says so with
+    # the flag alone.
+    if (kernel.needs_design and not has_design
+            and not kernel.requires_role("design")):
         problems.append("no --design was given.  Fix: pass a CSV keyed on the sample column. "
                         "Without it there is no contrast to test.")
     return problems
@@ -1152,3 +1217,32 @@ def _who_produces(slot, available=None):
             if d == slot or (bare is not None and d in (f"obs[{bare}]", bare)):
                 return name
     return None
+
+
+def producer_edges(kernels):
+    """consumer -> the installed plugins that provide a capability it reads. THE WAVE GRAPH.
+
+    `order_of_runs` honoured `needs_kernels`, which no plugin sets and none should: a plugin
+    names a CAPABILITY, never a peer. So the scheduler had no edges at all - every run was one
+    wave, and a plugin that reads another's output was ordered against it by nothing but
+    alphabetical luck. It looked like a graph and behaved like a list.
+
+    Resolved across the installed set, because that is the only scope where a capability has a
+    producer. Both required and optional roles create an edge: an optional input that arrives
+    after the plugin that wanted it is the same failure as a missing one, and it is quieter.
+    """
+    ks = kernels if isinstance(kernels, dict) else {k.name: k for k in kernels}
+    # `getattr` throughout: anything presenting the kernel interface must work here, including a
+    # test stub. A graph function that only accepts the concrete class cannot be tested apart
+    # from the plugin set it is meant to be independent of.
+    provides = {}
+    for name, k in ks.items():
+        for cap in ((getattr(k, "spec", None) or {}).get("provides") or []):
+            provides.setdefault(cap, set()).add(name)
+    edges = {}
+    for name, k in ks.items():
+        got = {p for cap in (getattr(k, "needs_capabilities", None) or [])
+               for p in provides.get(cap, ()) if p != name}
+        if got:
+            edges[name] = sorted(got)
+    return edges

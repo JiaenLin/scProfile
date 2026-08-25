@@ -288,22 +288,7 @@ def settings_for(k, *, keys, facts, references=None, cores=None):
         s["per_unit"] = {"key": k.per_unit, "n": len(units),
                          "units": units,
                          "mode": "per unit" if units else "POOLED (no unit key found)"}
-    if getattr(k, "needs_design", False) and facts.get("has_design"):
-        # MAXIMUM CAPACITY: the richest contrast the design permits, not the safest one.
-        pairs = facts.get("crossed_pairs") or []
-        if pairs:
-            a, b = pairs[0]
-            s["contrast"] = {"kind": "interaction", "terms": [a, b],
-                             "formula": f"~ {a} + {b} + {a}:{b}",
-                             "why": f"{a} and {b} are crossed with replication in every cell, so "
-                                    f"the interaction is estimable - and it is usually the "
-                                    f"question the study was designed to ask."}
-            if len(pairs) > 1:
-                s["contrast"]["other_crossed_pairs"] = pairs[1:]
-        elif facts.get("testable"):
-            s["contrast"] = {"kind": "main effects", "terms": list(facts["testable"]),
-                             "formula": "~ " + " + ".join(facts["testable"]),
-                             "why": "no two factors are crossed with replication in every cell"}
+    s.update(decisions_for(k, facts))
     if getattr(k, "reference_organisms", lambda: set())():
         s["references"] = {"organism": (keys.get("organism") or None),
                            "declared_for": sorted(k.reference_organisms()),
@@ -314,13 +299,57 @@ def settings_for(k, *, keys, facts, references=None, cores=None):
     return s
 
 
+def decisions_for(kernel, facts):
+    """The decisions the PLAN makes for a kernel, as the dict the RUN is handed verbatim.
+
+    ONE function, called by the planner to record and render and by the runner to inject,
+    because THE PLAN AND THE RUN MUST AGREE BY CONSTRUCTION - the same rule `available()` states
+    for capabilities, applied to decisions. A decision that exists only in the plan is a
+    decision the analysis did not make.
+
+    It was: `contrast` was computed here, rendered into the plan HTML and into the plan's text
+    output, and then passed to nothing at all. The run built its parameters from the command
+    line alone, so a study whose interaction the plan had identified, justified and PRINTED was
+    tested for main effects, and the report said so plainly without anything registering that
+    the two documents disagreed. A reader had the plan's formula on one page and the run's terms
+    on another and no reason to compare them.
+
+    Returns a plain dict so a new decision is added by returning one more key, and the runner
+    delivers it without being changed.
+    """
+    d = {}
+    if not (getattr(kernel, "needs_design", False) and facts.get("has_design")):
+        return d
+    # MAXIMUM CAPACITY: the richest contrast the design permits, not the safest one.
+    pairs = facts.get("crossed_pairs") or []
+    if pairs:
+        x, y = pairs[0]
+        d["contrast"] = {"kind": "interaction", "terms": [x, y],
+                         "formula": f"~ {x} + {y} + {x}:{y}",
+                         "why": f"{x} and {y} are crossed with replication in every cell, so "
+                                f"the interaction is estimable - and it is usually the "
+                                f"question the study was designed to ask."}
+        if len(pairs) > 1:
+            d["contrast"]["other_crossed_pairs"] = pairs[1:]
+    elif facts.get("testable"):
+        d["contrast"] = {"kind": "main effects", "terms": list(facts["testable"]),
+                         "formula": "~ " + " + ".join(facts["testable"]),
+                         "why": "no two factors are crossed with replication in every cell"}
+    return d
+
+
 def order_of_runs(names, available):
-    """Waves honouring `needs_kernels`, so a plan says WHEN as well as what.
+    """Waves honouring the capability graph, so a plan says WHEN as well as what.
 
     A plugin that reads another's output has to run after it, and a plan that lists both without
     saying so leaves the user to discover the ordering from a failure. Plugins in one wave are
     independent BY THE GRAPH - not merely convenient to group.
     """
+    from .kernels import producer_edges
+    # DECLARED EDGES PLUS CAPABILITY EDGES. `needs_kernels` is empty for every shipped plugin and
+    # should be - a plugin names a capability, not a peer - so honouring it alone gave the
+    # scheduler nothing to order and made every run a single wave.
+    edges = producer_edges({n: available[n] for n in names if available.get(n)})
     remaining, done, waves, guard = sorted(names), set(), [], 0
     while remaining:
         guard += 1
@@ -329,7 +358,8 @@ def order_of_runs(names, available):
             break
         ready = [n for n in remaining
                  if all(d in done or d not in names
-                        for d in getattr(available.get(n), "needs_kernels", []) or [])]
+                        for d in (list(getattr(available.get(n), "needs_kernels", []) or [])
+                                  + edges.get(n, [])))]
         if not ready:
             waves.append(list(remaining))
             break
