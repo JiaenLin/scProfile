@@ -716,6 +716,29 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
         source=table_path)
 
 
+
+def _bh_across_families(res, alpha):
+    """Benjamini-Hochberg over the RAW p-values of every family at once. A second number only.
+
+    Applied to `pvalue`, never to `padj`: correcting an already-corrected column twice is not a
+    joint correction, it is a smaller number with no interpretation at all. Genes that were not
+    tested carry NaN and are excluded from m rather than counted as failures to reject - a NaN
+    here means the gene was never a test, and inflating m with non-tests would make the joint
+    figure conservative for a reason that has nothing to do with the design.
+    """
+    import numpy as np
+
+    p = np.asarray(res["pvalue"], dtype=float)
+    p = p[np.isfinite(p)]
+    m = p.size
+    if not m:
+        return 0
+    p.sort()
+    thresh = alpha * np.arange(1, m + 1) / m
+    below = np.nonzero(p <= thresh)[0]
+    return int(below[-1] + 1) if below.size else 0
+
+
 def _fig_hits(ctx, hits):
     """Which populations responded, and which were never tested - drawn on one axis."""
     import numpy as np
@@ -1139,9 +1162,33 @@ def run(ctx):
     # have fitted: the design is built PER POPULATION, an aliased term is dropped from some
     # populations and not others, and an interaction appears in the formula and in no term name.
     # A headline that prints a formula nobody fitted is wrong in the one place every reader looks.
+    # THE CORRECTION SCOPE, BESIDE THE COUNT THAT AGGREGATES OVER IT.
+    #
+    # PyDESeq2 corrects WITHIN each population's own fit, and this count sums across all of
+    # them - so it is a total over as many independent families as there are populations, and
+    # neither the headline nor any caveat said so. "Apply multiple-testing correction jointly
+    # across the whole comparison family, not separately per cell type, when the cell types are
+    # tested in one design" is the standard the number will be read against.
+    #
+    # The per-population correction is KEPT, because it is what independent filtering and the
+    # dispersion prior are computed under and re-deriving them jointly would be a different
+    # analysis. What changes is that the joint number is computed and shown next to it, so a
+    # reader is never left to assume the two are the same.
+    n_families = int(res.groupby(["population", "term"]).ngroups)
+    sig_joint = _bh_across_families(res, C["alpha"])
     ctx.headline = (f"{sig:,} gene-population-term results below padj {C['alpha']} "
                     f"across {res['population'].nunique()} population(s), "
-                    f"terms {', '.join(sorted(set(res['term'])))}")
+                    f"terms {', '.join(sorted(set(res['term'])))}; "
+                    f"{sig_joint:,} under one correction over all {n_families} families")
+    ctx.caveat(
+        f"TWO CORRECTIONS, AND THE HEADLINE CARRIES BOTH. The model is fitted per population, "
+        f"so the `padj` column is corrected WITHIN each of the {n_families} population-term "
+        f"families separately - and the count that sums across them, {sig:,}, is a total over "
+        f"that many independent corrections rather than one. Correcting the raw p-values once "
+        f"over all families together gives {sig_joint:,}. The per-family `padj` is kept in the "
+        f"table because independent filtering and the dispersion prior are computed under it; "
+        f"the joint number is here because a count reported across families is read as though "
+        f"it came from one.")
     if formulas:
         ctx.caveat(
             "THE MODEL IS FITTED PER POPULATION and its formula is not necessarily the same for "

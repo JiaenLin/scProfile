@@ -249,7 +249,7 @@ def metric_drift(kernel, payload):
     out = []
     declared = [d for d in ((kernel.report_spec or {}).get("unit_metrics") or [])
                 if isinstance(d, dict)]
-    if not declared or payload.get("status") == "refused":
+    if payload.get("status") == "refused":
         return out
     ids = {str(d.get("id") or "") for d in declared} - {""}
     got = set()
@@ -257,6 +257,10 @@ def metric_drift(kernel, payload):
         got |= {str(k) for k in (u.get("metrics") or {})}
     if not (payload.get("units") or []):
         got |= {str(k) for k in (payload.get("metrics") or {})}
+    # THE UNDECLARED DIRECTION IS CHECKED EVEN WHEN NOTHING IS DECLARED. Returning early on an
+    # empty declaration meant a plugin that is not per-unit could record metrics that nothing
+    # renders and nothing reports - which is how two of them were added to a plugin whose page
+    # has no across-unit section, and passed every check.
     for mid in sorted(ids - got):
         out.append(Diagnosis(
             DECLARATION,

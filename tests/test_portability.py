@@ -658,6 +658,22 @@ ck("a metric nobody declared is a finding",
                                        "units": [{"metrics": {"invented": 1.0}}]})))
 ck("a refusal produced nothing by design and is exempt",
    not _FB.metric_drift(_kk, {"status": "refused", "units": []}))
+ck("a metric recorded by a plugin that declares none is STILL a finding",
+   bool(_FB.metric_drift(_K["de"], {"status": "ok", "metrics": {"stray": 1.0}})),
+   "returning early on an empty declaration lets a plugin record what nothing renders")
+ck("and a plugin that records none and declares none is clean",
+   not _FB.metric_drift(_K["de"], {"status": "ok"}))
+ck("a count reported across independently corrected families names the scope",
+   "corrected WITHIN" in _KSRC["de.py"] and "_bh_across_families" in _KSRC["de.py"],
+   "Apply multiple-testing correction jointly across the whole comparison family, not "
+   "separately per cell type, when the cell types are tested in one design")
+_bhsrc = ""
+for _node in __import__("ast").parse(_KSRC["de.py"]).body:
+    if getattr(_node, "name", "") == "_bh_across_families":
+        _bhsrc = __import__("ast").get_source_segment(_KSRC["de.py"], _node) or ""
+ck("the joint correction is applied to raw p-values, never to an adjusted column",
+   'res["pvalue"]' in _bhsrc and '"padj"' not in _bhsrc,
+   "correcting an adjusted column twice is a smaller number with no interpretation")
 ck("a PARTIAL run wrote a page and is NOT exempt",
    bool(_FB.metric_drift(_kk, {"status": "partial", "units": [{"metrics": {}}]})))
 
