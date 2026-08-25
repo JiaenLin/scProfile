@@ -411,8 +411,14 @@ def _clean(ax, F, basis=None):
     if basis:
         # A publication panel names its axes even when the values are meaningless. An unlabelled
         # embedding is the commonest reason a reviewer asks what they are looking at.
-        ax.set_xlabel(f"{basis.upper()} 1", loc="left")
-        ax.set_ylabel(f"{basis.upper()} 2", loc="bottom")
+        #
+        # THE ALGORITHM, THEN WHAT IT WAS RUN ON. Uppercasing the whole obsm key gave
+        # `UMAP_SCANVI 1`, which reads as an algorithm nobody has heard of - and is barely better
+        # than the `SCANVI 1` it replaced. A layout derived from a representation is a UMAP OF
+        # that representation, and saying it that way is both shorter and true.
+        algo, _, of = str(basis).partition("_")
+        ax.set_xlabel(f"{algo.upper()} 1" + (f"  (of {of})" if of else ""), loc="left")
+        ax.set_ylabel(f"{algo.upper()} 2", loc="bottom")
 
 
 def _colours_for(ctx, labels):
