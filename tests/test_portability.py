@@ -435,5 +435,38 @@ ck("past the palette's end the collisions are ANSWERABLE, not silent", len(_cl) 
 ck("...and each names the labels that share the hue",
    all(len(labs) == 2 for _c, labs in _cl), str(_cl))
 
+print("\nan axis label is a convention of this tool, not of each plugin")
+# FOUR PLUGINS DREW ON A LAYOUT AND WROTE FOUR AXIS LABELS. Three printed the obsm key verbatim -
+# `umap_scanvi 1` - and the fourth carried a private splitter, so the correction that turned
+# `SCANVI 1` into `UMAP 1 (of scanvi)` reached one of the four and none of the others. A
+# convention implemented per plugin is a convention that drifts.
+_KSRC = {q.name: q.read_text() for q in
+         (Path(__file__).resolve().parents[1] / "kernels").glob("*.py")}
+_own = sorted(n for n, s in _KSRC.items()
+              if re.search(r'set_[xy]label\(\s*f["\']\{[A-Za-z_]+\}\s*[12]', s))
+ck("no plugin spells its own basis axis label", not _own, str(_own))
+# CODE, NOT PROSE. `de` explains in a comment that it never calls `ctx.layout()` because it has
+# nothing per-cell to place - and a substring test read that sentence as a call, which is the same
+# false positive the plugin-name check hit on the word "declared". A guard that fires on a comment
+# saying the right thing is a guard somebody deletes.
+def _code(s):
+    return "\n".join(l for l in s.splitlines() if not l.lstrip().startswith("#"))
+
+
+_draws = [n for n, s in _KSRC.items() if "ctx.layout()" in _code(s)]
+ck("some plugin draws on a layout, or this check proves nothing", bool(_draws), str(_draws))
+ck("the ones that draw on a layout use the shared label",
+   all("basis_label" in _KSRC[n] for n in _draws),
+   str([n for n in _draws if "basis_label" not in _KSRC[n]]))
+ck("and the splitter lives in figure.py, not in a plugin",
+   not any("def split_basis" in s or "def _split_basis" in s for s in _KSRC.values()),
+   "a plugin carries its own splitter")
+ck("it knows a multi-word algorithm from a provenance",
+   _fg.split_basis("draw_graph_fa") == ("draw_graph_fa", "")
+   and _fg.split_basis("X_umap_anything") == ("umap", "anything"),
+   str(_fg.split_basis("draw_graph_fa")))
+ck("and an unrecognised basis is printed whole rather than guessed at",
+   _fg.split_basis("X_somebodyelses") == ("somebodyelses", ""))
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

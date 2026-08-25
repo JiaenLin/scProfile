@@ -126,6 +126,44 @@ def palette_collisions(labels):
     return sorted((c, sorted(ls)) for c, ls in by.items() if len(ls) > 1)
 
 
+#: Layout algorithms whose output an axis can be named after. Anything else is printed whole: a
+#: wrong guess about which half of a name is the algorithm is worse than not splitting it.
+LAYOUT_ALGORITHMS = ("umap", "tsne", "draw_graph_fa", "draw_graph_fr", "fa2", "phate",
+                     "densmap", "diffmap", "pca")
+
+
+def split_basis(name):
+    """`("umap", "scanvi")` from `umap_scanvi`; `(name, "")` for anything unrecognised.
+
+    Longest known algorithm first, never the first underscore: `partition("_")` turns
+    `draw_graph_fa` into `("draw", "graph_fa")`, inventing both an algorithm and a provenance out
+    of one name.
+    """
+    n = str(name)
+    n = n[2:] if n.startswith("X_") else n
+    for known in sorted(LAYOUT_ALGORITHMS, key=len, reverse=True):
+        if n == known:
+            return known, ""
+        if n.startswith(known + "_"):
+            return known, n.removeprefix(known + "_")
+    return n, ""
+
+
+def basis_label(name, axis=1):
+    """`UMAP 1  (of scanvi)` - the algorithm, then what it was run on.
+
+    HERE RATHER THAN IN EACH PLUGIN, and that is the point. Four plugins drawing on a layout wrote
+    four axis labels: three printed the obsm key verbatim (`umap_scanvi 1`) and the fourth carried
+    a private splitter, so a correction to one reached none of the others. An axis label is a
+    convention of this tool, like the column width and the palette, and a convention implemented
+    per plugin is a convention that drifts.
+
+    A layout derived from a representation IS a UMAP of that representation, and saying so is both
+    shorter than the raw key and true - where `SCANVI 1`, which this replaced, was neither.
+    """
+    algo, of = split_basis(name)
+    return f"{algo.upper()} {int(axis)}" + (f"  (of {of})" if of and int(axis) == 1 else "")
+
 def rasterize_points(ax):
     """Mark scatter collections raster, leaving text and axes vector."""
     for c in ax.collections:

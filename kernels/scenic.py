@@ -432,8 +432,8 @@ def _clean(ax, F, layout_name=None):
     for s in ax.spines.values():
         s.set_visible(False)
     if layout_name:
-        ax.set_xlabel(f"{layout_name} 1", loc="left")
-        ax.set_ylabel(f"{layout_name} 2", loc="bottom")
+        ax.set_xlabel(F.basis_label(layout_name, 1), loc="left")
+        ax.set_ylabel(F.basis_label(layout_name, 2), loc="bottom")
 
 
 def _fig_ranking_depth(ctx, detected, cutoff, n_universe, pops, colours):

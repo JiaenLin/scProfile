@@ -276,7 +276,7 @@ PLUGIN = {
 
 # ------------------------------------------------------------------------------- drawing helpers
 
-def _clean(ax, key=None):
+def _clean(ax, F, key=None):
     """Strip the frame from an embedding panel and name the axis by the layout's own key.
 
     THE KEY IS PRINTED WHOLE, deliberately. Splitting `umap_something` into an algorithm and what
@@ -292,8 +292,8 @@ def _clean(ax, key=None):
     for s in ax.spines.values():
         s.set_visible(False)
     if key:
-        ax.set_xlabel(f"{key} 1", loc="left")
-        ax.set_ylabel(f"{key} 2", loc="bottom")
+        ax.set_xlabel(F.basis_label(key, 1), loc="left")
+        ax.set_ylabel(F.basis_label(key, 2), loc="bottom")
 
 
 def _colours_for(ctx, labels):
@@ -631,7 +631,7 @@ def _fig_fate_map(ctx, barcodes, xy, key, fate, names, order):
         o = np.argsort(v)
         pts = ax.scatter(xy[o, 0], xy[o, 1], c=v[o], s=1.5, cmap="viridis", vmin=0, vmax=1,
                          linewidths=0, rasterized=True)
-        _clean(ax, key)
+        _clean(ax, F, key)
         ax.set_title(str(names[j]), loc="left")
         cb = fig.colorbar(pts, ax=ax, fraction=0.045, pad=0.02)
         cb.outline.set_visible(False)
@@ -639,7 +639,7 @@ def _fig_fate_map(ctx, barcodes, xy, key, fate, names, order):
     o = np.argsort(order)
     pts = ax.scatter(xy[o, 0], xy[o, 1], c=order[o], s=1.5, cmap="magma", linewidths=0,
                      rasterized=True)
-    _clean(ax, key)
+    _clean(ax, F, key)
     ax.set_title("ordering", loc="left")
     cb = fig.colorbar(pts, ax=ax, fraction=0.045, pad=0.02)
     cb.outline.set_visible(False)

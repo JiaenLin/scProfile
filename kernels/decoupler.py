@@ -438,8 +438,8 @@ def _clean(ax, F, key=""):
     for s in ax.spines.values():
         s.set_visible(False)
     if key:
-        ax.set_xlabel(f"{key} 1", loc="left")
-        ax.set_ylabel(f"{key} 2", loc="bottom")
+        ax.set_xlabel(F.basis_label(key, 1), loc="left")
+        ax.set_ylabel(F.basis_label(key, 2), loc="bottom")
 
 
 def _fig_coverage(ctx, cov, min_targets, source_path):
