@@ -628,3 +628,59 @@ change to every place that reads it, and the compiler will not say so.
 clean:  PBS 683117 — all ten plugins, 38/38 instances, 0 failures, 0 merge refusals, 0 tool-drift
         refusals, Exit_status 0. The fitted memory figures reproduced the previous run's to within
         a rounding step, which is the measurement being repeated rather than carried forward.
+
+## 2026-08-25 — the plugin declares what its own page should contain
+
+Seven of nine shipped plugins emitted no figure and every gate passed. The reporter was the third
+consumer of a plugin's own words — after the builder and the planner — and the only one still
+discovering rather than reading: it rendered whatever arrived, in emission order, with nothing on
+the page saying what a panel was for or that one was missing.
+
+A `report` block in the declaration. Per panel: an `id` (the name `emit_figure` is called with),
+`shows` (`diagnostic` / `result` / `comparison`), the `question` printed above it, the `source`
+table it must be drawable from, and `required` or a `when_absent` reason. Plus `reads_with`, for a
+plugin answering the same question from different evidence.
+
+**The reporter knows that vocabulary and no figure.** It positions by `shows`, captions by
+`question`, links by `source`. That is the `_who_produces` defect kept out of a third domain, and
+it is asserted rather than intended: no host module may name a figure id — computed from what the
+shipped plugins declare, so it tightens as plugins are added — and the layout's own text may name
+no plugin. The leak check needed a word boundary before it was usable: `de` is a plugin's name and
+a syllable in half of English, and the substring version failed on the word "declared".
+
+Diagnostics are ordered before results. A result under a failed check is a number, not an answer.
+
+### Two defects, and the second is why the first was invisible
+
+`manifest._figure` builds a fresh mapping from a **fixed key list** written before this existed.
+Nine panels emitted with their ids arrived at the host as nine `null`s — the join severed at
+serialisation, neither end noticing, because the plugin had written one and the host was reading a
+field that no longer came.
+
+And the check that exists to catch exactly that reported clean, because `figure_drift` exempted
+`partial` as well as `refused` — a guard copied from `declaration_drift`, where it belongs. A
+refusal produced nothing by design. A **partial** run produced results, wrote a page and drew
+figures, and `partial` is the ordinary status of a method that fitted on a subset or scored below
+its own threshold. Velocity's was partial. Only a refusal is exempt now; a panel that genuinely
+cannot be drawn is what `required: False` and `when_absent` are for, and the status is the wrong
+place to say it.
+
+Both halves passed their own tests and the pair did not, so the test is the round trip a real run
+makes: emit → `write_output` → read back → drift-check.
+
+**Found by reading the payload of a run that exited 0.** Nothing about the exit status said so, and
+a check whose input has been silently emptied is worse than no check.
+
+### And the verification made the same mistake the tool is built against
+
+The first probe of the fixed check reported SILENT on the real payload. It was reading
+`$RUNDIR/.tool` — a snapshot left by an earlier run — while the job had run from
+`$RUNDIR/out2/.tool`. Two trees, one name apart, and the stale one answers every question
+plausibly. That is the drift this tool snapshots to prevent, arriving in the check of the check.
+
+clean:  PBS 689055 — velocity and cellcycle on a 100,713-cell object. velocity: 9 declared, 9
+        drawn, 0 findings; its page carries five diagnostic panels under their questions, then
+        four results. cellcycle declares no block and renders as it always did, which is the
+        path a plugin written outside this repository takes. Proven live on the real payload,
+        not on a fixture: remove a required panel -> 1 finding naming it; remove an optional one
+        -> 0; add an undeclared one -> 1 naming it.
