@@ -403,6 +403,22 @@ def _pick_basis(ctx, declared):
                      if wide else ""))
 
 
+#: Layout algorithms this plugin can name on an axis. Anything not here is printed whole: a wrong
+#: guess about which half of a name is the algorithm is worse than not splitting it at all.
+_LAYOUT_ALGORITHMS = ("umap", "tsne", "draw_graph_fa", "draw_graph_fr", "fa2", "phate",
+                      "densmap", "diffmap", "pca")
+
+
+def _split_basis(name):
+    """`("umap", "scanvi")` from `umap_scanvi`; `(name, "")` for anything unrecognised."""
+    for known in sorted(_LAYOUT_ALGORITHMS, key=len, reverse=True):
+        if name == known:
+            return known, ""
+        if name.startswith(known + "_"):
+            return known, name.removeprefix(known + "_")
+    return name, ""
+
+
 def _clean(ax, F, basis=None):
     ax.set_xticks([])
     ax.set_yticks([])
@@ -416,7 +432,11 @@ def _clean(ax, F, basis=None):
         # `UMAP_SCANVI 1`, which reads as an algorithm nobody has heard of - and is barely better
         # than the `SCANVI 1` it replaced. A layout derived from a representation is a UMAP OF
         # that representation, and saying it that way is both shorter and true.
-        algo, _, of = str(basis).partition("_")
+        # A KNOWN ALGORITHM, LONGEST FIRST - not the first underscore. `partition("_")` turned
+        # `draw_graph_fa` into "DRAW (of graph_fa)", inventing both an algorithm and a provenance
+        # out of one name. A split has to know what it is splitting, and a basis this plugin does
+        # not recognise is printed whole, which is the honest outcome.
+        algo, of = _split_basis(str(basis))
         ax.set_xlabel(f"{algo.upper()} 1" + (f"  (of {of})" if of else ""), loc="left")
         ax.set_ylabel(f"{algo.upper()} 2", loc="bottom")
 
