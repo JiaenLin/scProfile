@@ -470,6 +470,72 @@ def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP):
     return out
 
 
+#: Below this many cells with both columns finite, a correlation describes the overlap and not
+#: the cohort.
+CONCORDANCE_MIN_CELLS = 200
+
+
+def concordance(adata, produced_by, *, min_cells=CONCORDANCE_MIN_CELLS):
+    """Every per-cell number one plugin produced, against every one ANOTHER plugin produced.
+
+    A DIAGNOSTIC IS USELESS ON THE PAGE OF THE PLUGIN THAT COMPUTED IT. One plugin's summary
+    reads "cell-cycle phase per cell, and the check that a trajectory is not a cell-cycle axis";
+    the trajectory is on a different plugin's page, and nothing connected the two, so the check
+    was computed, reported, and never applied to the claim it exists to bound. Exactly the shape
+    of the upstream constraint reaching an index and none of the pages.
+
+    Two things a trajectory report is asked for and could not otherwise have:
+
+      * a second ordering to agree with. "When the expected topology is unknown, trajectories
+        and downstream hypotheses should be confirmed by multiple trajectory inference methods"
+        - Heumos et al., Nat Rev Genet 2023, doi:10.1038/s41576-023-00586-w. Two plugins that
+          each produce an ordering are two methods, and the host is the only thing that holds
+          both.
+      * the cell-cycle check, which is a correlation between an ordering and a phase score and
+        is arithmetic the moment both columns are in one object.
+
+    Spearman, because an ordering is a rank and the relation between two orderings is monotone
+    long before it is linear. CROSS-PLUGIN ONLY: two columns from one plugin are that plugin's
+    own business and it can draw them together itself.
+
+    Reports rho and n for every pair. It does not threshold, star or interpret - which
+    correlation matters is a question about the biology.
+    """
+    import numpy as np
+    import pandas as pd
+
+    cols = []
+    for owner, names in sorted((produced_by or {}).items()):
+        for c in sorted(set(names or [])):
+            if c in adata.obs and pd.api.types.is_numeric_dtype(adata.obs[c]) \
+                    and not pd.api.types.is_bool_dtype(adata.obs[c]):
+                cols.append((owner, c))
+    out = {}
+    for i, (o1, c1) in enumerate(cols):
+        for o2, c2 in cols[i + 1:]:
+            if o1 == o2:
+                continue
+            x = pd.to_numeric(adata.obs[c1], errors="coerce")
+            y = pd.to_numeric(adata.obs[c2], errors="coerce")
+            m = np.isfinite(x) & np.isfinite(y)
+            n = int(m.sum())
+            if n < min_cells:
+                continue
+            xr, yr = x[m].rank(), y[m].rank()
+            if xr.std(ddof=0) == 0 or yr.std(ddof=0) == 0:
+                continue
+            rho = float(np.corrcoef(xr, yr)[0, 1])
+            if rho != rho:
+                continue
+            rec = {"rho": round(rho, 4), "n": n,
+                   "a": {"plugin": o1, "column": c1}, "b": {"plugin": o2, "column": c2}}
+            out.setdefault(o1, []).append(rec)
+            out.setdefault(o2, []).append(rec)
+    for k in out:
+        out[k].sort(key=lambda r: -abs(r["rho"]))
+    return out
+
+
 def describe(adata, keys, organism, assay, constraint_src):
     """The provenance block: what was found, and whether it was told or guessed."""
     return {

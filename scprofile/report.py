@@ -439,8 +439,46 @@ def _by_arm_block(by_arm, *, aware):
             "plugin wrote, and described rather than tested.</p>" + "".join(blocks))
 
 
+def _concordance_block(name, recs):
+    """This plugin's per-cell numbers against every OTHER plugin's, on both their pages.
+
+    A diagnostic is useless on the page of the plugin that computed it. One plugin's summary
+    reads "the check that a trajectory is not a cell-cycle axis" and the trajectory is on
+    another plugin's page; the check was computed, reported and never applied to the claim it
+    exists to bound - the same shape as an upstream constraint that reaches an index and none of
+    the pages a reader quotes from.
+
+    It is also the only second opinion a trajectory gets here. Confirming a trajectory with more
+    than one method is what the field asks for when the topology is not known in advance
+    (Heumos et al., Nat Rev Genet 2023), and two plugins that each order the same cells are two
+    methods whether or not they were run for that purpose.
+
+    Rho and n, sorted by strength, NOT thresholded and NOT interpreted. Which correlation
+    matters is a question about the biology; that these two columns move together is arithmetic.
+    """
+    if not recs:
+        return ""
+    rows = []
+    for r in recs:
+        a, b = r["a"], r["b"]
+        mine, theirs = (a, b) if a["plugin"] == name else (b, a)
+        rho = float(r["rho"])
+        rows.append(f"<tr><td><code>{_e(mine['column'])}</code></td>"
+                    f"<td><code>{_e(theirs['column'])}</code><br>"
+                    f"<span class='sub'>from {_e(theirs['plugin'])}</span></td>"
+                    f"<td>{rho:+.3f}</td><td>{r['n']:,}</td></tr>")
+    return ("<h2>Against the other plugins</h2><p class='sub'>Spearman rank correlation between "
+            "this plugin's per-cell numbers and those another plugin produced on the same cells. "
+            "An ordering that tracks a cell-cycle score may be a cell-cycle axis; two orderings "
+            "that agree are two methods agreeing. Nothing here is thresholded or interpreted — "
+            "which of these matters is a question about the biology.</p>"
+            "<div class='wrap'><table><tr><th>this plugin</th><th>against</th>"
+            "<th>rho</th><th>cells</th></tr>" + "".join(rows) + "</table></div>")
+
+
 def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
-                 spec=None, constraint="", binds=(), by_arm=None, aware=False):
+                 spec=None, constraint="", binds=(), by_arm=None, aware=False,
+                 concordance=()):
     """One kernel's own page. Ends in its own limits, not a shared block."""
     p = payload or {}
     caveats = p.get("caveats") or []
@@ -483,6 +521,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     if p.get("per_unit") and units:
         body.append(_across_units(units, (spec or {}).get("unit_metrics")))
     body.append(_by_arm_block(by_arm, aware=bool(aware)))
+    body.append(_concordance_block(name, concordance))
     body.append(_figure_section(p.get("figures") or [], spec))
     if p.get("per_unit") and units:
         # Nine of ten unit payloads used to be discarded by a dict comprehension keyed on the
@@ -675,5 +714,6 @@ def write_all(out_dir, payload):
                      merged=mg.get(name), spec=rs.get(name),
                      constraint=con, binds=cb.get(name) or [],
                      by_arm=(payload.get("by_arm") or {}).get(name),
-                     aware=bool((payload.get("design_aware") or {}).get(name)))
+                     aware=bool((payload.get("design_aware") or {}).get(name)),
+                     concordance=(payload.get("concordance") or {}).get(name) or [])
     return write_index(out_dir, payload)

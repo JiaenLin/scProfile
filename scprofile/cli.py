@@ -861,8 +861,22 @@ def _run(a):
     if _by_arm:
         print(f"  across the design: {', '.join(sorted(_by_arm))}")
 
+    # ONE PLUGIN'S NUMBER AGAINST ANOTHER'S. A diagnostic is useless on the page of the plugin
+    # that computed it: one plugin exists partly to check that a trajectory is not a cell-cycle
+    # axis, and the trajectory is on a different page. Only the host holds both columns.
+    _conc = {}
+    try:
+        _conc = inputs.concordance(A, {n: list((sl or {}).get("obs") or [])
+                                       for n, sl in merged_slots.items()})
+    except Exception as e:                                                # noqa: BLE001
+        print(f"  cross-plugin concordance not computed: {type(e).__name__}: {e}")
+    if _conc:
+        _pairs = {(r["a"]["column"], r["b"]["column"]) for v in _conc.values() for r in v}
+        print(f"  cross-plugin concordance: {len(_pairs)} pair(s) over "
+              f"{len(_conc)} plugin(s)")
+
     payload = {"version": _v(), "input": str(a.h5ad), "describe": describe,
-               "by_arm": _by_arm,
+               "by_arm": _by_arm, "concordance": _conc,
                "memory_model": memory_model,
                "constraint_on_use": constraint, "constraint_source": csrc,
                # WHICH PLUGINS THE CONSTRAINT BINDS, AND ON WHICH FACTORS - decided by the host,

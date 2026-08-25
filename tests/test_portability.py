@@ -730,5 +730,54 @@ ck("a plugin shown per arm is bound by the constraint that bounds such claims",
    "or n in _by_arm" in _clisrc,
    "the bound must grow with the set of pages making a claim across the design")
 
+# ---------------------------------------------------------------------------------------------
+# A DIAGNOSTIC IS USELESS ON THE PAGE OF THE PLUGIN THAT COMPUTED IT.
+#
+# One plugin's own summary reads "the check that a trajectory is not a cell-cycle axis". The
+# trajectory is on a different plugin's page, and nothing connected the two — so the check was
+# computed, reported, and never applied to the claim it exists to bound. The same shape as an
+# upstream constraint that reaches an index and none of the pages a reader quotes from.
+# ---------------------------------------------------------------------------------------------
+print("\na diagnostic reaches the page carrying the claim it bounds")
+import numpy as _np, pandas as _pd                                              # noqa: E402
+_n = 3000
+_r = _np.random.RandomState(0)
+_t = _np.linspace(0, 1, _n)
+
+
+class _Ord:
+    obs = _pd.DataFrame({"ordering": _t,
+                         "phase_score": _t * 0.8 + _r.normal(0, 0.3, _n),
+                         "other_ordering": _t + _r.normal(0, 0.05, _n),
+                         "unrelated": _r.normal(size=_n),
+                         "flat": _np.ones(_n)})
+
+
+_c = inputs.concordance(_Ord(), {"p1": ["ordering"], "p2": ["phase_score", "flat"],
+                                 "p3": ["other_ordering", "unrelated"]})
+ck("a plugin's number is compared with another plugin's", bool(_c.get("p1")))
+ck("two orderings that agree are found",
+   any(abs(x["rho"]) > 0.9 for x in _c["p1"]), str(_c.get("p1")))
+ck("an ordering tracking a phase score is found",
+   any(0.4 < abs(x["rho"]) < 0.9 for x in _c["p1"]))
+ck("an unrelated column is reported too, not filtered away",
+   any(abs(x["rho"]) < 0.1 for x in _c["p1"]),
+   "silently dropping weak pairs would make the strong ones look selected")
+ck("a constant column has no rank correlation and is skipped",
+   not any("flat" in (x["a"]["column"], x["b"]["column"]) for x in _c.get("p1", [])))
+ck("two columns from ONE plugin are that plugin's own business",
+   not any(x["a"]["plugin"] == x["b"]["plugin"] for v in _c.values() for x in v))
+ck("strongest first", [abs(x["rho"]) for x in _c["p1"]]
+   == sorted((abs(x["rho"]) for x in _c["p1"]), reverse=True))
+ck("too few overlapping cells is not a correlation",
+   inputs.CONCORDANCE_MIN_CELLS >= 200)
+_hb = _RP._concordance_block("p1", _c["p1"])
+ck("the pair appears on the page of BOTH plugins",
+   "p3" in _hb and "p1" in _RP._concordance_block("p3", _c["p3"]))
+ck("the page names the other plugin, not just the column", "from " in _hb)
+ck("it is not thresholded or starred",
+   "*" not in _hb and "significant" not in _hb.lower())
+ck("no pairs, no section", _RP._concordance_block("p1", []) == "")
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
