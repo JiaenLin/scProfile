@@ -88,6 +88,34 @@ PLUGIN = {
     #                    "cite": "TODO", "note": "TODO"},
     # },
 
+    # WHAT THE PAGE SHOULD CONTAIN. The reporter reads this, orders the panels by `shows`, prints
+    # each `question` above its panel, and states any declared panel that was NOT drawn - which is
+    # the thing a reader cannot see for themselves. It knows no id here and never will: it
+    # positions by `shows`, captions by `question` and links by `source`, so a plugin written
+    # outside this repository is reported exactly as well as one inside it.
+    #
+    # DIAGNOSTICS FIRST, and that ordering is the point rather than a style. A result under a
+    # failed check is a number, not an answer, and a reader must meet the check first.
+    #   diagnostic   did this method's assumptions hold on THIS data?
+    #   result       the answer it was run for
+    #   comparison   the same question answered a second way - needs another plugin, so this is
+    #                the one kind of panel that can be absent because something else did not run
+    #
+    # `source` is the table the panel must be drawable from. A figure whose numbers cannot be
+    # opened is a figure a reader has to believe. The `id` is what `emit_figure` is called with.
+    "report": {
+        "figures": [
+            {"id": "TODO_check", "shows": "diagnostic", "required": True,
+             "question": "TODO - the check that decides whether the result below means anything",
+             "source": "figures/TODO_check.csv"},
+            {"id": "TODO_result", "shows": "result", "required": True,
+             "question": "TODO - the question this method was run to answer",
+             "source": "figures/TODO_result.csv"},
+        ],
+        # Another plugin answering the same question from different evidence, if there is one.
+        # "reads_with": ["TODO"],
+    },
+
     # WHAT A READER MUST NOT CONCLUDE. Required, and the most valuable field here: a result whose
     # limits were never written down is one somebody will over-read.
     "cannot_show": [
@@ -102,7 +130,8 @@ def run(ctx):
         "__NAME__: run(ctx) is a skeleton. Replace this with the method call.\\n"
         "  ctx.counts() / ctx.X / ctx.obs(role) give you the data, resolved by ROLE\\n"
         "  ctx.cores is your share — never os.cpu_count()\\n"
-        "  ctx.emit_obs / emit_table / emit_figure declare results; ctx.caveat states limits\\n"
+        "  ctx.emit_obs / emit_table declare results; ctx.caveat states limits\\n"
+        "  ctx.emit_figure(id, ...) - the id MUST be one declared in PLUGIN['report']\\n"
         "  ctx.refuse(what, why) when the data cannot support the claim — never return a\\n"
         "  smaller answer that looks like a real one")
 

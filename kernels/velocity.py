@@ -213,6 +213,58 @@ PLUGIN = {
         ],
     },
 
+    # WHAT ITS PAGE SHOULD CONTAIN, declared so the reporter can lay it out, caption it, and say
+    # which panel is MISSING. Retrofitted to nine panels this plugin already drew: before this
+    # block existed the page was those nine in emission order, with nothing on it saying that the
+    # first four are checks on whether the field means anything and the rest are the field.
+    #
+    # `shows` is the whole of the reporter's knowledge. It knows no id here and never will.
+    "report": {
+        "figures": [
+            {"id": "F1_proportions", "shows": "diagnostic", "required": True,
+             "question": "is there enough unspliced signal for the model to fit?",
+             "source": "figures/F1_proportions.csv"},
+            {"id": "F4_confidence", "shows": "diagnostic", "required": True,
+             "question": "do neighbouring cells agree on the direction?",
+             "source": "figures/F4_confidence.csv"},
+            {"id": "F9_by_population", "shows": "diagnostic", "required": True,
+             "question": "where is the field trustworthy, population by population?",
+             "source": "figures/F9_by_population.csv"},
+            # OPTIONAL, AND THE REASON IS THE FINDING. Only a small subset of genes obeys the
+            # kinetics these models assume, and where none does the field rests on nothing - so
+            # the absence of this panel says more than the panel would.
+            {"id": "F5_phase_portraits", "shows": "diagnostic", "required": False,
+             "question": "do the driver genes actually obey the kinetics the model assumes?",
+             "source": "figures/F5_phase_portraits.csv",
+             "when_absent": "no gene passed the dynamical fit, so there is no phase portrait to "
+                            "draw. Read the field below as resting on the steady-state "
+                            "approximation alone."},
+            {"id": "F8_drivers", "shows": "diagnostic", "required": False,
+             "question": "which genes carry the field?",
+             "source": "figures/F8_drivers.csv",
+             "when_absent": "the fit produced no ranking column, so the genes driving the field "
+                            "cannot be named - only that some do."},
+            {"id": "F2_stream", "shows": "result", "required": True,
+             "question": "which way is the field pointing?",
+             "source": "figures/F2_stream.csv"},
+            {"id": "F3_grid", "shows": "result", "required": True,
+             "question": "does the field hold without interpolation between cells?",
+             "source": "figures/F3_grid.csv"},
+            {"id": "F6_transitions", "shows": "result", "required": True,
+             "question": "which populations flow into which?",
+             "source": "figures/F6_transitions.csv"},
+            {"id": "F7_pseudotime", "shows": "result", "required": True,
+             "question": "what ordering does the field imply?",
+             "source": "figures/F7_pseudotime.csv"},
+        ],
+        # THE PAIRING. Velocity and a pseudotime built without it answer the same question from
+        # different evidence, and a published comparison exists precisely because velocity can be
+        # wrong where the ordering is right (CellRank 2, Nat Methods 2024). Declared here so the
+        # reporter can name the missing half as an absence rather than leave the page silent;
+        # neither plugin can draw the comparison alone.
+        "reads_with": ["pseudotime"],
+    },
+
     "cannot_show": [
         "Velocity is a DIRECTION, not a rate of change in real time. Arrow length is not speed in "
         "hours, and two datasets' arrow lengths are not comparable.",

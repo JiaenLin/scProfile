@@ -185,6 +185,49 @@ def declaration_drift(kernel, payload):
     return out
 
 
+def figure_drift(kernel, payload):
+    """What the plugin DREW, against what its `report` block said it would.
+
+    The same edge as `declaration_drift` and for the same reason - the run has already happened
+    and the declaration is right there - applied to the half of the contract that had no check at
+    all. Seven of the nine shipped plugins emitted no figure and every gate passed, because
+    nothing anywhere compared a page against what it was supposed to contain.
+
+    A plugin that declares no block is not drifting; it has said nothing to drift from. That is a
+    WARN at declaration time and is not repeated per run.
+    """
+    from .declare import report_figures
+
+    out = []
+    declared = report_figures(kernel.spec)
+    if not declared:
+        return out
+    if payload.get("status") in ("refused", "partial"):
+        return out          # a refusal is allowed to draw nothing; it said why
+
+    drew = {str(f.get("id") or "") for f in (payload.get("figures") or []) if isinstance(f, dict)}
+    for d in declared:
+        fid = str(d.get("id") or "")
+        if fid in drew or not d.get("required", True):
+            continue
+        out.append(Diagnosis(
+            DECLARATION,
+            f"declares figure {fid!r} in `report.figures` as required and did not emit it. The "
+            f"page states it as NOT PRODUCED, which tells a reader the run is incomplete; if the "
+            f"panel is not always drawable, mark it optional and say when.",
+            action=f"emit {fid!r}, or set required=False with a `when_absent` reason"))
+    for fid in sorted(drew - {str(d.get("id") or "") for d in declared}):
+        if not fid:
+            continue
+        out.append(Diagnosis(
+            DECLARATION,
+            f"emitted figure {fid!r}, which its `report` block does not declare. The page shows "
+            f"it under 'drawn, and not declared', with nothing saying what it is for.",
+            action=f"add {fid!r} to `report.figures` with its question, its source and whether it "
+                   f"is a diagnostic or the result"))
+    return out
+
+
 def sentinel_as_population(out_dir, payload, sentinels):
     """Did this plugin report an annotator's refusal as though it were a cell type?
 

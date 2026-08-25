@@ -322,6 +322,18 @@ class Kernel:
         return self._list("cannot_show")
 
     @property
+    def report_spec(self):
+        """What this kernel says its own report should contain. `{}` when it declares none.
+
+        Read from the declaration, never from the host. The reporter is the third consumer of a
+        plugin's own words - after the builder and the planner - and it gets them the same way
+        those two do, so a plugin written outside this repository is reported as well as one
+        inside it.
+        """
+        b = self.spec.get("report")
+        return b if isinstance(b, dict) else {}
+
+    @property
     def when_to_use(self):
         """One line saying WHEN this kernel is the right thing to run.
 

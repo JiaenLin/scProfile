@@ -71,7 +71,124 @@ def _limits(items):
             + "".join(f"<li>{_e(x)}</li>" for x in items) + "</ul></div>")
 
 
-def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None):
+#: What each `shows` group is called on the page, and the sentence under the heading. The
+#: reporter's whole knowledge of what a figure is: three groups, no ids, no plugin names.
+_GROUPS = (
+    ("diagnostic", "Did the method's assumptions hold here?",
+     "Read these before the result. They are the checks on whether this method could answer "
+     "the question on this data at all; a result under a failed check is a number, not an "
+     "answer."),
+    ("result", "What it found",
+     "The answer the method was run for. Its limits are at the foot of this page."),
+    ("comparison", "The same question, answered another way",
+     "Drawn against a second method. Agreement is evidence; disagreement is a finding. A panel "
+     "missing here usually means the other half of the pair did not run."),
+)
+
+
+def _panel(f, index, *, note=""):
+    """One drawn panel: the image, its caption, its vector and its source data."""
+    rel = f"../{f['path']}"
+    extra = []
+    if f.get("vector"):
+        extra.append(f'<a href="../{_e(f["vector"])}">vector (PDF)</a>')
+    if f.get("source"):
+        extra.append(f'<a href="../{_e(f["source"])}">source data</a>')
+    else:
+        extra.append('<span class="nosrc">no source data</span>')
+    unit = f.get("unit")
+    head = f"Figure {index}." + (f" <code>{_e(unit)}</code>" if unit else "")
+    return (f'<figure><img src="{_e(rel)}" alt="{_e(f.get("id") or f["path"])}">'
+            f'<figcaption><b>{head}</b> {_e(f.get("caption") or "")}'
+            + (f'<br><span class="sub">{_e(note)}</span>' if note else "")
+            + f'<br><span class="sub">{" &middot; ".join(extra)}</span></figcaption></figure>')
+
+
+def _absent_panel(decl, kind):
+    """A declared panel that was not drawn. Never a gap.
+
+    A gap on a page reads as a figure nobody thought was needed, which is the one reading that is
+    never true here: the plugin declared it, so somebody thought it was needed and it is not
+    there. `required` decides whether that is a property of the data or a defect in the run.
+    """
+    why = str(decl.get("when_absent") or "").strip()
+    if decl.get("required", True):
+        body = ("<b>NOT PRODUCED</b> — this plugin declares this panel as required and did not "
+                "emit it. The method ran; the panel did not. That is a defect in the plugin, not "
+                "a property of these data.")
+        cls = "bad"
+    else:
+        body = "<b>not produced</b> — " + (why or "the plugin gave no reason, which is itself a "
+                                                 "gap in its declaration")
+        cls = "warn"
+    return (f'<div class="{cls}"><p class="sub">{_e(kind)} · '
+            f'{_e(decl.get("question") or "")}</p>{body}</div>')
+
+
+def _figure_section(figs, spec):
+    """The figure half of a kernel page, laid out by what each panel is FOR.
+
+    TWO SHAPES, AND THE SECOND IS NOT A FALLBACK TO BE REMOVED. A plugin that declares a `report`
+    block gets its panels ordered diagnostic-first, each under the question it answers, with every
+    declared panel it did not draw stated in place. A plugin that declares none gets what this
+    page has always done - the panels it emitted, in the order it emitted them - because the
+    declaration has to be worth adding for a plugin written outside this repository, and a
+    reporter that renders nothing without one is a reporter nobody's plugin survives.
+    """
+    from .declare import figures_in
+
+    declared = figures_in(spec)
+    if not declared:
+        if not figs:
+            return ""
+        panels = "".join(_panel(f, i + 1) for i, f in enumerate(figs))
+        return ("<h2>Figures</h2><p class='sub'>In the order this plugin emitted them: it "
+                "declares no <code>report</code> block, so nothing here can say what a panel is "
+                "for, or that one is missing.</p>" + panels)
+
+    # BY ID, AND A LIST PER ID. A per-unit plugin emits the same panel once per unit, and folding
+    # them to one would report nine units' work as one figure and silently pick whichever came
+    # back first.
+    by_id = {}
+    for f in figs:
+        by_id.setdefault(str(f.get("id") or ""), []).append(f)
+
+    out, n = [], 0
+    for kind, title, blurb in _GROUPS:
+        here = [d for d in declared if d.get("shows") == kind]
+        if not here:
+            continue
+        body = []
+        for d in here:
+            got = by_id.get(str(d.get("id") or ""), [])
+            q = f'<h3>{_e(d.get("question") or d.get("id"))}</h3>'
+            if not got:
+                body.append(q + _absent_panel(d, kind))
+                continue
+            body.append(q)
+            for f in got:
+                n += 1
+                body.append(_panel(f, n))
+        out.append(f"<h2>{_e(title)}</h2><p class='sub'>{_e(blurb)}</p>" + "".join(body))
+
+    # EMITTED AND NOT DECLARED. Rendered, always - a panel that was drawn must appear, or the
+    # page hides work the run did - but named as undeclared, because an undeclared panel is one
+    # no question describes and no `cannot_show` was written against.
+    extra = [f for f in figs if str(f.get("id") or "") not in {str(d.get("id")) for d in declared}]
+    if extra:
+        out.append("<h2>Drawn, and not declared</h2><p class='sub'>These panels were emitted and "
+                   "the plugin's <code>report</code> block does not list them, so nothing states "
+                   "what they are for.</p>"
+                   + "".join(_panel(f, n + i + 1) for i, f in enumerate(extra)))
+
+    if declared:
+        out.append("<p class='sub'>Every panel is written as a raster preview and as a vector PDF "
+                   "with live text, at journal column width. The source data link opens the table "
+                   "the panel was drawn from.</p>")
+    return "".join(out)
+
+def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
+                 spec=None):
     """One kernel's own page. Ends in its own limits, not a shared block."""
     p = payload or {}
     caveats = p.get("caveats") or []
@@ -107,36 +224,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None):
         body.append("<h2>What it could not produce</h2><div class='bad'><ul>"
                     + "".join(f"<li><b>{_e(a.get('what', '?'))}</b> — {_e(a.get('why', ''))}</li>"
                               for a in absent) + "</ul></div>")
-    figs = p.get("figures") or []
-    if figs:
-        # Paths here are RELATIVE TO THE RUN DIRECTORY, normalised by merge.fold_payloads. They
-        # were relative to the kernel's own output directory and re-prefixed here with a guessed
-        # `../kernels/<name>/`, which was right until an instance directory gained a unit segment
-        # - and then every image, vector link and source link on a per-unit plugin's page 404'd.
-        # The comment this replaces recorded the SAME failure being fixed once already, one path
-        # segment lower down. A page of broken images is indistinguishable from a page of nothing.
-        panels = []
-        for i, f in enumerate(figs):
-            if not isinstance(f, dict):
-                f = {"path": f, "caption": ""}
-            rel = f"../{f['path']}"
-            extra = []
-            if f.get("vector"):
-                extra.append(f'<a href="../{_e(f["vector"])}">vector (PDF)</a>')
-            if f.get("source"):
-                extra.append(f'<a href="../{_e(f["source"])}">source data</a>')
-            else:
-                extra.append('<span class="nosrc">no source data</span>')
-            cap = _e(f.get("caption") or "")
-            panels.append(
-                f'<figure><img src="{_e(rel)}" alt="{_e(f["path"])}">'
-                f'<figcaption><b>Figure {i + 1}.</b> {cap}'
-                f'<br><span class="sub">{" &middot; ".join(extra)}</span></figcaption></figure>')
-        body.append(
-            "<h2>Figures</h2>"
-            "<p class='sub'>Every panel is written as a raster preview and as a vector PDF with "
-            "live text, at journal column width. The source data link opens the table the panel "
-            "was drawn from.</p>" + "".join(panels))
+    body.append(_figure_section(p.get("figures") or [], spec))
     units = p.get("units") or []
     if p.get("per_unit") and units:
         # Nine of ten unit payloads used to be discarded by a dict comprehension keyed on the
@@ -315,7 +403,11 @@ def write_all(out_dir, payload):
     cs = payload.get("cannot_show") or {}
     sm = payload.get("summaries") or {}
     mg = payload.get("merged") or {}
+    # FROM THE PAYLOAD, not from the installed plugin. `scprofile report` rebuilds these documents
+    # from report.json alone; reading the declaration live would describe what the plugin promises
+    # today over numbers it produced some other day.
+    rs = payload.get("report_spec") or {}
     for name, p in (payload.get("kernels") or {}).items():
         write_kernel(out_dir, name, p, cs.get(name, []), sm.get(name, ""),
-                     merged=mg.get(name))
+                     merged=mg.get(name), spec=rs.get(name))
     return write_index(out_dir, payload)

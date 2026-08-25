@@ -668,7 +668,7 @@ def _run(a):
             # THE run -> declare EDGE, the cheapest in the loop: the run has happened and the
             # declaration is right there. A plugin whose `produces` no longer matches what it
             # emits has drifted, and the next person to read the declaration will believe it.
-            for dd in FB.declaration_drift(ks[name], pl):
+            for dd in FB.declaration_drift(ks[name], pl) + FB.figure_drift(ks[name], pl):
                 print(f"      [{dd.layer}] {dd.why}")
                 diagnoses.append(dd)
             # AND THE RULE THE HOST STATES BUT CANNOT APPLY. Only the plugin knows what it groups
@@ -813,6 +813,12 @@ def _run(a):
                "diagnoses": [d.as_dict() for d in diagnoses],
                "repaired": sorted(repaired),
                "cannot_show": {n: ks[n].cannot_show for n in sorted(ks)},
+               # WHAT EACH PLUGIN SAID ITS REPORT SHOULD CONTAIN, carried into the payload rather
+               # than read from the plugin at render time. `scprofile report` rebuilds the
+               # documents from this file alone, months later and possibly on another machine:
+               # a reporter that went back to the declaration would render a page describing
+               # whatever the plugin says TODAY over numbers from the run that happened then.
+               "report_spec": {n: ks[n].report_spec for n in sorted(ks)},
                "summaries": {n: ks[n].summary for n in sorted(ks)},
                # WHAT THE PLUGINS ACTUALLY READ. When a plugin's pinned anndata cannot read the
                # object as written, the host hands it a compatibility copy instead - the matrices

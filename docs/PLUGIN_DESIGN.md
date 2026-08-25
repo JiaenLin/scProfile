@@ -142,6 +142,61 @@ one array would place values that are not the same quantity in the same column.
 
 ---
 
+### `report` — what the page should contain
+
+The reporter is the third consumer of a plugin's own words, after the builder and the planner, and
+it reads them the same way. Without this block a page is the outputs the plugin declared plus
+whatever figures it happened to emit, in emission order, with nothing on it saying what a panel is
+for or that one is missing.
+
+```python
+"report": {
+    "figures": [
+        {"id": "confidence",
+         "shows": "diagnostic",
+         "question": "do neighbouring cells agree on the direction?",
+         "source": "figures/confidence.csv",
+         "required": True},
+        {"id": "phase_portraits",
+         "shows": "diagnostic",
+         "question": "do the driver genes obey the kinetics the model assumes?",
+         "source": "figures/phase_portraits.csv",
+         "required": False,
+         "when_absent": "no gene passed the dynamical fit, so the field below rests on the "
+                        "steady-state approximation alone"},
+    ],
+    "reads_with": ["pseudotime"],
+}
+```
+
+| field | is |
+|---|---|
+| `id` | the name `emit_figure` is called with. The join between the declaration and the panel |
+| `shows` | `diagnostic`, `result` or `comparison`. The only vocabulary the reporter understands |
+| `question` | printed above the panel, so a reader knows what it is for before deciding whether it answers them |
+| `source` | the table the panel must be drawable from |
+| `required` | default `True`. A required panel that is absent is a defect; an optional one is a property of the data |
+| `when_absent` | the sentence printed in an optional panel's place |
+| `reads_with` | plugins that answer the same question from different evidence |
+
+**Diagnostics come first, and that is the point rather than a style.** A result under a failed
+check is a number, not an answer, so the reporter orders every page `diagnostic` → `result` →
+`comparison` and a reader meets the checks before the headline.
+
+**The reporter knows this vocabulary and no figure.** It positions a panel by `shows`, captions it
+by `question` and links it by `source`. It holds no list of ids, no idea what any panel draws, and
+gains nothing when a plugin arrives with panels nobody has seen — a reporter that knew the ids
+would be wrong about every plugin it had not been told about.
+
+**A declared panel that was not drawn is stated, never left as a gap.** A gap on a page reads as a
+figure nobody thought was needed, which is the one reading that is never true: the plugin declared
+it. `figure_drift` reports the same mismatch to the maintainer, in both directions — declared and
+not drawn, drawn and not declared — the way `produces` already is.
+
+**The block is optional.** A plugin without one still runs and still reports; `declare.check`
+returns a WARN, not an ERROR. A format that refuses a plugin for not having it yet is a format
+nobody adopts.
+
 ## What the host guarantees
 
 Everything below happens for every plugin, in `_entry.py`, and none of it is a plugin's business:

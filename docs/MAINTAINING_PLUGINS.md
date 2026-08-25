@@ -39,6 +39,7 @@ later, elsewhere, about a method you wrote and they did not.
 | `references` with a `tier` | see no reference at all | the plan cannot warn, the report cannot name what decided the answer |
 | `per_unit` / `also_cohort` | run one pooled fit | an answer describing the average of the conditions, which may describe none of them |
 | `gpus` | assume none | |
+| `report.figures` | lay out whatever you emitted, in emission order | nothing says what a panel is for, and an absent panel is indistinguishable from one nobody wanted |
 
 **Measure the memory, do not estimate it.** Every run fits both terms from your plugin's own
 instances and prints them ready to paste. The estimate this project's most expensive plugin

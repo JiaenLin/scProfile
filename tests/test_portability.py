@@ -265,5 +265,83 @@ ck("no upstream tool is named in the reader",
            for t in ("scqc", "scanno")),
    "the reader still names a specific pipeline")
 
+print("\nthe reporter knows what a panel is FOR and no panel by name")
+# A REPORTER THAT KNEW THE IDS WOULD BE WRONG ABOUT EVERY PLUGIN IT HAD NOT BEEN TOLD ABOUT -
+# the defect `_who_produces` in kernels.py was written to record, arriving in a third domain.
+# The vocabulary is three words; everything else about a panel comes from the plugin's own
+# declaration, so a tenth plugin with panels nobody has seen is laid out as well as the nine.
+from scprofile import declare as _dc, report as _rp                            # noqa: E402
+from scprofile.kernels import discover as _disc                                # noqa: E402
+
+_HOST = {q.name: q.read_text() for q in
+         (Path(__file__).resolve().parents[1] / "scprofile").glob("*.py")}
+_ids = sorted({str(f.get("id")) for k in _disc().values()
+               for f in _dc.report_figures(k.spec) if f.get("id")})
+ck("some plugin declares panels at all, or this check proves nothing", bool(_ids), str(_ids))
+_leak = [(m, i) for m, s in _HOST.items() for i in _ids if i in s]
+ck("no host module names a figure id", not _leak, str(_leak[:4]))
+ck("the vocabulary is closed and generic",
+   _dc.SHOWS == ("diagnostic", "result", "comparison"), str(_dc.SHOWS))
+_gsrc = inspect.getsource(_rp._figure_section) + str(_rp._GROUPS)
+# ON A WORD BOUNDARY. `de` is a shipped plugin's name and a syllable in half of English, so a
+# substring test fails on the word "declared" and reports a leak that is not one - a guard that
+# cries wolf is a guard somebody deletes.
+_named = [n for n in _disc() if re.search(rf"\b{re.escape(n)}\b", _gsrc)]
+ck("and the reporter's own text names no plugin", not _named, str(_named))
+
+print("\na plugin that declares no report block is still reported")
+# THE DECLARATION MUST BE WORTH ADDING, NOT COMPULSORY. A format that refuses a plugin for not
+# having it yet is a format nobody adopts - and every plugin written before this existed is such
+# a plugin, including any a user wrote against $SCPROFILE_KERNELS.
+_none = _rp._figure_section([{"id": "x", "path": "kernels/k/figures/x.png", "caption": "c"}],
+                            None)
+ck("its emitted panels are still rendered", "x.png" in _none)
+ck("and the page says why it cannot say more", "declares no" in _none)
+ck("nothing is claimed missing", "NOT PRODUCED" not in _none)
+_empty = _rp._figure_section([], None)
+ck("a plugin that drew nothing and declared nothing renders nothing", _empty == "")
+
+print("\na declared panel that was not drawn is stated, never a gap")
+_spec = {"figures": [
+    {"id": "must", "shows": "diagnostic", "question": "q1", "source": "s", "required": True},
+    {"id": "may", "shows": "result", "question": "q2", "source": "s", "required": False,
+     "when_absent": "the data could not support it"}]}
+_out = _rp._figure_section([], _spec)
+ck("a required panel that is absent is a DEFECT on the page", "NOT PRODUCED" in _out)
+# THE TWO ABSENCES MUST NOT LOOK ALIKE. A required panel missing is a defect in the run; an
+# optional one missing is a property of the data, and the page says which with a different class
+# and the plugin's own sentence. Asserted on the classes, because splitting the HTML on an id
+# that is never printed compared the wrong half and passed for the wrong reason.
+ck("an optional one carries the plugin's own reason and is NOT a defect",
+   "the data could not support it" in _out
+   and _out.count("class=\"bad\"") == 1 and _out.count("class=\"warn\"") == 1,
+   f'bad={_out.count(chr(34).join(["class=", "bad", ""]))}')
+ck("both questions are printed whether or not the panel exists",
+   "q1" in _out and "q2" in _out)
+_drawn = _rp._figure_section(
+    [{"id": "undeclared", "path": "kernels/k/figures/u.png", "caption": ""}], _spec)
+ck("a panel drawn and not declared is still shown", "u.png" in _drawn)
+ck("...and named as undeclared", "not declared" in _drawn.lower())
+
+print("\nthe run -> declare edge holds a plugin to its own report block")
+from scprofile import feedback as _fb                                          # noqa: E402
+
+
+class _K:
+    def __init__(self, spec):
+        self.spec = spec
+
+
+ck("no block means nothing to drift from",
+   _fb.figure_drift(_K({}), {"figures": []}) == [])
+_d = _fb.figure_drift(_K({"report": _spec}), {"figures": [{"id": "may"}]})
+ck("a required panel not drawn is a finding", any("must" in d.why for d in _d), str(_d))
+ck("an optional one not drawn is not", not any("'may'" in d.why for d in _d), str(_d))
+_d2 = _fb.figure_drift(_K({"report": _spec}),
+                       {"figures": [{"id": "must"}, {"id": "may"}, {"id": "surprise"}]})
+ck("a panel drawn and not declared is a finding", any("surprise" in d.why for d in _d2), str(_d2))
+ck("a refusal is allowed to draw nothing",
+   _fb.figure_drift(_K({"report": _spec}), {"status": "refused", "figures": []}) == [])
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

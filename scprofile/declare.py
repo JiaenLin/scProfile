@@ -87,6 +87,131 @@ class DeclarationError(Exception):
     """The declaration is wrong. Said here, where it is cheap, not inside somebody's run."""
 
 
+#: What a panel is FOR, and the only vocabulary the reporter understands. Three words, chosen
+#: because they are the three questions a reader asks in this order and no other:
+#:
+#:   diagnostic   did this method's assumptions hold on THIS data? Read before the result,
+#:                because it decides whether the result means anything.
+#:   result       the answer the method was run for.
+#:   comparison   the same question answered a second way. Needs another plugin, so it is the
+#:                one kind of panel that can be absent because something ELSE did not run.
+#:
+#: THE REPORTER KNOWS THIS VOCABULARY AND NO FIGURE. It positions a panel by `shows`, captions it
+#: by `question` and links it by `source`; it has no list of figure ids, no idea what any of them
+#: draws, and gains nothing when a tenth plugin arrives with panels nobody has seen. A reporter
+#: that knew the ids would be wrong about every plugin it had not been told about - the defect
+#: `_who_produces` in kernels.py was written to record.
+SHOWS = ("diagnostic", "result", "comparison")
+
+#: The order the reporter lays them out in. Not alphabetical, not emission order: a reader must
+#: meet the checks on the method before the number it produced.
+SHOWS_ORDER = {k: i for i, k in enumerate(SHOWS)}
+
+
+def figures_in(block) -> list:
+    """The panels a `report` BLOCK declares, in declaration order. `[]` when it declares none.
+
+    TWO READERS BECAUSE THERE ARE TWO SHAPES IN CIRCULATION, and conflating them is silent: the
+    checker and the feedback loop hold a whole plugin spec, while the reporter is handed the block
+    alone out of `report.json` - and a reader that took the wrong one returned `[]` for a plugin
+    that had declared nine panels, which renders as a plugin that declared none.
+
+    A plugin that declares nothing still runs and still reports; its figures are laid out in
+    emission order as they were before this existed. That is deliberate and not a loophole: the
+    declaration must be worth adding for a plugin written outside this repository, and a format
+    that refuses a plugin for not having it yet is a format nobody adopts.
+    """
+    if not isinstance(block, dict):
+        return []
+    figs = block.get("figures")
+    return [f for f in figs if isinstance(f, dict)] if isinstance(figs, list) else []
+
+
+def report_figures(spec) -> list:
+    """The panels a plugin's declaration carries. Takes the whole spec, not the block."""
+    return figures_in((spec or {}).get("report"))
+
+
+def _check_report(spec, out) -> None:
+    """The `report` block: a contract the reporter reads and the run is held to.
+
+    Every rule here exists because the alternative is a page that looks complete. A panel with no
+    question is a picture; a panel with no source is a picture a reader must take on trust; an
+    optional panel with no `when_absent` leaves a gap that reads exactly like a panel nobody
+    thought was needed.
+    """
+    block = spec.get("report")
+    if block is None:
+        out.append(("WARN", "declares no `report` block, so its page is a list of outputs and "
+                            "whatever figures it happened to emit, in emission order. The "
+                            "reporter cannot tell a diagnostic from a result, cannot say what a "
+                            "panel is for, and cannot report one as MISSING - an absent figure "
+                            "and a figure nobody wanted look the same."))
+        return
+    if not isinstance(block, dict):
+        out.append(("ERROR", f"`report` must be a mapping, got {type(block).__name__}"))
+        return
+
+    figs = block.get("figures")
+    if figs is None or (isinstance(figs, list) and not figs):
+        out.append(("WARN", "declares a `report` block with no figures. A result with no panel "
+                            "is a table, and a reader cannot check a table against the data it "
+                            "came from."))
+    elif not isinstance(figs, list):
+        out.append(("ERROR", "`report.figures` must be a list of mappings"))
+        figs = []
+    else:
+        seen = set()
+        for i, f in enumerate(figs):
+            at = f"report.figures[{i}]"
+            if not isinstance(f, dict):
+                out.append(("ERROR", f"{at} must be a mapping, got {type(f).__name__}"))
+                continue
+            fid = str(f.get("id") or "").strip()
+            at = f"report.figures[{fid or i}]"
+            if not fid:
+                out.append(("ERROR", f"{at} declares no `id`. The id is what the reporter "
+                                     f"positions, what `emit_figure` is called with, and what a "
+                                     f"reader names when they refer to the panel."))
+            elif fid in seen:
+                out.append(("ERROR", f"{at} is declared twice. Two panels under one id cannot "
+                                     f"both be reported present or absent."))
+            else:
+                seen.add(fid)
+            if not str(f.get("question") or "").strip():
+                out.append(("ERROR", f"{at} states no `question`. It is printed above the panel "
+                                     f"so a reader knows what it is for before deciding whether "
+                                     f"it answers them."))
+            shows = f.get("shows")
+            if shows not in SHOWS:
+                out.append(("ERROR", f"{at} declares shows={shows!r}; it must be one of "
+                                     f"{', '.join(SHOWS)}. The reporter orders a page by this and "
+                                     f"by nothing else - a reader must meet the checks on the "
+                                     f"method before the number it produced."))
+            if not str(f.get("source") or "").strip():
+                out.append(("ERROR", f"{at} names no `source` table. A figure whose numbers "
+                                     f"cannot be opened is a figure a reader has to believe, and "
+                                     f"several journals now require the source data beside the "
+                                     f"panel."))
+            if not f.get("required", True) and not str(f.get("when_absent") or "").strip():
+                out.append(("WARN", f"{at} is optional and says nothing for the case where it is "
+                                    f"absent. The reporter will print that it was not produced "
+                                    f"and no reason, which reads as an oversight rather than as "
+                                    f"a property of the data."))
+
+    rw = block.get("reads_with")
+    if rw is not None:
+        if not isinstance(rw, list) or any(not isinstance(x, str) for x in rw):
+            out.append(("ERROR", "`report.reads_with` must be a list of plugin names"))
+        elif spec.get("name") and spec["name"] in rw:
+            out.append(("ERROR", "`report.reads_with` names this plugin itself"))
+
+    extra = sorted(set(block) - {"figures", "reads_with"})
+    if extra:
+        out.append(("WARN", f"`report` carries unknown key(s) {', '.join(extra)}. The reporter "
+                            f"ignores them, so they are a note to a human that reads as a "
+                            f"setting."))
+
 def check(spec, name="<plugin>"):
     """Every problem with a declaration, as a list. Empty means it is usable.
 
@@ -230,6 +355,8 @@ def check(spec, name="<plugin>"):
                 out.append(("WARN", f"env pin {pin!r} is not exact. A lower bound is honest about "
                                     f"what a tool was written against and says nothing about "
                                     f"what it still works with."))
+
+    _check_report(spec, out)
 
     w = spec.get("wraps") or {}
     if w and not (spec.get("upstream") or {}).get("docs"):

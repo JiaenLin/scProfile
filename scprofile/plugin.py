@@ -559,7 +559,12 @@ class Context:
                 source.to_csv(src)
             else:
                 src = Path(source)
-        self._figures.append({"path": png, "vector": pdf, "source": src, "caption": caption})
+        # THE ID IS THE NAME IT WAS EMITTED UNDER, and that is the whole join between the
+        # declaration and the panel. Without it the reporter can count figures and nothing else:
+        # it cannot say which declared panel is missing, and a missing panel is the one thing a
+        # reader cannot see for themselves.
+        self._figures.append({"id": str(name), "path": png, "vector": pdf, "source": src,
+                              "caption": caption})
         if close:
             try:
                 import matplotlib.pyplot as plt
