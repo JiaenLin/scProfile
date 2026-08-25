@@ -94,7 +94,13 @@ def test_captioned_figures(tmp):
     check("vector recorded", f0.get("vector") == "figures/F1.pdf", str(f0))
     check("source recorded", f0.get("source") == "figures/source_data/F1.csv", str(f0))
     check("subdirectory kept in the path", f0["path"] == "figures/F1.png", str(f0))
-    check("a bare path still works", f1 == {"path": "figures/F2.png", "caption": ""}, str(f1))
+    # THE BARE FORM GAINS AN ID, from the file's stem. It is the join to `report.figures`, and
+    # `emit_figure` names the file after the id anyway - so the one-line form a plugin uses while
+    # it is being written joins up exactly as the full mapping does.
+    check("a bare path still works",
+          f1 == {"id": "F2", "path": "figures/F2.png", "caption": ""}, str(f1))
+    check("...and both forms carry an id, which is what the report joins on",
+          f0.get("id") == "F1" and f1.get("id") == "F2", f"{f0.get('id')} {f1.get('id')}")
     check("figure_paths finds every file", len(manifest.figure_paths(d)) == 4,
           str(manifest.figure_paths(d)))
 
