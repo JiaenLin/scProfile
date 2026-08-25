@@ -75,15 +75,55 @@ def use():
     return plt
 
 
+#: Paul Tol's qualitative schemes, appended to Okabe-Ito for the categories Okabe-Ito runs out
+#: on. Both sets are designed for colour-vision deficiency; together they give twelve hues that
+#: stay separable, which is about where hue stops working as an identifier at all.
+#: https://personal.sron.nl/~pault/ - "muted" and "light", minus the ones too near an Okabe-Ito.
+TOL_EXTRA = ["#332288", "#88CCEE", "#44AA99", "#117733", "#999933", "#DDCC77",
+             "#661100", "#AA4499", "#882255"]
+
+#: Every hue this tool will use for a category, in order.
+CATEGORY_COLOURS = OKABE_ITO[:7] + [c for c in TOL_EXTRA if c not in OKABE_ITO]
+
+#: Above this many categories, no palette separates them and a legend stops being readable.
+#: Not a style rule: at sixteen the eye cannot match a swatch to a dot.
+PALETTE_LIMIT = len(CATEGORY_COLOURS)
+
+
 def palette(labels):
     """A stable colour per label: same label, same colour, in every figure of every kernel.
 
     Keyed on the sorted label list rather than on encounter order, so two figures drawn from
     different subsets of the same data still agree - a legend that means one thing in panel A and
     another in panel B is worse than no legend.
+
+    IT USED TO CYCLE, SILENTLY. `OKABE_ITO[i % 8]` over an annotation with fourteen cell types
+    gave five pairs of real populations the same colour, with a legend that showed each hue twice
+    and nothing anywhere saying so. A palette that fails for readers with colour-vision deficiency
+    was the
+    stated reason for choosing Okabe-Ito in the first place; one that repeats itself fails for
+    everybody.
+
+    The palette is longer now, and where it still runs out `palette_collisions` names the pairs so
+    a caller can say so or label the points directly. It never silently repeats without that being
+    answerable.
     """
     labs = sorted(map(str, labels))
-    return {l: OKABE_ITO[i % len(OKABE_ITO)] for i, l in enumerate(labs)}
+    return {l: CATEGORY_COLOURS[i % len(CATEGORY_COLOURS)] for i, l in enumerate(labs)}
+
+
+def palette_collisions(labels):
+    """`[(colour, [labels])]` for every hue carrying more than one label. `[]` when none.
+
+    A figure with collisions must say so, or label its populations on the plot rather than in a
+    legend. Two cell types under one swatch is a legend that cannot be used, and the reader has
+    no way to discover it.
+    """
+    p = palette(labels)
+    by = {}
+    for l, c in p.items():
+        by.setdefault(c, []).append(l)
+    return sorted((c, sorted(ls)) for c, ls in by.items() if len(ls) > 1)
 
 
 def rasterize_points(ax):

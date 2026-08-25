@@ -281,11 +281,17 @@ def _run(a):
 
     try:
         keys = inputs.detect_keys(
-            A.obs.columns, layers=manifest.layer_names(A), obsm=list(A.obsm),
+            A.obs.columns, layers=manifest.layer_names(A),
+            # WIDTHS, NOT JUST NAMES. Handed a bare list of obsm keys the host could not tell a
+            # 30-dimensional latent from a 2-dimensional layout, and chose the latent as the
+            # thing to draw on - on an object that also carried the UMAP of that same latent.
+            obsm={str(k): int(v.shape[1]) if getattr(v, "ndim", 0) == 2 else None
+                  for k, v in A.obsm.items()},
             overrides={"label": a.label_key, "sample": a.sample_key, "batch": a.batch_key,
                        "counts_layer": a.counts_layer, "compartment": a.compartment_key,
                        "lognorm_layer": getattr(a, "lognorm_layer", None),
-                       "embedding": getattr(a, "embedding", None)})
+                       "embedding": getattr(a, "embedding", None),
+                       "layout": getattr(a, "layout", None)})
     except inputs.Refuse as e:
         print(f"scprofile: REFUSE - {e}", file=sys.stderr)
         return REFUSE
@@ -990,11 +996,17 @@ def _plan(a):
 
     try:
         keys = inputs.detect_keys(
-            A.obs.columns, layers=manifest.layer_names(A), obsm=list(A.obsm),
+            A.obs.columns, layers=manifest.layer_names(A),
+            # WIDTHS, NOT JUST NAMES. Handed a bare list of obsm keys the host could not tell a
+            # 30-dimensional latent from a 2-dimensional layout, and chose the latent as the
+            # thing to draw on - on an object that also carried the UMAP of that same latent.
+            obsm={str(k): int(v.shape[1]) if getattr(v, "ndim", 0) == 2 else None
+                  for k, v in A.obsm.items()},
             overrides={"label": a.label_key, "sample": a.sample_key, "batch": a.batch_key,
                        "counts_layer": a.counts_layer, "compartment": a.compartment_key,
                        "lognorm_layer": getattr(a, "lognorm_layer", None),
-                       "embedding": getattr(a, "embedding", None)})
+                       "embedding": getattr(a, "embedding", None),
+                       "layout": getattr(a, "layout", None)})
     except inputs.Refuse as e:
         print(f"scprofile: REFUSE - {e}", file=sys.stderr)
         return REFUSE
@@ -1036,6 +1048,35 @@ def _plan(a):
             if keys["label"][0] and s in set(A.obs[keys["label"][0]].astype(str))]
     print(f"  annotator sentinels         {', '.join(sent) if sent else 'none present'}"
           + (f"  (looking for {', '.join(sentinels)})" if sentinels and not sent else ""))
+
+    # THE TWO OBSM ROLES, SIDE BY SIDE AND WITH THEIR WIDTHS. A reader cannot otherwise tell that
+    # the thing being computed on and the thing being drawn on are different objects - and neither
+    # could the tool: it planned a plugin as runnable while handing it a 30-column latent to draw
+    # arrows on, and nothing in the plan said what would be drawn on what.
+    _emb = keys.get("embedding", (None,))[0]
+    _lay = keys.get("layout", (None,))[0]
+
+    def _w(k):
+        m = A.obsm.get(k) if k else None
+        return m.shape[1] if getattr(m, "ndim", 0) == 2 else None
+
+    print(f"  representation              "
+          + (f"obsm[{_emb!r}], {_w(_emb)} columns - neighbours and graphs are computed on this"
+             if _emb else "NONE - a plugin needing a neighbour graph will say so"))
+    if _lay:
+        print(f"  layout to draw on           obsm[{_lay!r}], {_w(_lay)} columns - "
+              f"{keys['layout'][1]}")
+    else:
+        # NOT AN ERROR, AND NOT SILENT. A plugin that draws refuses and names the remedy; one
+        # that does not is unaffected. What must not happen is the run finding out.
+        print("  layout to draw on           NONE - no two-column entry in obsm. Any plugin that "
+              "draws will refuse or compute its own; the remedy is "
+              "`sc.pp.neighbors(adata, use_rep=<representation>)` then `sc.tl.umap(adata)`")
+    _wide = sorted(f"{k} ({v.shape[1]}c)" for k, v in A.obsm.items()
+                   if getattr(v, "ndim", 0) == 2 and v.shape[1] != 2)
+    if _wide and not _lay:
+        print(f"      wider entries present, and NOT layouts: {', '.join(_wide[:6])}"
+              + (" ..." if len(_wide) > 6 else ""))
 
     cl = keys.get("counts_layer", (None,))[0]
     if cl:
@@ -1793,6 +1834,11 @@ def main(argv=None):
                    help="obsm key to use as THE embedding. Detected otherwise, with the evidence "
                         "printed. This flag was declared and never read - the embedding was "
                         "picked inline from a fixed list headed by one integration tool's output")
+    r.add_argument("--layout", default=None, metavar="OBSM_KEY",
+                   help="obsm key to DRAW on: a two-column embedding. Detected otherwise, "
+                        "preferring the layout derived from the representation (`X_umap_<name>` "
+                        "beside `X_<name>`). This is not the same key as --embedding, which is "
+                        "what neighbours are computed on and is usually 30-50 columns wide")
     r.add_argument("--sentinels", default=None, metavar="A,B",
                    help="labels an annotator uses for 'no call', REPLACING the default "
                         "EXCLUDED,UNRESOLVED. Pass an empty string if this annotation has none")

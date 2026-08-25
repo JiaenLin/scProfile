@@ -1321,7 +1321,11 @@ def test_every_data_capability_can_actually_be_delivered():
     from scprofile import inputs
     from scprofile.declare import CAPABILITIES
 
-    detected = {r: (f"col_{r}", "detected") for r in inputs.CANDIDATES}
+    # FROM `ROLES`, NOT FROM `CANDIDATES`. Not every role has a candidate list: `layout` is
+    # resolved by a rule that depends on which representation was chosen, so a fixture built from
+    # the candidate table omits it - and this check, whose whole purpose is that no capability is
+    # forgotten, forgot one.
+    detected = {r: (f"col_{r}", "detected") for r in inputs.ROLES}
     km = inputs.capability_keys(detected)
     for cap, spec in sorted(CAPABILITIES.items()):
         if spec["resolve"] != "data" or cap in ("organism", "spliced", "unspliced"):

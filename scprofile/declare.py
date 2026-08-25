@@ -33,7 +33,16 @@ CAPABILITIES = {
     "compartment":  {"resolve": "data",   "why": "a coarser grouping than label"},
     "sample":       {"resolve": "data",   "why": "the unit of replication"},
     "batch":        {"resolve": "data",   "why": "a technical grouping"},
-    "embedding":    {"resolve": "data",   "why": "a cell embedding to compute neighbours on"},
+    # TWO CAPABILITIES, BECAUSE THEY ARE TWO THINGS. The wording here was always right - "to
+    # compute neighbours on" - and two consumers read it as "to draw on" anyway, which put a
+    # 30-dimensional scANVI latent on the x and y axes of four panels. A representation is a
+    # space where distances mean something; a layout is two coordinates made to be looked at.
+    # For a variational latent they are not even close: its dimensions carry no variance
+    # ordering, so the first two are two arbitrary coordinates and draw as a featureless ball.
+    "embedding":    {"resolve": "data",   "why": "a cell embedding to compute neighbours on. "
+                                                 "NOT a thing to draw - see `layout`"},
+    "layout":       {"resolve": "data",   "why": "a TWO-column embedding to draw on, ideally "
+                                                 "the one derived from the representation"},
     "spliced":      {"resolve": "data",   "why": "spliced counts from the aligner. These cannot "
                                                  "be derived later"},
     "unspliced":    {"resolve": "data",   "why": "unspliced counts from the aligner"},

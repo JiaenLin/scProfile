@@ -44,6 +44,11 @@ CANDIDATES = {
     # loop - the only key in the whole tool selected silently, with no evidence line, and headed
     # by one particular integration tool's output name. A user whose object carries both an
     # `X_scanvi` and the embedding they actually meant got scanvi and was never told.
+    # THIS IS THE REPRESENTATION TO COMPUTE ON, and the order is right for that: an integrated
+    # space before an uncorrected one, because a neighbour graph built on the uncorrected space
+    # has the batch in it. It is NOT the thing to draw on - see `pick_layout` below, and
+    # CAPABILITIES["embedding"], which has always read "a cell embedding to compute neighbours
+    # on". `X_umap` and `X_pca` remain at the end as the last resort for a graph.
     "embedding": ["X_scanvi", "X_scvi", "X_harmony", "X_integrated", "X_pca_harmony",
                   "X_umap", "X_pca"],
 }
@@ -52,7 +57,7 @@ CANDIDATES = {
 #: This was `role == "counts_layer"` inline, so a second layer role searched obs and found
 #: nothing - silently, because "not found" is a legitimate answer for an optional key.
 _LAYER_ROLES = ("counts_layer", "lognorm_layer")
-_OBSM_ROLES = ("embedding",)
+_OBSM_ROLES = ("embedding", "layout")
 
 #: Genes present in essentially every mammalian dataset, used only to tell CASING apart.
 #: Not a marker panel and not biology - purely a test of whether symbols are Xxxx or XXXX.
@@ -88,8 +93,113 @@ def detect_keys(obs_columns, layers=(), obsm=(), overrides=None):
         hit = next((c for c in cands if c in pool), None)
         out[role] = (hit, f"detected: the first of {cands[:3]}... present" if hit
                      else "not found among the usual names")
+
+    # LAYOUT IS RESOLVED BY RULE, NOT BY A CANDIDATE LIST, and therefore after the loop: it
+    # depends on which representation was chosen, because the layout worth drawing on is the one
+    # derived FROM that representation. A candidate list could not express that and would go on
+    # naming product names in a fixed order, which is the shape of the defect it replaces.
+    emb = (out.get("embedding") or (None, ""))[0]
+    try:
+        out["layout"] = pick_layout(obsm, embedding=emb, override=over.get("layout"))
+    except Refuse:
+        raise
+    except Exception as exc:                                              # noqa: BLE001
+        out["layout"] = (None, f"could not be resolved: {type(exc).__name__}: {exc}")
     return out
 
+
+#: Algorithms whose output is a LAYOUT - two coordinates made to be looked at. Ordered by how
+#: commonly they are the thing a reader has already seen. scvelo's own default is `umap` and its
+#: documented preference is umap, tsne, pca; nothing here contradicts a tool's own default, it
+#: only makes the choice visible.
+LAYOUT_PREFERENCE = ["X_umap", "X_tsne", "X_draw_graph_fa", "X_fa2", "X_phate", "X_densmap",
+                     "X_diffmap"]
+
+#: How wide a thing has to be to be a layout. Exactly two: a figure has two axes.
+LAYOUT_WIDTH = 2
+
+
+def _widths(obsm):
+    """`{name: n_columns}` from either a mapping or a bare sequence of names.
+
+    A SEQUENCE MEANS THE WIDTHS ARE UNKNOWN, not that they are two. `detect_keys` was given a
+    list of obsm KEYS and nothing else, so it could not tell a 30-dimensional latent from a
+    2-dimensional layout - and it chose `X_scanvi` as the thing to draw on, on an object that
+    also carried `X_umap_scanvi`. Every caller that can pass widths should.
+    """
+    if isinstance(obsm, dict):
+        return {str(k): (int(v) if isinstance(v, int) else
+                         int(v[1]) if isinstance(v, (tuple, list)) and len(v) > 1 else None)
+                for k, v in obsm.items()}
+    return {str(k): None for k in obsm}
+
+
+def pick_layout(obsm, embedding=None, override=None):
+    """The 2-D layout to DRAW on. Returns (name|None, why).
+
+    A REPRESENTATION IS NOT A LAYOUT, and conflating them is what this function exists to stop.
+    `embedding` is documented in CAPABILITIES as "a cell embedding to compute neighbours on" - a
+    30- or 50-dimensional space where distances are meaningful and the axes are not. A layout is
+    two coordinates produced to be looked at.
+
+    The distinction is not pedantic for a variational latent. The dimensions of a scVI or scANVI
+    latent are exchangeable and carry no variance ordering, unlike principal components: taking
+    the first two gives two arbitrary coordinates of a roughly isotropic Gaussian, which draws as
+    a featureless ball whatever structure the data has. Theis's own DRVI line of work exists
+    because standard VAE latents are entangled, and disentangling them is a research problem
+    rather than a property one can assume.
+
+    The rule, in order, and it is a RULE rather than a list of product names:
+
+      1. THE LAYOUT DERIVED FROM THE CHOSEN REPRESENTATION. `X_umap_<name>` beside `X_<name>` is
+         a widespread convention for exactly this - a UMAP computed FROM that representation -
+         and it is the only candidate guaranteed to describe the same manifold the neighbours
+         were computed on.
+      2. A named layout algorithm's output, at two columns.
+      3. The only two-column key present, if there is exactly one. Unambiguous by arithmetic.
+      4. Nothing. A plugin that needs to draw then refuses and names what to compute, which is a
+         better answer than a picture of the wrong space.
+    """
+    w = _widths(obsm)
+    two = [k for k, n in w.items() if n == LAYOUT_WIDTH]
+    unknown = [k for k, n in w.items() if n is None]
+
+    if override:
+        if override not in w:
+            raise Refuse(f"--layout {override!r} is not in obsm. Present: "
+                         + ", ".join(sorted(w)[:20]) + (" ..." if len(w) > 20 else ""))
+        n = w[override]
+        if n is not None and n != LAYOUT_WIDTH:
+            raise Refuse(f"--layout {override!r} has {n} columns. A layout is drawn on two axes; "
+                         f"a wider one is a representation, and its first two columns are not a "
+                         f"picture of it.")
+        return override, "given on the command line"
+
+    if embedding:
+        stem = embedding[2:] if embedding.startswith("X_") else embedding
+        derived = f"X_umap_{stem}"
+        if derived in w and w[derived] in (LAYOUT_WIDTH, None):
+            return derived, (f"the layout derived from the representation ({embedding}): a UMAP "
+                             f"of that same space, so both describe one manifold")
+
+    for cand in LAYOUT_PREFERENCE:
+        if w.get(cand) == LAYOUT_WIDTH:
+            return cand, f"first of {LAYOUT_PREFERENCE[:3]}... present, at two columns"
+
+    if len(two) == 1:
+        return two[0], "the only two-column entry in obsm"
+    if two:
+        return sorted(two)[0], (f"first of the {len(two)} two-column entries in obsm "
+                                f"({', '.join(sorted(two)[:4])}) - name one with --layout")
+    if unknown and not two:
+        for cand in LAYOUT_PREFERENCE:
+            if cand in w:
+                return cand, (f"first of {LAYOUT_PREFERENCE[:3]}... present; its width was not "
+                              f"supplied, so it is assumed to be a layout by its name")
+    return None, ("no two-column entry in obsm. A layout has to be computed - for an integrated "
+                  "representation that is `sc.pp.neighbors(adata, use_rep=<representation>)` "
+                  "then `sc.tl.umap(adata)` - and drawing on the first two columns of a wider "
+                  "space would be a picture of two arbitrary coordinates.")
 
 def detect_organism(var_names, declared=None):
     """`mouse` / `human` / None, from gene-symbol CASING. Returns (organism, why).
@@ -173,6 +283,13 @@ def sentinel_mask(labels, sentinels=DEFAULT_SENTINELS):
 #: counts layer, `ctx.X` fell back to `.X` without saying so, and any plugin declaring
 #: `inject.required: ["lognorm"]` was refused a capability the object plainly had.
 ROLE_CAPABILITY = {"counts_layer": "counts", "lognorm_layer": "lognorm"}
+
+#: EVERY ROLE THE HOST RESOLVES, which is not the same as every role with a candidate list.
+#: `layout` is resolved by a rule that depends on the chosen representation, so it has no entry in
+#: CANDIDATES - and anything iterating CANDIDATES to enumerate roles silently omits it. That is
+#: how a capability can be declared, resolved, handed to plugins, and still be missing from the
+#: one check that asserts every capability has a bridge.
+ROLES = tuple(CANDIDATES) + ("layout",)
 
 
 def capability_keys(detected):

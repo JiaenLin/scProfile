@@ -266,8 +266,45 @@ class Context:
         return self.adata.obs[name] if name in self.adata.obs else None
 
     def embedding(self):
+        """The REPRESENTATION to compute on: a neighbour graph, a transition matrix, a kNN.
+
+        Usually 30-50 columns wide. Its axes are not interpretable and it is NOT what to draw on
+        - for that call `layout()`, and see the note there for why the difference matters.
+        """
         emb = self.keys.get("embedding")
         return self.adata.obsm[emb] if emb and emb in self.adata.obsm else None
+
+    def layout(self):
+        """The TWO columns to draw on, or None when the object carries no layout.
+
+        A REPRESENTATION IS NOT A LAYOUT. `embedding()` returns a space where distances mean
+        something and the axes do not; this returns two coordinates produced to be looked at. For
+        a variational latent the difference is total: its dimensions carry no variance ordering,
+        so its first two are two arbitrary coordinates of a roughly isotropic ball and draw as
+        one - which is what four panels of a shipped plugin looked like before this existed, on
+        an object that carried the UMAP of that same latent all along.
+
+        None means the object has none. Refuse and name what to compute; do not fall back to the
+        first two columns of something wider, because that picture cannot announce itself as
+        wrong.
+        """
+        lay = self.keys.get("layout")
+        if not lay or lay not in self.adata.obsm:
+            return None
+        m = self.adata.obsm[lay]
+        return m if getattr(m, "ndim", 0) == 2 and m.shape[1] == 2 else None
+
+    def layout_key(self):
+        """The NAME of the layout, for a plugin that hands a basis to a tool rather than an array.
+
+        Returned without the `X_` prefix as well as with it, because scanpy and scvelo take
+        `basis='umap'` while obsm holds `X_umap`, and every plugin that has needed this has
+        written the same two lines of stripping.
+        """
+        lay = self.keys.get("layout")
+        if not lay or lay not in self.adata.obsm:
+            return None, None
+        return lay, (lay[2:] if lay.startswith("X_") else lay)
 
     def real_cells(self):
         """A boolean mask: cells whose label is a REAL call, not an annotator's refusal to make one.

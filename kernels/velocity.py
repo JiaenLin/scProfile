@@ -63,7 +63,11 @@ PLUGIN = {
     # useful than "layers absent".
     "needs": {"layers": ["spliced", "unspliced"]},
     "can_source_layers": True,
-    "inject": {"required": [], "optional": ["counts", "label", "sample", "embedding"]},
+    # `layout` AND `embedding` ARE BOTH NAMED, because this plugin uses both and they are not
+    # the same object: the fit and the neighbour graph run on the representation, the arrows are
+    # drawn on the layout. Declaring only one is how it came to draw on the other.
+    "inject": {"required": [],
+               "optional": ["counts", "label", "sample", "embedding", "layout"]},
     "provides": [],
     "produces": ["obs[velocity_confidence]",
                  "obs[velocity_length]",
@@ -190,9 +194,11 @@ PLUGIN = {
             "arrow_size in the plots is 0.7 rather than scvelo's default. It is in POINTS and "
             "does not scale with the figure, so a panel built for an 85 mm column comes out with "
             "arrowheads meant for a screen.",
-            "basis is an INTEGRATED embedding where one exists, rather than whatever is first in "
-            "obsm. Arrows drawn on a different manifold from the annotation cannot be read "
-            "against it.",
+            "basis is the LAYOUT DERIVED FROM the integrated representation where one exists - "
+            "`X_umap_<name>` beside `X_<name>` - rather than whatever is first in obsm. Arrows "
+            "drawn on a different manifold from the annotation cannot be read against it, and "
+            "arrows drawn on the representation ITSELF cannot be read at all: that space is 30 "
+            "to 50 columns wide, its axes carry no ordering, and its first two are a ball.",
         ],
         "not_used": [
             "mode='dynamical' as the default: it fits per-gene kinetic rates and `latent_time` "
@@ -354,22 +360,47 @@ def _pick_basis(ctx, declared):
     """
     A = ctx.adata
     have = {k[2:] if k.startswith("X_") else k: k for k in A.obsm}
+
+    def _two(key):
+        """Is this obsm entry actually two columns? A basis that is not is not a picture."""
+        m = A.obsm.get(have.get(key, key))
+        return getattr(m, "ndim", 0) == 2 and m.shape[1] == 2
+
     if declared:
         d = declared[2:] if declared.startswith("X_") else declared
         if d not in have:
             raise ValueError(
                 f"basis={declared!r} was asked for and obsm has {sorted(A.obsm)}. Name one of "
                 f"those, or leave it empty and one will be chosen.")
+        if not _two(d):
+            raise ValueError(
+                f"basis={declared!r} has {A.obsm[have[d]].shape[1]} columns. Arrows are drawn on "
+                f"two axes; the first two columns of a wider space are two coordinates of it, "
+                f"not a picture of it.")
         return d, "declared in --params"
-    named = ctx.keys.get("embedding")
+
+    # THE LAYOUT, NOT THE REPRESENTATION. This read `ctx.keys['embedding']` and checked its width
+    # nowhere, so on an integrated object every panel was drawn on the first two columns of a
+    # 30-dimensional scANVI latent - labelled SCANVI 1 and SCANVI 2, two arbitrary coordinates of
+    # a space with no variance ordering, which draw as a featureless ball whatever structure the
+    # data has. The object carried `X_umap_scanvi` throughout. scvelo's own default basis is
+    # `umap` and its documented preference is umap, tsne, pca: a 30-column latent was never
+    # expected here by the tool either.
+    named = ctx.keys.get("layout")
     if named:
         d = named[2:] if named.startswith("X_") else named
-        if d in have:
-            return d, f"the embedding key the host detected ({named})"
+        if d in have and _two(d):
+            return d, f"the layout the host resolved ({named})"
+
     for cand in BASIS_PREFERENCE:
-        if cand in have and A.obsm[have[cand]].shape[1] >= 2:
-            return cand, f"first of {list(BASIS_PREFERENCE)} present in obsm"
-    return None, "no 2-D embedding in obsm; one will be computed here"
+        if cand in have and _two(cand):
+            return cand, f"first of {list(BASIS_PREFERENCE)} present in obsm, at two columns"
+
+    wide = sorted(f"{k} ({A.obsm[v].shape[1]}c)" for k, v in have.items()
+                  if getattr(A.obsm[v], "ndim", 0) == 2 and A.obsm[v].shape[1] != 2)
+    return None, ("no two-column embedding in obsm; one will be computed here"
+                  + (f". Present but wider, and therefore not a layout: {', '.join(wide[:6])}"
+                     if wide else ""))
 
 
 def _clean(ax, F, basis=None):
@@ -394,10 +425,21 @@ def _colours_for(ctx, labels):
     F = ctx.figure
     sent = {str(s) for s in ctx.sentinels}
     every = sorted(set(map(str, labels)))
-    cols = F.palette([l for l in every if l not in sent])
+    real = [l for l in every if l not in sent]
+    cols = F.palette(real)
     for l in every:
         if l in sent:
             cols[l] = F.GREY
+    # A HUE CARRYING TWO POPULATIONS IS SAID, because it cannot be seen. The palette used to
+    # cycle at eight and this cohort has fourteen cell types, so five pairs shared a colour and
+    # the legend showed each hue twice with nothing anywhere admitting it. The palette is longer
+    # now; past its end the only honest thing is to name the pairs.
+    clash = getattr(F, "palette_collisions", None)
+    for colour, labs in (clash(real) if clash else []):
+        ctx.caveat(f"{len(labs)} populations share one colour in every figure below "
+                   f"({', '.join(labs)}). There are more populations than the palette has hues "
+                   f"that stay separable; read those points from the per-population panels "
+                   f"rather than from the map.")
     return cols
 
 
@@ -530,8 +572,13 @@ def _fig_confidence(ctx, basis, mask, groups, colours):
 
     xy = np.asarray(A.obsm[f"X_{basis}"])[:, :2]
     ncol = 1 if groups is None else 2
+    # `constrained`, because the right panel's tick labels are cell-type names and the left
+    # panel's colourbar is placed in the gap between them: without it the colourbar was drawn
+    # across four of those labels, which on a real annotation are long. The phase-portrait figure
+    # in this file already used it, for the same reason one panel lower down.
     fig, axs = plt.subplots(1, ncol, figsize=(F.DOUBLE if ncol == 2 else F.SINGLE,
-                                              F.SINGLE * 0.9), squeeze=False)
+                                              F.SINGLE * 0.9), squeeze=False,
+                            layout="constrained")
     ax = axs[0][0]
     o = np.argsort(conf)
     pts = ax.scatter(xy[o, 0], xy[o, 1], c=conf[o], s=2, cmap="RdYlBu_r", vmin=0, vmax=1,
@@ -1022,9 +1069,10 @@ def run(ctx):
         f"Mode {C['mode']}. Arrows are a DIRECTION: length is not a rate in real time, and "
         f"lengths from two datasets are not comparable.")
     ctx.caveat(
-        f"Arrows are drawn on X_{basis} ({why_basis}). A velocity embedding is a projection - the "
-        f"fit happens in gene space, and a projection can make a coherent field look incoherent "
-        f"if the 2-D layout tore the manifold.")
+        f"Arrows are drawn on X_{basis} ({why_basis}), a TWO-column layout. The neighbours and "
+        f"the fit use the representation, which is a different and wider space; a velocity "
+        f"embedding is the projection of the fitted field onto this layout, so a projection can "
+        f"make a coherent field look incoherent where the layout tore the manifold.")
     if ctx.assay == "nucleus":
         ctx.caveat(
             f"Single-NUCLEUS data, unspliced {100 * u_frac:.1f}% of counts. The high intronic "
