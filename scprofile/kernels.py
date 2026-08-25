@@ -672,13 +672,20 @@ def order(names, available):
 def schedule(names, available, *, budget_cores=1, units=None):
     """The run plan: waves of plugin instances, cost-ordered, with a core share for each.
 
-    A WAVE IS NOT A BARRIER UNLESS THE GRAPH SAYS SO. Waves are computed from `needs_kernels`, so
-    a plugin waits only on what it actually depends on — not on whatever else happened to be
-    scheduled beside it. `pseudotime` waits on `cellcycle` and must not wait on `scenic`.
+    A WAVE IS NOT A BARRIER UNLESS THE GRAPH SAYS SO. A plugin waits only on what it actually
+    depends on, not on whatever else happened to be scheduled beside it.
+
+    THE SAME GRAPH THE PLAN USES. There are two wave builders - this one for the run and
+    `planner.order_of_runs` for the plan - and until they were made to call one edge function
+    they read different things: this read `needs_kernels`, which no plugin sets and none should,
+    so the run put a consumer in the same wave as its producer while the plan, correctly, put it
+    in the next one. Two implementations of one graph drift the moment either is fixed, and the
+    first fix to either is what proves it.
 
     Returns [[instance, ...], ...] where an instance is
     {"plugin": name, "unit": <value or None>, "cores": int}.
     """
+    edges = producer_edges({n: available[n] for n in names if n in available})
     remaining, done, waves = list(names), set(), []
     guard = 0
     while remaining:
@@ -687,7 +694,8 @@ def schedule(names, available, *, budget_cores=1, units=None):
             raise ValueError(f"cannot schedule {remaining}: a needs_kernels cycle")
         ready = [n for n in remaining
                  if all(d in done or d not in names
-                        for d in (available[n].needs_kernels if n in available else []))]
+                        for d in (list(available[n].needs_kernels if n in available else [])
+                                  + edges.get(n, [])))]
         if not ready:
             raise ValueError(f"cannot schedule {remaining}: a needs_kernels cycle")
 

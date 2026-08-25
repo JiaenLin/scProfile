@@ -538,6 +538,19 @@ ck("every capability a plugin asks for has an installed provider",
    not _unprov, str([a for a, _ in _unprov]))
 ck("the wave graph has at least one edge, or it is not a graph",
    bool(_pe(_K)), "producer_edges resolved nothing across the installed set")
+# TWO WAVE BUILDERS, ONE GRAPH. `schedule` orders the run and `order_of_runs` orders the plan,
+# and until both were made to call one edge function they read different things: the run put a
+# consumer in the same wave as its producer while the plan put it in the next one. The first fix
+# to either is what proves two implementations of one graph drift.
+_runw = [sorted({i["plugin"] for i in w})
+         for w in _KN.schedule(sorted(_K), _K, budget_cores=8, units=["u1", "u2"])]
+_planw = [sorted(w) for w in _PL.order_of_runs(sorted(_K), _K)]
+ck("the run's waves and the plan's waves are the same waves", _runw == _planw,
+   f"run {_runw} vs plan {_planw}")
+ck("and a consumer is in a later wave than its producer",
+   all(any(p in _runw[i - 1] for i in range(1, len(_runw)) if c in _runw[i])
+       for c, ps in _pe(_K).items() for p in ps),
+   str(_pe(_K)))
 
 print("\nthe plan and the run make the same decisions, by calling the same function")
 _facts = {"has_design": True, "crossed_pairs": [["f1", "f2"]], "testable": ["f1", "f2"]}
