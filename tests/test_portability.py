@@ -11,6 +11,7 @@ So the portability rules are asserted, not intended.
 Run: python tests/test_portability.py
 """
 import inspect
+import pathlib
 import re
 import sys
 from pathlib import Path
@@ -646,6 +647,75 @@ ck("a refusal produced nothing by design and is exempt",
    not _FB.metric_drift(_kk, {"status": "refused", "units": []}))
 ck("a PARTIAL run wrote a page and is NOT exempt",
    bool(_FB.metric_drift(_kk, {"status": "partial", "units": [{"metrics": {}}]})))
+
+# ---------------------------------------------------------------------------------------------
+# THE DESIGN REACHES THE PAGES THAT DID NOT TEST IT.
+#
+# Of nine plugins on the cohort this was found on, the two that TEST the design reported across
+# it and the other seven reported per population and per cell, never once splitting a result by
+# the factor the study exists to ask about. Two of the seven DECLARED `design_aware` - "reports
+# per arm without testing across the design" - and between them had fourteen panels, none about
+# an arm. A flag nobody sets and a flag nobody honours fail the same way and only a check
+# against the OUTPUT tells them apart.
+# ---------------------------------------------------------------------------------------------
+print("\nthe design reaches the pages that did not test it")
+
+
+class _Obj:
+    def __init__(self, obs):
+        self.obs = obs
+
+
+def _fake_obs():
+    import numpy as np, pandas as pd
+    n, r = 900, __import__("numpy").random.RandomState(0)
+    return pd.DataFrame({"sample": [f"S{i % 6}" for i in range(n)],
+                         "score": r.normal(size=n),
+                         "phase": r.choice(["G1", "S", "G2M"], n),
+                         "barcode": [f"b{i}" for i in range(n)],
+                         "tiny": r.normal(size=n)})
+
+
+_des = {f"S{i}": {"f1": "a" if i < 3 else "b", "f2": "x" if i % 2 else "y"} for i in range(6)}
+_ba = inputs.by_arm(_Obj(_fake_obs()), ["score", "phase", "barcode"], _des, "sample", ["f1", "f2"])
+ck("a numeric per-cell column is summarised per arm",
+   _ba.get("score", {}).get("f1", {}).get("kind") == "numeric")
+ck("with quantiles, not a mean and an error bar over cells",
+   set(_ba["score"]["f1"]["arms"][0]) >= {"median", "q1", "q3", "min", "max", "n"})
+ck("a categorical column is summarised as its composition",
+   _ba.get("phase", {}).get("f1", {}).get("kind") == "categorical"
+   and "share" in _ba["phase"]["f1"]["arms"][0])
+ck("shares sum to one",
+   abs(sum(_ba["phase"]["f1"]["arms"][0]["share"].values()) - 1.0) < 1e-6)
+ck("an identifier column is not mistaken for a readout", "barcode" not in _ba)
+ck("it works on factor names it has never seen", set(_ba["score"]) == {"f1", "f2"})
+ck("a factor with one arm is not a comparison",
+   not inputs.by_arm(_Obj(_fake_obs()), ["score"],
+                     {f"S{i}": {"f1": "only"} for i in range(6)}, "sample", ["f1"]))
+ck("an arm below the cell floor is dropped rather than quantiled",
+   inputs.ARM_MIN_CELLS >= 20)
+ck("no design, no section", not inputs.by_arm(_Obj(_fake_obs()), ["score"], {}, "sample", ["f1"]))
+
+_html = _RP._by_arm_block(_ba, aware=False)
+ck("the page says outright that it is a description and not a test",
+   "not a test" in _html and "unit of replication is the sample" in _html)
+ck("it draws with no plotting library", "<svg" in _html)
+ck("it uses the shared palette rather than a second copy of it",
+   "from .figure import CATEGORY_COLOURS" in pathlib.Path(
+       Path(_RP.__file__)).read_text())
+ck("a plugin claiming design_aware with nothing to split is NAMED on its page",
+   "produced no per-cell column" in _RP._by_arm_block({}, aware=True))
+ck("a plugin making no such claim gets no empty section",
+   _RP._by_arm_block({}, aware=False) == "")
+ck("the declaration REFUSES design_aware with no per-cell column",
+   any(lvl == "ERROR" and "design_aware" in msg for lvl, msg in _DECL.check(
+       {**_K["cellcycle"].spec, "design_aware": True, "produces": ["tables/x.csv"]})))
+ck("the section is placed before the per-population panels",
+   inspect.getsource(_RP.write_kernel).index("_by_arm_block")
+   < inspect.getsource(_RP.write_kernel).index("_figure_section"))
+ck("a plugin shown per arm is bound by the constraint that bounds such claims",
+   "or n in _by_arm" in _clisrc,
+   "the bound must grow with the set of pages making a claim across the design")
 
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

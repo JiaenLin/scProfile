@@ -14,6 +14,11 @@ import html
 from datetime import datetime, timezone
 from pathlib import Path
 
+# THE SAME PALETTE THE PLUGINS DRAW WITH. Imported, never copied: a second list of the same
+# sixteen colours is how a convention drifts, and `figure.py` imports no plotting library at
+# module scope, so the reporter takes on no dependency by asking it.
+from .figure import CATEGORY_COLOURS
+
 CSS = """
 :root{--bg:#fff;--fg:#191919;--mut:#5b5b5b;--line:#e6e4e0;--card:#faf9f7;--warn:#fff8ec;
 --warnl:#b06d12;--bad:#fdeeed;--badl:#a8403c;--good:#eef7ee;--goodl:#3f7d43}
@@ -321,8 +326,121 @@ def _across_units(units, declared):
             + "".join(rows) + "</table></div>")
 
 
+def _arm_rows_numeric(arms, *, width=560, row=22):
+    """One row per arm: the min-max span, the interquartile box and the median.
+
+    A box is drawn rather than a mean and an error bar because a mean over cells says almost
+    nothing about a distribution that is usually skewed and often bimodal, and because an error
+    bar over CELLS is a standard error of the wrong n - the unit of replication is the sample,
+    not the cell, and nothing here should imply otherwise. Quantiles claim only what they are.
+    """
+    lo = min(a["min"] for a in arms)
+    hi = max(a["max"] for a in arms)
+    span = (hi - lo) or 1.0
+    pad, lab = 30, 110
+    w = width - pad - lab
+    h = row * len(arms) + 26
+    def x(v):
+        return lab + w * (v - lo) / span
+    out = []
+    for i, a in enumerate(arms):
+        y = 12 + row * i
+        out.append(
+            f'<text x="0" y="{y + 4}" font-size="11" fill="currentColor">'
+            f'{_e(a["level"])} <tspan fill-opacity="0.55">n={a["n"]:,}</tspan></text>'
+            f'<line x1="{x(a["min"]):.1f}" y1="{y}" x2="{x(a["max"]):.1f}" y2="{y}" '
+            f'stroke="currentColor" stroke-opacity="0.3"/>'
+            f'<rect x="{x(a["q1"]):.1f}" y="{y - 5}" width="{max(1.0, x(a["q3"]) - x(a["q1"])):.1f}" '
+            f'height="10" fill="currentColor" fill-opacity="0.18"/>'
+            f'<line x1="{x(a["median"]):.1f}" y1="{y - 6}" x2="{x(a["median"]):.1f}" y2="{y + 6}" '
+            f'stroke="currentColor" stroke-width="2"><title>median {_num(a["median"])}</title>'
+            f'</line>')
+    out.append(f'<text x="{lab}" y="{h - 4}" font-size="10" fill="currentColor" '
+               f'fill-opacity="0.6">{_num(lo)}</text>'
+               f'<text x="{width - pad}" y="{h - 4}" font-size="10" text-anchor="end" '
+               f'fill="currentColor" fill-opacity="0.6">{_num(hi)}</text>')
+    return (f'<svg viewBox="0 0 {width} {h}" width="100%" role="img" '
+            f'style="max-width:{width}px">' + "".join(out) + "</svg>")
+
+
+def _arm_rows_categorical(arms, categories, *, width=560, row=22):
+    """One stacked bar per arm: the composition, as shares that sum to one."""
+    cats = [c for c in (categories or []) if any(c in (a.get("share") or {}) for a in arms)]
+    pad, lab = 30, 110
+    w = width - pad - lab
+    h = row * len(arms) + 30
+    out = []
+    for i, a in enumerate(arms):
+        y = 12 + row * i
+        cx = lab
+        out.append(f'<text x="0" y="{y + 8}" font-size="11" fill="currentColor">'
+                   f'{_e(a["level"])} <tspan fill-opacity="0.55">n={a["n"]:,}</tspan></text>')
+        for j, c in enumerate(cats):
+            frac = float((a.get("share") or {}).get(c, 0.0))
+            bw = w * frac
+            if bw <= 0:
+                continue
+            out.append(f'<rect x="{cx:.1f}" y="{y}" width="{bw:.1f}" height="12" '
+                       f'fill="{CATEGORY_COLOURS[j % len(CATEGORY_COLOURS)]}">'
+                       f'<title>{_e(c)}: {frac * 100:.1f}%</title></rect>')
+            cx += bw
+    key = " ".join(
+        f'<tspan fill="{CATEGORY_COLOURS[j % len(CATEGORY_COLOURS)]}">&#9632;</tspan> {_e(c)}'
+        for j, c in enumerate(cats))
+    out.append(f'<text x="{lab}" y="{h - 6}" font-size="10" fill="currentColor">{key}</text>')
+    return (f'<svg viewBox="0 0 {width} {h}" width="100%" role="img" '
+            f'style="max-width:{width}px">' + "".join(out) + "</svg>")
+
+
+def _by_arm_block(by_arm, *, aware):
+    """THE DESIGN, ON A PAGE THAT DID NOT TEST IT. Description only.
+
+    Of nine plugins on the cohort that motivated this, the two that test the design reported
+    across it and the other seven reported per population and per cell - never once splitting a
+    result by the factor the study exists to ask about. Two of the seven DECLARED that they
+    report per arm and between them had fourteen panels, none of them about an arm.
+
+    Rendered by the host from the per-cell columns a plugin already writes, so a plugin gets
+    this by producing its output and writing no code for it.
+
+    IT IS NOT A TEST AND MUST NOT BE READ AS ONE. The unit of replication in these designs is
+    the sample, not the cell; a difference visible here is a difference between groups of cells
+    and becomes a claim about the design only through a model that says so - which is what the
+    plugins that test the design are for, and what the upstream constraint may forbid outright.
+    """
+    if not by_arm:
+        if aware:
+            return ('<h2>Across the design</h2><div class="bad">This plugin declares that it '
+                    'reports per arm and produced no per-cell column the host could split by '
+                    'one, so its page says nothing about the design it claims to describe.'
+                    '</div>')
+        return ""
+    blocks = []
+    for col in sorted(by_arm):
+        for fac in sorted(by_arm[col]):
+            d = by_arm[col][fac]
+            arms = d.get("arms") or []
+            if len(arms) < 2:
+                continue
+            svg = (_arm_rows_numeric(arms) if d.get("kind") == "numeric"
+                   else _arm_rows_categorical(arms, d.get("categories")))
+            what = ("median, interquartile box and full range, per arm"
+                    if d.get("kind") == "numeric" else "composition, per arm")
+            blocks.append(f'<figure><figcaption><b><code>{_e(col)}</code> by '
+                          f'<code>{_e(fac)}</code></b> — {what}, over cells. '
+                          f'{len(arms)} arm(s). This is a DESCRIPTION and not a test: the unit '
+                          f'of replication is the sample, not the cell.</figcaption>'
+                          + svg + "</figure>")
+    if not blocks:
+        return ""
+    return ("<h2>Across the design</h2><p class='sub'>Every other panel on this page describes "
+            "populations or cells. This is what this plugin's own per-cell output looks like "
+            "across the design the study was built on — drawn by the host from the columns the "
+            "plugin wrote, and described rather than tested.</p>" + "".join(blocks))
+
+
 def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
-                 spec=None, constraint="", binds=()):
+                 spec=None, constraint="", binds=(), by_arm=None, aware=False):
     """One kernel's own page. Ends in its own limits, not a shared block."""
     p = payload or {}
     caveats = p.get("caveats") or []
@@ -364,6 +482,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     units = p.get("units") or []
     if p.get("per_unit") and units:
         body.append(_across_units(units, (spec or {}).get("unit_metrics")))
+    body.append(_by_arm_block(by_arm, aware=bool(aware)))
     body.append(_figure_section(p.get("figures") or [], spec))
     if p.get("per_unit") and units:
         # Nine of ten unit payloads used to be discarded by a dict comprehension keyed on the
@@ -554,5 +673,7 @@ def write_all(out_dir, payload):
     for name, p in (payload.get("kernels") or {}).items():
         write_kernel(out_dir, name, p, cs.get(name, []), sm.get(name, ""),
                      merged=mg.get(name), spec=rs.get(name),
-                     constraint=con, binds=cb.get(name) or [])
+                     constraint=con, binds=cb.get(name) or [],
+                     by_arm=(payload.get("by_arm") or {}).get(name),
+                     aware=bool((payload.get("design_aware") or {}).get(name)))
     return write_index(out_dir, payload)

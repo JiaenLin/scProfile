@@ -388,6 +388,88 @@ def constraint_binds(constraint, factors):
                    if re.search(rf"\b{re.escape(str(f))}\b", hay)})
 
 
+#: Above this many levels a factor is an identifier, not an arm, and a per-arm panel of it is a
+#: per-sample panel wearing the wrong label.
+ARM_LEVEL_CAP = 12
+#: Below this many cells an arm's quantiles describe the handful of cells that landed in it.
+ARM_MIN_CELLS = 20
+
+
+def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP):
+    """Every per-cell column a plugin produced, summarised ACROSS THE DESIGN. Description only.
+
+    THE DESIGN IS MISSING FROM EVERY PAGE THAT DOES NOT TEST IT. Measured on a 2x2 cohort: of
+    nine plugins, the two that test the design reported across it and the other seven reported
+    per population and per cell and never once split a result by the factor the study exists to
+    ask about. Two of the seven DECLARED `design_aware` - "reports per arm without testing
+    across the design" - and between them had fourteen panels, none of them about an arm. The
+    first form of this defect was a flag nobody set; this is a flag nobody honoured, and only a
+    check that looks at the OUTPUT rather than the declaration can tell them apart.
+
+    So the host does it, once, for every plugin - a plugin gets its per-arm view by writing a
+    per-cell column, which it already does, and writes no code for it. That also fixes it for a
+    plugin written next year.
+
+    NUMBERS ARE DESCRIBED, NEVER TESTED. Quantiles and counts, no p-value and no effect size:
+    the moment this computed a test it would be doing inference the plugin declared, the design
+    was audited for, and the upstream constraint may forbid outright. A categorical column is
+    summarised as its per-arm composition, which is the same description of a different scale.
+
+    Returns {column: {factor: {...}}}, empty for anything it cannot honestly summarise.
+    """
+    import numpy as np
+    import pandas as pd
+
+    if not (columns and design and sample_key) or sample_key not in adata.obs:
+        return {}
+    samp = adata.obs[sample_key].astype(str)
+    out = {}
+    for col in sorted(set(columns)):
+        if col not in adata.obs:
+            continue
+        v = adata.obs[col]
+        numeric = pd.api.types.is_numeric_dtype(v) and not pd.api.types.is_bool_dtype(v)
+        levels_of_col = None
+        if not numeric:
+            levels_of_col = sorted({str(x) for x in v.dropna().unique()})
+            if len(levels_of_col) > cap:
+                continue                       # an identifier, not a readout
+        per_factor = {}
+        for fac in sorted(factors or []):
+            arm = samp.map({k: str(r.get(fac, "")) for k, r in design.items()})
+            keep = arm.notna() & (arm.astype(str) != "")
+            levels = sorted({str(x) for x in arm[keep].unique()})
+            if not (2 <= len(levels) <= cap):
+                continue
+            rows = []
+            for lv in levels:
+                m = keep & (arm.astype(str) == lv)
+                n = int(m.sum())
+                if n < ARM_MIN_CELLS:
+                    continue
+                if numeric:
+                    x = pd.to_numeric(v[m], errors="coerce").to_numpy(dtype=float)
+                    x = x[np.isfinite(x)]
+                    if x.size < ARM_MIN_CELLS:
+                        continue
+                    q1, med, q3 = (float(q) for q in np.quantile(x, [0.25, 0.5, 0.75]))
+                    rows.append({"level": lv, "n": int(x.size), "median": med,
+                                 "q1": q1, "q3": q3,
+                                 "min": float(x.min()), "max": float(x.max())})
+                else:
+                    c = v[m].astype(str).value_counts()
+                    rows.append({"level": lv, "n": n,
+                                 "share": {str(k): round(int(x) / n, 6)
+                                           for k, x in c.items()}})
+            if len(rows) >= 2:
+                per_factor[fac] = {"kind": "numeric" if numeric else "categorical",
+                                   "arms": rows,
+                                   "categories": levels_of_col}
+        if per_factor:
+            out[col] = per_factor
+    return out
+
+
 def describe(adata, keys, organism, assay, constraint_src):
     """The provenance block: what was found, and whether it was told or guessed."""
     return {

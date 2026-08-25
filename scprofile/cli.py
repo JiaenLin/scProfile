@@ -840,7 +840,29 @@ def _run(a):
                          else "per-cell term indeterminate")
                 print(f"    {_n:<12} {_m['base_gb']:>6.1f} GB fixed + {_rate}")
 
+    # ACROSS THE DESIGN, FOR EVERY PLUGIN THAT WROTE A PER-CELL COLUMN. Computed by the host
+    # because the host is the only party holding the design, the object and every plugin's
+    # output at once - and because a per-arm view every plugin implements for itself is a
+    # convention, which is the form of this defect that has already cost three fixes.
+    # Description only: quantiles and compositions, no test. See inputs.by_arm.
+    _by_arm = {}
+    if _run_facts.get("has_design") and sample_key:
+        try:
+            _dt, _dk, _df = inputs.read_design(a.design, units or [])
+            for _n, _slots in sorted(merged_slots.items()):
+                _cols = list((_slots or {}).get("obs") or [])
+                if not _cols:
+                    continue
+                _got = inputs.by_arm(A, _cols, _dt, sample_key, _df)
+                if _got:
+                    _by_arm[_n] = _got
+        except Exception as e:                                            # noqa: BLE001
+            print(f"  per-arm summaries not computed: {type(e).__name__}: {e}")
+    if _by_arm:
+        print(f"  across the design: {', '.join(sorted(_by_arm))}")
+
     payload = {"version": _v(), "input": str(a.h5ad), "describe": describe,
+               "by_arm": _by_arm,
                "memory_model": memory_model,
                "constraint_on_use": constraint, "constraint_source": csrc,
                # WHICH PLUGINS THE CONSTRAINT BINDS, AND ON WHICH FACTORS - decided by the host,
@@ -856,7 +878,12 @@ def _run(a):
                              & set(inputs.constraint_binds(
                                  constraint, sorted((_run_facts.get("factors") or {})))))
                    for n in sorted(ks)
-                   if ks[n].needs_design or ks[n].needs_representation},
+                   # A PLUGIN SHOWN PER ARM IS MAKING A CLAIM ACROSS THE DESIGN, whether or not
+                   # it tested one. The host now renders that section for any plugin that wrote
+                   # a per-cell column, so the set the constraint binds grew with it - and a
+                   # bound that did not grow with the claims would have gone quiet exactly where
+                   # the new section put the design on seven more pages.
+                   if ks[n].needs_design or ks[n].needs_representation or n in _by_arm},
                "ran": ran, "skipped": skipped,
                "status": {n: ks[n].status for n in sorted(ks)},
                "schedule": [[{kk: vv for kk, vv in i.items()} for i in w] for w in waves],
@@ -876,6 +903,10 @@ def _run(a):
                # a reporter that went back to the declaration would render a page describing
                # whatever the plugin says TODAY over numbers from the run that happened then.
                "report_spec": {n: ks[n].report_spec for n in sorted(ks)},
+               # THE CLAIM, carried beside the output that would make it true, so the page can
+               # say "declares it reports per arm and produced nothing to split" rather than
+               # rendering an empty section that reads like a plugin nobody asked.
+               "design_aware": {n: bool(ks[n].design_aware) for n in sorted(ks)},
                "summaries": {n: ks[n].summary for n in sorted(ks)},
                # WHAT THE PLUGINS ACTUALLY READ. When a plugin's pinned anndata cannot read the
                # object as written, the host hands it a compatibility copy instead - the matrices

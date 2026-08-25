@@ -253,6 +253,19 @@ def check(spec, name="<plugin>"):
         out.append(("ERROR", "no `summary`. It is what a user reads in the plan to decide "
                              "whether they want this at all."))
 
+    # `design_aware` IS A CLAIM, AND IT IS CHECKED AGAINST THE OUTPUT THAT WOULD MAKE IT TRUE.
+    #
+    # It means "reports per arm without testing across the design". Two plugins declared it and
+    # between them had fourteen panels, none of them about an arm - the flag was a sentence in a
+    # declaration and nothing anywhere compared it with what the plugin produced. The host now
+    # renders the per-arm view from any per-cell column a plugin writes, so the claim is
+    # structurally possible exactly when there is such a column to split.
+    if spec.get("design_aware") and not [q for q in (spec.get("produces") or [])
+                                         if str(q).startswith("obs[")]:
+        out.append(("ERROR", "declares `design_aware` - it reports per arm - and produces no "
+                             "per-cell `obs[...]` column, so there is nothing the host can split "
+                             "by an arm and nothing on its page will be about the design."))
+
     # A PER-UNIT PLUGIN MUST DECLARE WHAT MAKES ITS UNITS COMPARABLE.
     #
     # It runs separately on every unit and its page is that many single-unit reports in
