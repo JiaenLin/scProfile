@@ -132,9 +132,17 @@ def main():
         n_inst = len(sch)
         planned = re.search(rf"plan: {n_inst} instance.*?\n  wave 1: ([^\n]+)", log)
         actual = re.search(r"=== wave 1 === ([^\n]+)", log[planned.end():]) if planned else None
-        ck("the plan and the wave agree on cores",
-           bool(planned and actual) and planned.group(1).strip() == actual.group(1).strip(),
-           f"planned {planned and planned.group(1)!r} vs ran {actual and actual.group(1)!r}")
+        # THE CORE ASSIGNMENT, NOT THE THROUGHPUT. The wave line carries a trailing
+        # `[N at a time of M]` whenever the wave is throttled, and that describes how many
+        # instances run CONCURRENTLY - not how many cores each was given, which is what this
+        # asserts. The suffix appears only above a size threshold, so the check passed for as
+        # long as the fixture was small enough never to be throttled and failed the moment it
+        # was not, on two identical lists.
+        _suffix = re.compile(r"\s*\[\d+ at a time of \d+\]\s*$")
+        _p = _suffix.sub("", planned.group(1).strip()) if planned else None
+        _a = _suffix.sub("", actual.group(1).strip()) if actual else None
+        ck("the plan and the wave agree on cores", bool(_p and _a) and _p == _a,
+           f"planned {_p!r} vs ran {_a!r}")
 
     print("\n" + ("ALL SMOKE CHECKS PASSED" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
     return 1 if FAIL else 0

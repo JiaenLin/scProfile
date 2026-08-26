@@ -29,7 +29,7 @@ PLUGIN = {
     "sees": ["obs[sample]", "X"],
     "inject": {"required": ["sample"], "optional": []},
     "executor": {"cost": "trivial", "cores": 1},
-    "produces": ["obs[perunit_score]", "obsm[X_perunit]"],
+    "produces": ["obs[perunit_score]", "obsm[X_perunit]", "layers[perunit_layer]"],
     "report": {
         # WHAT MAKES THE UNITS COMPARABLE. Declared here and recorded by `run`; the two are
         # checked against each other, so a fixture that walks the per-unit path walks this part
@@ -69,6 +69,17 @@ def run(ctx):
     score = pd.Series(rng.normal(size=A.n_obs), index=A.obs_names.astype(str))
     ctx.emit_obs("perunit_score", score.values)
     ctx.emit_obsm("X_perunit", rng.normal(size=(A.n_obs, 2)).astype("float32"))
+
+    # AND ONE OUTPUT THAT CANNOT CROSS UNITS, so the ABSENCE path stays observable. A per-unit
+    # layer is dropped by design and always will be - the reason is memory, not alignment: a
+    # cohort-wide cells-by-genes matrix is not implied by any one unit's result.
+    #
+    # It is here because rewriting this fixture silently removed the coverage. The six-file
+    # version wrote its array as a bare .npy with no barcodes, which the merge refused; the
+    # modern `ctx.emit_obsm` writes barcodes with the rows, so the array now MERGES - a genuine
+    # improvement that left the smoke test asserting a drop that no longer happened, and two of
+    # its checks failing with an empty detail string.
+    ctx.emit_layer("perunit_layer", rng.normal(size=(A.n_obs, A.n_vars)).astype("float32"))
 
     ctx.emit_table("perunit_edges",
                    pd.DataFrame({"unit": [unit] * 3, "rank": [1, 2, 3],
