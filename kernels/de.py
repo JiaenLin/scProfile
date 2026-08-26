@@ -717,6 +717,30 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
 
 
 
+
+def _interaction_estimable(obs, a, b, np, pd):
+    """Is `a:b` estimable here? THE SAME RANK TEST EVERY MAIN EFFECT ALREADY GETS.
+
+    `_identifiable` asks it of each main effect, in the same dummy coding, and the interaction
+    was appended to the formula without being asked at all. A population missing one cell of the
+    a-by-b table then produced precisely the error that function exists to prevent -
+    `numpy.linalg.LinAlgError: Singular matrix`, raised inside PyDESeq2's IRLS, after the fit had
+    been paid for, and killing the whole plugin rather than the one population.
+
+    It was invisible for as long as the plan's contrast never reached the run: with main effects
+    only, nothing ever added an interaction column. The first cohort to be handed the decision
+    the planner had been making all along was the first to hit it.
+    """
+    da = pd.get_dummies(obs[a].astype(str), drop_first=True).to_numpy(dtype=float)
+    db = pd.get_dummies(obs[b].astype(str), drop_first=True).to_numpy(dtype=float)
+    if da.shape[1] == 0 or db.shape[1] == 0:
+        return False
+    inter = np.hstack([da[:, [i]] * db[:, [j]]
+                       for i in range(da.shape[1]) for j in range(db.shape[1])])
+    trial = np.hstack([np.ones((len(obs), 1)), da, db, inter])
+    return int(np.linalg.matrix_rank(trial)) >= trial.shape[1]
+
+
 def _bh_across_families(res, alpha):
     """Benjamini-Hochberg over the RAW p-values of every family at once. A second number only.
 
@@ -861,6 +885,7 @@ def run(ctx):
     disp_frames, hist_rows, acct_rows, hit_rows = [], [], [], []
     no_disp, thin_refit, no_genes = [], [], []
     formulas, interacted, multi_level = {}, {}, {}
+    not_interacted = {}          # the plan asked for an interaction this population cannot fit
     rng = np.random.default_rng(0)
 
     # A POPULATION THAT REACHED NO PSEUDOBULK SAMPLE AT ALL IS STILL A POPULATION, and it is the
@@ -947,8 +972,14 @@ def run(ctx):
         # interaction is now ADDED to the formula, never substituted for it.
         formula = "~ " + " + ".join(use)
         if len(use) >= 2 and (ctx.params.get("contrast") or {}).get("kind") == "interaction":
-            formula += f" + {use[0]}:{use[1]}"
-            interacted[pop] = (use[0], use[1])
+            # ASKED, NOT ASSUMED. See `_interaction_estimable`: the main effects are rank-tested
+            # and the interaction was not, so a population with an empty cell of the a-by-b
+            # table took down the entire plugin instead of dropping one term.
+            if _interaction_estimable(sub_obs, use[0], use[1], np, pd):
+                formula += f" + {use[0]}:{use[1]}"
+                interacted[pop] = (use[0], use[1])
+            else:
+                not_interacted[pop] = (use[0], use[1])
         formulas.setdefault(formula, []).append(pop)
         dds = DeseqDataSet(counts=counts_df, metadata=sub_obs, design=formula,
                            refit_cooks=True, min_replicates=int(C["min_replicates"]),
@@ -1209,6 +1240,20 @@ def run(ctx):
               "first and last levels are compared. A population reported here as not responding "
               "was compared on ONE of that factor's contrasts, not on all of them; the pair "
               "taken is the `contrast` column of tables/de_by_population.csv.")
+    if not_interacted:
+        pairs_ni = sorted(set(not_interacted.values()))
+        ctx.caveat(
+            f"THE PLAN ASKED FOR AN INTERACTION THAT {len(not_interacted)} POPULATION(S) CANNOT "
+            f"FIT, and those populations were fitted on main effects instead: "
+            + "; ".join(
+                f"{a}:{b} in "
+                + ", ".join(sorted(q for q, v in not_interacted.items() if v == (a, b)))
+                for a, b in pairs_ni)
+            + ". The term is dropped where the design matrix would not be full rank - a cell of "
+              "the two factors' table has no sample in that population - so the model there "
+              "estimates the same main effects and no interaction. A population reported here "
+              "as not responding to the interaction was NOT TESTED for one; the formula "
+              "actually fitted per population is in the caveat above.")
     if interacted:
         pairs = sorted({v for v in interacted.values()})
         ctx.caveat(

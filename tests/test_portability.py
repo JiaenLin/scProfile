@@ -925,5 +925,75 @@ ck("and nothing calls a figure CONSTANT as if it were a factory", not _bad_call,
 ck("the check covers the test fixtures too, which is where it was found",
    any(k.startswith("smoke/") for k in _ALLSRC), str(sorted(_ALLSRC)[:3]))
 
+# ---------------------------------------------------------------------------------------------
+# WHAT THE FIRST REAL RUN OF THE CONTRAST FOUND.
+#
+# Two failures, both invisible for as long as the plan's decision never reached the run:
+#
+#   de       LinAlgError: Singular matrix. Every MAIN EFFECT is rank-tested by `_identifiable`
+#            and the interaction was appended without being asked, so a population with an empty
+#            cell of the a-by-b table killed the whole plugin instead of dropping one term.
+#   velocity IORegistryError, from ONE unreadable file among 569 candidates found by a search
+#            over 21,408 directories. A candidate that cannot be opened is a candidate that does
+#            not match; only the h5py probe was guarded and the read beneath it was not.
+# ---------------------------------------------------------------------------------------------
+print("\nthe first real run of the contrast, and what it found")
+import numpy as _np2, pandas as _pd2                                            # noqa: E402
+
+_desrc = _KSRC["de.py"]
+_ie = None
+for _nd in _ast.parse(_desrc).body:
+    if getattr(_nd, "name", "") == "_interaction_estimable":
+        _ns2 = {}
+        exec(compile(_ast.Module([_nd], []), "<x>", "exec"), {"__builtins__": __builtins__}, _ns2)
+        _ie = _ns2["_interaction_estimable"]
+ck("the interaction gets the same rank test the main effects get", _ie is not None,
+   "an interaction appended without being asked is the Singular matrix this prevents")
+if _ie:
+    _full = _pd2.DataFrame({"a": list("yyyyoooo"), "b": list("cchhcchh")})
+    _gap = _pd2.DataFrame({"a": list("yyoo"), "b": list("cccH")})
+    _one = _pd2.DataFrame({"a": list("yyyy"), "b": list("chch")})
+    ck("a replicated 2x2 is estimable", _ie(_full, "a", "b", _np2, _pd2) is True)
+    ck("an empty cell of the two-way table is NOT", _ie(_gap, "a", "b", _np2, _pd2) is False)
+    ck("a factor with one level here is NOT", _ie(_one, "a", "b", _np2, _pd2) is False)
+    ck("a full 3x2 is estimable, so the test is not just a 2x2 rule",
+       _ie(_pd2.DataFrame({"a": list("yyoomm"), "b": list("chchch")}), "a", "b", _np2, _pd2) is True)
+ck("the run asks before it adds", "_interaction_estimable(sub_obs" in _desrc)
+ck("and a population that cannot fit it is NAMED, not silently main-effects-only",
+   "not_interacted" in _desrc and "WAS NOT TESTED" in _desrc.upper())
+
+from scprofile import sources as _SRC                                           # noqa: E402
+_srcsrc = pathlib.Path(_SRC.__file__).read_text()
+ck("an unreadable candidate is skipped rather than raised",
+   "skipped, not matched" in _srcsrc)
+ck("the guard covers every source kind, not only the one that failed",
+   _srcsrc.count("skipped, not matched") >= 3, "loom, h5ad and mtx all open foreign files")
+
+
+class _Boom:
+    kind, path = "h5ad", Path("/nonexistent/boom.h5ad")
+
+
+_said = []
+try:
+    _SRC.attach.__globals__["load"]
+    _orig_load = _SRC.load
+    _SRC.load = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("unreadable"))
+    try:
+        _SRC.attach(type("A", (), {"n_obs": 0, "n_vars": 0, "obs_names": [], "var_names": [],
+                                   "obs": _pd2.DataFrame()})(),
+                    [_Boom()], log=_said.append)
+        _raised = False
+    except RuntimeError:
+        _raised = True
+    except Exception:
+        _raised = False          # any other failure is the stub, not the guard
+    finally:
+        _SRC.load = _orig_load
+except Exception:
+    _raised = None
+ck("a raising candidate does not propagate out of the search", _raised is not True,
+   "one unopenable file among hundreds must not end a plugin")
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

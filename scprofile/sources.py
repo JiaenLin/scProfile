@@ -212,9 +212,34 @@ def load(source, log=print, names=DEFAULT_LAYERS):
         except OSError:
             return None
         import anndata as ad
-        A = ad.read_h5ad(source.path)
-        return (list(map(str, A.obs_names)), list(map(str, A.var_names)),
-                [sp.csr_matrix(A.layers[w]) for w in names])
+        # A CANDIDATE THAT CANNOT BE OPENED IS A CANDIDATE THAT DOES NOT MATCH. Only the h5py
+        # probe above was guarded, and the read below was not - so ONE unreadable file among
+        # hundreds ended the whole plugin.
+        #
+        # Measured on a real cohort: the search visited 21,408 directories, found 569 candidate
+        # h5ad files, and died on one of them with `IORegistryError: No read method registered
+        # for IOSpec(encoding_type='nullable-string-array')` - a file written by a NEWER anndata
+        # than the one in this plugin's pinned environment. The plugin was looking for spliced
+        # and unspliced counts; whether some unrelated object on the same filesystem uses a
+        # string encoding this interpreter postdates has nothing to do with that question, and a
+        # search is exactly the place where an unopenable file is ordinary rather than
+        # exceptional.
+        #
+        # Reported, never silent: a candidate skipped without a word is indistinguishable from
+        # one that was searched and genuinely had nothing.
+        try:
+            A = ad.read_h5ad(source.path)
+        except Exception as e:                                            # noqa: BLE001
+            log(f"    h5ad  {source.path.name}: cannot be opened by this environment "
+                f"({type(e).__name__}: {str(e)[:120]}); skipped, not matched")
+            return None
+        try:
+            return (list(map(str, A.obs_names)), list(map(str, A.var_names)),
+                    [sp.csr_matrix(A.layers[w]) for w in names])
+        except Exception as e:                                            # noqa: BLE001
+            log(f"    h5ad  {source.path.name}: opened, but its layers could not be read "
+                f"({type(e).__name__}: {str(e)[:120]}); skipped, not matched")
+            return None
 
     if source.kind == "mtx":
         import scipy.io
@@ -329,7 +354,17 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
         if len(scope) == 0 or filled[scope].all():
             skipped += 1
             continue
-        loaded = load(src, log=log, names=names)
+        # EVERY SOURCE KIND, NOT JUST THE ONE THAT BIT US. `load` reads loom, h5ad and mtx, and
+        # each branch opens files this process did not write. A search walks whatever is on the
+        # filesystem, so an unopenable file is an ordinary finding there, not an exceptional one
+        # - and one of them ending a plugin that had already searched 21,408 directories is a
+        # loss out of all proportion to the file's relevance.
+        try:
+            loaded = load(src, log=log, names=names)
+        except Exception as e:                                            # noqa: BLE001
+            log(f"    {src.kind:<5} {Path(src.path).name}: unreadable here "
+                f"({type(e).__name__}: {str(e)[:110]}); skipped, not matched")
+            loaded = None
         if loaded is None:
             continue
         bcs, genes, mats = loaded
