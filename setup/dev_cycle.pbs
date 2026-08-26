@@ -316,4 +316,12 @@ for x in (d.get('diagnoses') or []): print('    [%s] %s'%(x['layer'],x['why'][:2
 esac
 
 echo
+# THE EXIT STANDARD, ON WHAT THIS RUN JUST WROTE. A run that produces a report nobody can read
+# has not finished, and the only place that is visible is the report itself.
+if [ -d "${OUT:-}/report" ]; then
+  echo
+  echo "########## 7. THE EXIT STANDARD ##########"
+  "$PY" -m scprofile.cli standard --out "$OUT" || echo "  standard exit $?"
+fi
+
 echo "finished : $(date)"

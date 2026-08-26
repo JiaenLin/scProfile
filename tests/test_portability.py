@@ -1066,5 +1066,22 @@ except Exception:
 ck("a raising candidate does not propagate out of the search", _raised is not True,
    "one unopenable file among hundreds must not end a plugin")
 
+# THE STANDARD IS RUN, NOT REMEMBERED. It was a module somebody had to think to invoke, which
+# is the same as not having it: the report that fails it is exactly the one nobody thought to
+# check. Both harnesses run it now — the gate that decides whether a long run is worth starting,
+# and the run itself, on what it just wrote.
+print("\nthe exit standard is measured by the harnesses, not by hand")
+_root = Path(__file__).resolve().parents[1]
+_smk = (_root / "tests" / "smoke" / "run_smoke.sh").read_text()
+_dev = (_root / "setup" / "dev_cycle.pbs").read_text()
+ck("the gate measures it", "cli standard --out" in _smk)
+ck("and fails when it is not met", "does not meet the exit standard" in _smk)
+ck("the run measures it too, on what it just wrote", "cli standard --out" in _dev)
+ck("it is a command, not a module somebody has to import",
+   'add_parser("standard"' in _clisrc and "def _standard(" in _clisrc)
+ck("it takes a DIRECTORY, so it can only be pointed at a real report",
+   'd if d.name == "report" else d / "report"' in _clisrc,
+   "a standard that accepts a payload can be run against something never rendered")
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

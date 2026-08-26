@@ -1897,6 +1897,30 @@ def _write_readme(out, payload):
     return out / "README.md"
 
 
+def _standard(a):
+    """Measure the RENDERED report against the exit standard. Non-zero when it is not met.
+
+    On the report that was actually written, in the directory a run actually produced - the
+    same reason `report` rebuilds from report.json rather than from the installed plugins. A
+    standard measured on a fixture proves the checker runs and nothing about the report anyone
+    opens, which is why this takes a directory rather than a payload.
+    """
+    from . import standard as ST
+    d = Path(a.out)
+    d = d if d.name == "report" else d / "report"
+    if not d.is_dir():
+        print(f"no rendered report at {d}. Run `scprofile report --out <run dir>` first.")
+        return 2
+    res = ST.check_report(d)
+    if not res:
+        print(f"no plugin pages under {d}")
+        return 2
+    ok = ST.summarise(res)
+    n = sum(1 for v in res.values() for _c, o, _dd in v if not o)
+    print(f"\n{'EXIT STANDARD MET' if ok else f'{n} failing criteria across {len(res)} page(s)'}")
+    return 0 if ok else 1
+
+
 def _report(a):
     from . import report
     p = Path(a.out) / "report.json"
@@ -2107,6 +2131,12 @@ def main(argv=None):
     p = sub.add_parser("report", help="[you] rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)
     p.set_defaults(fn=_report)
+
+    st_ = sub.add_parser("standard",
+                         help="[you] does the rendered report meet the exit standard?")
+    st_.add_argument("--out", required=True, type=Path,
+                     help="a run directory, or the report/ inside one")
+    st_.set_defaults(fn=_standard)
 
     a = ap.parse_args(argv)
     if not getattr(a, "fn", None):

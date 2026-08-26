@@ -110,9 +110,21 @@ echo "  run exit $?"
 echo; echo "=== 6. what landed ==="
 ( cd "$WORK/results" && find . -type f | sort | sed 's/^/  /' )
 
-echo; echo "=== 7. the checks ==="
+echo; echo "=== 7. the exit standard, on the report this run just wrote ==="
+# MEASURED ON THE RENDERED REPORT, EVERY CYCLE. It was a module somebody had to remember to
+# run, which is the same as not having it: the report that fails the standard is the one nobody
+# thought to check. Folded into the exit status like the selftests, so a job reports it rather
+# than stopping at it.
+standard_rc=0
+$PY -m scprofile.cli standard --out "$WORK/results" || standard_rc=$?
+
+echo; echo "=== 8. the checks ==="
 $PY "$HERE/_check.py" --out "$WORK/results" --units 8 --expect "$WANT" --log "$LOG"
 rc=$?
+if [ "$standard_rc" -ne 0 ]; then
+    echo "  the rendered report does not meet the exit standard (rc=$standard_rc)."
+    rc=1
+fi
 if [ "$selftest_rc" -ne 0 ]; then
     echo "  and the selftests failed earlier (rc=$selftest_rc): an environment is not usable."
     rc=1
