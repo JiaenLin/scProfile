@@ -37,6 +37,9 @@ MAX_CAPTION_WORDS = 45
 MAX_PROSE_WORDS = 900
 #: Collapsed text is not in a reader's way, but it must not grow without limit.
 MAX_HIDDEN_WORDS = 2500
+#: Caveats are the page's most load-bearing prose and must stay visible; they are capped
+#: generously rather than charged against narration.
+MAX_CAVEAT_WORDS = 800
 #: UniProt-style accessions. A result naming one of these has an unmapped identifier in it.
 ACCESSION = re.compile(r"\b(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})\b")
 #: What a figure must say to count as comparing the design.
@@ -113,8 +116,17 @@ def check_page(path, *, exempt=()):
     # but it is not in anybody's way.
     hidden_all = sum(len(_text(h).split())
                      for h in re.findall(r"<details[^>]*>(.*?)</details>", html, re.S))
-    prose = len(txt.split()) - sum(len(c.split()) for c in caps) - hidden_all
+    # CAVEATS ARE NOT NARRATION, and the cap was written against narration - the ten-thousand-word
+    # pages of repeated explanation. A caveat is the most load-bearing prose on a page and the
+    # one thing that must not be collapsed, so charging it against a narration cap pushed in
+    # exactly the wrong direction: the way to pass would have been to say less about the limits
+    # of the result. Counted separately, and capped, so it cannot grow without bound either.
+    cav_html = " ".join(re.findall(r'<div class="warn".*?</div>', html, re.S))
+    cav_words = len(_text(re.sub(r"<details[^>]*>.*?</details>", " ", cav_html, flags=re.S)).split())
+    prose = len(txt.split()) - sum(len(c.split()) for c in caps) - hidden_all - cav_words
     ck("prose", prose <= MAX_PROSE_WORDS, f"{prose} words of prose, cap {MAX_PROSE_WORDS}")
+    ck("caveats", cav_words <= MAX_CAVEAT_WORDS,
+       f"{cav_words} words of caveat, cap {MAX_CAVEAT_WORDS}")
     ck("hidden", hidden_all <= MAX_HIDDEN_WORDS,
        f"{hidden_all} words behind disclosures, cap {MAX_HIDDEN_WORDS}")
     acc = sorted(set(ACCESSION.findall(" ".join(caps))))

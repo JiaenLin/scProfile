@@ -804,9 +804,14 @@ def _fig_hits(ctx, hits):
     n_untested = int((~np.asarray(full["tested"], dtype=bool)).sum())
     ctx.emit_figure(
         "F6_hits_by_population", fig,
-        caption=(f"Significant genes per population and term at padj < {ctx.config['alpha']}, "
-                 f"split by direction; the second level of each contrast is the numerator, and "
-                 f"the contrast is named in the source table. "
+        # IT SAYS WHAT IT COMPARES. Each term here IS a contrast between arms of the design -
+        # that is what a term is - and the caption described the drawing without ever saying so,
+        # which left the only figure on the page that compares the design looking like a summary
+        # of counts.
+        caption=(f"Genes changing across the design, per population and term, at "
+                 f"padj < {ctx.config['alpha']} - one row per arm comparison, split by "
+                 f"direction. The second level of each contrast is the numerator, and the "
+                 f"contrast is named in the source table. "
                  + (f"The {len(d)} rows with the most genes are drawn, never-tested rows first; "
                     f"all {len(full)} are in the source table. " if hidden else "")
                  + (f"{n_untested} row(s) are marked NOT TESTED: no fit was run for them, so an "

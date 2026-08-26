@@ -96,25 +96,30 @@ _GROUPS = (
 CAPTION_LEAD_WORDS = 32
 
 
-def _split_caption(text):
+#: A heading is a heading: this many words, then the rest goes under it.
+HEADING_LEAD_WORDS = 14
+
+
+def _split_caption(text, limit=None):
     """(what a reader sees, what is one click away). Split on a sentence, never mid-clause."""
+    limit = CAPTION_LEAD_WORDS if limit is None else int(limit)
     t = " ".join(str(text).split())
-    if len(t.split()) <= CAPTION_LEAD_WORDS:
+    if len(t.split()) <= limit:
         return t, ""
     lead, used = [], 0
     for sent in re.split(r"(?<=[.!?]) ", t):
-        if used and used + len(sent.split()) > CAPTION_LEAD_WORDS:
+        if used and used + len(sent.split()) > limit:
             break
         lead.append(sent)
         used += len(sent.split())
     head = " ".join(lead)
-    if not head or len(head.split()) > CAPTION_LEAD_WORDS:
+    if not head or len(head.split()) > limit:
         # A SINGLE SENTENCE CAN EXCEED THE CAP, and splitting on sentences alone then returns a
         # lead longer than the lead is allowed to be. Break at the last clause boundary that
         # fits; failing that, at the word. The remainder still goes behind the disclosure, so
         # the split is where a reader stops, never where the text ends.
         words = t.split()
-        cut = CAPTION_LEAD_WORDS
+        cut = limit
         for i in range(cut, max(4, cut // 2), -1):
             if words[i - 1].endswith((",", ";", ":", "-")):
                 cut = i
@@ -205,7 +210,14 @@ def _figure_section(figs, spec):
         body = []
         for d in here:
             got = by_id.get(str(d.get("id") or ""), [])
-            q = f'<h3>{_e(d.get("question") or d.get("id"))}</h3>'
+            # A HEADING IS A HEADING. The whole question went into the <h3>, and the questions
+            # are sentences - several hundred words of them on a page, in the largest type on
+            # it. The lead names what the panel answers; the rest is still there, under it.
+            _q_lead, _q_rest = _split_caption(d.get("question") or d.get("id") or "",
+                                              limit=HEADING_LEAD_WORDS)
+            q = (f'<h3>{_e(_q_lead)}</h3>'
+                 + (f"<details><summary class='sub'>in full</summary>{_e(_q_rest)}</details>"
+                    if _q_rest else ""))
             if not got:
                 body.append(q + _absent_panel(d, kind))
                 continue
@@ -606,6 +618,19 @@ def _concordance_block(name, recs):
             "<th>rho</th><th>cells</th></tr>" + "".join(rows) + "</table></div>")
 
 
+def _lede(text):
+    """The headline's claim, with the rest under it.
+
+    A per-unit plugin's headline is every unit's headline concatenated - sixty words of
+    per-sample detail in the first line of the page, before a reader has been told what the
+    cohort is. The lead is the claim; the per-unit half is in the appendix and here.
+    """
+    lead, rest = _split_caption(text or "", limit=CAPTION_LEAD_WORDS)
+    return (_e(lead)
+            + (f"<details><summary class='sub'>per unit</summary>{_e(rest)}</details>"
+               if rest else ""))
+
+
 def _fold_caveats(caveats):
     """Caveats identical apart from their `[unit]` tag, folded into one line naming the units.
 
@@ -657,6 +682,7 @@ def _fold_caveats(caveats):
 
     groups = {_fill(k): v for k, v in groups.items()}
     order = [_fill(k) for k in order]
+    order_units = {u for v in groups.values() for u in v}
     out = []
     for body in order:
         units = groups[body]
@@ -665,8 +691,14 @@ def _fold_caveats(caveats):
         elif len(units) == 1:
             out.append(f"[{units[0]}] {body}")
         else:
-            out.append(f"{body}  <span class='sub'>({len(units)} units: "
-                       f"{', '.join(units)})</span>")
+            # ALL OF THEM IS NOT A LIST. Naming every unit on every folded caveat put ten names
+            # on seventeen lines - two hundred words of the same ten strings, on a page whose
+            # per-sample appendix already names them all. A SUBSET is still listed, because
+            # which units a caveat applies to is the whole of its meaning when it is not all.
+            total = len(order_units) if order_units else len(units)
+            tag = (f"all {len(units)} units" if len(set(units)) >= total
+                   else f"{len(units)} units: {', '.join(units)}")
+            out.append(f"{body}  <span class='sub'>({tag})</span>")
     return out
 
 
@@ -715,7 +747,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     body = [f"<h1>{_e(name)}</h1>",
             f'<p class="sub">{_e(summary)}</p>',
             f'<p class="lede">status <b>{_e(p.get("status", "?"))}</b> · '
-            f'{_e(p.get("headline", ""))}</p>',
+            + _lede(p.get("headline", "")) + '</p>',
             _overview_block(payload_all or {}),
             _constraint_block(constraint, binds)]
     if caveats:
@@ -774,6 +806,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     # the report this was written for. Worse, two of those three INFER PER SAMPLE, so the
     # panels are not comparable with each other even in principle. Nothing is deleted: every
     # panel is still rendered, on its own page, one click away.
+    per_unit_extra = ""
     figs_all = p.get("figures") or []
     per_unit_figs = [f for f in figs_all if f.get("unit")]
     cohort_figs = [f for f in figs_all if not f.get("unit")]
@@ -793,7 +826,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
         # Nine of ten unit payloads used to be discarded by a dict comprehension keyed on the
         # plugin name, and the survivor was rendered under that name as though it described the
         # cohort. Every unit gets a row, including the ones that produced nothing.
-        body.append(
+        per_unit_table = (
             "<h2>Per unit</h2><p class='sub'>This plugin runs once per unit because pooling the "
             "units would answer a different question. Each ran separately; the cell-level results "
             "are one column in the object, assembled from all of them.</p>"
@@ -806,6 +839,13 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
                 f"<td>{_e(u.get('n_figures', 0))}</td>"
                 f"<td class='sub'>{len(u.get('caveats') or [])}</td></tr>"
                 for u in units) + "</table></div>")
+        # BESIDE THE PANELS IT DESCRIBES. Ten rows of per-sample headlines is per-sample detail,
+        # and it was 551 words on the page a reader opens - more than a third of everything
+        # visible there - describing figures that are no longer on it.
+        if per_unit_figs:
+            per_unit_extra = per_unit_table
+        else:
+            body.append(per_unit_table)
     body.append(_limits(cannot_show))
     body.append('<p class="sub"><a href="index.html">&larr; back to the index</a></p>')
     d = Path(out_dir) / "report"
@@ -817,6 +857,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
               "result &mdash; and where the method is fitted per sample, these are not "
               "comparable with each other. "
               f"<a href='{_e(name)}.html'>&larr; back</a></p>"]
+        ap += [per_unit_extra] if per_unit_extra else []
         ap += [_panel(f_, i + 1) for i, f_ in enumerate(per_unit_figs)]
         (d / f"{name}_by_sample.html").write_text(
             _page(f"{name} per sample — scProfile", "".join(ap)), encoding="utf-8")
