@@ -312,12 +312,21 @@ def _across_units(units, declared):
                       + f' Each dot is one unit; hover for its name. '
                         f'{n} unit(s), {_num(vals[0])} to {_num(vals[-1])}.</figcaption>'
                       + _svg_strip(vals, labs) + "</figure>")
+    # A DECLARED METRIC THAT ARRIVED FOR NO UNIT IS NAMED, not omitted. The same rule the
+    # figures already follow: an absent panel and a panel nobody wanted look identical on a
+    # page, and only one of them means the run is incomplete.
+    absent = sorted(set(named) - set(keys))
+    gap = ("" if not absent else
+           '<div class="bad"><b>Declared and not recorded:</b> '
+           + ", ".join(f"<code>{_e(a)}</code>" for a in absent)
+           + ". The comparison this plugin said it would make is missing from this page, and "
+             "its absence is a fact about the run rather than about the cohort.</div>")
     if not rows:
-        return ('<h2>Across units</h2><div class="bad">This plugin ran once per unit and '
+        return ('<h2>Across units</h2>' + gap + '<div class="bad">This plugin ran once per unit and '
                 'recorded no comparable number, so its units cannot be put on one axis. Every '
                 'panel below describes a single unit, and whether the units agree is not '
                 'answered anywhere on this page.</div>')
-    return ("<h2>Across units</h2><p class='sub'>Every panel further down describes ONE unit. "
+    return ("<h2>Across units</h2>" + gap + "<p class='sub'>Every panel further down describes ONE unit. "
             "This is the only place the units are compared, and the spread here is the context "
             "for reading any single-unit panel as a finding.</p>"
             + "".join(blocks)

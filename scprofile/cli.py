@@ -891,7 +891,16 @@ def _run(a):
                                              sorted((_run_facts.get("factors") or {}))))
     _binds = {}
     for _n in sorted(ks):
-        _shown = {f for cols in (_by_arm.get(_n) or {}).values() for f in cols}
+        # THE ALIASES COUNT AS SHOWN. A collapsed factor is not an absent one: if a page draws
+        # `age` and the design aliases `age` with a reagent version, the page is drawing that
+        # reagent split too, and a constraint naming the reagent must bind it. Collapsing the
+        # panel and then not binding what the panel shows would have been a quieter version of
+        # the bug the collapse was added to fix.
+        _shown = set()
+        for _cols in (_by_arm.get(_n) or {}).values():
+            for _f, _d in _cols.items():
+                _shown.add(_f)
+                _shown.update(_d.get("aliased_with") or [])
         _terms = set((_PL.decisions_for(ks[_n], _run_facts).get("contrast") or {})
                      .get("terms") or [])
         _hit = sorted(_forbidden & (_shown | _terms))

@@ -1,0 +1,9 @@
+sample,group,arm
+S1,control,a
+S2,control,a
+S3,control,b
+S4,control,b
+S5,treated,a
+S6,treated,a
+S7,treated,b
+S8,treated,b

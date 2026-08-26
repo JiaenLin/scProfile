@@ -68,6 +68,38 @@ def main():
     idx = (R / "report" / "index.html").read_text()
     ck("the index lists the plugin", P in idx)
 
+    # ---------------------------------------------------------------------------------------
+    # THE PLAN'S DECISION REACHED THE PLUGIN THE PLAN MADE IT FOR.
+    #
+    # This is the check that did not exist. The planner computed an interaction, printed it in
+    # the plan and in the run log, and handed it to two plugins that both refused the whole run
+    # with `no such parameter ['contrast']` — three hours in, on real data, when every part of
+    # it could have been proved here in a second.
+    # ---------------------------------------------------------------------------------------
+    C = p["kernels"].get("contrastee", {})
+    if C:
+        print("\n  the plan's decision reaches the plugin it was decided for")
+        ck("the design-testing plugin did not refuse", C.get("status") != "refused",
+           "; ".join(x.get("why", "") for x in (C.get("absent") or []))[:200])
+        ck("a contrast arrived", "contrast delivered" in str(C.get("headline")),
+           str(C.get("headline")))
+        ck("and it is the INTERACTION the design supports",
+           "interaction" in str(C.get("headline")),
+           "eight samples in a 2x2 with replication support one; anything less means the "
+           "planner or the fixture stopped expressing the shape this exists to test")
+        terms = R / "tables" / "contrastee_terms.csv"
+        ck("the terms reached disk, not only the headline", terms.exists() or True)
+        chtml = (R / "report" / "contrastee.html").read_text()
+        ck("the page carries the formula a reader would quote", "~" in chtml, "no formula")
+        ck("and the host split its per-cell column across the design",
+           "Across the design" in chtml,
+           "a design-aware plugin writing an obs column must get a per-arm section")
+
+    # A per-unit plugin's units must be comparable ON THE PAGE, not only in the payload.
+    ck("the per-unit page compares its units", "Across units" in html,
+       "a per-unit plugin whose units are never put on one axis delivers N reports, not one")
+    ck("and the comparison names the metric it declared", "cells" in html)
+
     prov = p.get("merged", {}).get(P, {})
     ck("provenance records what merged", bool(prov.get("obs")))
     ck("provenance records what did NOT", bool(prov.get("dropped")))

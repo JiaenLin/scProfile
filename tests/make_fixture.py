@@ -79,9 +79,17 @@ def build(n=1200, g=400, seed=0):
     A.obs_names = [f"CELL{i:05d}" for i in range(n)]
     A.var_names = _gene_names(g)
     A.obs["cell_type"] = pd.Categorical(lab)
-    A.obs["sample"] = pd.Categorical(rng.choice([f"S{i}" for i in range(1, 5)], size=n))
-    A.obs["group"] = pd.Categorical(np.where(
-        A.obs["sample"].isin(["S1", "S2"]), "control", "treated"))
+    # EIGHT SAMPLES IN A 2x2 WITH REPLICATION, because that is the shape the planner is built
+    # to recognise and four samples cannot express it. With one sample per cell of the design
+    # the richest contrast available is main effects, so the interaction branch - the one a real
+    # design-testing plugin takes, and the one that carried a delivery bug into a three-hour run
+    # unnoticed - was never reached by any test that runs before that run.
+    A.obs["sample"] = pd.Categorical(rng.choice([f"S{i}" for i in range(1, 9)], size=n))
+    _first = A.obs["sample"].isin(["S1", "S2", "S3", "S4"])
+    A.obs["group"] = pd.Categorical(np.where(_first, "control", "treated"))
+    # crossed with `group`, two samples in every cell of the 2x2
+    A.obs["arm"] = pd.Categorical(np.where(
+        A.obs["sample"].isin(["S1", "S2", "S5", "S6"]), "a", "b"))
 
     # X lognormalised, counts kept in the layer. This is the arrangement that makes a second log
     # transform possible, and the kernel is expected to notice it.

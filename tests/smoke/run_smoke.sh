@@ -33,8 +33,12 @@ echo "python   $PY"
 echo "work     $WORK"
 echo "started  $(date -u +%FT%TZ)"
 
-echo; echo "=== 1. the per-unit fixture plugin is discovered and valid ==="
+echo; echo "=== 1. the fixture plugins are discovered and valid ==="
+# `_check.py`, with the underscore, so plugin discovery skips it. Without it the checker script
+# in this directory is loaded as a plugin and reported as one with no summary — noise in every
+# doctor and validate this suite runs, from a file that is not a plugin at all.
 $PY -m scprofile.cli validate perunit || exit 1
+$PY -m scprofile.cli validate contrastee || exit 1
 
 echo; echo "=== 2. every built plugin's selftest ==="
 # `scprofile selftest`, NOT a shell loop over selftest.py with the host interpreter. A plugin
@@ -65,7 +69,7 @@ echo; echo "=== 5. the run ==="
 # refusal rather than a test - but skipping it silently would leave the only plugin that brings an
 # environment, writes a side-car object and needs a compatibility copy of the input outside the
 # only test that opens what a run wrote. Which of the two happened is printed, not implied.
-WANT=cellcycle,perunit
+WANT=cellcycle,perunit,contrastee
 if [ -n "$PREFIX" ] && [ -d "$PREFIX" ]; then
     WANT=velocity,$WANT
     echo "  including velocity: an environment prefix was given ($PREFIX)"
@@ -73,7 +77,13 @@ else
     echo "  NOT including velocity: no environment prefix given, so its own interpreter, its"
     echo "  side-car object and the compatibility-copy path are NOT exercised by this run."
 fi
+# --design, AND THAT IS THE POINT OF THIS STEP. Without one the planner decides no contrast,
+# no plugin is handed one, and the channel that carried a delivery bug into a three-hour run
+# is not walked by anything that runs before that run. The fixture is eight samples in a 2x2
+# with replication, so the contrast decided here is the INTERACTION — the branch a real
+# design-testing plugin takes.
 $PY -m scprofile.cli run --h5ad "$WORK/fixture.h5ad" --out "$WORK/results" \
+    --design "$HERE/design.csv" \
     --kernel "$WANT" ${PREFIX:+--prefix "$PREFIX"} \
     --cores 4 --timeout 1800
 echo "  run exit $?"
@@ -82,7 +92,7 @@ echo; echo "=== 6. what landed ==="
 ( cd "$WORK/results" && find . -type f | sort | sed 's/^/  /' )
 
 echo; echo "=== 7. the checks ==="
-$PY "$HERE/check.py" --out "$WORK/results" --units 4 --expect "$WANT" --log "$LOG"
+$PY "$HERE/_check.py" --out "$WORK/results" --units 8 --expect "$WANT" --log "$LOG"
 rc=$?
 echo; echo "finished $(date -u +%FT%TZ)"
 exit $rc
