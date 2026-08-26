@@ -11,6 +11,7 @@ are not SCENIC's, and a shared block at the end of one long document is a block 
 from __future__ import annotations
 
 import html
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -91,6 +92,38 @@ _GROUPS = (
 )
 
 
+#: A caption's first sentences, up to this many words. The rest goes behind a disclosure.
+CAPTION_LEAD_WORDS = 32
+
+
+def _split_caption(text):
+    """(what a reader sees, what is one click away). Split on a sentence, never mid-clause."""
+    t = " ".join(str(text).split())
+    if len(t.split()) <= CAPTION_LEAD_WORDS:
+        return t, ""
+    lead, used = [], 0
+    for sent in re.split(r"(?<=[.!?]) ", t):
+        if used and used + len(sent.split()) > CAPTION_LEAD_WORDS:
+            break
+        lead.append(sent)
+        used += len(sent.split())
+    head = " ".join(lead)
+    if not head or len(head.split()) > CAPTION_LEAD_WORDS:
+        # A SINGLE SENTENCE CAN EXCEED THE CAP, and splitting on sentences alone then returns a
+        # lead longer than the lead is allowed to be. Break at the last clause boundary that
+        # fits; failing that, at the word. The remainder still goes behind the disclosure, so
+        # the split is where a reader stops, never where the text ends.
+        words = t.split()
+        cut = CAPTION_LEAD_WORDS
+        for i in range(cut, max(4, cut // 2), -1):
+            if words[i - 1].endswith((",", ";", ":", "-")):
+                cut = i
+                break
+        head = " ".join(words[:cut]).rstrip(",;:-") + " ..."
+        return head, " ".join(words[cut:])
+    return head, t[len(head):].strip()
+
+
 def _panel(f, index, *, note=""):
     """One drawn panel: the image, its caption, its vector and its source data."""
     rel = f"../{f['path']}"
@@ -103,8 +136,14 @@ def _panel(f, index, *, note=""):
         extra.append('<span class="nosrc">no source data</span>')
     unit = f.get("unit")
     head = f"Figure {index}." + (f" <code>{_e(unit)}</code>" if unit else "")
+    # THE CLAIM VISIBLE, THE REST ONE CLICK AWAY. Captions were 65% of every word on the page -
+    # 13,172 of 20,545 on the worst - so the figures were surrounded by more text than a reader
+    # will read, and the sentence that says what the panel SHOWS was buried in it. Nothing is
+    # thrown away: the remainder is still on the page, behind a disclosure.
+    lead, rest = _split_caption(f.get("caption") or "")
     return (f'<figure><img src="{_e(rel)}" alt="{_e(f.get("id") or f["path"])}">'
-            f'<figcaption><b>{head}</b> {_e(f.get("caption") or "")}'
+            f'<figcaption><b>{head}</b> {_e(lead)}'
+            + (f'<details><summary class="sub">more</summary>{_e(rest)}</details>' if rest else "")
             + (f'<br><span class="sub">{_e(note)}</span>' if note else "")
             + f'<br><span class="sub">{" &middot; ".join(extra)}</span></figcaption></figure>')
 
@@ -205,14 +244,20 @@ def _constraint_block(constraint, binds):
     """
     if not (constraint and binds):
         return ""
-    return ('<div class="bad"><b>The upstream constraint binds this page.</b> Its numbers cross '
-            + _e(", ".join(binds))
-            + ', and a claim across ' + ("that factor" if len(binds) == 1 else "those factors")
-            + ' is what the object\'s own constraint on use forbids. Read it before the results, '
-              'not after them:<blockquote>'
+    # THE PROHIBITION VISIBLE, THE WHOLE TEXT KEPT. Printing the entire constraint on every
+    # bound page put ~250 words of it in front of a reader six times over, and the sentence that
+    # actually forbids something was inside them. The prohibition is what binds; the rest is
+    # context, and it is one click away rather than gone.
+    text = str(constraint)
+    forbid = [ln.strip() for ln in re.split(r"(?<=[.])\s+", " ".join(text.split()))
+              if "must NOT" in ln]
+    return ('<div class="bad"><b>The upstream constraint binds this page</b> on '
+            + _e(", ".join(binds)) + '. '
+            + _e(forbid[0] if forbid else text[:300])
+            + '<details><summary class="sub">the constraint in full</summary>'
             + "".join(f"<p>{_e(line.strip())}</p>"
-                      for line in str(constraint).splitlines() if line.strip())
-            + "</blockquote></div>")
+                      for line in text.splitlines() if line.strip())
+            + "</details></div>")
 
 
 def _num(v):
@@ -307,11 +352,10 @@ def _across_units(units, declared):
                     f"<td>{_num(med)}</td><td>{_num(vals[-1])}</td>"
                     f"<td>{'-' if fold != fold or fold == float('inf') else f'{fold:,.2f}x'}</td>"
                     f"<td class='sub'>{_e(labs[0])} lowest, {_e(labs[-1])} highest</td></tr>")
-        blocks.append(f'<figure><figcaption><b>{_e(k)}</b>'
-                      + (f' — {_e(q)}' if q else "")
-                      + f' Each dot is one unit; hover for its name. '
-                        f'{n} unit(s), {_num(vals[0])} to {_num(vals[-1])}.</figcaption>'
-                      + _svg_strip(vals, labs) + "</figure>")
+        blocks.append(f'<figure><figcaption><b>{_e(k)}</b> — {n} units, '
+                      f'{_num(vals[0])} to {_num(vals[-1])}'
+                      + (f', {fold:,.2f}x' if fold == fold and fold != float("inf") else "")
+                      + '.</figcaption>' + _svg_strip(vals, labs) + "</figure>")
     # A DECLARED METRIC THAT ARRIVED FOR NO UNIT IS NAMED, not omitted. The same rule the
     # figures already follow: an absent panel and a panel nobody wanted look identical on a
     # page, and only one of them means the run is incomplete.
@@ -326,13 +370,15 @@ def _across_units(units, declared):
                 'recorded no comparable number, so its units cannot be put on one axis. Every '
                 'panel below describes a single unit, and whether the units agree is not '
                 'answered anywhere on this page.</div>')
-    return ("<h2>Across units</h2>" + gap + "<p class='sub'>Every panel further down describes ONE unit. "
-            "This is the only place the units are compared, and the spread here is the context "
-            "for reading any single-unit panel as a finding.</p>"
+    return ("<h2>Across units</h2>" + gap + "<p class='sub'>The only place the units are "
+            "compared; every panel below describes one.</p>"
             + "".join(blocks)
             + "<div class='wrap'><table><tr><th>metric</th><th>min</th><th>median</th>"
               "<th>max</th><th>range</th><th>extremes</th></tr>"
             + "".join(rows) + "</table></div>")
+
+
+BY_ARM_PANEL_CAP = 3
 
 
 def _arm_rows_numeric(arms, *, width=560, row=22):
@@ -424,9 +470,15 @@ def _by_arm_block(by_arm, *, aware):
                     'one, so its page says nothing about the design it claims to describe.'
                     '</div>')
         return ""
-    blocks = []
+    # A CAP, AND THE REST NAMED. Three columns by three factors is nine panels of the same
+    # shape, and a page a reader does not finish hides its own result. The factors are taken in
+    # a stable order so the same ones appear every run.
+    blocks, shown, omitted = [], 0, []
     for col in sorted(by_arm):
         for fac in sorted(by_arm[col]):
+            if shown >= BY_ARM_PANEL_CAP:
+                omitted.append(f"{col} by {fac}")
+                continue
             d = by_arm[col][fac]
             arms = d.get("arms") or []
             if len(arms) < 2:
@@ -435,23 +487,24 @@ def _by_arm_block(by_arm, *, aware):
                    else _arm_rows_categorical(arms, d.get("categories")))
             what = ("median, interquartile box and full range, per arm"
                     if d.get("kind") == "numeric" else "composition, per arm")
+            # SHORT, AND THE CAVEAT SAID ONCE. Repeating "this is a description and not a test"
+            # under every panel put the same 25 words on the page as many times as there were
+            # factors; it belongs to the section, which states it above, not to each figure.
             ali = d.get("aliased_with") or []
+            shown += 1
             blocks.append(f'<figure><figcaption><b><code>{_e(col)}</code> by '
-                          f'<code>{_e(fac)}</code></b> — {what}, over cells. '
-                          f'{len(arms)} arm(s). This is a DESCRIPTION and not a test: the unit '
-                          f'of replication is the sample, not the cell.'
-                          + (f' <b>This split is identical to '
-                             f'{", ".join("<code>" + _e(x) + "</code>" for x in ali)}</b>, which '
-                             f'divides the samples exactly the same way — one panel, not two, '
-                             f'and which of them the difference belongs to is not something '
-                             f'this data can say.' if ali else "")
+                          f'<code>{_e(fac)}</code></b> — {what}, {len(arms)} arms.'
+                          + (f' Identical split to '
+                             + ", ".join("<code>" + _e(x) + "</code>" for x in ali)
+                             + ' — one panel, not two.' if ali else "")
                           + '</figcaption>' + svg + "</figure>")
     if not blocks:
         return ""
-    return ("<h2>Across the design</h2><p class='sub'>Every other panel on this page describes "
-            "populations or cells. This is what this plugin's own per-cell output looks like "
-            "across the design the study was built on — drawn by the host from the columns the "
-            "plugin wrote, and described rather than tested.</p>" + "".join(blocks))
+    return ("<h2>Across the design</h2><p class='sub'>This plugin's per-cell output across the "
+            "design. A DESCRIPTION, not a test: the unit of replication is the sample, not the "
+            "cell.</p>" + "".join(blocks)
+            + (f"<p class='sub'>Not drawn, same shape: {_e('; '.join(omitted))}. "
+               f"The numbers are in the object.</p>" if omitted else ""))
 
 
 def _concordance_block(name, recs):
@@ -482,18 +535,82 @@ def _concordance_block(name, recs):
                     f"<td><code>{_e(theirs['column'])}</code><br>"
                     f"<span class='sub'>from {_e(theirs['plugin'])}</span></td>"
                     f"<td>{rho:+.3f}</td><td>{r['n']:,}</td></tr>")
-    return ("<h2>Against the other plugins</h2><p class='sub'>Spearman rank correlation between "
-            "this plugin's per-cell numbers and those another plugin produced on the same cells. "
-            "An ordering that tracks a cell-cycle score may be a cell-cycle axis; two orderings "
-            "that agree are two methods agreeing. Nothing here is thresholded or interpreted — "
-            "which of these matters is a question about the biology.</p>"
+    return ("<h2>Against the other plugins</h2><p class='sub'>Spearman between this plugin's "
+            "per-cell numbers and another's, on the same cells. Not thresholded, not "
+            "interpreted.</p>"
             "<div class='wrap'><table><tr><th>this plugin</th><th>against</th>"
             "<th>rho</th><th>cells</th></tr>" + "".join(rows) + "</table></div>")
 
 
+def _fold_caveats(caveats):
+    """Caveats identical apart from their `[unit]` tag, folded into one line naming the units.
+
+    A per-unit plugin emits its caveats once per unit and the merge tags each with the unit it
+    came from, so a ten-sample run put the same sentence on the page ten times - 106 caveats on
+    one page, of which a handful were distinct. Every unit is still named; what goes is the
+    repetition, not the information.
+    """
+    import re as _re
+    groups, order = {}, []
+    for c in caveats:
+        m = _re.match(r"^\[([^\]]+)\]\s*(.*)$", str(c), _re.S)
+        unit, body = (m.group(1), m.group(2)) if m else (None, str(c))
+        if body not in groups:
+            groups[body] = []
+            order.append(body)
+        if unit:
+            groups[body].append(unit)
+    out = []
+    for body in order:
+        units = groups[body]
+        if not units:
+            out.append(body)
+        elif len(units) == 1:
+            out.append(f"[{units[0]}] {body}")
+        else:
+            out.append(f"{body}  <span class='sub'>({len(units)} units: "
+                       f"{', '.join(units)})</span>")
+    return out
+
+
+def _overview_block(payload):
+    """WHAT WAS COMPARED, before any number. First on every page.
+
+    Measured on the report this was written for: no page said how many samples there were, how
+    many arms, or what was contrasted. A reader met "1,654 significant edges" with nothing
+    anywhere to say the study was ten animals in a 2x2. A result is not interpretable before
+    the design is.
+    """
+    d = payload.get("describe") or {}
+    units = [str(u) for u in (payload.get("units") or [])]
+    arms = {}
+    for cols in (payload.get("by_arm") or {}).values():
+        for per_factor in cols.values():
+            for fac, dd in per_factor.items():
+                arms.setdefault(fac, sorted({str(a.get("level")) for a in (dd.get("arms") or [])}))
+    n = d.get("n_obs")
+    bits = []
+    if n:
+        bits.append(f"<b>{n:,}</b> cells")
+    if units:
+        bits.append(f"<b>{len(units)}</b> samples")
+    if d.get("organism"):
+        bits.append(f"{_e(d['organism'])} {_e(d.get('assay',''))}".strip())
+    rows = "".join(
+        f"<tr><td><code>{_e(f)}</code></td><td>{_e(' / '.join(v))}</td>"
+        f"<td class='sub'>{len(v)} arms</td></tr>"
+        for f, v in sorted(arms.items()))
+    return ("<h2>The cohort</h2><p class='lede'>" + " &middot; ".join(bits) + "</p>"
+            + (f"<p class='sub'>Samples: {_e(', '.join(units))}</p>" if units else "")
+            + ("<div class='wrap'><table><tr><th>factor</th><th>arms</th><th></th></tr>"
+               + rows + "</table></div>" if rows else
+               "<div class='bad'>No design factor was resolved, so nothing on this page is "
+               "a comparison between groups.</div>"))
+
+
 def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
                  spec=None, constraint="", binds=(), by_arm=None, aware=False,
-                 concordance=()):
+                 concordance=(), payload_all=None):
     """One kernel's own page. Ends in its own limits, not a shared block."""
     p = payload or {}
     caveats = p.get("caveats") or []
@@ -502,10 +619,26 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
             f'<p class="sub">{_e(summary)}</p>',
             f'<p class="lede">status <b>{_e(p.get("status", "?"))}</b> · '
             f'{_e(p.get("headline", ""))}</p>',
+            _overview_block(payload_all or {}),
             _constraint_block(constraint, binds)]
     if caveats:
+        # THE CLAIM VISIBLE, THE ELABORATION COLLAPSED - the same split the captions get, and
+        # for the same reason. These are written claim-first, so the leading sentence is the
+        # part a reader must not miss; what follows is why, and it is one click away rather
+        # than gone. A caveat nobody reaches the end of is not a caveat that was read.
+        folded = _fold_caveats(caveats)
+        items = []
+        for c in folded:
+            tail = ""
+            if "</span>" in c:
+                c, tail = c.split("<span class='sub'>", 1)
+                tail = "<span class='sub'>" + tail
+            lead, rest = _split_caption(c)
+            items.append("<li>" + _e(lead) + tail
+                         + (f"<details><summary class='sub'>why</summary>{_e(rest)}</details>"
+                            if rest else "") + "</li>")
         body.append('<div class="warn"><b>Read these with the numbers, not after them</b><ul>'
-                    + "".join(f"<li>{_e(c)}</li>" for c in caveats) + "</ul></div>")
+                    + "".join(items) + "</ul></div>")
     # WHAT THE MERGE RETURNED, not what the plugin declared. Hard-coding "merged into the object
     # by barcode" from the declaration made this table assert a key the object did not have: a
     # per-unit plugin's arrays cannot be concatenated across units, merge_many drops them, and
@@ -537,7 +670,26 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
         body.append(_across_units(units, (spec or {}).get("unit_metrics")))
     body.append(_by_arm_block(by_arm, aware=bool(aware)))
     body.append(_concordance_block(name, concordance))
-    body.append(_figure_section(p.get("figures") or [], spec))
+    # PER-SAMPLE PANELS GO TO AN APPENDIX, AND ARE LINKED. Three plugins here run once per
+    # sample, so their pages carried the same five plots ten times over - 140 of 191 figures in
+    # the report this was written for. Worse, two of those three INFER PER SAMPLE, so the
+    # panels are not comparable with each other even in principle. Nothing is deleted: every
+    # panel is still rendered, on its own page, one click away.
+    figs_all = p.get("figures") or []
+    per_unit_figs = [f for f in figs_all if f.get("unit")]
+    cohort_figs = [f for f in figs_all if not f.get("unit")]
+    if per_unit_figs and cohort_figs:
+        body.append(_figure_section(cohort_figs, spec))
+    elif per_unit_figs:
+        body.append("<h2>Figures</h2><div class='bad'>Every panel this plugin drew describes "
+                    "ONE sample; it has none over the cohort. They are in the "
+                    f"<a href=\"{_e(name)}_by_sample.html\">per-sample appendix</a>.</div>")
+    else:
+        body.append(_figure_section(figs_all, spec))
+    if per_unit_figs:
+        body.append(f"<p class='sub'><a href=\"{_e(name)}_by_sample.html\">"
+                    f"{len(per_unit_figs)} per-sample panels</a> &mdash; the same plots, one set "
+                    f"per sample.</p>")
     if p.get("per_unit") and units:
         # Nine of ten unit payloads used to be discarded by a dict comprehension keyed on the
         # plugin name, and the survivor was rendered under that name as though it described the
@@ -553,12 +705,22 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
                 f"<td>{_e(u.get('status', ''))}</td>"
                 f"<td class='sub'>{_e(u.get('headline', ''))}</td>"
                 f"<td>{_e(u.get('n_figures', 0))}</td>"
-                f"<td class='sub'>{_e('; '.join(u.get('caveats') or []) or '—')}</td></tr>"
+                f"<td class='sub'>{len(u.get('caveats') or [])}</td></tr>"
                 for u in units) + "</table></div>")
     body.append(_limits(cannot_show))
     body.append('<p class="sub"><a href="index.html">&larr; back to the index</a></p>')
     d = Path(out_dir) / "report"
     d.mkdir(parents=True, exist_ok=True)
+    if per_unit_figs:
+        ap = ["<h1>" + _e(name) + " &mdash; per sample</h1>",
+              "<p class='sub'>The same panels, once per sample. They are here rather than on "
+              "the plugin's page because a page carrying one plot ten times hides its own "
+              "result &mdash; and where the method is fitted per sample, these are not "
+              "comparable with each other. "
+              f"<a href='{_e(name)}.html'>&larr; back</a></p>"]
+        ap += [_panel(f_, i + 1) for i, f_ in enumerate(per_unit_figs)]
+        (d / f"{name}_by_sample.html").write_text(
+            _page(f"{name} per sample — scProfile", "".join(ap)), encoding="utf-8")
     f = d / f"{name}.html"
     f.write_text(_page(f"{name} — scProfile", "".join(body)), encoding="utf-8")
     return f
@@ -730,5 +892,6 @@ def write_all(out_dir, payload):
                      constraint=con, binds=cb.get(name) or [],
                      by_arm=(payload.get("by_arm") or {}).get(name),
                      aware=bool((payload.get("design_aware") or {}).get(name)),
-                     concordance=(payload.get("concordance") or {}).get(name) or [])
+                     concordance=(payload.get("concordance") or {}).get(name) or [],
+                     payload_all=payload)
     return write_index(out_dir, payload)

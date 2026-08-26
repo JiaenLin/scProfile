@@ -35,6 +35,8 @@ MAX_FIGURES = 12
 #: Words in one caption, and in all the prose that is not a caption.
 MAX_CAPTION_WORDS = 45
 MAX_PROSE_WORDS = 900
+#: Collapsed text is not in a reader's way, but it must not grow without limit.
+MAX_HIDDEN_WORDS = 2500
 #: UniProt-style accessions. A result naming one of these has an unmapped identifier in it.
 ACCESSION = re.compile(r"\b(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})\b")
 #: What a figure must say to count as comparing the design.
@@ -46,14 +48,28 @@ def _text(html):
 
 
 def _captions(html):
-    return [_text(c) for c in re.findall(r"<figcaption[^>]*>(.*?)</figcaption>", html, re.S)]
+    """(visible lead, hidden remainder) per caption.
+
+    A `<details>` is CLOSED when the page opens, so its words are not what a reader meets - and
+    counting them against the caption cap made a page fail for text nobody sees. They are not
+    forgiven either: the remainder is charged to `prose`, so moving words behind a disclosure
+    moves the accounting rather than escaping it.
+    """
+    out = []
+    for c in re.findall(r"<figcaption[^>]*>(.*?)</figcaption>", html, re.S):
+        hidden = " ".join(re.findall(r"<details[^>]*>(.*?)</details>", c, re.S))
+        visible = re.sub(r"<details[^>]*>.*?</details>", " ", c, flags=re.S)
+        out.append((_text(visible), _text(hidden)))
+    return out
 
 
 def check_page(path, *, exempt=()):
     """Every criterion, measured on one rendered page. Returns [(id, ok, detail)]."""
     html = Path(path).read_text(encoding="utf-8")
     txt = _text(html)
-    caps = _captions(html)
+    pairs = _captions(html)
+    caps = [v for v, _h in pairs]
+    hidden_words = sum(len(h.split()) for _v, h in pairs)
     figs = re.findall(r"<figure", html)
     # THE PANEL A FIGURE IS, taken from the FILE it shows. Keying this on a `data-fig-id`
     # attribute the reporter does not emit made the criterion pass on a page carrying the
@@ -75,8 +91,17 @@ def check_page(path, *, exempt=()):
     long_caps = [c[:60] for c in caps if len(c.split()) > MAX_CAPTION_WORDS]
     ck("captions", not long_caps,
        f"{len(long_caps)} caption(s) over {MAX_CAPTION_WORDS} words")
-    prose = len(txt.split()) - sum(len(c.split()) for c in caps)
+    # TWO NUMBERS, EACH MEASURING WHAT IT CLAIMS. Charging collapsed text to `prose` made
+    # `prose` stop measuring prose: a page could fail it entirely on words behind disclosures
+    # that a reader never opens. Visible text is capped because it is what confronts a reader;
+    # hidden text is capped separately and generously, because it must not grow without limit
+    # but it is not in anybody's way.
+    hidden_all = sum(len(_text(h).split())
+                     for h in re.findall(r"<details[^>]*>(.*?)</details>", html, re.S))
+    prose = len(txt.split()) - sum(len(c.split()) for c in caps) - hidden_all
     ck("prose", prose <= MAX_PROSE_WORDS, f"{prose} words of prose, cap {MAX_PROSE_WORDS}")
+    ck("hidden", hidden_all <= MAX_HIDDEN_WORDS,
+       f"{hidden_all} words behind disclosures, cap {MAX_HIDDEN_WORDS}")
     acc = sorted(set(ACCESSION.findall(" ".join(caps))))
     ck("identifiers", not acc, f"unmapped accession(s) in a caption: {acc[:4]}")
     return out
@@ -87,8 +112,23 @@ def check_report(report_dir, *, exempt=None):
     exempt = exempt or {}
     d = Path(report_dir)
     res = {}
-    for f in sorted(d.glob("*.html")):
-        if f.stem == "index":
+    pages = [f for f in sorted(d.glob("*.html")) if f.stem != "index"]
+    # AN APPENDIX IS NOT A REPORT PAGE, and holding it to the report standard would fail it for
+    # being what it is: per-sample panels ARE repeats, and there are many, which is the reason
+    # they were moved off the page a reader reads.
+    #
+    # It cannot be used to hide a page. An appendix counts as one only when the plugin page it
+    # belongs to EXISTS and LINKS to it, so moving figures out of sight requires leaving a door
+    # to them in plain view.
+    appendix = set()
+    for f in pages:
+        if not f.stem.endswith("_by_sample"):
+            continue
+        parent = d / f"{f.stem[:-len('_by_sample')]}.html"
+        if parent.exists() and f.name in parent.read_text(encoding="utf-8"):
+            appendix.add(f.stem)
+    for f in pages:
+        if f.stem in appendix:
             continue
         res[f.stem] = check_page(f, exempt=set(exempt.get(f.stem, ())))
     return res
