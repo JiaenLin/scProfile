@@ -440,14 +440,31 @@ def resolve_config(spec, given, name="<plugin>"):
     """Defaults applied, types checked, unknown keys refused. BEFORE the run, not inside it.
 
     A bad `--params` should fail in the second the plan is drawn, not an hour into a queue.
+
+    TWO KINDS OF THING ARRIVE IN ONE DICT, and only one of them is a knob. A `config` key is
+    something the USER sets. An INJECTED CAPABILITY is something the HOST hands the plugin
+    because the plugin declared it can use one - a contrast decided from the design is the
+    case here - and it reaches the plugin through the same `params` mapping. This validated
+    the whole mapping as though it were all config, so the host could not deliver what the
+    plugin had itself declared: the two plugins that read `ctx.params["contrast"]`, and whose
+    own documentation says the host passes it there, refused the run outright with "no such
+    parameter ['contrast']".
+
+    Both halves were wrong and the second would have survived a fix to the first: `out` was
+    built from `cfg` alone, so an injected value that got past the check would have been
+    dropped without a word on its way to the plugin.
     """
     cfg = spec.get("config") or {}
+    inj = spec.get("inject") or {}
+    injected = ((set(inj.get("required") or []) | set(inj.get("optional") or []))
+                if isinstance(inj, dict) else set())
     given = dict(given or {})
-    unknown = sorted(set(given) - set(cfg))
+    unknown = sorted(set(given) - set(cfg) - injected)
     if unknown:
         raise DeclarationError(
             f"{name}: no such parameter(s) {unknown}. It declares: "
-            f"{', '.join(sorted(cfg)) or 'none'}")
+            f"{', '.join(sorted(cfg)) or 'none'}"
+            + (f"; and can be injected: {', '.join(sorted(injected))}" if injected else ""))
     out = {}
     for key, c in cfg.items():
         val = given.get(key, c.get("default"))
@@ -467,4 +484,9 @@ def resolve_config(spec, given, name="<plugin>"):
                     f"{name}: parameter {key!r} is {val}, {word} the declared {bound} "
                     f"{c[bound]}")
         out[key] = val
+    # CARRIED THROUGH, NOT TYPE-CHECKED against a config schema it was never described by. An
+    # injected capability's shape is the host's contract with the plugin, not a user-facing
+    # parameter with a type and bounds.
+    for key in sorted((set(given) & injected) - set(cfg)):
+        out[key] = given[key]
     return out

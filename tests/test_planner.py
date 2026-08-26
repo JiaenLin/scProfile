@@ -24,10 +24,19 @@ def ck(name, cond, detail=""):
 
 
 class K:
-    """A plugin, as the planner sees one."""
-    def __init__(self, name, needs_design=False, per_unit=None, needs_kernels=()):
+    """A plugin, as the planner sees one.
+
+    `injects_optional` carries `contrast` because a real design-testing plugin declares it: the
+    planner now refuses to record a decision the plugin has not said it can be given, after a
+    version that recorded one anyway printed a contrast the run then refused outright. A stub
+    that omits it is not a simpler plugin, it is a plugin that cannot receive a contrast.
+    """
+    def __init__(self, name, needs_design=False, per_unit=None, needs_kernels=(),
+                 injects_optional=("contrast",)):
         self.name, self.needs_design = name, needs_design
         self.per_unit, self.needs_kernels = per_unit, list(needs_kernels)
+        self.injects_required = ["design"] if needs_design else []
+        self.injects_optional = list(injects_optional)
 
 
 def design(rows):
@@ -132,6 +141,7 @@ print("\nthe order of runs honours needs_kernels")
 class KO:
     def __init__(self, name, needs):
         self.name, self.needs_kernels = name, needs
+        self.spec, self.needs_capabilities = {}, []
 avail = {"a": KO("a", []), "b": KO("b", ["a"]), "c": KO("c", ["b"]), "d": KO("d", [])}
 w = P.order_of_runs(["a", "b", "c", "d"], avail)
 ck("dependents come after what they need", w == [["a", "d"], ["b"], ["c"]], str(w))

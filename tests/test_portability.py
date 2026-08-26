@@ -23,6 +23,15 @@ from scprofile.kernels import discover                                          
 FAIL = []
 
 
+def _refused(fn):
+    """True if the call raises DeclarationError — a check that must still refuse."""
+    try:
+        fn()
+    except Exception as e:                                                # noqa: BLE001
+        return type(e).__name__ == "DeclarationError"
+    return False
+
+
 def ck(name, cond, detail=""):
     print(f"  {'ok  ' if cond else 'FAIL'} {name}" + (f" — {detail}" if not cond else ""))
     if not cond:
@@ -569,6 +578,24 @@ ck("a design-testing plugin is planned a contrast on any crossed design",
    all(_PL.decisions_for(k, _facts).get("contrast", {}).get("kind") == "interaction"
        for k in _K.values() if k.needs_design),
    "a crossed pair with replication must yield an interaction, whatever the factors are called")
+# THE DECISION MUST BE DELIVERABLE. The plan printed a contrast, the run delivered it, and both
+# plugins refused the whole run three hours into a queue with "no such parameter ['contrast']" —
+# because a config key is a knob the USER sets and an injected capability is something the HOST
+# hands the plugin, and they arrive in one dict that was validated as though it were all config.
+ck("every decision the plan makes is one the plugin declared it can be given",
+   all(set(_PL.decisions_for(k, _facts)) <= (set(k.injects_required) | set(k.injects_optional))
+       for k in _K.values()),
+   str({n: sorted(set(_PL.decisions_for(k, _facts))
+                  - set(k.injects_required) - set(k.injects_optional))
+        for n, k in _K.items() if _PL.decisions_for(k, _facts)}))
+ck("and the config resolver actually delivers it rather than dropping it",
+   all(_DECL.resolve_config(k.spec, _PL.decisions_for(k, _facts), n).get("contrast")
+       == _PL.decisions_for(k, _facts).get("contrast")
+       for n, k in _K.items() if _PL.decisions_for(k, _facts)),
+   "an injected capability that passes the check and is then dropped from the resolved "
+   "mapping never reaches the plugin, and nothing says so")
+ck("a genuine typo in --params is still refused",
+   _refused(lambda: _DECL.resolve_config(_K["de"].spec, {"nonsense": 1}, "de")))
 ck("and main effects where nothing is crossed",
    all(_PL.decisions_for(k, {"has_design": True, "crossed_pairs": [],
                              "testable": ["f1"]}).get("contrast", {}).get("kind")
@@ -725,6 +752,28 @@ ck("an arm below the cell floor is dropped rather than quantiled",
    inputs.ARM_MIN_CELLS >= 20)
 ck("no design, no section", not inputs.by_arm(_Obj(_fake_obs()), ["score"], {}, "sample", ["f1"]))
 
+# TWO FACTORS WITH THE SAME PARTITION ARE ONE SPLIT. Drawing both shows one division of the
+# samples twice, and a reader with two panels showing the same difference under two names has,
+# on the page, two pieces of evidence. Keying the partition on (sample, level) PAIRS missed it
+# entirely, because an aliased confounder almost never shares the vocabulary of the factor it is
+# aliased with — a reagent version aliased with an age arm calls its levels v3/v4, not young/old.
+_ali_des = {f"S{i}": {"bio": "y" if i < 3 else "o",
+                      "reagent": "v3" if i < 3 else "v4",
+                      "crossed": "a" if i % 2 else "b"} for i in range(6)}
+_ali = inputs.by_arm(_Obj(_fake_obs()), ["score"], _ali_des, "sample",
+                     ["bio", "reagent", "crossed"])
+ck("an aliased pair is drawn once, not twice", sorted(_ali["score"]) == ["bio", "crossed"],
+   str(sorted(_ali.get("score", {}))))
+ck("and the alias is NAMED, never silently dropped",
+   _ali["score"]["bio"]["aliased_with"] == ["reagent"])
+ck("a genuinely crossed factor keeps its own panel",
+   _ali["score"]["crossed"]["aliased_with"] == [])
+ck("the page says which of the two the difference belongs to cannot be known",
+   "not something this data can say" in _RP._by_arm_block(_ali, aware=False))
+ck("it detects the alias across different level VOCABULARIES",
+   "by_level" in pathlib.Path(inputs.__file__).read_text(),
+   "keying on (sample, level) pairs cannot see young/aged aliased with v3/v4")
+
 _html = _RP._by_arm_block(_ba, aware=False)
 ck("the page says outright that it is a description and not a test",
    "not a test" in _html and "unit of replication is the sample" in _html)
@@ -742,9 +791,18 @@ ck("the declaration REFUSES design_aware with no per-cell column",
 ck("the section is placed before the per-population panels",
    inspect.getsource(_RP.write_kernel).index("_by_arm_block")
    < inspect.getsource(_RP.write_kernel).index("_figure_section"))
-ck("a plugin shown per arm is bound by the constraint that bounds such claims",
-   "or n in _by_arm" in _clisrc,
-   "the bound must grow with the set of pages making a claim across the design")
+# A PAGE IS BOUND BY THE FACTORS IT ACTUALLY SHOWS — a union of what it TESTS and what its
+# per-arm section DISPLAYS. Widening the set of bound plugins while still computing the factors
+# as an intersection with contrast terms gave every newly-included plugin an empty list, because
+# a plugin that does not test the design has no terms to intersect: four pages went on showing
+# results across the design with no constraint on them, and the binding looked considered.
+ck("a page is bound by what it SHOWS as well as by what it TESTS",
+   "_shown | _terms" in _clisrc,
+   "intersecting only with contrast terms empties the bound for every plugin that does not test")
+ck("the factors shown come from the per-arm section itself",
+   "_by_arm.get(_n)" in _clisrc)
+ck("and a plugin the constraint does not touch is not listed",
+   "if _hit:" in _clisrc, "an empty list must not be recorded as a considered binding")
 
 # ---------------------------------------------------------------------------------------------
 # A DIAGNOSTIC IS USELESS ON THE PAGE OF THE PLUGIN THAT COMPUTED IT.

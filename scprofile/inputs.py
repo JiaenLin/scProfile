@@ -423,6 +423,34 @@ def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP):
     if not (columns and design and sample_key) or sample_key not in adata.obs:
         return {}
     samp = adata.obs[sample_key].astype(str)
+
+    # TWO FACTORS WITH THE SAME PARTITION ARE ONE SPLIT, AND THE PAGE SAYS SO. Drawing both
+    # presents one division of the samples twice, and a reader with two panels showing the same
+    # difference under two names has, on the page, two pieces of evidence. Measured on the
+    # cohort this was found on: `age` and `chemistry` are aliased one-to-one over all ten
+    # libraries, so every per-arm panel appeared once as biology and once as a reagent lot.
+    #
+    # The alias is NAMED rather than dropped silently - which of two aliased factors is the
+    # cause is exactly what the data cannot say, and hiding one would imply the other was
+    # chosen.
+    partitions, keep, alias = {}, [], {}
+    for fac in sorted(factors or []):
+        # THE GROUPING OF SAMPLES, NOT ITS LABELS. Keying on (sample, level) pairs made two
+        # factors that split the samples identically look different because one calls its arms
+        # `young`/`aged` and the other `v3`/`v4` - which is precisely the pair this exists to
+        # catch, since an aliased confounder almost never shares the vocabulary of the factor it
+        # is aliased with.
+        by_level = {}
+        for k, r in design.items():
+            by_level.setdefault(str(r.get(fac, "")), set()).add(k)
+        key = frozenset(frozenset(v) for v in by_level.values())
+        if key in partitions:
+            alias.setdefault(partitions[key], []).append(fac)
+        else:
+            partitions[key] = fac
+            keep.append(fac)
+    factors = keep
+
     out = {}
     for col in sorted(set(columns)):
         if col not in adata.obs:
@@ -464,6 +492,7 @@ def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP):
             if len(rows) >= 2:
                 per_factor[fac] = {"kind": "numeric" if numeric else "categorical",
                                    "arms": rows,
+                                   "aliased_with": sorted(alias.get(fac, [])),
                                    "categories": levels_of_col}
         if per_factor:
             out[col] = per_factor

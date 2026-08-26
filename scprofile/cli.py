@@ -875,29 +875,37 @@ def _run(a):
         print(f"  cross-plugin concordance: {len(_pairs)} pair(s) over "
               f"{len(_conc)} plugin(s)")
 
+    # WHICH PLUGINS THE CONSTRAINT BINDS, AND ON WHICH FACTORS - decided by the host, the only
+    # party holding the constraint, every plugin's contrast and every plugin's per-arm section
+    # at once, and written here so the reporter never re-derives it against a different design.
+    # Measured on the run that motivated it: the constraint reached the README and the index and
+    # NONE of the nine plugin pages, including the one whose headline it forbids outright.
+    #
+    # A PAGE IS BOUND BY THE FACTORS IT ACTUALLY SHOWS, which is a union of two things and was
+    # briefly only one. Widening the SET of bound plugins to include everything with a per-arm
+    # section, while still computing the factors as an intersection with the plugin's CONTRAST
+    # TERMS, gave every one of them an empty list: a plugin that does not test the design has no
+    # terms to intersect. Four pages went on showing results across age and diet with no
+    # constraint on them, and the binding looked as though it had been considered.
+    _forbidden = set(inputs.constraint_binds(constraint,
+                                             sorted((_run_facts.get("factors") or {}))))
+    _binds = {}
+    for _n in sorted(ks):
+        _shown = {f for cols in (_by_arm.get(_n) or {}).values() for f in cols}
+        _terms = set((_PL.decisions_for(ks[_n], _run_facts).get("contrast") or {})
+                     .get("terms") or [])
+        _hit = sorted(_forbidden & (_shown | _terms))
+        if _hit:
+            _binds[_n] = _hit
+    if _binds:
+        print(f"  the constraint binds: "
+              + "; ".join(f"{n} on {', '.join(v)}" for n, v in sorted(_binds.items())))
+
     payload = {"version": _v(), "input": str(a.h5ad), "describe": describe,
                "by_arm": _by_arm, "concordance": _conc,
                "memory_model": memory_model,
                "constraint_on_use": constraint, "constraint_source": csrc,
-               # WHICH PLUGINS THE CONSTRAINT BINDS, AND ON WHICH FACTORS - decided by the host,
-               # which is the only party that holds both the constraint and every plugin's
-               # contrast, and written here so the reporter never has to. Measured on the run
-               # that motivated it: the constraint reached the README and the index and NONE of
-               # the nine plugin pages, including the one whose headline it forbids outright. A
-               # bound placed only on the cover of a document does not bind anything a reader
-               # quotes out of it.
-               "constraint_binds": {
-                   n: sorted(set(((_PL.decisions_for(ks[n], _run_facts).get("contrast") or {})
-                                  .get("terms") or []))
-                             & set(inputs.constraint_binds(
-                                 constraint, sorted((_run_facts.get("factors") or {})))))
-                   for n in sorted(ks)
-                   # A PLUGIN SHOWN PER ARM IS MAKING A CLAIM ACROSS THE DESIGN, whether or not
-                   # it tested one. The host now renders that section for any plugin that wrote
-                   # a per-cell column, so the set the constraint binds grew with it - and a
-                   # bound that did not grow with the claims would have gone quiet exactly where
-                   # the new section put the design on seven more pages.
-                   if ks[n].needs_design or ks[n].needs_representation or n in _by_arm},
+               "constraint_binds": _binds,
                "ran": ran, "skipped": skipped,
                "status": {n: ks[n].status for n in sorted(ks)},
                "schedule": [[{kk: vv for kk, vv in i.items()} for i in w] for w in waves],

@@ -316,6 +316,13 @@ def decisions_for(kernel, facts):
 
     Returns a plain dict so a new decision is added by returning one more key, and the runner
     delivers it without being changed.
+
+    A DECISION THE PLUGIN CANNOT RECEIVE IS NOT A DECISION. Every key returned here must be a
+    capability the kernel declares in `inject`, because that is the channel it arrives by - and
+    the first version of this checked nothing, so the plan printed a contrast, the run delivered
+    it, and both plugins refused the whole run with "no such parameter ['contrast']" three
+    hours into a queue. Deciding something for a plugin that has not said it can be given it is
+    a decision made about a plugin rather than for one.
     """
     d = {}
     if not (getattr(kernel, "needs_design", False) and facts.get("has_design")):
@@ -335,7 +342,9 @@ def decisions_for(kernel, facts):
         d["contrast"] = {"kind": "main effects", "terms": list(facts["testable"]),
                          "formula": "~ " + " + ".join(facts["testable"]),
                          "why": "no two factors are crossed with replication in every cell"}
-    return d
+    takes = (set(getattr(kernel, "injects_required", []) or [])
+             | set(getattr(kernel, "injects_optional", []) or []))
+    return {k: v for k, v in d.items() if k in takes}
 
 
 def order_of_runs(names, available):

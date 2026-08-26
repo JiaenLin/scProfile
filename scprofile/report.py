@@ -426,11 +426,17 @@ def _by_arm_block(by_arm, *, aware):
                    else _arm_rows_categorical(arms, d.get("categories")))
             what = ("median, interquartile box and full range, per arm"
                     if d.get("kind") == "numeric" else "composition, per arm")
+            ali = d.get("aliased_with") or []
             blocks.append(f'<figure><figcaption><b><code>{_e(col)}</code> by '
                           f'<code>{_e(fac)}</code></b> — {what}, over cells. '
                           f'{len(arms)} arm(s). This is a DESCRIPTION and not a test: the unit '
-                          f'of replication is the sample, not the cell.</figcaption>'
-                          + svg + "</figure>")
+                          f'of replication is the sample, not the cell.'
+                          + (f' <b>This split is identical to '
+                             f'{", ".join("<code>" + _e(x) + "</code>" for x in ali)}</b>, which '
+                             f'divides the samples exactly the same way — one panel, not two, '
+                             f'and which of them the difference belongs to is not something '
+                             f'this data can say.' if ali else "")
+                          + '</figcaption>' + svg + "</figure>")
     if not blocks:
         return ""
     return ("<h2>Across the design</h2><p class='sub'>Every other panel on this page describes "
