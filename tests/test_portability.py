@@ -1070,6 +1070,26 @@ ck("a raising candidate does not propagate out of the search", _raised is not Tr
 # is the same as not having it: the report that fails it is exactly the one nobody thought to
 # check. Both harnesses run it now — the gate that decides whether a long run is worth starting,
 # and the run itself, on what it just wrote.
+# AN UNMAPPED LABEL IS NAMED, NEVER DROPPED. The prior supplies a UniProt accession where it
+# has no gene symbol; 123 of 674 regulators arrived that way on a real run and one of them was
+# the strongest signal in every population. Dropping them hides a result. Leaving them unremarked
+# lets a reader take `A0A079HLR9` for a gene beside `Gata4`.
+print("\nan unmapped identifier is named, not dropped")
+from scprofile import standard as _ST                                           # noqa: E402
+ck("the criterion reads the LABELS a figure is drawn with, not the words under it",
+   "_source_accessions" in inspect.getsource(_ST),
+   "checking captions passed a page whose strongest signal was an accession on an axis")
+ck("and it is satisfied by SAYING so, not by removing them",
+   "not acc or said" in inspect.getsource(_ST),
+   "a criterion that demands none would require hiding real signal")
+_dsrc = _KSRC["decoupler.py"]
+ck("the plugin counts its unmapped regulators", "_ACCESSION_PATTERN" in _dsrc)
+ck("and says they are KEPT", "They are KEPT" in _dsrc)
+ck("the pattern matches an accession and not a gene symbol",
+   bool(re.match(_ST.ACCESSION.pattern.strip("\\b"), "A0A079HLR9"))
+   and not _ST.ACCESSION.fullmatch("Gata4"),
+   "a pattern that matches Gata4 would flag every page")
+
 print("\nthe exit standard is measured by the harnesses, not by hand")
 _root = Path(__file__).resolve().parents[1]
 _smk = (_root / "tests" / "smoke" / "run_smoke.sh").read_text()

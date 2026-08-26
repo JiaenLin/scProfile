@@ -35,6 +35,12 @@ so `report.reads_with` names that other plugin, and the reporter marks the missi
 pair as an absence rather than leaving the page silent about it.
 """
 
+#: A UniProt accession - what the prior supplies for a regulator with no gene symbol. Kept as a
+#: PATTERN rather than a compiled object because this file imports nothing at module scope, on
+#: purpose: discovering a plugin should cost nothing, and a module-level `re.compile` made the
+#: whole declaration fail to load.
+_ACCESSION_PATTERN = r"^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})$"
+
 PLUGIN = {
     "api": 1,
     "version": "0.2.0",
@@ -740,6 +746,22 @@ def run(ctx):
                f"the only record of which version produced this result - including whether the "
                f"fetch reached OmniPath at all, since a failed fetch falls back to a stored "
                f"snapshot and returns normally.")
+    # SOME REGULATORS HAVE NO GENE SYMBOL, AND THEY ARE KEPT. The prior supplies a UniProt
+    # accession where it has no symbol, and on a real mouse run 123 of 674 regulators arrived
+    # that way - one of them the strongest signal in every population. Dropping them would hide
+    # a real result; leaving them unremarked lets a reader take `A0A079HLR9` for a gene beside
+    # `Gata4`. Named, counted, and kept.
+    import re as _re_mod
+    _acc = _re_mod.compile(_ACCESSION_PATTERN)
+    _srcs = [str(x) for x in net["source"].unique()]
+    _unmapped = [x for x in _srcs if _acc.match(x)]
+    if _unmapped:
+        ctx.caveat(
+            f"{len(_unmapped)} of {len(_srcs)} regulators in this prior have NO GENE SYMBOL and "
+            f"are labelled by their UniProt accession ({', '.join(sorted(_unmapped)[:3])} and "
+            f"others). They are KEPT - one of them may carry real signal - but an accession on "
+            f"an axis beside a gene symbol looks like a gene and is not one. Anything ranked "
+            f"highly whose name matches that pattern is unmapped, not novel.")
     ctx.caveat(f"CollecTRI is curated in one species and served for others by ORTHOLOGY "
                f"projection. This run asked for {ctx.organism}; unless that is the curated "
                f"species, each regulon's membership is a mapping of the curated one and not "

@@ -81,6 +81,41 @@ def _captions(html):
     return out
 
 
+#: How many rows of a figure's source table to read. The labels are the header and the first
+#: column; reading the whole file to find them would make the check cost more than the report.
+SOURCE_ROWS = 200
+
+
+def _source_accessions(page):
+    """Unmapped accessions among the LABELS a page's figures are drawn with.
+
+    A figure's labels come from its source table - the header, and the first column - and that
+    is the file the page links to as "source data". Nothing here parses CSV properly: a label
+    that needs quoting is not an accession.
+    """
+    try:
+        html = page.read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    root = page.parent.parent
+    found = set()
+    for rel in set(re.findall(r'href="\.\./([^"]+\.csv)"', html)):
+        f = root / rel
+        if not f.is_file():
+            continue
+        try:
+            with f.open("r", encoding="utf-8", errors="replace") as fh:
+                head = fh.readline()
+                found |= set(ACCESSION.findall(head))
+                for i, line in enumerate(fh):
+                    if i >= SOURCE_ROWS:
+                        break
+                    found |= set(ACCESSION.findall(line.split(",", 1)[0]))
+        except OSError:
+            continue
+    return found
+
+
 def check_page(path, *, exempt=()):
     """Every criterion, measured on one rendered page. Returns [(id, ok, detail)]."""
     html = Path(path).read_text(encoding="utf-8")
@@ -129,8 +164,22 @@ def check_page(path, *, exempt=()):
        f"{cav_words} words of caveat, cap {MAX_CAVEAT_WORDS}")
     ck("hidden", hidden_all <= MAX_HIDDEN_WORDS,
        f"{hidden_all} words behind disclosures, cap {MAX_HIDDEN_WORDS}")
-    acc = sorted(set(ACCESSION.findall(" ".join(caps))))
-    ck("identifiers", not acc, f"unmapped accession(s) in a caption: {acc[:4]}")
+    # THE LABELS A FIGURE IS DRAWN WITH, not the words underneath it. Checking captions alone
+    # passed a page whose strongest signal in every population was `A0A079HLR9` - because the
+    # accession was on the AXIS and in the source table, and the caption said "mean activity".
+    # 123 of that plugin's 674 regulators are unmapped, and the criterion reported none.
+    acc = set(ACCESSION.findall(" ".join(caps)))
+    acc |= _source_accessions(Path(path))
+    acc = sorted(acc)
+    # NAMED, NEVER DROPPED. An accession is what the prior supplies for a regulator that has no
+    # gene symbol, and excluding those would hide real signal - on the page this was written
+    # for, the STRONGEST regulator in every population is one of them. What a reader cannot do
+    # is tell `A0A079HLR9` from `Gata4` when both sit on the same axis. So the requirement is
+    # that the page SAYS how many of its labels are unmapped, not that it have none.
+    said = bool(re.search(r"unmapped|no gene symbol|accession", txt, re.I))
+    ck("identifiers", not acc or said,
+       f"{len(acc)} unmapped accession(s) among the labels and the page never says so, "
+       f"e.g. {acc[:4]}")
     return out
 
 
