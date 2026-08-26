@@ -74,7 +74,15 @@ with tempfile.TemporaryDirectory() as d:
        'src="../kernels/liana/s1/figs/dot.png"' in panels_html,
        "hrefs still guess ../kernels/<name>/")
     ck("no unit-less kernel href survives", '"../kernels/liana/figs' not in html)
-    ck("the page has a per-unit section", "Per unit" in html and "s3" in html)
+    # THE TABLE FOLLOWED THE PANELS. Ten rows of per-sample headlines is per-sample detail, and
+    # it sat on the page a reader opens describing figures that are no longer on it. The
+    # requirement is unchanged - the per-unit account must exist, name its units, and be
+    # reachable - so the check accepts it on the plugin page or on the appendix that page links
+    # to, and still insists a unit is named in it.
+    _acct = html if "Per unit" in html else panels_html
+    ck("the per-unit account exists, names its units and is reachable",
+       "Per unit" in _acct and "s3" in _acct
+       and (_acct is html or "_by_sample.html" in html))
 
 print("\ntable names are the ones actually delivered")
 ck("unit-suffixed", sorted(f["liana"]["tables"]) ==
