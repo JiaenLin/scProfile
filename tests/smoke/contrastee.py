@@ -68,7 +68,11 @@ def run(ctx):
                           "kind": [con.get("kind", "")] * len(terms),
                           "formula": [con.get("formula", "")] * len(terms)}).set_index("term")
 
-    fig, ax = ctx.figure.SINGLE()
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    F = ctx.figure
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.72))
     ax.barh(range(len(terms)), [1] * len(terms))
     ax.set_yticks(range(len(terms)))
     ax.set_yticklabels(terms)
@@ -103,7 +107,11 @@ def selftest(ctx):
     import pandas as pd
 
     con = ctx.params.get("contrast") or {}
-    fig, ax = ctx.figure.SINGLE()
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    F = ctx.figure
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.72))
     ax.barh([0], [1])
     ctx.emit_figure("F1_terms", fig,
                     source=pd.DataFrame({"term": list(con.get("terms") or ["none"])}),

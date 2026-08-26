@@ -853,5 +853,77 @@ ck("it is not thresholded or starred",
    "*" not in _hb and "significant" not in _hb.lower())
 ck("no pairs, no section", _RP._concordance_block("p1", []) == "")
 
+# ---------------------------------------------------------------------------------------------
+# A PLUGIN CANNOT CALL AN API THAT DOES NOT EXIST.
+#
+# `ctx.figure.SINGLE()` is a TypeError: SINGLE is a WIDTH IN INCHES, not a factory, and every
+# shipped plugin writes `plt.subplots(figsize=(F.SINGLE, ...))`. Nothing static caught it —
+# a fixture written against a misremembered API validated cleanly and would have failed inside
+# the job, at the one step a pre-flight exists to make unnecessary.
+# ---------------------------------------------------------------------------------------------
+print("\na plugin cannot call an API that does not exist")
+import ast as _ast                                                              # noqa: E402
+from scprofile import figure as _FIG                                            # noqa: E402
+from scprofile.plugin import Context as _Ctx                                    # noqa: E402
+
+_SMOKE = {q.name: q.read_text() for q in
+          (Path(__file__).resolve().parents[1] / "tests" / "smoke").glob("*.py")
+          if not q.name.startswith("_")}
+_ALLSRC = dict(_KSRC)
+_ALLSRC.update({f"smoke/{k}": v for k, v in _SMOKE.items()})
+
+# THE CLASS PLUS WHAT __init__ BINDS. `dir(Context)` lists methods and properties and none of
+# the instance attributes — `ctx.log`, `ctx.headline`, `ctx.status` — so a check built on it
+# alone reports every plugin in the tree as calling APIs that do not exist. A guard whose first
+# run is all false positives is a guard that gets deleted.
+_ctx_api = {n for n in dir(_Ctx) if not n.startswith("__")}
+for _nd in _ast.walk(_ast.parse(pathlib.Path(_Ctx.__module__.replace(".", "/") + ".py").read_text()
+                                if False else
+                                (Path(__file__).resolve().parents[1] / "scprofile"
+                                 / "plugin.py").read_text())):
+    if isinstance(_nd, _ast.Assign):
+        for _t in _nd.targets:
+            for _sub in ([_t] if not isinstance(_t, _ast.Tuple) else _t.elts):
+                if isinstance(_sub, _ast.Attribute) and isinstance(_sub.value, _ast.Name) \
+                        and _sub.value.id == "self":
+                    _ctx_api.add(_sub.attr)
+_fig_api = {n for n in dir(_FIG) if not n.startswith("_")}
+_bad_ctx, _bad_fig, _bad_call = [], [], []
+for _name, _src in sorted(_ALLSRC.items()):
+    try:
+        _tree = _ast.parse(_src)
+    except SyntaxError as e:
+        _bad_ctx.append(f"{_name}: does not parse ({e})")
+        continue
+    for _nd in _ast.walk(_tree):
+        if not isinstance(_nd, _ast.Attribute):
+            continue
+        _v = _nd.value
+        # ctx.<attr>
+        if isinstance(_v, _ast.Name) and _v.id == "ctx" and _nd.attr not in _ctx_api:
+            _bad_ctx.append(f"{_name}: ctx.{_nd.attr}")
+        # ctx.figure.<attr>  /  F.<attr> where F = ctx.figure
+        if isinstance(_v, _ast.Attribute) and getattr(_v, "attr", "") == "figure" \
+                and isinstance(getattr(_v, "value", None), _ast.Name) \
+                and _v.value.id == "ctx" and _nd.attr not in _fig_api:
+            _bad_fig.append(f"{_name}: ctx.figure.{_nd.attr}")
+    # a non-callable used as a call: ctx.figure.SINGLE() and friends
+    for _nd in _ast.walk(_tree):
+        if isinstance(_nd, _ast.Call) and isinstance(_nd.func, _ast.Attribute):
+            _f = _nd.func
+            _base = _f.value
+            _is_fig = (isinstance(_base, _ast.Attribute) and _base.attr == "figure") or \
+                      (isinstance(_base, _ast.Name) and _base.id == "F")
+            if _is_fig and _f.attr in _fig_api and not callable(getattr(_FIG, _f.attr, None)):
+                _bad_call.append(f"{_name}: {_f.attr}() — it is a "
+                                 f"{type(getattr(_FIG, _f.attr)).__name__}, not a function")
+
+ck("every ctx.<attr> a plugin uses exists on Context", not _bad_ctx, str(_bad_ctx[:4]))
+ck("every ctx.figure.<attr> exists in figure.py", not _bad_fig, str(_bad_fig[:4]))
+ck("and nothing calls a figure CONSTANT as if it were a factory", not _bad_call,
+   str(_bad_call[:4]))
+ck("the check covers the test fixtures too, which is where it was found",
+   any(k.startswith("smoke/") for k in _ALLSRC), str(sorted(_ALLSRC)[:3]))
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

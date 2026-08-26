@@ -74,7 +74,11 @@ def run(ctx):
                    pd.DataFrame({"unit": [unit] * 3, "rank": [1, 2, 3],
                                  "value": rng.normal(size=3)}).set_index("rank"))
 
-    fig, ax = ctx.figure.SINGLE()
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    F = ctx.figure
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.72))
     ax.hist(score.values, bins=20)
     ax.set_xlabel("score")
     ax.set_ylabel("cells")
@@ -108,7 +112,11 @@ def selftest(ctx):
 
     n = 40
     s = pd.Series(np.linspace(0, 1, n))
-    fig, ax = ctx.figure.SINGLE()
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    F = ctx.figure
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.72))
     ax.plot(s.values)
     ctx.emit_figure("F1_score", fig, source=s.to_frame("score"), caption="selftest")
     ctx.emit_table("perunit_edges", pd.DataFrame({"rank": [1], "value": [0.0]}).set_index("rank"))
