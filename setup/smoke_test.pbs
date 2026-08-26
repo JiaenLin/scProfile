@@ -8,8 +8,16 @@
 # Prove the whole path on a synthetic dataset: build a fixture, run the kernels over it, merge,
 # report. Nothing here touches your data.
 #
-#   qsub -v PREFIX=$HOME/envs,TOOL=$HOME/tools/scProfile,OUT=$HOME/scprofile_smoke \
-#        -o $HOME/scprofile_smoke.log  setup/smoke_test.pbs
+#   qsub -v TOOL=$HOME/tools/scProfile,OUT=<scratch>,HOST_PYTHON=<python with anndata> \
+#        [,PREFIX=<dir holding the kernel envs>] -o <scratch>/smoke.pbs.log  setup/smoke_test.pbs
+#
+# PREFIX is OPTIONAL. Without it only host-interpreter plugins run, which still walks the plan,
+# the decision channel, the per-unit path, the merge and the report - everything that broke on
+# 2026-08-26. Give it when you also want the plugins that bring their own environment.
+#
+# RUN THIS BEFORE A LONG RUN, EVERY TIME. It is minutes on `workq` against hours on `super`, and
+# the failure it exists to catch cost three hours of a 64-core allocation and produced two
+# refused plugins and no result.
 #
 # Run this after `install`. A selftest proves a kernel's ENVIRONMENT works; this proves the
 # kernel, the contract, the merge and the report work together - which is a different claim, and
@@ -17,47 +25,20 @@
 
 set -euo pipefail
 
-: "${PREFIX:?pass -v PREFIX=<dir holding the kernel envs>}"
 : "${TOOL:?pass -v TOOL=<path to the scProfile checkout>}"
 : "${OUT:?pass -v OUT=<a scratch directory for the results>}"
-KERNELS="${KERNELS:-velocity,cellcycle}"
+PREFIX="${PREFIX:-}"
 
 # The HOST needs anndata; it does not need any kernel's pins. Point HOST_PYTHON at an interpreter
 # that has anndata, scanpy, numpy and pandas - a kernel env will do if you have nothing else.
 HOST="${HOST_PYTHON:-python3}"
 
-LIVE="${LIVE_LOG:-${OUT}/smoke.log}"
 mkdir -p "${OUT}"
-exec > >(tee -a "${LIVE}") 2>&1
-
-echo "host      $(hostname)"
-echo "tool      ${TOOL}"
-echo "kernels   ${KERNELS}"
-echo "out       ${OUT}"
-echo "started   $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo
-
 cd "${TOOL}"
-export PYTHONPATH="${TOOL}"
 
-echo "=== 1. build the fixture ==="
-"${HOST}" tests/make_fixture.py "${OUT}/fixture.h5ad"
-
-echo
-echo "=== 2. what the host makes of it ==="
-"${HOST}" -m scprofile.cli doctor --prefix "${PREFIX}" || true
-
-echo
-echo "=== 3. run ==="
-"${HOST}" -m scprofile.cli run \
-    --h5ad "${OUT}/fixture.h5ad" \
-    --out  "${OUT}/results" \
-    --kernel "${KERNELS}" \
-    --prefix "${PREFIX}"
-
-echo
-echo "=== 4. what landed ==="
-find "${OUT}/results" -type f | sed "s|${OUT}/results|  results|" | sort
-
-echo
-echo "finished  $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+# ONE SMOKE HARNESS, NOT TWO. This script used to build the fixture, run the host and print what
+# landed - and CHECK NOTHING, while tests/smoke/run_smoke.sh next door did the same work and then
+# asserted the result. Two harnesses for one job is the shape that lets the checked one rot: the
+# job that gets submitted is whichever one has a .pbs beside it, and that was this one. It now
+# delegates, so submitting it runs the checks.
+exec bash tests/smoke/run_smoke.sh "${HOST}" "${OUT}" ${PREFIX:+"${PREFIX}"}
