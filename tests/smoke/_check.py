@@ -62,8 +62,17 @@ def main():
     srcs = re.findall(r'(?:src|href)="\.\./(kernels/[^"]+)"', html)
     missing = [s for s in srcs if not (R / s).exists()]
     ck("every figure and link on the page resolves", not missing, str(missing[:3]))
-    ck("the page has a per-unit section", "Per unit" in html)
-    ck("a dropped array is not called merged", "NOT in the object" in html)
+    # THE ACCOUNT MOVED, THE REQUIREMENT DID NOT. Per-sample panels and the per-unit table are
+    # per-sample detail and now live on `<plugin>_by_sample.html`, linked from the page. This
+    # was fixed in tests/test_perunit.py and not here, which is the ordinary way two copies of
+    # one check drift: the one that runs on a workstation was updated and the one that runs in
+    # the job was not, so the job failed on a requirement that had already been met elsewhere.
+    _ap = R / "report" / f"{P}_by_sample.html"
+    _acct = html if "Per unit" in html else (_ap.read_text() if _ap.exists() else "")
+    ck("the per-unit account exists and is reachable",
+       "Per unit" in _acct and (_acct is html or f"{P}_by_sample.html" in html))
+    ck("a dropped array is not called merged", "NOT in the object" in html or
+       "NOT in the object" in _acct)
 
     idx = (R / "report" / "index.html").read_text()
     ck("the index lists the plugin", P in idx)
