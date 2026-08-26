@@ -959,6 +959,20 @@ if _ie:
     ck("a full 3x2 is estimable, so the test is not just a 2x2 rule",
        _ie(_pd2.DataFrame({"a": list("yyoomm"), "b": list("chchch")}), "a", "b", _np2, _pd2) is True)
 ck("the run asks before it adds", "_interaction_estimable(sub_obs" in _desrc)
+# AN INTERACTION IN THE MODEL AND NOT IN THE OUTPUT. The results loop iterates the MAIN EFFECTS,
+# so `age:diet` entered the design, moved every coefficient in it, and produced no row. The
+# study's primary readout was fitted and never reported, and the caveat said it had been ADDED -
+# true, and read as though it had been tested. Measured on the real table of run 693758: terms
+# were `age` and `diet`, and nothing else.
+ck("an interaction that is added is also CONTRASTED",
+   "if pop in interacted:" in _desrc and "DeseqStats(dds, contrast=vec" in _desrc,
+   "adding a term to the formula is not testing it")
+ck("the contrast column is taken from the design matrix the fit built",
+   'dds.obsm.get("design_matrix")' in _desrc,
+   "reconstructing what formulaic would have named it guesses at another library's internals")
+ck("an interaction spread over several columns is NAMED, not silently skipped",
+   "not_interacted.setdefault" in _desrc,
+   "a factor with three levels spreads its interaction over columns an F-test would combine")
 ck("and a population that cannot fit it is NAMED, not silently main-effects-only",
    "not_interacted" in _desrc and "WAS NOT TESTED" in _desrc.upper())
 

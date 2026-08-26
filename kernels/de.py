@@ -1019,6 +1019,40 @@ def run(ctx):
             if first_res is None:
                 first_res = r
 
+        # THE INTERACTION, CONTRASTED. It was added to the formula and never tested: the loop
+        # above iterates the MAIN EFFECTS, so `age:diet` entered the design, changed every
+        # coefficient in it, and produced no row of its own. The study's primary readout was in
+        # the model and absent from the output, and the caveat said it had been added - which
+        # was true, and read as though it had been tested.
+        #
+        # PyDESeq2 takes a contrast VECTOR the length of the design matrix, so the column is
+        # selected by name from the matrix the fit actually built rather than by reconstructing
+        # what formulaic would have called it.
+        if pop in interacted:
+            a_, b_ = interacted[pop]
+            dm = dds.obsm.get("design_matrix")
+            cols = list(dm.columns) if dm is not None else []
+            hits = [c for c in cols if ":" in c and a_ in c and b_ in c]
+            if len(hits) == 1:
+                vec = np.zeros(len(cols), dtype=float)
+                vec[cols.index(hits[0])] = 1.0
+                sti = DeseqStats(dds, contrast=vec, alpha=C["alpha"],
+                                 cooks_filter=bool(C["cooks_filter"]),
+                                 independent_filter=bool(C["independent_filter"]),
+                                 quiet=True)
+                sti.summary()
+                ri = sti.results_df.copy()
+                ri["population"], ri["term"] = pop, f"{a_}:{b_}"
+                ri["contrast"] = hits[0]
+                ri["gene"] = ri.index
+                out.append(ri)
+            else:
+                # MORE THAN ONE COLUMN IS NOT ONE CONTRAST. A factor with three or more levels
+                # spreads its interaction over several columns, and testing them together is an
+                # F-test this does not do. Named rather than silently skipped.
+                not_interacted.setdefault(pop, (a_, b_))
+                interacted.pop(pop, None)
+
             # WHERE EVERY GENE WENT. DESeq2's own documentation names the three routes out:
             # baseMean zero -> NA in every column; a Cook's-distance outlier -> pvalue AND padj
             # NA; independent filtering -> padj only.
