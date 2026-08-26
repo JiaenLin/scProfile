@@ -1080,6 +1080,21 @@ ck("a raising candidate does not propagate out of the search", _raised is not Tr
 # is what a uniform fate probability looks like. Neither page was wrong - the evidence was
 # plotted, honestly, further down - but a reader takes the headline, and a limit reachable only
 # by reading every panel is a limit most readers never meet.
+# A GRID IS DRAWN TO BE COMPARED. Every panel of the fold-change grid scaled itself, so the
+# y-axes ran -10..5, -5..5 and -2.5..2.5 side by side and the panel with the LARGEST effects
+# looked flattest. A grid whose panels cannot be compared is nine separate figures sharing a
+# caption.
+print("\na panel grid shares one scale")
+ck("the fold-change grid sets one limit across its panels",
+   "_a.set_ylim(-_r, _r)" in _KSRC["de.py"] and "_a.set_xlim(0.0, _xhi)" in _KSRC["de.py"])
+ck("symmetric about zero, so up and down are the same distance",
+   "max(abs(_lo), abs(_hi))" in _KSRC["de.py"])
+ck("the limits are the UNION of the panels, so nothing is clipped out of view",
+   "min((float(np.nanmin(a.get_ylim()))" in _KSRC["de.py"])
+ck("and the caption says the scale is shared",
+   "ONE SCALE ACROSS EVERY PANEL" in _KSRC["de.py"],
+   "a reader cannot see that axes are shared without being told")
+
 print("\na headline carries what its own diagnostics refute")
 from scprofile.plugin import Context as _Ctx2                                   # noqa: E402
 ck("there is one way to say it, on the context",

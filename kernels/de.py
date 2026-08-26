@@ -701,10 +701,26 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
         ax.set_title(f"{pop}\n{term}: {contrast}", loc="left")
         ax.set_xlabel("log10(baseMean + 1)")
         ax.set_ylabel("log2 fold change")
+
+    # ONE SCALE ACROSS THE GRID. Every panel scaled itself, so a fold change of 2 was a different
+    # height in each - and the only reason to draw nine panels together is to compare them. On
+    # the report this was found in, the y-axes ran -10..5, -5..5 and -2.5..2.5 side by side, and
+    # the panel with the LARGEST effects looked flattest.
+    #
+    # The limits are the union of what the panels hold, symmetric about zero on the fold-change
+    # axis so up and down are the same distance, and no point is clipped out of view.
+    _lo = min((float(np.nanmin(a.get_ylim())) for a in axes[:len(drawn)]), default=-1.0)
+    _hi = max((float(np.nanmax(a.get_ylim())) for a in axes[:len(drawn)]), default=1.0)
+    _r = max(abs(_lo), abs(_hi)) or 1.0
+    _xhi = max((float(a.get_xlim()[1]) for a in axes[:len(drawn)]), default=1.0)
+    for _a in axes[:len(drawn)]:
+        _a.set_ylim(-_r, _r)
+        _a.set_xlim(0.0, _xhi)
     ctx.emit_figure(
         "F5_ma", fig,
-        caption=(f"One point per gene: mean normalised expression against log2 fold change, with "
-                 f"genes at padj < {alpha} in orange ({n_sig:,} across the panels shown)"
+        caption=(f"One point per gene: mean normalised expression against log2 fold change, "
+                 f"ONE SCALE ACROSS EVERY PANEL so the heights are comparable, with genes at "
+                 f"padj < {alpha} in orange ({n_sig:,} across the panels shown)"
                  + (f". {len(drawn)} of {len(drawn) + len(omitted)} population-term combinations "
                     f"are drawn; not shown: "
                     f"{', '.join(f'{p} / {t}' for p, t in omitted)}" if omitted else "")
