@@ -28,6 +28,16 @@ export PYTHONPATH=$TOOL
 export SCPROFILE_KERNELS=$HERE
 export MPLCONFIGDIR=$WORK/.mpl
 
+# THREADS BOUNDED BY THE ALLOCATION, which this did not do and the job script beside it always
+# has. Every one of these is read at IMPORT time by the library it controls, so a BLAS that sees
+# a 64-core node while the scheduler granted four will oversubscribe — and a native library
+# fighting a cgroup dies without a Python traceback, which is exactly what a selftest failure
+# with one log line and no exception looks like.
+: "${NCPUS:=${SCPROFILE_SMOKE_CORES:-4}}"
+export OMP_NUM_THREADS="$NCPUS" OPENBLAS_NUM_THREADS="$NCPUS" MKL_NUM_THREADS="$NCPUS" \
+       NUMEXPR_NUM_THREADS="$NCPUS" VECLIB_MAXIMUM_THREADS="$NCPUS" BLIS_NUM_THREADS="$NCPUS"
+echo "threads  $NCPUS per library"
+
 echo "tool     $TOOL"
 echo "python   $PY"
 echo "work     $WORK"
@@ -45,7 +55,16 @@ echo; echo "=== 2. every built plugin's selftest ==="
 # that brings its own environment must have its selftest run BY THAT ENVIRONMENT; the loop this
 # replaces ran velocity's selftest under the host python and died on `No module named scvelo`,
 # reporting a missing dependency that is not missing anywhere it matters.
-$PY -m scprofile.cli selftest ${PREFIX:+--prefix "$PREFIX"} || exit 1
+# REPORTED, NOT FATAL — and the two are different claims. A selftest proves a plugin's
+# ENVIRONMENT works; the steps below prove the plan, the decision channel, the merge and the
+# report work together, and a code change breaks the second far more often than the first.
+# Aborting here meant one unusable environment hid every host-path failure behind it, so a
+# pre-flight submitted to find them reported one thing and stopped. The exit status still
+# carries it: `selftest_rc` is folded into the result at the end.
+selftest_rc=0
+$PY -m scprofile.cli selftest ${PREFIX:+--prefix "$PREFIX"} || selftest_rc=$?
+[ "$selftest_rc" -eq 0 ] || echo "  SELFTESTS FAILED (rc=$selftest_rc) — continuing, so this job
+  reports every host-path failure too rather than only the first environment one."
 
 echo; echo "=== 3. the fixture ==="
 # tests/make_fixture.py, the one that was already here. It is the better fixture and it predates
@@ -94,5 +113,9 @@ echo; echo "=== 6. what landed ==="
 echo; echo "=== 7. the checks ==="
 $PY "$HERE/_check.py" --out "$WORK/results" --units 8 --expect "$WANT" --log "$LOG"
 rc=$?
+if [ "$selftest_rc" -ne 0 ]; then
+    echo "  and the selftests failed earlier (rc=$selftest_rc): an environment is not usable."
+    rc=1
+fi
 echo; echo "finished $(date -u +%FT%TZ)"
 exit $rc

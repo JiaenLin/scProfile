@@ -1,7 +1,10 @@
 #!/bin/bash
 #PBS -N scprofile_smoke
 #PBS -q workq
-#PBS -l select=1:ncpus=4:mem=16gb
+# 8 cores and 48gb, against `workq`'s ceiling of 50. The fixtures are tiny; the plugin
+# SELFTESTS are not - they fit real models in real environments, several sharing one
+# node. Estimate high: an over-request costs queue time, and a kill keeps nothing.
+#PBS -l select=1:ncpus=8:mem=48gb
 #PBS -l walltime=01:00:00
 #PBS -j oe
 
