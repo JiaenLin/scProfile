@@ -131,7 +131,20 @@ export MKL_NUM_THREADS="${NCPUS:-1}"
 # that is still running - or one that was killed - leaves nothing to read, and "no output" then
 # looks exactly like "never started". Never /tmp: it is node-local, so a log written there is
 # invisible from the machine you are sitting on.
-LIVE="${LIVE_LOG:-$PWD/logs/live_${PHASE}.log}"
+# ONE LOG PER RUN. This was `logs/live_<phase>.log`, opened with `tee -a`, so every run of a
+# phase APPENDED to the same file — and the file therefore carried several jobs, on several
+# nodes, at several commits, with one header at the top naming only the first of them.
+#
+# It cost a healthy run. Reading that file's tail showed the current job; grepping it by line
+# number showed YESTERDAY's, and the two are indistinguishable inside one file: a job id in the
+# header, no job id on any other line. A run was diagnosed as failing on environment resolution,
+# and killed, on evidence that belonged to a job from the previous afternoon. Nothing about the
+# stale half looked stale — which is the whole of the problem, and exactly what rule six says
+# about an artifact older than the data it appears to describe.
+#
+# The job id is in the name now, so a stale log cannot be mistaken for this one, and `-a` is
+# kept only so a requeued job appends to its own file rather than truncating it.
+LIVE="${LIVE_LOG:-$PWD/logs/live_${PHASE}_${PBS_JOBID%%.*}.log}"
 exec > >(tee -a "$LIVE") 2>&1
 # now that stdout reaches the live log, say what was decided before it did
 [ -n "${_SNAP_MSG:-}" ] && echo "$_SNAP_MSG"
