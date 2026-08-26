@@ -496,7 +496,8 @@ def _by_arm_block(by_arm, *, aware):
                           f'<code>{_e(fac)}</code></b> — {what}, {len(arms)} arms.'
                           + (f' Identical split to '
                              + ", ".join("<code>" + _e(x) + "</code>" for x in ali)
-                             + ' — one panel, not two.' if ali else "")
+                             + ' — one panel, not two, and which of them a difference belongs '
+                               'to is not something this data can say.' if ali else "")
                           + '</figcaption>' + svg + "</figure>")
     if not blocks:
         return ""

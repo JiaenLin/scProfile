@@ -63,8 +63,15 @@ ck("vector and source too",
 with tempfile.TemporaryDirectory() as d:
     d = Path(d)
     report.write_kernel(d, "liana", f["liana"], [], "")
+    # PER-SAMPLE PANELS MOVED. They are rendered on `<plugin>_by_sample.html` now,
+    # because a page carrying one plot ten times hides its own result. The
+    # requirement is unchanged - a rendered src must name the unit it came from -
+    # so the check follows the panels rather than the page they used to be on.
+    _ap = d / "report" / "liana_by_sample.html"
     html = (d / "report" / "liana.html").read_text()
-    ck("rendered src includes the unit", 'src="../kernels/liana/s1/figs/dot.png"' in html,
+    panels_html = _ap.read_text() if _ap.exists() else html
+    ck("rendered src includes the unit (on the per-sample appendix, where the panels now are)",
+       'src="../kernels/liana/s1/figs/dot.png"' in panels_html,
        "hrefs still guess ../kernels/<name>/")
     ck("no unit-less kernel href survives", '"../kernels/liana/figs' not in html)
     ck("the page has a per-unit section", "Per unit" in html and "s3" in html)
@@ -83,6 +90,9 @@ print("\nthe report says what the merge did, not what the plugin declared")
 with tempfile.TemporaryDirectory() as d:
     d = Path(d)
     report.write_kernel(d, "liana", f["liana"], [], "", merged={"obs": ["ccc_score"], "obsm": []})
+    # READ WHAT THIS BLOCK JUST WROTE. It asserted against `html` from the block above and never
+    # opened its own render, so it was checking a page rendered with different arguments - and
+    # passed for as long as that page happened to contain the string.
     html = (d / "report" / "liana.html").read_text()
     ck("a dropped obsm is not called merged", "NOT in the object" in html)
     ck("the merged obs still is", html.count("merged into the object by barcode") >= 1)
