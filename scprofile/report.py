@@ -312,6 +312,69 @@ def _svg_strip(values, labels, *, width=560, height=96):
             + "".join(ticks) + "".join(pts) + "</svg>")
 
 
+def _units_by_arm(units, design, declared):
+    """THE PER-UNIT NUMBERS, GROUPED BY ARM. The comparison the study exists to make.
+
+    A per-unit plugin already records one comparable number per unit, and the units already sit
+    on one axis. What was missing was the join: the reporter had the numbers and the arm NAMES
+    and no way to put a unit in an arm, so three plugins could show ten dots and not say which
+    four were aged.
+
+    Median per arm, and the units behind it. NOT a test - two arms of five samples compared by
+    eye is a description, and the page says so.
+    """
+    if not design:
+        return ""
+    named = {str(d.get("id")): d for d in (declared or []) if isinstance(d, dict)}
+    factors = sorted({f for r in design.values() for f in r})
+    keys = []
+    for u in units:
+        for k in (u.get("metrics") or {}):
+            if k not in keys:
+                keys.append(k)
+    blocks, rows = [], []
+    for k in keys:
+        vals = {str(u.get("unit")): float(u["metrics"][k]) for u in units
+                if isinstance((u.get("metrics") or {}).get(k), (int, float))}
+        if len(vals) < 2:
+            continue
+        for fac in factors:
+            arms = {}
+            for unit, v in vals.items():
+                lvl = (design.get(unit) or {}).get(fac)
+                if lvl:
+                    arms.setdefault(str(lvl), []).append(v)
+            if len(arms) < 2 or any(len(v) < 2 for v in arms.values()):
+                continue
+            recs = []
+            for lvl in sorted(arms):
+                xs = sorted(arms[lvl])
+                m = xs[len(xs) // 2] if len(xs) % 2 else (xs[len(xs)//2 - 1] + xs[len(xs)//2]) / 2
+                recs.append({"level": lvl, "n": len(xs), "median": m,
+                             "q1": xs[0], "q3": xs[-1], "min": xs[0], "max": xs[-1]})
+            q = (named.get(k) or {}).get("question") or ""
+            # DRAWN UP TO THE CAP, TABULATED IN FULL. Two metrics across four factors is eight
+            # panels of one shape, and the page budget is twelve for everything. Every pair is
+            # still in the table below, so capping the drawing loses no number.
+            if len(blocks) < BY_ARM_PANEL_CAP:
+                blocks.append(f'<figure><figcaption><b><code>{_e(k)}</code> by '
+                              f'<code>{_e(fac)}</code></b> — per arm, one point per sample. '
+                              f'{len(recs)} arms.</figcaption>'
+                              + _arm_rows_numeric(recs) + "</figure>")
+            lo, hi = recs[0], recs[-1]
+            rows.append(f"<tr><td><code>{_e(k)}</code></td><td><code>{_e(fac)}</code></td>"
+                        f"<td>{_e(lo['level'])} {_num(lo['median'])}</td>"
+                        f"<td>{_e(hi['level'])} {_num(hi['median'])}</td>"
+                        f"<td class='sub'>{_e(q[:70])}</td></tr>")
+    if not rows:
+        return ""
+    return ("<h2>Across the design</h2><p class='sub'>This plugin's per-unit numbers grouped by "
+            "arm. A DESCRIPTION, not a test: n is the number of samples in each arm.</p>"
+            + "".join(blocks)
+            + "<div class='wrap'><table><tr><th>metric</th><th>factor</th><th>arm</th>"
+              "<th>arm</th><th></th></tr>" + "".join(rows) + "</table></div>")
+
+
 def _across_units(units, declared):
     """THE UNITS ON ONE AXIS. Drawn by the host, once, for every per-unit plugin.
 
@@ -552,15 +615,48 @@ def _fold_caveats(caveats):
     repetition, not the information.
     """
     import re as _re
-    groups, order = {}, []
+    # IDENTICAL APART FROM THEIR NUMBERS COUNTS AS IDENTICAL. Ten units emit the same sentence
+    # with their own counts in it - "576 cells carry an annotator sentinel", "412 cells ..." -
+    # so folding on exact text left 42 distinct lines from 106, and a thousand words of the same
+    # handful of statements. The numbers are not lost: each varying position is rendered as the
+    # RANGE across the units it came from.
+    _NUM = _re.compile(r"\d[\d,\.]*")
+    groups, order, nums = {}, [], {}
     for c in caveats:
         m = _re.match(r"^\[([^\]]+)\]\s*(.*)$", str(c), _re.S)
         unit, body = (m.group(1), m.group(2)) if m else (None, str(c))
-        if body not in groups:
-            groups[body] = []
-            order.append(body)
+        key = _NUM.sub("\u0000", body)
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+            nums[key] = [[] for _ in _NUM.findall(body)]
+        for i, v in enumerate(_NUM.findall(body)):
+            if i < len(nums[key]):
+                nums[key][i].append(v)
         if unit:
-            groups[body].append(unit)
+            groups[key].append(unit)
+
+    def _fill(key):
+        parts = key.split("\u0000")
+        vals = nums.get(key) or []
+        out_s = parts[0]
+        for i, seg in enumerate(parts[1:]):
+            got = sorted(set(vals[i])) if i < len(vals) else []
+            if len(got) == 1:
+                out_s += got[0]
+            elif got:
+                def _f(x):
+                    try:
+                        return float(str(x).replace(",", ""))
+                    except ValueError:
+                        return 0.0
+                lo, hi = min(got, key=_f), max(got, key=_f)
+                out_s += f"{lo}-{hi}"
+            out_s += seg
+        return out_s
+
+    groups = {_fill(k): v for k, v in groups.items()}
+    order = [_fill(k) for k in order]
     out = []
     for body in order:
         units = groups[body]
@@ -669,6 +765,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     units = p.get("units") or []
     if p.get("per_unit") and units:
         body.append(_across_units(units, (spec or {}).get("unit_metrics")))
+        body.append(_units_by_arm(units, (payload_all or {}).get("design") or {},
+                                  (spec or {}).get("unit_metrics")))
     body.append(_by_arm_block(by_arm, aware=bool(aware)))
     body.append(_concordance_block(name, concordance))
     # PER-SAMPLE PANELS GO TO AN APPENDIX, AND ARE LINKED. Three plugins here run once per

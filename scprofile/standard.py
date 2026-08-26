@@ -44,6 +44,14 @@ ARM_HINT = re.compile(r"\b(by arm|across the design|per arm|between arms|arm[s]?
 
 
 def _text(html):
+    """Visible words. STYLE AND SCRIPT ARE NOT PROSE.
+
+    Stripping tags alone leaves what is BETWEEN them, and `<style>` is a tag with 74 words of
+    CSS inside it on every page in this tool. Every prose count was inflated by the same
+    stylesheet, on all ten pages, which is a defect in the ruler rather than in the thing it
+    measured - and the kind that makes a page look worse the more carefully it is styled.
+    """
+    html = re.sub(r"<(style|script)\b[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
 
 

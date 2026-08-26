@@ -912,6 +912,12 @@ def _run(a):
 
     payload = {"version": _v(), "input": str(a.h5ad), "describe": describe,
                "by_arm": _by_arm, "concordance": _conc,
+               # WHICH ARM EACH SAMPLE IS IN. The reporter had the per-unit numbers and the arm
+               # NAMES and no way to join them, so a per-unit plugin's units could be put on one
+               # axis and not grouped by the design - which is the only comparison the study
+               # exists to make. It is the design table, carried verbatim.
+               "design": {str(k): {str(f): str(v) for f, v in (r or {}).items()}
+                          for k, r in (_dtab or {}).items()},
                "memory_model": memory_model,
                "constraint_on_use": constraint, "constraint_source": csrc,
                "constraint_binds": _binds,
