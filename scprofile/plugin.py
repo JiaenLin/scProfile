@@ -490,8 +490,15 @@ class Context:
         self._obs[name] = p
         return p
 
-    def emit_obsm(self, name, array):
-        """A per-cell ARRAY, written with the barcodes its rows belong to.
+    def emit_obsm(self, name, array, columns=None):
+        """A per-cell ARRAY, written with the barcodes its rows belong to and the names of its
+        COLUMNS.
+
+        AN ARRAY CARRIES NO COLUMN NAMES EITHER, and that gap costs the same thing one step
+        later. A 674-column activity matrix reaches the merged object as a bare ndarray, so the
+        host can split it by design arm and can only call the results `X_tf_activity[3]` - which
+        is not a regulator, and not a figure anybody can read. The plugin is the party that
+        knows the names, right here, exactly as the host was the party that knew the barcodes.
 
         "AN ARRAY CARRIES NO BARCODES" WAS NOT A FACT, IT WAS A GAP. The host said it three times
         - as the reason a per-cell array must cover every cell in order, and as the reason a
@@ -516,6 +523,16 @@ class Context:
                     f"run(); if this result is not, emit it as a table or a side-car object.")
             (self.out / "arrays" / f"{name}.barcodes.txt").write_text(
                 "\n".join(self.adata.obs_names.astype(str)) + "\n", encoding="utf-8")
+        cols = list(columns) if columns is not None else getattr(array, "columns", None)
+        if cols is not None:
+            cols = [str(c) for c in cols]
+            if len(cols) != arr.shape[1]:
+                raise ValueError(
+                    f"emit_obsm({name!r}): {len(cols)} column names for {arr.shape[1]} columns. "
+                    f"Names that do not match the array are worse than none: they would label "
+                    f"every downstream figure with the wrong thing.")
+            (self.out / "arrays" / f"{name}.columns.txt").write_text(
+                "\n".join(cols) + "\n", encoding="utf-8")
         np.save(p, arr)
         self._obsm[name] = p
         return p

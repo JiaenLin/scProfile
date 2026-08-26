@@ -40,7 +40,14 @@ MAX_HIDDEN_WORDS = 2500
 #: UniProt-style accessions. A result naming one of these has an unmapped identifier in it.
 ACCESSION = re.compile(r"\b(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0-9]{2}[0-9]){1,2})\b")
 #: What a figure must say to count as comparing the design.
-ARM_HINT = re.compile(r"\b(by arm|across the design|per arm|between arms|arm[s]? of the design)\b", re.I)
+ARM_HINT = re.compile(
+    r"\b(by arm|across the design|per arm|between arms|arm[s]? of the design"
+    # A PLUGIN SAYS IT ITS OWN WAY. abundance's shares panel is captioned "split by design
+    # level" and compares exactly what this criterion is looking for; the pattern missed it and
+    # reported the page as having no design comparison at all. That is the same defect as
+    # `repeats` passing on a page of repeats, pointing the other way: a ruler that cannot see a
+    # thing reports its absence just as confidently as its presence.
+    r"|split by design|by design level|per design level|grouped by design)\b", re.I)
 
 
 def _text(html):

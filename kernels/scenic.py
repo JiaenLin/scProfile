@@ -1118,7 +1118,7 @@ def run(ctx):
     # A per-sample fit keeps its AUC as a table in its own directory, where it is per-sample and
     # reads as such.
     if ctx.unit is None:
-        ctx.emit_obsm("X_regulon_auc", auc.to_numpy())
+        ctx.emit_obsm("X_regulon_auc", auc.to_numpy(), columns=list(auc.columns))
     else:
         ctx.emit_table("regulon_auc", auc)
 

@@ -851,9 +851,14 @@ def _run(a):
             _dt, _dk, _df = inputs.read_design(a.design, units or [])
             for _n, _slots in sorted(merged_slots.items()):
                 _cols = list((_slots or {}).get("obs") or [])
-                if not _cols:
+                # AND ITS ARRAYS. A plugin whose per-cell output is a matrix has no obs column,
+                # and skipping it here is what kept the design off the pages of the two plugins
+                # that deliver activity per cell. `obsm_columns` is written by the merge from
+                # the names `ctx.emit_obsm` puts beside the array.
+                _obsm = {k: v for k, v in ((_slots or {}).get("obsm_columns") or {}).items()}
+                if not _cols and not _obsm:
                     continue
-                _got = inputs.by_arm(A, _cols, _dt, sample_key, _df)
+                _got = inputs.by_arm(A, _cols, _dt, sample_key, _df, obsm=_obsm)
                 if _got:
                     _by_arm[_n] = _got
         except Exception as e:                                            # noqa: BLE001

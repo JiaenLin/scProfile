@@ -816,7 +816,7 @@ def run(ctx):
             f"assert an activity of exactly none where the truth is that nothing was scored.")
     ctx.log(f"scored {n_sources:,} regulators over {n_cells_scored:,} cells"
             + (f"; {n_missing:,} cell(s) were empty and carry NaN" if n_missing else ""))
-    ctx.emit_obsm("X_tf_activity", acts.to_numpy())
+    ctx.emit_obsm("X_tf_activity", acts.to_numpy(), columns=list(acts.columns))
 
     # ------------------------------------------------------------ per regulator: what it had
     #

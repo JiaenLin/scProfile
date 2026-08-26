@@ -752,6 +752,40 @@ ck("an arm below the cell floor is dropped rather than quantiled",
    inputs.ARM_MIN_CELLS >= 20)
 ck("no design, no section", not inputs.by_arm(_Obj(_fake_obs()), ["score"], {}, "sample", ["f1"]))
 
+# A PLUGIN WHOSE PER-CELL OUTPUT IS A MATRIX. It has no obs column, so the guard that required
+# one skipped it entirely - which is why the two plugins delivering activity per cell showed the
+# design nowhere. The columns are named beside the array by `ctx.emit_obsm`; without names there
+# is nothing to draw, because `X_tf_activity[3]` is not a regulator.
+import numpy as _np2b, pandas as _pd2b                                          # noqa: E402
+_n2 = 1200
+_r2 = _np2b.random.RandomState(0)
+_sm = [f"S{i % 10}" for i in range(_n2)]
+_ag = _np2b.array([int(x[1:]) < 5 for x in _sm])
+_X = _np2b.c_[_r2.normal(size=_n2), _r2.normal(size=_n2) + _ag * 3.0, _r2.normal(size=_n2)]
+
+
+class _ObjM:
+    obs = _pd2b.DataFrame({"sample": _sm})
+    obsm = {"X_act": _X}
+
+
+_des2 = {f"S{i}": {"f1": "a" if i < 5 else "b"} for i in range(10)}
+_om = inputs.by_arm(_ObjM(), [], _des2, "sample", ["f1"],
+                    obsm={"X_act": ["Flat", "Diff", "Noise"]})
+ck("an obsm-only plugin still gets a per-arm view", bool(_om), str(sorted(_om)))
+ck("and the column chosen is the one that DIFFERS between arms",
+   any("Diff" in k for k in _om), str(sorted(_om)))
+ck("an array with no names is not drawn by position",
+   not inputs.by_arm(_ObjM(), [], _des2, "sample", ["f1"], obsm={"X_act": []}),
+   "X_tf_activity[3] is not a regulator")
+ck("names that do not match the array are refused at emission",
+   "column names for" in pathlib.Path(
+       Path(__file__).resolve().parents[1] / "scprofile" / "plugin.py").read_text(),
+   "mislabelled columns are worse than none")
+ck("the merge carries the names it was given",
+   "_array_columns" in pathlib.Path(
+       Path(__file__).resolve().parents[1] / "scprofile" / "merge.py").read_text())
+
 # TWO FACTORS WITH THE SAME PARTITION ARE ONE SPLIT. Drawing both shows one division of the
 # samples twice, and a reader with two panels showing the same difference under two names has,
 # on the page, two pieces of evidence. Keying the partition on (sample, level) PAIRS missed it

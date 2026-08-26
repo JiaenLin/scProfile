@@ -395,7 +395,12 @@ ARM_LEVEL_CAP = 12
 ARM_MIN_CELLS = 20
 
 
-def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP):
+#: How many columns of a wide array to summarise per arm. A 674-column activity matrix has no
+#: useful "the" column; the ones that DIFFER between arms are the ones a reader wants.
+OBSM_TOP = 2
+
+
+def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP, obsm=None):
     """Every per-cell column a plugin produced, summarised ACROSS THE DESIGN. Description only.
 
     THE DESIGN IS MISSING FROM EVERY PAGE THAT DOES NOT TEST IT. Measured on a 2x2 cohort: of
@@ -420,9 +425,49 @@ def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP):
     import numpy as np
     import pandas as pd
 
-    if not (columns and design and sample_key) or sample_key not in adata.obs:
+    # OBSM COUNTS AS OUTPUT. Requiring `columns` skipped exactly the plugins this function was
+    # just extended for: one whose per-cell output is a matrix has no obs column at all, so the
+    # guard returned before the new code could run and the design stayed off its page.
+    if not ((columns or obsm) and design and sample_key) or sample_key not in adata.obs:
         return {}
     samp = adata.obs[sample_key].astype(str)
+
+    # WIDE ARRAYS TOO, BY THE COLUMNS THAT DIFFER. A plugin whose per-cell output is a matrix
+    # rather than a column had no per-arm view at all: the host summarised `obs` and nothing
+    # else, so the two plugins that deliver activity per cell showed the design nowhere. The
+    # columns are named by `ctx.emit_obsm`; without names there is nothing to draw, because
+    # `X_tf_activity[3]` is not a regulator.
+    extra = {}
+    for key, names in (obsm or {}).items():
+        arr = adata.obsm.get(key) if hasattr(adata, "obsm") else None
+        if arr is None or not names:
+            continue
+        try:
+            import numpy as _np
+            a = _np.asarray(arr, dtype=float)
+        except Exception:                                                 # noqa: BLE001
+            continue
+        if a.ndim != 2 or a.shape[1] != len(names):
+            continue
+        best = []
+        for fac in sorted(factors or []):
+            arm = samp.map({k: str(r.get(fac, "")) for k, r in design.items()})
+            lv = sorted({str(x) for x in arm.dropna().unique() if str(x)})
+            if not (2 <= len(lv) <= cap):
+                continue
+            means = []
+            for l_ in lv:
+                m = (arm.astype(str) == l_).to_numpy()
+                if m.sum() >= ARM_MIN_CELLS:
+                    means.append(a[m].mean(axis=0))
+            if len(means) < 2:
+                continue
+            spread = _np.max(_np.vstack(means), axis=0) - _np.min(_np.vstack(means), axis=0)
+            for i in _np.argsort(spread)[::-1][:OBSM_TOP]:
+                best.append((float(spread[i]), int(i)))
+        for _sp, i in sorted(best, reverse=True)[:OBSM_TOP]:
+            extra[f"{key}[{names[i]}]"] = a[:, i]
+
 
     # TWO FACTORS WITH THE SAME PARTITION ARE ONE SPLIT, AND THE PAGE SAYS SO. Drawing both
     # presents one division of the samples twice, and a reader with two panels showing the same
@@ -452,10 +497,14 @@ def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP):
     factors = keep
 
     out = {}
-    for col in sorted(set(columns)):
-        if col not in adata.obs:
+    import pandas as _pd
+    for col in sorted(set(columns)) + sorted(extra):
+        if col in extra:
+            v = _pd.Series(extra[col], index=adata.obs.index)
+        elif col in adata.obs:
+            v = adata.obs[col]
+        else:
             continue
-        v = adata.obs[col]
         numeric = pd.api.types.is_numeric_dtype(v) and not pd.api.types.is_bool_dtype(v)
         levels_of_col = None
         if not numeric:

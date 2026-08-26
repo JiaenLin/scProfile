@@ -877,7 +877,8 @@ def run(ctx):
                    f"capability without carrying one.")
         wide = np.full((ctx.adata.n_obs, fate.shape[1]), np.nan, dtype="float32")
         wide[real] = fate
-        ctx.emit_obsm("fate_probabilities", wide)
+        ctx.emit_obsm("fate_probabilities", wide,
+                   columns=list(getattr(wide, "columns", []) or []) or None)
         ctx.headline = f"one terminal state over {A.n_obs:,} cells, from {which}"
         return
 
@@ -892,7 +893,8 @@ def run(ctx):
     # NaN, which is "not measured", rather than 0, which is a fate probability.
     wide = np.full((ctx.adata.n_obs, fate.shape[1]), np.nan, dtype="float32")
     wide[real] = fate
-    ctx.emit_obsm("fate_probabilities", wide)
+    ctx.emit_obsm("fate_probabilities", wide,
+                   columns=list(getattr(wide, "columns", []) or []) or None)
 
     stability = {}
     if coarse is not None and len(coarse):

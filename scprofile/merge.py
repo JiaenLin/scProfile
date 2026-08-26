@@ -48,6 +48,24 @@ def _read_array(path):
     raise MergeError(f"{p} is not .npy or .npz; the contract accepts those for arrays")
 
 
+def _array_columns(path):
+    """The names of an array's columns, written beside it by `ctx.emit_obsm`.
+
+    Without them a 674-column activity matrix reaches the object as a bare ndarray and every
+    figure the host could draw from it would be labelled by position. Absent for an array whose
+    columns have no names - a two-column layout has none to give - and that is not an error.
+    """
+    f = Path(str(path) + "").with_suffix("").with_suffix(".columns.txt")
+    g = Path(str(path).replace(".npy", ".columns.txt"))
+    for cand in (g, f):
+        try:
+            if cand.exists():
+                return [x for x in cand.read_text(encoding="utf-8").splitlines() if x]
+        except OSError:
+            pass
+    return None
+
+
 def _array_barcodes(path):
     """The barcodes an emitted array's rows belong to, or None if it carries none.
 
@@ -149,6 +167,9 @@ def merge_one(adata, out_dir, payload, *, log=print):
     for key, rel in (payload.get("obsm") or {}).items():
         arr = _read_array(out / rel)
         idx = _array_barcodes(out / rel)
+        _cols = _array_columns(out / rel)
+        if _cols:
+            merged.setdefault("obsm_columns", {})[key] = _cols
         if idx is not None:
             # BY BARCODE, like every obs column. The host excludes cells with NaN in a computed
             # embedding from every plugin, so a plugin handed 98,627 of 100,713 cells returned
