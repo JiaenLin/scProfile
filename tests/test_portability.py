@@ -970,6 +970,22 @@ ck("an interaction that is added is also CONTRASTED",
 ck("the contrast column is taken from the design matrix the fit built",
    'dds.obsm.get("design_matrix")' in _desrc,
    "reconstructing what formulaic would have named it guesses at another library's internals")
+# THE PER-TERM LOOP STILL CONTAINS ITS OWN ACCOUNTING. Inserting the interaction block one
+# indent level too far left ENDED that loop, and everything after it - the gene accounting and
+# the hits rows - fell inside `if pop in interacted:`, running once per population with the last
+# term's data. The table looked right and the figure lost two of its three terms, which is the
+# order these are checked in and the reason a table is not a report.
+_determ = None
+for _nd in _ast.walk(_ast.parse(_desrc)):
+    if isinstance(_nd, _ast.For) and getattr(getattr(_nd, "target", None), "id", "") == "term":
+        _determ = _ast.unparse(_ast.Module(_nd.body, []))
+ck("the per-term loop still contains the gene accounting",
+   _determ is not None and "acct_rows.append" in _determ,
+   "an insert at the wrong indent ends the loop and the accounting falls out of it")
+ck("and the hits rows every figure is built from",
+   _determ is not None and "hit_rows.append" in _determ)
+ck("the interaction is accounted for too, or it is in the table and in no figure",
+   "\"term\": f\"{a_}:{b_}\"" in _desrc and _desrc.count("hit_rows.append") >= 5)
 ck("an interaction spread over several columns is NAMED, not silently skipped",
    "not_interacted.setdefault" in _desrc,
    "a factor with three levels spreads its interaction over columns an F-test would combine")
