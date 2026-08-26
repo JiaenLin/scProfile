@@ -229,6 +229,8 @@ class Context:
         #: interaction count ran 8,194 to 38,895 across the ten, and nothing on its page put
         #: the ten numbers on the same axis.
         self._metrics = {}
+        #: Claims this plugin's own diagnostics refute. See `contradiction`.
+        self._contradictions = []
         #: So `populations()` says what it set aside ONCE however many tables a plugin writes.
         self._said_populations = False
         #: Every directory `source_layers()` walked, so a refusal can name where it looked -
@@ -705,6 +707,29 @@ class Context:
     def caveat(self, text):
         """Something true of this result that a reader must be told. Printed with the numbers."""
         self.caveats.append(text)
+
+    def contradiction(self, claim):
+        """This plugin's OWN diagnostic refutes its own headline. Say it in the headline.
+
+        Two pages measured on a real cohort carried a headline their own figures contradict:
+        "45.5% of cells score S or G2M" in post-mitotic tissue, on a panel whose genes are
+        detected in almost no cell and whose called fraction FALLS as sequencing depth rises;
+        and "3 terminal states" over cells whose fate entropy sits at the maximum three states
+        allow, which is what a uniform fate probability looks like.
+
+        Neither page was wrong - the evidence against each was plotted, honestly, further down.
+        But a reader takes the headline, and a limit that is only reachable by reading every
+        panel is a limit most readers will not meet. A refutation belongs where the claim is.
+
+        Recorded as a caveat too, so it survives into `report.json` and any document built from
+        it rather than living only in a string.
+        """
+        text = str(claim).strip()
+        if not text:
+            return
+        self._contradictions.append(text)
+        self.caveat(text)
+        self.headline = (f"{text} " + (self.headline or "")).strip()
 
     def metric(self, name, value):
         """Record ONE headline number for this instance, comparable across units.

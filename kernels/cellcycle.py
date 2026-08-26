@@ -653,7 +653,7 @@ def _fig_depth(ctx, detected, phase, S, G2M):
             "F5_score_vs_detection was not drawn: these cells fall into fewer than three "
             "distinct bins of detected-gene count, so there is no depth gradient to test the "
             "phase call against. The confound is untested here, which is not the same as absent.")
-        return
+        return None
     df = pd.DataFrame({"bin": np.asarray(q.values, dtype=float), "detected_genes": det,
                        "S_score": np.asarray(S, dtype=float),
                        "G2M_score": np.asarray(G2M, dtype=float),
@@ -663,6 +663,17 @@ def _fig_depth(ctx, detected, phase, S, G2M):
                               S_score_median=("S_score", "median"),
                               G2M_score_median=("G2M_score", "median"),
                               cycling_fraction=("cycling", "mean"))
+    # THE TREND THIS PANEL DRAWS, RETURNED. It is the one number that says whether the phase
+    # call tracks the biology or the sequencing depth, and it was drawn and thrown away - so
+    # the headline could report 45.5% cycling while this panel, further down the same page,
+    # showed the called fraction FALLING as detection rises.
+    _x = g["detected_genes_median"].to_numpy(dtype=float)
+    _y = g["cycling_fraction"].to_numpy(dtype=float)
+    _rho = None
+    if _x.size >= 3 and _x.std() > 0 and _y.std() > 0:
+        _rx = pd.Series(_x).rank().to_numpy()
+        _ry = pd.Series(_y).rank().to_numpy()
+        _rho = float(np.corrcoef(_rx, _ry)[0, 1])
     fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.72))
     ax.plot(g["detected_genes_median"].values, g["cycling_fraction"].values,
             color=F.INK, lw=1.0, marker="o", ms=3.0)
@@ -689,6 +700,8 @@ def _fig_depth(ctx, detected, phase, S, G2M):
                  f"check passing."),
         source=g)
 
+
+    return _rho
 
 def _fig_by_population(ctx, phase):
     """Scored phase per population - the result, and the panel the trajectory check is made on."""
@@ -865,15 +878,21 @@ def run(ctx):
     # Each under its own guard: a panel that cannot be drawn on some object costs that panel, not
     # the four after it. The whole block used to sit under one `try`.
     ctx.log("figures:")
+    # WHAT A PANEL MEASURED, KEPT. The loop called each figure for its side effect and dropped
+    # whatever it returned, so the depth trend - the one number saying whether the phase call
+    # tracks detection rather than cycling - was computed, drawn, and discarded before the
+    # headline was written.
+    _drawn = {}
     for fn, args in ((_fig_panel_detection, (ctx, det)),
                      (_fig_scores, (ctx, S_ref, G_ref, ph_ref)),
                      (_fig_stability, (ctx, stab, [sd for sd, _p in alt])),
                      (_fig_depth, (ctx, per_cell, ph_ref, S_ref, G_ref)),
                      (_fig_by_population, (ctx, ph_ref))):
         try:
-            fn(*args)
+            _drawn[fn.__name__] = fn(*args)
         except Exception as e:                                            # noqa: BLE001
             ctx.log(f"  {fn.__name__} not drawn: {type(e).__name__}: {e}")
+    _depth_rho = _drawn.get("_fig_depth")
 
     ctx.emit_obs("phase", ph_ref)
     ctx.emit_obs("S_score", S_ref)
@@ -933,6 +952,17 @@ def run(ctx):
         f"score above zero. The gene sets' own paper called a cell cycling at >=2-fold "
         f"upregulation with t-test p < 0.01 for one of the programmes.")
 
+    # ITS OWN DIAGNOSTIC, AGAINST ITS OWN HEADLINE. If the fraction called cycling FALLS as
+    # detection rises, the call is tracking how deeply a cell was sequenced and not how it was
+    # cycling - and a headline reporting a proliferation-shaped percentage on top of that is a
+    # claim this plugin's own panel refutes. The panel was drawn and the headline never heard
+    # of it.
+    if _depth_rho is not None and _depth_rho < 0:
+        ctx.contradiction(
+            f"THE PHASE CALL TRACKS SEQUENCING DEPTH, NOT CYCLING: the fraction called S or "
+            f"G2M FALLS as detection rises (Spearman {_depth_rho:+.2f} over the depth bins), "
+            f"which is the opposite of what a real proliferating fraction does. Read the "
+            f"percentage below as a property of detection.")
     ctx.headline = (f"{100 * cycling_fraction:.1f}% of cells score S or G2M "
                     f"(G1 {int(counts.get('G1', 0)):,}, S {int(counts.get('S', 0)):,}, "
                     f"G2M {int(counts.get('G2M', 0)):,})"

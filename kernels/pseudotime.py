@@ -928,6 +928,26 @@ def run(ctx):
     else:
         _fig_ordering_by_population(ctx, order, groups, colours)
 
+    # ITS OWN NUMBER, AGAINST ITS OWN HEADLINE. log2(k) is the entropy of an even split over k
+    # fates and an absolute ceiling; a cohort sitting at that ceiling has fate probabilities of
+    # 1/k everywhere, which is what "no fate was resolved" looks like. Measured on a real run:
+    # every cell within 2% of the ceiling for three states, while the headline announced three
+    # terminal states as a result. The panel showed it; the headline had not heard of it.
+    _k = int(fate.shape[1])
+    if _k > 1:
+        import numpy as _np_ent
+        _f = _np_ent.asarray(fate, dtype=float)
+        _safe = _np_ent.where(_f > 0, _f, 1.0)
+        _ent = -(_np_ent.where(_f > 0, _f, 0.0) * _np_ent.log2(_safe)).sum(axis=1)
+        _ceiling = float(_np_ent.log2(_k))
+        _med = float(_np_ent.median(_ent)) if _ent.size else 0.0
+        if _ceiling > 0 and _med >= 0.95 * _ceiling:
+            ctx.contradiction(
+                f"NO FATE WAS RESOLVED: the median cell's fate entropy is {_med:.2f} bits "
+                f"against a ceiling of {_ceiling:.2f} for {_k} states, so the fate probabilities "
+                f"are within {100 * (1 - _med / _ceiling):.0f}% of an even split everywhere. The "
+                f"terminal states below are the states the method was asked for, not fates the "
+                f"cells were found to have.")
     ctx.headline = (f"{fate.shape[1]} terminal state(s) over {A.n_obs:,} cells, "
                     f"from {which}")
     ctx.caveat(f"The ordering came from {which}, on a {ctx.config['n_neighbors']}-neighbour graph "

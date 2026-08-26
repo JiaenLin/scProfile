@@ -1074,6 +1074,30 @@ ck("a raising candidate does not propagate out of the search", _raised is not Tr
 # has no gene symbol; 123 of 674 regulators arrived that way on a real run and one of them was
 # the strongest signal in every population. Dropping them hides a result. Leaving them unremarked
 # lets a reader take `A0A079HLR9` for a gene beside `Gata4`.
+# A HEADLINE ITS OWN DIAGNOSTIC REFUTES. Two pages carried one: "45.5% of cells score S or G2M"
+# in post-mitotic tissue, on a panel whose called fraction FALLS as sequencing depth rises; and
+# "3 terminal states" over cells whose fate entropy sits at the ceiling three states allow, which
+# is what a uniform fate probability looks like. Neither page was wrong - the evidence was
+# plotted, honestly, further down - but a reader takes the headline, and a limit reachable only
+# by reading every panel is a limit most readers never meet.
+print("\na headline carries what its own diagnostics refute")
+from scprofile.plugin import Context as _Ctx2                                   # noqa: E402
+ck("there is one way to say it, on the context",
+   "def contradiction(" in inspect.getsource(_Ctx2),
+   "two plugins writing their own prefix is a convention, not a mechanism")
+ck("it goes in the HEADLINE, not only in a caveat",
+   "self.headline = (f\"{text} \"" in inspect.getsource(_Ctx2.contradiction))
+ck("and into the caveats too, so it survives into report.json",
+   "self.caveat(text)" in inspect.getsource(_Ctx2.contradiction))
+ck("cellcycle tests whether its call tracks depth rather than cycling",
+   "_depth_rho" in _KSRC["cellcycle.py"] and "ctx.contradiction(" in _KSRC["cellcycle.py"])
+ck("and the panel that measures it returns the number instead of discarding it",
+   "_drawn[fn.__name__] = fn(*args)" in _KSRC["cellcycle.py"],
+   "the loop called each figure for its side effect and dropped what it returned")
+ck("pseudotime tests its fate entropy against the ceiling for k states",
+   "NO FATE WAS RESOLVED" in _KSRC["pseudotime.py"]
+   and "0.95 * _ceiling" in _KSRC["pseudotime.py"])
+
 print("\nan unmapped identifier is named, not dropped")
 from scprofile import standard as _ST                                           # noqa: E402
 ck("the criterion reads the LABELS a figure is drawn with, not the words under it",
