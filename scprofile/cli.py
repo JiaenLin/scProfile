@@ -376,6 +376,12 @@ def _run(a):
     # of code that happen to match today.
     from . import planner as _PL
     _run_facts = {"has_design": False}
+    # BOUND BEFORE THE BRANCH. `_dtab` was set only inside `if a.design:` and read
+    # unconditionally when the payload was assembled, so any run WITHOUT a design died at the
+    # last step with an UnboundLocalError - after every plugin had finished. A run with no
+    # design is the ordinary case for a cohort that has none, and it is what the smoke test
+    # exercises.
+    _dtab = None
     if a.design:
         try:
             _dtab, _dkey, _dfactors = inputs.read_design(a.design, units or [])

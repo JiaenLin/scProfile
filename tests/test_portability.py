@@ -594,6 +594,13 @@ ck("and the config resolver actually delivers it rather than dropping it",
        for n, k in _K.items() if _PL.decisions_for(k, _facts)),
    "an injected capability that passes the check and is then dropped from the resolved "
    "mapping never reaches the plugin, and nothing says so")
+# A RUN WITH NO DESIGN IS THE ORDINARY CASE for a cohort that has none, and every name the
+# payload reads must be bound whether or not the design branch ran. `_dtab` was set only inside
+# `if a.design:` and read unconditionally at payload assembly, so a design-less run died with an
+# UnboundLocalError AFTER every plugin had finished - the most expensive place to fail.
+ck("every name the payload reads is bound before the design branch",
+   _clisrc.index("_dtab = None") < _clisrc.index('"design": {str(k)'),
+   "a run without a design must not die at the last step")
 ck("a genuine typo in --params is still refused",
    _refused(lambda: _DECL.resolve_config(_K["de"].spec, {"nonsense": 1}, "de")))
 ck("and main effects where nothing is crossed",
