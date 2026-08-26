@@ -1100,8 +1100,31 @@ from scprofile.plugin import Context as _Ctx2                                   
 ck("there is one way to say it, on the context",
    "def contradiction(" in inspect.getsource(_Ctx2),
    "two plugins writing their own prefix is a convention, not a mechanism")
-ck("it goes in the HEADLINE, not only in a caveat",
-   "self.headline = (f\"{text} \"" in inspect.getsource(_Ctx2.contradiction))
+# ORDER MUST NOT MATTER. It prefixed the headline directly, and both plugins that call it
+# assign `ctx.headline` on the NEXT line - so the refutation was written and immediately
+# overwritten. Two targeted runs came back with the unqualified claim and no sign anything had
+# been attempted, which is the quietest way for a mechanism to not exist.
+ck("it RECORDS rather than prefixing, so a later headline cannot erase it",
+   "self.headline" not in inspect.getsource(_Ctx2.contradiction).split('"""')[-1],
+   "a mechanism that works only when called last is a trap for the next plugin")
+ck("and the entry point composes the headline from what was recorded",
+   'getattr(ctx, "_contradictions"' in pathlib.Path(
+       Path(__file__).resolve().parents[1] / "scprofile" / "_entry.py").read_text())
+
+
+class _FakeCtx:
+    def __init__(self):
+        self._contradictions, self.caveats, self.headline = [], [], ""
+
+    def caveat(self, t):
+        self.caveats.append(t)
+
+
+_fc = _FakeCtx()
+_Ctx2.contradiction(_fc, "NO FATE WAS RESOLVED:")
+_fc.headline = "3 terminal state(s)"          # assigned AFTER, exactly as the plugins do
+ck("proved: a contradiction raised before the headline still reaches it",
+   " ".join(list(_fc._contradictions) + [_fc.headline]).startswith("NO FATE WAS RESOLVED:"))
 ck("and into the caveats too, so it survives into report.json",
    "self.caveat(text)" in inspect.getsource(_Ctx2.contradiction))
 ck("cellcycle tests whether its call tracks depth rather than cycling",

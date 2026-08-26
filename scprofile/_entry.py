@@ -305,7 +305,13 @@ def main(argv):
     manifest.write_output(
         out, kernel=Path(plugin_path).stem,
         version=str((getattr(mod, "PLUGIN", {}) or {}).get("version", "0.1.0")),
-        status=ctx.status, headline=ctx.headline,
+        # THE REFUTATIONS FIRST, COMPOSED HERE SO ORDER CANNOT MATTER. `ctx.contradiction`
+        # prefixed the headline directly, and both plugins that call it assign `ctx.headline`
+        # on the next line - so the refutation was written and immediately overwritten, and two
+        # runs came back with the unqualified claim and no sign anything had been attempted.
+        status=ctx.status,
+        headline=" ".join(list(getattr(ctx, "_contradictions", []) or []) + [ctx.headline or ""]
+                          ).strip(),
         obs=ctx._obs, obsm=ctx._obsm, layers=ctx._layers,
         tables=ctx._tables, figures=ctx._figures, objects=ctx._objects,
         absent=ctx.absent, caveats=ctx.caveats,

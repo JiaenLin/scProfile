@@ -723,13 +723,20 @@ class Context:
 
         Recorded as a caveat too, so it survives into `report.json` and any document built from
         it rather than living only in a string.
+
+        ORDER MUST NOT MATTER, and it did. This prefixed `self.headline`, and both plugins that
+        call it assign `ctx.headline = ...` on the NEXT line - so the refutation was written and
+        immediately overwritten, and two runs came back with the unqualified headline and no
+        sign anything had been attempted. A mechanism that works only when called last is a
+        trap set for whoever writes the next plugin.
+
+        It records; the entry point composes the headline from what was recorded.
         """
         text = str(claim).strip()
         if not text:
             return
         self._contradictions.append(text)
         self.caveat(text)
-        self.headline = (f"{text} " + (self.headline or "")).strip()
 
     def metric(self, name, value):
         """Record ONE headline number for this instance, comparable across units.
