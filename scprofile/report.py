@@ -425,16 +425,23 @@ def _units_by_arm(units, design, declared, *, out_dir=None, name=""):
                 dupes = sorted({a for f in _alias for a in (_alias.get(f) or [])})
                 return ("<h2>Across the design</h2><figure>"
                         f'<img src="../{rel}" alt="{_e(name)} across the design">'
-                        f"<figcaption>Every measure this plugin recorded per sample, against "
-                        f"every factor of the design — {n_cmp} comparison(s). One point per "
-                        f"SAMPLE, bar is the median; n is in each panel because the sample is "
-                        f"the unit of replication, not the cell. Right: each comparison as a "
-                        f"standardised difference with a 95% interval, filled where the "
-                        f"interval excludes zero."
+                        # CLAIM FIRST, AND SHORT. The visible lead is what a reader meets and
+                        # what the standard measures; the rest goes behind a disclosure. This
+                        # caption was written as one paragraph and failed both `captions` (over
+                        # the word cap) and `arms` (the criterion looks for the vocabulary of an
+                        # arm comparison, and "against every factor" is not it) - on the very
+                        # figure built to make the comparison.
+                        f"<figcaption>Each measure per arm, across the design: {n_cmp} "
+                        f"comparison(s), one point per sample."
+                        + "<details><summary class='sub'>how to read it</summary>"
+                        + "The bar is the median and n is stated in each panel, because the "
+                          "sample is the unit of replication and not the cell. The last column "
+                          "puts every comparison on one standardised axis with a 95% interval, "
+                          "filled where that interval excludes zero."
                         + (" A factor marked * splits the samples identically to "
                            + ", ".join("<code>" + _e(d) + "</code>" for d in dupes)
                            + ", so it is drawn once." if dupes else "")
-                        + " A DESCRIPTION, not a test.</figcaption></figure>"
+                        + " A DESCRIPTION, not a test.</details></figcaption></figure>"
                         + "<div class='wrap'><table><tr><th>metric</th><th>factor</th>"
                           "<th>arm</th><th>arm</th><th></th></tr>"
                         + "".join(rows) + "</table></div>")
