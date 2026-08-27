@@ -707,12 +707,25 @@ def _fig_dotplot(ctx, full):
     cb = fig.colorbar(pts, ax=ax, orientation="horizontal", location="top", fraction=0.05, pad=0.04)
     cb.outline.set_visible(False)
     cb.set_label("-log10 magnitude_rank  (expression strength)")
-    import matplotlib.lines as ml
-    keys = [lo, (lo + hi) / 2.0, hi] if hi > lo else [lo]
-    handles = [ml.Line2D([], [], marker="o", ls="", color=F.INK,
-                         ms=float(np.sqrt(8.0 + 52.0 * ((k - lo) / (hi - lo) if hi > lo else 0.0))),
-                         label=f"{k:.1f}") for k in keys]
-    F.legend_outside(fig, ax, handles, [h.get_label() for h in handles])
+    # THE SCATTER'S OWN LEGEND, not a second formula. This built Line2D handles with
+    # `ms=sqrt(8 + 52*t)` - markersize in POINTS - to stand for a scatter sized by `s`, which is
+    # an AREA in points squared. Two formulas for one mapping, kept in step by hand, and the
+    # legend drew three markers that overlapped into a single blob in the margin: a size key a
+    # reader cannot read is worse than none, because the panel's size channel then means nothing.
+    #
+    # `legend_elements` derives the handles FROM the artist, so the key cannot disagree with the
+    # dots it explains, whatever the size formula becomes later.
+    try:
+        handles, labels = pts.legend_elements(prop="sizes", num=3, alpha=0.8)
+        _rng = (hi - lo) or 1.0
+        labels = [f"{lo + _rng * i / max(1, len(handles) - 1):.1f}"
+                  for i in range(len(handles))]
+    except Exception:                                                     # noqa: BLE001
+        handles, labels = [], []
+    if handles:
+        # TRUE SIZE. This legend IS the size key; scaling its markers would say something
+        # false about every dot it explains.
+        F.legend_outside(fig, ax, handles, labels, markerscale=1.0)
     ctx.emit_figure(
         "F4_dotplot", fig,
         caption=(f"The {len(ys)} highest-ranked interactions by magnitude, and the sender -> "

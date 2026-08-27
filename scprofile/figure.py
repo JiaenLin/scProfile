@@ -245,10 +245,17 @@ def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"),
     return entry
 
 
-def legend_outside(fig, ax, handles=None, labels=None, ncol=1):
-    """Legend to the right of the axes, never on top of the data."""
+def legend_outside(fig, ax, handles=None, labels=None, ncol=1, markerscale=2.5):
+    """Legend to the right of the axes, never on top of the data.
+
+    `markerscale` DEFAULTS TO 2.5 because a categorical key stands for dots drawn at s=2 or s=3,
+    which are invisible at true size. A SIZE key is the opposite case and must pass 1.0: its
+    whole content is how big the marker is, so scaling it says something false about every dot
+    it explains - and at 2.5 the three keys of a size legend overlapped into one blob in the
+    margin, which is a size key a reader cannot read at all.
+    """
     kw = dict(loc="center left", bbox_to_anchor=(1.02, 0.5), ncol=ncol,
-              handletextpad=0.4, borderaxespad=0, markerscale=2.5)
+              handletextpad=0.4, borderaxespad=0, markerscale=markerscale)
     if handles is not None:
         return fig.legend(handles, labels, **kw)
     return ax.legend(**kw)

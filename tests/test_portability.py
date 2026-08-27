@@ -1084,6 +1084,23 @@ ck("a raising candidate does not propagate out of the search", _raised is not Tr
 # y-axes ran -10..5, -5..5 and -2.5..2.5 side by side and the panel with the LARGEST effects
 # looked flattest. A grid whose panels cannot be compared is nine separate figures sharing a
 # caption.
+# A SIZE KEY IS DRAWN AT TRUE SIZE. `legend_outside` scales markers 2.5x, which is right for a
+# CATEGORICAL key standing for dots drawn at s=2 and invisible otherwise, and wrong for a SIZE
+# key, whose whole content is how big the marker is. At 2.5 the three keys overlapped into one
+# blob in the margin - a size key a reader cannot read, which makes the panel's size channel
+# mean nothing.
+print("\na size key is drawn at true size")
+import inspect as _insp2                                                        # noqa: E402
+from scprofile import figure as _FIG2                                           # noqa: E402
+_losrc = _insp2.getsource(_FIG2.legend_outside)
+ck("legend_outside takes a markerscale", "markerscale=2.5" in _losrc.split("\n")[0])
+ck("and says why the default is wrong for a size key",
+   "SIZE key is the opposite case" in _losrc or "A SIZE key" in _losrc)
+ck("the size key passes 1.0", "markerscale=1.0" in _KSRC["liana.py"])
+ck("and derives its handles FROM the artist, not from a second formula",
+   'legend_elements(prop="sizes"' in _KSRC["liana.py"],
+   "two formulas for one mapping drift the moment either is touched")
+
 print("\na panel grid shares one scale")
 ck("the fold-change grid sets one limit across its panels",
    "_a.set_ylim(-_r, _r)" in _KSRC["de.py"] and "_a.set_xlim(0.0, _xhi)" in _KSRC["de.py"])
