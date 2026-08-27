@@ -558,6 +558,31 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   value to ink including any intercept, clamp or `min()`. Is the word on the page true of THAT
   mapping? Does the key include the smallest value the panel actually draws? Measure two keys a
   decade apart in the rendered file: is their ink ratio the ratio the caption claims?
+- **C23c (a parameter can be honoured in one function and defeated by a default in another)** When
+  a plugin offers a CHOICE about how to treat missing entities — impute a zero, drop them, carry
+  them as NaN — that choice is usually applied in two places: where the per-unit tables are BUILT
+  and where they are SUMMARISED. Thread it through one and leave the other on its default and the
+  panel reports the option it was GIVEN rather than the one it APPLIED. Nothing errors, both
+  functions are correct in isolation, and the figure is a lie about its own arithmetic. This is
+  worst for the CONTROL panel — the one whose entire job is to show whether the choice matters —
+  because it then shows that it does not, which is the most reassuring possible way to be wrong.
+  Make the combination impossible rather than correcting the call site: a summariser asked to drop
+  missing values, handed data with no missing values, and holding entities known to be absent
+  somewhere, should REFUSE.
+  **ONE INSTANCE.** A cohort panel titled "absent = left out of its own mean" was byte-identical in
+  every numeric column to its sibling titled "absent = 0", because the unit tables had been built
+  once with the zero rule and reused for both — so `nanmean` had no NaN to skip. Applying the rule
+  for real changed 8 of 13 entities, by up to **10x** (an entity present in 1 of 10 units), and
+  reordered the top five. The repair then broke a SECOND rule silently: the summariser had been
+  setting its `n_units` to the per-entity present count, so `n_present == n_units` for every row
+  and the label rule that attaches `(k/N)` to any dot whose n is not the full n stopped firing
+  everywhere. Two rules had disagreed about what N meant.
+  **CHECK:** for every option your plugin exposes about missing or excluded entities, list every
+  function that reads it, and confirm each is passed the same value on the same call path. Does the
+  panel drawn under option A differ NUMERICALLY from the one under option B? If they are identical,
+  prove that is the data's doing and not the plumbing's. And after changing how absence is counted,
+  re-check every derived count that shares the denominator.
+
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?
