@@ -640,6 +640,23 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   **CHECK:** before acting on a defect found by parsing a rendered file, did you open the file and
   see it? If the parse and the picture disagree, have you established which one is broken?
 
+- **C23g (never name a channel by its hue in the legend)** "The amber bar means...", "red =
+  higher", "the green cells are..." - each identifies a mark by a property roughly 8% of male
+  readers cannot perceive, so the one reader who most needs the legend cannot use it to FIND the
+  mark. The swatch printed beside the text does not rescue it, because the reader must first know
+  which swatch the sentence is about. Name POSITION, SHAPE or ORDER instead: "the bar in the column
+  right of the labels", "the open circles", "the upper of each pair". The hue can still carry the
+  distinction; it just cannot be how the words point at it. This is separate from whether the
+  palette is colour-vision-safe - a perfectly safe palette still fails if the prose says "amber".
+  **ONE INSTANCE.** A legend read "amber bar: entity absent from at least one WHOLE group". Under a
+  deuteranopia simulation of the delivered PNG - rendered and then LOOKED AT, not merely computed -
+  that bar is olive. Every other channel on the same figure survived, because each had a text
+  fallback: the group strip was coded by letters, the category swatches sat under written names,
+  and the sequential ramp kept its lightness ordering. The one thing that failed was a sentence.
+  **CHECK:** search the legend and footnotes for colour words. For each, is the mark identifiable
+  without that word? Render a deuteranopia and a protanopia simulation, OPEN IT AND LOOK: is the
+  colour the sentence names still recognisable as that colour?
+
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?
