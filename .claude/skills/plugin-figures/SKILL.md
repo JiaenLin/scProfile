@@ -221,6 +221,15 @@ showed one sample and no comparison. Nothing in the process had asked.
   title, an axis label? Cover the caption and look. A figure whose unit a reader cannot determine
   is the modal published failure of this kind: in one survey of 39 papers using a widely-used
   method, **23% never stated their unit at all**, the same size as every other category but one.
+- **C2g** Does any single unit dominate an arm? Compute each unit's share of its arm's total and
+  print the largest. *One instance:* one animal of five carried **48% of its arm's entire signal**
+  and had 595 significant edges against 84-145 for the other four - it was the deepest library in
+  the cohort, so "the arm" was substantially "that animal". A comparison in which one unit is half
+  of one side is not a comparison between groups, and no summary panel shows it.
+- **C2h** Print what a restriction COSTS. Restricting to entities detected in every unit of both
+  arms is the right move (see D21) and it is not free: in one set it removed **79.2% of all
+  observations** and 23 of 68 features. A restriction whose cost is not stated reads as though the
+  full data supported the result.
 - **C2f** For every supplementary figure, name the question it answers that the main figure does
   not. If you cannot, delete it — a supplementary figure nobody needs is a figure a reader still
   has to read.
@@ -431,6 +440,47 @@ arithmetic instead of letting the library place it.
 | **aspect** (a channel is area, or a size key claims a diameter) | axes aspect equal **and** a rendered size key measures 1.000 ± 0.01 width/height in pixels | size keys drawn as ellipses |
 | **ink** | rasterise, 4×4 grid over the axes, no contiguous quadrant below your stated ink threshold unless declared empty | the empty quarter above — found by eye, mechanisable by this |
 
+## Step 5b — A CHANNEL THAT IS DRAWN BUT CANNOT BE DECODED
+
+> **Encoding a quantity is not the same as making it readable. If a reader cannot recover a value
+> from the channel, the channel is decoration that looks like evidence.**
+
+An independent scan of one rebuilt set of 23 figures found this in **at least 15 of them**, in six
+disguises. It was by far the most common defect, and every instance had passed code review:
+
+| disguise | what it looks like |
+|---|---|
+| a ramp not orderable by eye | a rainbow applied to a sequential quantity: not monotonic in lightness, so two marks cannot be ranked |
+| a size channel with no key | area encodes something and nothing says what, or the legend's range is smaller than the eye can separate |
+| a plotted track with **no axis at all** | a marginal bar, density or secondary track with no ticks and no numbers |
+| an axis that exists **once** | a grid of twelve panels labelled only under the leftmost column; a reader maps position across a thousand pixels |
+| an **undeclared** non-linear ramp | ticks at equal pixel spacing for unequal intervals, so two marks 1.6x apart in magnitude carry identical intensity — and its sibling figure uses a linear ramp, so the pair cannot be read as a pair |
+| a stack the caption asks you to count | *"count the units"* over marks that overlap into one blob |
+
+The fix is not more caption. It is either **make the channel decodable** — a key with a real range,
+an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can be counted — or
+**stop drawing it**, because a channel a reader cannot decode is one they will decode wrongly.
+
+- **C23** For every visual channel in the panel (position, length, area, colour value, colour hue,
+  opacity, texture), name the quantity it encodes and point at the key, axis or tick scale a reader
+  recovers a value from. Any channel without one is either keyed or removed.
+- **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
+  in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
+  look: can you still order two marks?
+- **C25** If a caption asks the reader to count, can they? Render at the shipped size and count
+  the marks yourself in the densest region.
+- **C26** Across every panel of a multi-panel figure, does each axis a reader needs appear on the
+  panel they are reading, or only once for the set?
+
+**And one that crosses figures.** In the same set, four figures used *the same thirteen colours
+assigned to different entities* — the hue that meant one cell type in three figures meant a
+different one in the fourth, with nothing on either figure warning of it. A palette is a claim
+about identity, and identity has to hold across the set, not within one panel.
+
+- **C27** Does every categorical palette in the set map the same colour to the same entity in
+  every figure? Put the legends side by side and check. If two figures cannot share a palette,
+  say so on both.
+
 ## Step 6 — ABSENCE IS NOT ZERO
 
 This appeared **five times in one session, in five figures, by five agents who never spoke to each
@@ -636,6 +686,27 @@ first brief is written and travels as `(value, N, min, max)`, because a per-agen
 catch a fact that was wrong when it was handed out. The converse also holds: a defect five
 independent agents each produced is a property of the data shape, not of an agent, so put Step 6 in
 every brief and expect to find it in every panel.
+
+**F27 — a bound the figure states, its own shipped numbers must satisfy.** A caption that prints
+a floor, a ceiling, a resolution or an attainable minimum has made an assertion the panel's own
+data can falsify. Check it mechanically: for every stated bound, scan the figure's source table
+for a value on the wrong side of it.
+
+*Two instances, both in one set, both shipped.* A panel printed *"6 vs 4 units cannot reach below
+p = 0.0095"* while all ten of its highlighted hits sat at **p = 0.004762**; at the printed floor,
+multiple-testing correction over its own 161 tests gives q = 0.153 and **nothing on the panel
+crosses its own significance threshold at all** — the figure disproves its own headline in its own
+footnote. A sibling asserted a floor of 0.0079 and its table attained **0.0075**. In both cases the
+bound was the exact rank-test minimum and the number came from a normal approximation, so whatever
+test ran was not the test named.
+
+This is the most self-inflicted defect in this document, and the most quotable: **a figure that
+states a bound and then violates it has done the reviewer's work for them, and lost.**
+
+- **C28** For every bound printed on the figure - an attainable minimum, a resolution, a detection
+  floor, a range - is there a value in the figure's own source table on the wrong side of it? One
+  pass over the table per stated bound. If the answer is yes, either the bound is wrong or the
+  method is not the one named; find out which before shipping, because a reader who checks will.
 
 ## Step 9 — Render the page and run the standard
 
