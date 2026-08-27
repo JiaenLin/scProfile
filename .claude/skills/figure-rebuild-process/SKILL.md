@@ -271,6 +271,43 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   **CHECK:** after converting each figure to the shared convention, did you re-open the rendered
   file and look at the region you changed? Can you name what the change cost in layout?
 
+- **P23 (when two sentences on a page disagree, find out which is TRUE - deleting one is not
+  resolving it)** Two statements about the same entities that give different reasons for the same
+  absence is a signal that somebody does not know which reason is right. The repair is to go to the
+  data and find out. Deleting the sentence you like less removes the CONTRADICTION and leaves the
+  ERROR, now unopposed and looking settled - and you will delete the true one about half the time.
+  **ONE INSTANCE, and it is the coordinator's own.** A panel carried a provenance line saying
+  entities were omitted because "this unit did not have" them, and a second line calling the same
+  entities "NO SURVIVING LINK". I noticed the collision, judged the second line authoritative
+  because it came from the drawing function, and rewrote the first to agree with it - deleting the
+  clause that named the method's detection floor. The data said the opposite: all five named
+  entities appeared in no edge at all in that unit, having fallen below the floor before anything
+  could be scored. So the panel went from contradicting itself to asserting the wrong one of two
+  states, on the unit with the MOST floor-driven omissions in the whole cohort, while its sibling
+  panels kept the floor sentence - which invited a reader to infer this unit's omissions had some
+  other cause. One measurement against the source table would have settled it in a minute.
+  **CHECK:** for every contradiction you resolve, what measurement decided which side was right?
+  If the answer is "the one in the more authoritative-looking code", you have not measured. And
+  after resolving, does the surviving sentence still say everything the deleted one said that was
+  TRUE?
+
+- **P24 (a bucket named for one of the states it contains asserts that state)** Code that groups
+  entities by a computed condition - `total <= 0`, `count == 0`, `not in index` - often merges
+  states the vocabulary keeps apart, because the condition is equally true of all of them. The
+  grouping is fine; the LABEL is where it goes wrong, because a label has to say something and
+  whatever it says will be read as true of every member. Either split the bucket by passing in the
+  information that distinguishes the states, or name it so it asserts NEITHER.
+  **ONE INSTANCE.** `total_in <= 0` collected both entities the method never scored and entities it
+  scored and found silent, and the note read "NO SURVIVING LINK" - which asserts the second of the
+  two. On the panel that exposed it, all five members were the first. The drawing function reserved
+  a separate correctly-named note for the genuine "lost to the cutoff" case, but that list was
+  empty on this panel, so the contrasting line that would have taught the reader the narrow sense
+  never rendered. Repair: the caller now passes which entities were never tested, the note splits
+  into two canonical states, and where the caller passes nothing the note asserts neither.
+  **CHECK:** for every group your code forms by a threshold or a missing-key test, list the
+  distinct real-world states its members can be in. Does the label hold for ALL of them? If the
+  distinguishing information lives in the caller, is it being passed?
+
 ## What to expect at the end
 
 In this rebuild, of 23 plates: **19 were about the method, not the biology.** Four presented a
