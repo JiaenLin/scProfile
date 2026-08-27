@@ -2110,6 +2110,79 @@ def test_the_saved_width_is_measured_from_the_file_not_from_the_figure():
         check("a panel at its declared width is silent", ok2 and not quiet, f"log was {quiet!r}")
 
 
+def test_no_local_shadows_a_module_function_it_also_calls():
+    """A function that BINDS a module-level function's name and CALLS it is broken, always.
+
+    Python decides scope per function: a name assigned anywhere in a body is local for the whole
+    body. So a function that does both gets `TypeError: '<type>' object is not callable` after
+    the assignment and `UnboundLocalError` before it - never the module-level function it looks
+    like it is calling.
+
+    *One instance.* A plugin bound `_unmapped = [x for x in srcs if acc.match(x)]` inside `run()`,
+    shadowing the module-level `_unmapped(names)` defined above it. Two hundred lines later the
+    same `run()` called `_unmapped(cov.index)` and raised. **Every run of that plugin crashed**,
+    and the caveat the machinery existed to emit - naming the identifiers a prior could give no
+    gene symbol for - never reached a page. Five other call sites were fine because they sit in
+    OTHER functions, where the module-level lookup still resolves, so the file read correctly
+    everywhere a reviewer looked.
+
+    Nothing else here could catch it: it is not an import error, not a signature mismatch, and
+    not reachable by any check that does not either execute that function or read its scopes.
+
+    THE DETECTOR IS PROVED BEFORE IT IS TRUSTED. It is run first against a module written to
+    contain exactly this bug; a detector that reports the shipped tree clean without ever having
+    fired on a positive control is indistinguishable from one that cannot fire.
+    """
+    print("\nno local shadows a module-level function it also calls")
+    import ast
+
+    def sites(src):
+        tree = ast.parse(src)
+        module_fns = {n.name for n in tree.body
+                      if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+        found = []
+        for fn in ast.walk(tree):
+            if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            params = {a.arg for a in list(fn.args.args) + list(fn.args.kwonlyargs)}
+            if fn.args.vararg:
+                params.add(fn.args.vararg.arg)
+            if fn.args.kwarg:
+                params.add(fn.args.kwarg.arg)
+            bound, called = {}, {}
+            for nd in ast.walk(fn):
+                if isinstance(nd, ast.Name) and isinstance(nd.ctx, ast.Store):
+                    bound.setdefault(nd.id, nd.lineno)
+                elif isinstance(nd, ast.Call) and isinstance(nd.func, ast.Name):
+                    called.setdefault(nd.func.id, nd.lineno)
+            # A PARAMETER IS MEANT TO SHADOW, and a function rebinding its OWN name is a
+            # decorator idiom. Neither is this bug.
+            for nm in sorted((set(bound) & set(called) & module_fns) - params - {fn.name}):
+                found.append(f"{fn.name}(): local `{nm}` bound line {bound[nm]}, "
+                             f"called line {called[nm]}")
+        return found
+
+    POSITIVE = ("def helper(x):\n    return x\n\n\n"
+                "def run(ctx):\n    helper = [1, 2]\n    return helper(ctx), helper\n")
+    check("the detector fires on a module written to contain the bug",
+          len(sites(POSITIVE)) == 1, f"got {sites(POSITIVE)!r}")
+    NEGATIVE = ("def helper(x):\n    return x\n\n\n"
+                "def run(ctx):\n    other = [1, 2]\n    return helper(ctx), other\n")
+    check("and stays silent on the same module without it",
+          sites(NEGATIVE) == [], f"got {sites(NEGATIVE)!r}")
+
+    root = Path(__file__).resolve().parents[1]
+    scanned, bad = 0, []
+    for f in sorted(root.joinpath("kernels").glob("*.py")) + \
+            sorted(root.joinpath("scprofile").glob("*.py")):
+        scanned += 1
+        for hit in sites(f.read_text(encoding="utf-8")):
+            bad.append(f"{f.name}: {hit}")
+    # THE COUNT IS ASSERTED so a glob that silently stops matching cannot report a clean tree.
+    check("the scan actually reached the tree", scanned >= 20, f"scanned {scanned} file(s)")
+    check("no shipped module shadows a function it calls", not bad, "; ".join(bad[:4]))
+
+
 def _load_module(path):
     import importlib.util
     spec = importlib.util.spec_from_file_location(f"_t_{Path(path).stem}", path)
@@ -2183,6 +2256,7 @@ def main():
     _guarded(test_a_guard_that_could_not_run_has_not_allowed_anything)
     _guarded(test_a_figure_is_saved_at_the_width_it_declared)
     _guarded(test_the_saved_width_is_measured_from_the_file_not_from_the_figure)
+    _guarded(test_no_local_shadows_a_module_function_it_also_calls)
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")

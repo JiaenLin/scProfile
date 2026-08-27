@@ -115,8 +115,18 @@ src = pp.read_text()
 run_src = src[src.index("def run("):src.index("def selftest(")]
 ck("run() contains no prerequisite checking",
    "if not ctx.organism" not in run_src and "if not ctx.keys" not in run_src, "it still checks")
+# THE INTENT IS "run() DOES NOT RAISE", AND THAT IS AN AST QUESTION, NOT A SPELLING ONE.
+# This was `"raise" not in run_src` - a substring search over the function's whole source,
+# COMMENTS INCLUDED. A comment explaining a bug that had been fixed used the word "raised" and
+# failed the check, which is a gate firing on correct behaviour: the kind that gets switched off
+# rather than obeyed. `ast` asks what the code does and is blind to what the prose says about it.
+import ast as _ast_run                                                        # noqa: E402
+_run_tree = _ast_run.parse(run_src)
+_raises = [n for n in _ast_run.walk(_run_tree) if isinstance(n, _ast_run.Raise)]
 ck("run() reads config without validating it",
-   "ctx.config[" in run_src and "raise" not in run_src)
+   "ctx.config[" in run_src and not _raises,
+   f"{len(_raises)} raise statement(s) at line(s) "
+   f"{[n.lineno for n in _raises[:4]]} within run()")
 
 print("\nthe CONTRACT'S own dependency is declared, not assumed")
 # `_entry.py` reads the object with `anndata.read_h5ad` BEFORE a plugin is called, so a python

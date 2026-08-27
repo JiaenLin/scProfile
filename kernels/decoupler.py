@@ -1060,11 +1060,16 @@ def run(ctx):
     import re as _re_mod
     _acc = _re_mod.compile(_ACCESSION_PATTERN)
     _srcs = [str(x) for x in net["source"].unique()]
-    _unmapped = [x for x in _srcs if _acc.match(x)]
-    if _unmapped:
+    # NOT `_unmapped`: THAT IS THE MODULE-LEVEL FUNCTION, and binding this name here shadowed it
+    # for the rest of `run()`. The call at the coverage table below then raised
+    # `TypeError: 'list' object is not callable` on EVERY run, so this plugin could not finish
+    # and the accession caveat it exists to emit never reached a page. Nothing caught it because
+    # the failure is a runtime name lookup inside one function, not an import or a signature.
+    _acc_srcs = [x for x in _srcs if _acc.match(x)]
+    if _acc_srcs:
         ctx.caveat(
-            f"{len(_unmapped)} of {len(_srcs)} regulators in this prior have NO GENE SYMBOL and "
-            f"are labelled by their UniProt accession ({', '.join(sorted(_unmapped)[:3])} and "
+            f"{len(_acc_srcs)} of {len(_srcs)} regulators in this prior have NO GENE SYMBOL and "
+            f"are labelled by their UniProt accession ({', '.join(sorted(_acc_srcs)[:3])} and "
             f"others). They are KEPT - one of them may carry real signal - but an accession on "
             f"an axis beside a gene symbol looks like a gene and is not one. Anything ranked "
             f"highly whose name matches that pattern is unmapped, not novel.")
