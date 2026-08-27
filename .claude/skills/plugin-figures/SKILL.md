@@ -387,6 +387,22 @@ encoding with a measured zero.
 - **C18 (occlusion)** At real n, is the drawing density-aware — binned, hexbinned, contoured, or
   split into per-arm small multiples — and is the number of marks drawn printed on the panel? Swap
   the categorical draw order and re-render: does any claim in the caption change?
+- **C19 (the ragged denominator)** An aggregate over units divides by the number of units, and
+  an entity observable in only some of them gets the same divisor as one observable in all. The
+  entities this understates are exactly the ones a floor already removed, so the two defects
+  compound silently and in the same direction. For every aggregate you draw across units, is the
+  divisor the number of units in which the entity could be observed, or the number of units? If
+  you keep the whole-cohort divisor deliberately, is the per-entity denominator drawn or printed?
+  *One instance.* A cohort mean divided by ten everywhere. An entity scorable in four units of ten
+  was drawn at **40% of its scored mean, a factor of 2.50**, and nothing on the panel said so -
+  while the same entity's absences were already aligned with a design factor.
+- **C20 (marks outside the axes)** A point drawn beyond the axis limit is clipped, and clipping is
+  silent. Render, then count the marks inside the axes and compare that to the number of records
+  handed to the renderer - the same identity check as C17, applied to geometry rather than to
+  padding. Are they equal? *One instance:* an axis limit taken from the largest MEAN while
+  per-unit points were drawn over it clipped **20 of 368 points (5.4%)**, including every one of
+  a panel's nine - so that panel showed two summary bars and not a single unit, with nothing
+  saying so. Prefer the full domain of a bounded quantity over a data-derived limit.
 - **D21 (per-unit thresholds)** A method run once per unit applies its own floors once per unit,
   so an entity near a floor is exposed to it as many times as there are units — and pooling would
   have exposed it once. That makes the floor a REMOVAL whose incidence must be computed per level
