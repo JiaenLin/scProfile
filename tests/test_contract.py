@@ -1842,6 +1842,20 @@ def test_a_refutation_survives_every_hop_to_the_verdict():
         w2 = report.write_kernel(d, "k2", pl2, [], payload_all={})
         by = {c: (o, dd) for c, o, dd in ST.check_page(Path(w2), recorded=punct)}
         check("chain/entities", by["contradiction"][0] is True, str(by["contradiction"]))
+        # A PAYLOAD WITHOUT THE FIELD IS NOT A PAYLOAD WITH NO CLAIMS. Measured on two real
+        # reports written before contract 1.4: both plugins HAD recorded a refutation - it is
+        # in their headlines - and the criterion reported `ok` on both, having checked nothing.
+        from scprofile import standard as _ST2
+        d2 = d / "old"
+        (d2 / "report").mkdir(parents=True)
+        (d2 / "report.json").write_text(json.dumps(
+            {"kernels": {"k": {"kernel": "k", "headline": "h", "caveats": ["c"]}}}))
+        got = _ST2.recorded_claims(d2 / "report")
+        check("chain/pre-field-payload-is-unmeasurable", got.get("k") is None, str(got))
+        (d2 / "report.json").write_text(json.dumps(
+            {"kernels": {"k": {"kernel": "k", "headline": "h", "contradictions": []}}}))
+        got = _ST2.recorded_claims(d2 / "report")
+        check("chain/an-empty-field-IS-measured", got.get("k") == [], str(got))
         # MEASURED-AND-CLEAN IS NOT THE SAME AS NOT-MEASURED. A report directory copied away
         # from its run has no payload beside it; reading that as "no contradictions" would make
         # the criterion pass on every page of it, which is absence of evidence rendered as

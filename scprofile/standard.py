@@ -272,8 +272,9 @@ def check_page(path, *, exempt=(), recorded=()):
         # criterion. Reported as n/a with the reason, so a report judged without its payload
         # cannot be quoted as having passed this.
         out.append(("contradiction", True,
-                    "n/a: no run payload beside this report, so a refutation the plugin "
-                    "recorded and the page omitted cannot be detected"))
+                    "n/a: this page's payload does not carry a `contradictions` field - no run "
+                    "payload beside the report, or one written before the field existed - so a "
+                    "refutation the plugin recorded and the page omitted cannot be detected"))
     else:
         missing = [c for c in recorded
                    if _norm(c) not in _norm(_text(re.sub(r"<details[^>]*>.*?</details>", " ",
@@ -306,9 +307,18 @@ def recorded_claims(report_dir):
         return None
     out = {}
     for name, pl in (payload.get("kernels") or {}).items():
-        got = (pl or {}).get("contradictions") or []
-        if got:
-            out[str(name)] = [str(c) for c in got]
+        # A PAYLOAD WRITTEN BEFORE THE FIELD EXISTED IS NOT A PAYLOAD WITH NO CLAIMS. The key is
+        # ABSENT there, and reading that as an empty list made the criterion report `ok` while
+        # checking nothing - on the two plugins it was written for, both of which had recorded
+        # a refutation that the older host composed into the headline instead.
+        #
+        # `None` for that page: unmeasurable, said out loud. The distinction is the same one
+        # this module already draws for a report with no payload beside it at all, and it has
+        # to be drawn twice because there are two ways to have nothing to measure.
+        if not isinstance(pl, dict) or "contradictions" not in pl:
+            out[str(name)] = None
+            continue
+        out[str(name)] = [str(c) for c in (pl.get("contradictions") or [])]
     return out
 
 
@@ -339,8 +349,10 @@ def check_report(report_dir, *, exempt=None):
     for f in pages:
         if f.stem in appendix:
             continue
-        res[f.stem] = check_page(f, exempt=set(exempt.get(f.stem, ())),
-                                 recorded=None if unmeasurable else claims.get(f.stem, ()))
+        # THREE STATES: no payload at all, a payload whose page predates the field, and a
+        # measured list. Only the last is a check; the other two say so.
+        _rec = None if unmeasurable else claims.get(f.stem, ())
+        res[f.stem] = check_page(f, exempt=set(exempt.get(f.stem, ())), recorded=_rec)
     return res
 
 
