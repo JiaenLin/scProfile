@@ -748,6 +748,24 @@ _pl = [{"kernel": "k", "status": "ok", "headline": "h", "caveats": [_claim],
 _f = merge.fold_payloads(_pl)["k"]
 ck("the fold leaves the contradiction untagged", _f["contradictions"] == [_claim],
    str(_f["contradictions"]))
+# AND DEDUPES ON THE STATEMENT, NOT THE STRING. A per-unit plugin that names its own unit's
+# count in the refutation - "so the 8,194 figure above describes size" - emits a DIFFERENT
+# string per unit, so exact-match dedup kept every one and the page opened with that many
+# near-identical shouting sentences. It cannot be folded at RENDER time, because the standard
+# matches it verbatim, so the two forms are reconciled in the fold.
+_numbered = [{**_pl[0], "unit": f"S{_i}", "contradictions":
+              [f"The {_n} above describes the object's size, not its biology."], "caveats": []}
+             for _i, _n in enumerate((100, 120, 140, 160))]
+_fn = merge.fold_payloads(_numbered)["k"]
+ck("the same refutation with different numbers folds to one",
+   len(_fn["contradictions"]) == 1, str(_fn["contradictions"]))
+ck("and it is kept VERBATIM, so the exit standard can still find it",
+   _fn["contradictions"][0] in [c for p_ in _numbered for c in p_["contradictions"]],
+   str(_fn["contradictions"]))
+_distinct = [{**_pl[0], "unit": "S1", "contradictions": ["Depth refutes it."], "caveats": []},
+             {**_pl[1], "unit": "S2", "contradictions": ["Entropy refutes it."], "caveats": []}]
+ck("two genuinely different refutations both survive",
+   len(merge.fold_payloads(_distinct)["k"]["contradictions"]) == 2)
 ck("and tags the caveat copy with its unit, as it does every per-unit caveat",
    all(c.startswith("[") for c in _f["caveats"]), str(_f["caveats"]))
 with tempfile.TemporaryDirectory() as _td4:

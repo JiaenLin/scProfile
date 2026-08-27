@@ -17,6 +17,7 @@ because forcing an edge list into `uns` makes it readable by this tool and nothi
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -441,6 +442,12 @@ def link_objects(out_dir, payload, dest, *, log=print):
     return made
 
 
+#: Digits in a sentence, for deciding whether two refutations are the same statement. The
+#: same rule `report._fold_caveats` applies to caveats, stated here because this is where the
+#: two forms of one claim are reconciled.
+_NUMBERS = re.compile(r"\d[\d,\.]*")
+
+
 def fold_payloads(payloads, failed=None):
     """One entry per PLUGIN from a list with one entry per INSTANCE. Keyed by name, keeps units.
 
@@ -463,6 +470,7 @@ def fold_payloads(payloads, failed=None):
     for name, group in by.items():
         multi = len(group) > 1 or any(g.get("unit") for g in group)
         units, figs, tabs, cav, absent, contra = [], [], [], [], [], []
+        _contra_keys = set()
         slots = {"obs": {}, "obsm": {}, "layers": {}, "objects": {}}
         for pl in sorted(group, key=lambda g: str(g.get("unit") or "")):
             u = pl.get("unit")
@@ -483,10 +491,27 @@ def fold_payloads(payloads, failed=None):
                     f["caption"] = tag + (f.get("caption") or "")
                 figs.append(f)
             cav += [tag + c for c in (pl.get("caveats") or [])]
-            # UNTAGGED. A contradiction is looked for VERBATIM on the rendered page, so a
-            # per-unit prefix would make every one of them unfindable - the fold would break
-            # the check by making the sentence true of a unit rather than of the result.
-            contra += [c for c in (pl.get("contradictions") or []) if c not in contra]
+            # UNTAGGED, AND DEDUPED IGNORING THE NUMBERS IN IT. A contradiction is looked for
+            # VERBATIM on the rendered page, so a per-unit prefix would make every one of them
+            # unfindable - the fold would break the check by making the sentence true of a unit
+            # rather than of the result.
+            #
+            # Which leaves the repetition. A per-unit plugin fires the same refutation on every
+            # unit, and one that names its own unit's count - "so the 8,194 figure above
+            # describes size" - produced a DIFFERENT string each time, so exact-match dedup kept
+            # all of them and the page opened with ten near-identical shouting sentences. That
+            # is the repetition `_fold_caveats` exists to remove, reappearing in the one block
+            # that must not be folded at render time because the standard matches it verbatim.
+            #
+            # So it is deduped HERE, on the sentence with its numbers blinded, keeping the FIRST
+            # verbatim. The payload then records one claim, the page shows one claim, and the
+            # standard finds it. The per-unit numbers are not lost: every unit's caveats carry
+            # them, tagged, and `_fold_caveats` renders their range.
+            for c in (pl.get("contradictions") or []):
+                key = _NUMBERS.sub("\u0000", str(c))
+                if key not in _contra_keys:
+                    _contra_keys.add(key)
+                    contra.append(c)
             absent += [{"what": tag + str(a.get("what", "?")), "why": a.get("why", "")}
                        for a in (pl.get("absent") or [])]
             units.append({"unit": u, "status": pl.get("status", ""),
