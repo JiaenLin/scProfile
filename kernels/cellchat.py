@@ -116,10 +116,19 @@ PLUGIN = {
             "QUANTISED: only multiples of 1/nboot exist, and at the default of 100 every "
             "surviving edge sits in {0, 0.01, 0.02, 0.03, 0.04}. A reported 0 is an upper bound "
             "set by nboot.",
-            "About 60% of CellChatDB is SECRETED signaling (Jin et al., Nat Commun 2021). On "
-            "nuclei those transcripts are the ones least well captured, so the classes of "
-            "interaction are not equally affected by the assay - the coverage table is broken "
-            "down by CellChat's own annotation class for that reason.",
+            "THE ASSAY DOES NOT AFFECT THE INTERACTION CLASSES EQUALLY, and the size of that "
+            "is measured on this run rather than quoted: the coverage table is broken down by "
+            "CellChat's own annotation class for exactly this reason, and F1 draws it. Measured "
+            "on one snRNA sample of a real cohort, SECRETED signalling fell from 37.9% of the "
+            "database to 16.6% of the surviving edges while ECM-RECEPTOR rose from 12.9% to "
+            "59.1% - a 2.3x depletion against a 4.6x enrichment. Read any pathway-level total "
+            "with that in front of it.",
+            "The 37.9%/12.9% above are MEASURED from the shipped CellChatDB v2 (mouse: 3,379 "
+            "interactions, 1,280 secreted, 435 ECM), not taken from the documentation. This "
+            "caveat previously read 'about 60% of CellChatDB is secreted (Jin et al., Nat "
+            "Commun 2021)', which is v1's composition of a 2,021-interaction database quoted "
+            "beside a pinned v2. CellChat's own v2 vignette is no better: its stated ~17% ECM "
+            "and ~13% cell-cell contact are transposed with respect to the data it ships.",
         ],
     },
 
@@ -1796,8 +1805,10 @@ def run(ctx):
                "only the ranking can be compared.")
     if ctx.assay == "nucleus":
         ctx.caveat(
-            "Single-NUCLEUS data. Around 60% of CellChatDB is secreted signalling (Jin et al., "
-            "Nat Commun 2021), and secreted ligand transcripts are among those least well "
+            "Single-NUCLEUS data. Secreted signalling is 37.9% of the pinned CellChatDB v2 "
+            "(measured: 1,280 of 3,379 mouse interactions; the v1 figure of ~60% belongs to a "
+            "different, smaller database), and secreted ligand transcripts are among those "
+            "least well "
             "retained when the cytoplasm is lost, so the interaction classes are not equally "
             "represented here and an absent secreted interaction is as consistent with the "
             "preparation as with the biology. How large that cost is on this tissue is not "
