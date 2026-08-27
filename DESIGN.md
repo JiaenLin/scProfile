@@ -1,7 +1,8 @@
 # scProfile — design
 
-**Status: BUILT and running.** Agreed 2026-08-18; ten plugins now run against a real cohort and
-meet the exit standard on rendered reports (see `docs/DEVLOG.md`, 2026-08-27). This document is
+**Status: BUILT and running.** Agreed 2026-08-18; the nine shipped plugins run against a real
+cohort and meet the exit standard on rendered reports, as does a plugin supplied from outside
+the repository (see `docs/DEVLOG.md`, 2026-08-27). This document is
 the contract. Where the code and this file disagree, one of them is a bug — and now that the code
 exists, that is a question to settle by measuring, not by preferring the document.
 
