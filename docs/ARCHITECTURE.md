@@ -1,21 +1,24 @@
-# Four domains, and what each is allowed to know
+# Five domains, and what each is allowed to know
 
-scProfile is a plugin host. Its correctness rests on the boundaries between four things, and
-every serious defect in its history has been one domain doing another's job.
+scProfile is a plugin host. Its correctness rests on the boundaries between five things, and
+every serious defect in its history has been one domain doing another's job — or, in the case
+of the fifth, no domain doing it at all.
 
 ```
-      DECLARE  ──►  BUILD  ──►  PLAN  ──►  RUN
-         ▲            ▲           ▲          │
-         │            │           └──────────┘   plan triggers the builder
-         │            └──────────────────────┘   a run that fails on the ENVIRONMENT
-         │                                        rebuilds it and retries, once
-         └───────────────────────────────────┘   a run whose output contradicts the
-                                                  DECLARATION is a maintainer's defect
+      DECLARE  ──►  BUILD  ──►  PLAN  ──►  RUN  ──►  REPORT
+         ▲            ▲           ▲          │          │
+         │            │           └──────────┘          │   plan triggers the builder
+         │            └──────────────────────┘          │   a run that fails on the ENVIRONMENT
+         │                                              │    rebuilds it and retries, once
+         └──────────────────────────────────────────────┘   output that contradicts the
+                                                             DECLARATION is a maintainer's
+                                                             defect — and so is a page the
+                                                             standard refuses
 ```
 
 **The arrows back are the point.** A pipeline that only flows one way makes every downstream
-failure look like the user's problem. These three edges route a failure to the layer that owns
-it, and each has a different remedy.
+failure look like the user's problem. These edges route a failure to the layer that owns it,
+and each has a different remedy.
 
 | domain | owns | may read | may NOT |
 |---|---|---|---|
@@ -23,6 +26,35 @@ it, and each has a different remedy.
 | **the builder** | making a declared plugin runnable | the plugin's declaration | infer anything the plugin did not declare |
 | **the planner** | deciding what runs, how, in what order | the object, the design, the plugin declarations | write results, or refuse for a build reason |
 | **the runner** | executing the plan | the plan, the built plugins | decide what should run |
+| **the reporter** | what a reader meets, and the cohort no plugin can see | every payload at once, the design, the object | compute a result, or hide one it dislikes |
+
+## 0. The reporter is a domain, and for a long time it was not
+
+It was added to this table after a report on a real cohort arrived with **191 figures, 51 of
+them distinct and 140 the same fifteen plots redrawn once per sample**, no statement anywhere of
+what the cohort was, not one panel comparing an arm of the design, and two pages carrying a
+headline their own figures refute. None of that was a plugin being careless. It was work nobody
+owned: a plugin cannot see the cohort by construction — a per-unit instance is handed one unit —
+and the host was not asked to.
+
+Its boundary is one line: **a plugin knows its method, the host knows the cohort.** Anything a
+plugin cannot see from inside one method belongs to the reporter; anything the reporter would
+have to guess belongs to the plugin. `docs/REPORTING.md` is the whole of it, defect by defect.
+
+Two prohibitions carry the weight:
+
+- **It may not compute a result.** A number that first exists at render time cannot be traced to
+  a file, cannot be re-derived, and belongs to no plugin's declaration. The reporter arranges,
+  compares and folds; it does not analyse.
+- **It may not hide one.** It has every payload at once, which is exactly the position from
+  which a disappointing result is easiest to quietly drop. An absence is named — a panel that
+  could not be drawn, a metric that never arrived, a unit that failed, an identifier with no
+  gene symbol. Silence and success look the same on a page.
+
+And it is held to a **standard measured on the artifact**: `scprofile standard` takes a
+directory, so it can only ever be pointed at a report that was actually written, and whatever
+writes a report measures it in the same breath. A module somebody has to think to call is the
+same as not having one, and the report that fails is exactly the report nobody checks.
 
 ---
 

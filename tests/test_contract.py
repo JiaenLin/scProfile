@@ -11,6 +11,7 @@ bare interpreter, so if it ever needs numpy the design has drifted.
 from __future__ import annotations
 
 import json
+import ast
 import inspect
 import sys
 import tempfile
@@ -1804,6 +1805,42 @@ def test_a_refutation_survives_every_hop_to_the_verdict():
               "the criterion passes on a page the refutation was removed from")
 
 
+def test_the_standard_is_run_by_the_thing_that_writes_the_report():
+    """Whatever renders a report measures it, in the same breath, unprompted.
+
+    A MODULE SOMEBODY HAS TO THINK TO CALL IS THE SAME AS NOT HAVING ONE. Both job harnesses
+    invoked `scprofile standard` and the tool itself did not, so a run delivered a report and
+    said nothing about whether a reader could get through it - the one question a reader cannot
+    answer without opening every page. The report that fails is exactly the report nobody
+    thinks to check.
+
+    AND IT NEVER REFUSES. A report that fails the standard is still the record of what the run
+    did; withholding it would destroy the evidence in order to protect the reader from it.
+    """
+    print("\nthe standard is run by whatever writes the report, not remembered")
+    from scprofile import cli
+    src = inspect.getsource(cli)
+    check("there is one judge", "def _judge(" in src)
+    for fn in ("_run", "_report"):
+        node = [n for n in ast.walk(ast.parse(src))
+                if isinstance(n, ast.FunctionDef) and n.name == fn]
+        calls = {getattr(c.func, "id", "") for n in node for c in ast.walk(n)
+                 if isinstance(c, ast.Call)}
+        check(f"{fn} judges what it wrote", "_judge" in calls,
+              "a report written and never measured")
+    j = [n for n in ast.walk(ast.parse(src))
+         if isinstance(n, ast.FunctionDef) and n.name == "_judge"]
+    check("the judge cannot refuse the report",
+          j and not any(isinstance(n, ast.Raise) for n in ast.walk(j[0])),
+          "a failing report is still the record of the run")
+    check("nor rewrite it",
+          j and not any(getattr(getattr(c, "func", None), "attr", "") in
+                        {"write_text", "write_bytes", "unlink", "rmtree"}
+                        for c in ast.walk(j[0]) if isinstance(c, ast.Call)))
+    check("and it checks the ruler before applying it",
+          j and "selfcheck" in ast.unparse(j[0]))
+
+
 def _load_module(path):
     import importlib.util
     spec = importlib.util.spec_from_file_location(f"_t_{Path(path).stem}", path)
@@ -1856,6 +1893,7 @@ def main():
     test_the_host_answers_the_sentinel_question_once()
     test_a_criterion_that_cannot_fail_is_not_a_criterion()
     test_a_refutation_survives_every_hop_to_the_verdict()
+    test_the_standard_is_run_by_the_thing_that_writes_the_report()
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")

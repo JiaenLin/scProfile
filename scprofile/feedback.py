@@ -2,12 +2,15 @@
 
 THE LOOP THIS COMPLETES
 
-    declare  ->  build  ->  plan  ->  run
-       ^           ^         ^          |
-       |           |         +----------+   plan already triggers the builder
-       |           +--------------------+   a run that fails on the ENVIRONMENT rebuilds it
-       +--------------------------------+   a run whose output contradicts the DECLARATION
-                                            is a defect for the maintainer, reported as one
+    declare  ->  build  ->  plan  ->  run  ->  report
+       ^           ^         ^          |         |
+       |           |         +----------+         |   plan already triggers the builder
+       |           +--------------------+         |   a run that fails on the ENVIRONMENT
+       |                                          |    rebuilds it and retries, once
+       +------------------------------------------+   output that contradicts the DECLARATION
+                                                       is a defect for the maintainer, reported
+                                                       as one - and so is a cost that contradicts
+                                                       the declared memory model
 
 A failure in a run has a cause in exactly one layer, and the layers have completely different
 remedies. Reporting them all as "plugin X failed" makes the user read a traceback and guess.

@@ -991,8 +991,45 @@ def _run(a):
     # early is the same failure as describing what was intended; it just fails the other way.
     idx = report.write_all(out, payload)
     print(f"      {idx}")
+    _judge(out)
     _write_readme(out, payload)
     return 0
+
+
+def _judge(out):
+    """Measure the report that was just written, and SAY SO. Never refuse it.
+
+    A MODULE SOMEBODY HAS TO THINK TO CALL IS THE SAME AS NOT HAVING ONE, and the report that
+    fails the standard is exactly the report nobody thinks to check. Both harnesses invoked
+    `scprofile standard` and the tool itself did not, so a run delivered a report and said
+    nothing about whether it was readable - which is the one question a reader cannot answer
+    for themselves without opening every page.
+
+    IT NEVER REFUSES AND NEVER REWRITES. A report that fails the standard is still the record
+    of what the run did, and withholding it would destroy the evidence to protect the reader
+    from it. The verdict is printed beside the path, at the moment the path is printed.
+    """
+    from . import standard as ST
+    d = Path(out) / "report"
+    if not d.is_dir():
+        return
+    if not ST.summarise_selfcheck(ST.selfcheck()):
+        print("      the exit standard could not be applied: the ruler above is broken")
+        return
+    res = ST.check_report(d)
+    if not res:
+        return
+    bad = [(page, cid, det) for page, cs in sorted(res.items()) for cid, ok, det in cs if not ok]
+    if not bad:
+        print(f"      exit standard MET on {len(res)} page(s)")
+        return
+    print(f"      exit standard NOT met: {len(bad)} criteri{'on' if len(bad) == 1 else 'a'} "
+          f"across {len({p for p, _c, _d in bad})} of {len(res)} page(s). "
+          f"The report is written and is still the record of this run.")
+    for page, cid, det in bad[:8]:
+        print(f"        {page:<14} {cid:<14} {det}")
+    if len(bad) > 8:
+        print(f"        ... and {len(bad) - 8} more; `scprofile standard --out {out}` for all")
 
 
 def _selftest(a):
@@ -1953,6 +1990,7 @@ def _report(a):
         print(f"scprofile: no {p}. Run `scprofile run` first.", file=sys.stderr)
         return REFUSE
     print(f"wrote {report.write_all(Path(a.out), json.loads(p.read_text()))}")
+    _judge(Path(a.out))
     return 0
 
 
