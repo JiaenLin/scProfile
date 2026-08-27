@@ -240,6 +240,37 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   identifier computed from the same subset the quantity describes? Are any percentages in the
   annotation literals rather than derived? Print the sentence's inputs and read them side by side.
 
+- **P21 (a shared vocabulary is shared only where it is IMPORTED)** Deciding the canonical words
+  for a rebuild is the easy half; the hard half is that every figure has to fetch them from one
+  place. Write the canon into a module, let each figure keep its own wording, and you have the
+  divergence you started with PLUS a file asserting it is gone - which is worse, because the next
+  reader checks the module and stops. Marks may legitimately differ by figure type (a heatmap cell
+  has no rim to dot, a ring node has no column to hatch); the WORDS are the transferable part and
+  must come from the shared module by import, not by copying.
+  **ONE INSTANCE.** A rebuild produced a good four-state absence vocabulary in a module whose own
+  docstring said "identical in every figure of this set; do not paraphrase them per figure". Four
+  of roughly twelve figure modules imported it. The rest each carried their own phrasing for the
+  same states - one sheet said "population present, zero in this row" for what the canon calls a
+  measured absence and "not reported by any animal in that arm" for what it calls never tested -
+  so a reader who learned the terms on one page did not meet them on the next. The module that
+  ORIGINATED the vocabulary was itself among the non-importers.
+  **CHECK:** grep for the module that defines your shared vocabulary - how many figure modules
+  import it, out of how many exist? For each that does not, is that because the concept does not
+  arise there, or because it was paraphrased?
+
+- **P22 (adopt a set-wide convention by CONVERTING one figure at a time, and look at each)** The
+  temptation with a set-wide change is to apply it everywhere in one pass. Do not: a convention
+  interacts with each figure's own layout, so the change that fits one panel overflows the next,
+  and a single sweep produces a set where some figures are better, some are broken, and the diff
+  is too large to tell which is which. Convert one, render it, LOOK at it, and only then take the
+  next. The rendered result is the only evidence that the convention actually fits.
+  **ONE INSTANCE.** Substituting canonical wording into one sheet's key lengthened two lines. On
+  that sheet they fitted; on a different figure the same class of edit had already pushed a
+  bottom-anchored footer block through a panel's axis labels, twice. Neither outcome was
+  predictable from the source - both were visible immediately in the render.
+  **CHECK:** after converting each figure to the shared convention, did you re-open the rendered
+  file and look at the region you changed? Can you name what the change cost in layout?
+
 ## What to expect at the end
 
 In this rebuild, of 23 plates: **19 were about the method, not the biology.** Four presented a
