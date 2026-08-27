@@ -212,6 +212,34 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   **CHECK:** how many directories hold a render of this family? If the answer is more than one, you
   are relying on somebody remembering which, and that has already failed here.
 
+- **P19 (scope the freshness check to a figure's OWN producer)** The check in P16 is only as good as
+  its notion of "the source". Taking the newest mtime over every module in a directory marks every
+  figure stale the moment any one module is touched, so the check cries wolf, and a check that
+  fires on correct behaviour gets ignored - which costs you the one time it was right. Match each
+  figure to the script that actually draws it and compare against that.
+  **ONE INSTANCE.** Run over one directory, the coarse check reported **60 of 62** figures stale.
+  Matching each figure to its own producer gave **26 of 52** - the coarse version over-reported by
+  2.3x, and a reviewer handed the first number would reasonably have concluded the whole directory
+  was worthless and stopped looking.
+  **CHECK:** does your freshness check name, for each figure, the specific file it compared against?
+  If it reports a single source mtime for a whole directory, it is answering a different question.
+
+- **P20 (two true facts fuse into one false sentence, and the join is invisible)** The dangerous
+  error in an annotated figure is not a wrong number - a wrong number is usually checkable against
+  the panel. It is two correct numbers joined by a clause that was never computed: each half
+  survives inspection, the sentence reads fluently, and only someone who knows what the identifiers
+  MEAN can see that they belong to different objects. Build such sentences from the same variables
+  that draw the marks, and derive each clause separately even when that makes the sentence longer.
+  **ONE INSTANCE.** A headline panel printed "One animal, X, carries ~48% of the chow arm's signal
+  - it is the deepest library (1949 edges against 297)". X was the cohort's deepest library and an
+  animal of the OTHER arm; the animal carrying ~48% of the named arm was a different one entirely.
+  Both halves were true of somebody. The name came from an argmax over the whole cohort while the
+  share was a hard-coded literal about one arm, and nothing connected them. It survived every
+  numeric check because no number in it was wrong.
+  **CHECK:** for every sentence on a panel that joins an identifier to a quantity, was the
+  identifier computed from the same subset the quantity describes? Are any percentages in the
+  annotation literals rather than derived? Print the sentence's inputs and read them side by side.
+
 ## What to expect at the end
 
 In this rebuild, of 23 plates: **19 were about the method, not the biology.** Four presented a
