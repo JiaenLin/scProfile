@@ -341,6 +341,16 @@ PREDICATE_EXEMPT = {
     "needs_kernels": "A PLUGIN MUST NEVER NAME ANOTHER PLUGIN - it names a capability, and "
                      "`producer_edges` resolves which installed plugin provides it. Naming a "
                      "peer would bake one site's toolbox into a portable declaration.",
+    # A DIFFERENT CATEGORY, and naming it is the point: the three above are DECLARATIONS, where
+    # falsy-for-everyone means nobody declared it and the branch is dead. This one is a FAULT
+    # REPORT, where falsy means there is no fault - so falsy across a healthy installed set is
+    # the CORRECT reading and a true value would be the alarm. The two look identical to an
+    # introspecting check, which is why the distinction is written here rather than assumed:
+    # a fault report added tomorrow belongs in this list, and a declaration flag never does.
+    "guard_unreadable": "a FAULT REPORT, not a declaration. It is None when a plugin's file can "
+                        "be read, which is every plugin of a healthy installation; a non-None "
+                        "value is the alarm, not the norm. Exempt because falsy-for-all is its "
+                        "correct state, and NOT because no plugin sets it.",
 }
 
 

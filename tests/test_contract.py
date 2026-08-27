@@ -1898,6 +1898,70 @@ def test_the_standard_is_run_by_the_thing_that_writes_the_report():
         cli._judge_inner = _prev
 
 
+def test_a_guard_that_could_not_run_has_not_allowed_anything():
+    """An unreadable or hanging guard REFUSES. It used to allow.
+
+    `has_guard` answered a two-state question and returned False when the plugin file could not
+    be OPENED; `guard_argv` then returned None, and a missing argv means "ships no guard", which
+    allows. So an `OSError` turned "I could not check" into "the check passed" - inside the one
+    mechanism that exists to refuse a dataset on which a result would not mean what its report
+    says. Not hypothetical: plugins are read over NFS on a cluster, whose directory attributes
+    are cached, and a file another node just wrote may not be visible yet.
+
+    Exactly the shape already recorded in `guard_argv`: converting a guarded plugin to the
+    one-file shape silently dropped its guard, and the first dataset it existed to refuse was
+    analysed and reported. Different cause, same two-state answer, same outcome.
+
+    And a guard that HANGS is the other way a check returns no verdict. There was no timeout at
+    all, so a stuck guard stopped the run with no message.
+    """
+    print("\na guard that could not run has not allowed anything")
+    from scprofile import kernels as K
+
+    class _Unreadable:
+        name = "k"
+        guard_unreadable = "OSError: [Errno 5] Input/output error"
+
+        def guard_argv(self, exe):
+            return None                    # what an unreadable file yields
+
+    allow, why, esc = K.guard_verdict(_Unreadable(), describe={}, constraint="", params={})
+    check("an unreadable plugin file REFUSES", allow is False)
+    check("and says the check could not be read, not that it passed",
+          "could not be READ is not a guard that PASSED" in why, why[:90])
+    check("and the escape is offered, because a gate with no escape gets switched off",
+          esc == "--allow k", esc)
+
+    class _NoGuard:
+        name = "k"
+        guard_unreadable = None
+
+        def guard_argv(self, exe):
+            return None
+
+    check("a plugin that genuinely ships no guard still runs",
+          K.guard_verdict(_NoGuard(), describe={}, constraint="", params={})[0] is True)
+
+    class _Hangs:
+        name = "k"
+        guard_unreadable = None
+
+        def guard_argv(self, exe):
+            return [sys.executable, "-c", "import time; time.sleep(30)"]
+
+    _prev = K.GUARD_TIMEOUT_S
+    try:
+        K.GUARD_TIMEOUT_S = 1
+        allow, why, esc = K.guard_verdict(_Hangs(), describe={}, constraint="", params={})
+        check("a guard that does not finish REFUSES", allow is False)
+        check("and says so rather than stopping the run with no message",
+              "did not answer is not a guard that allowed" in why, why[:90])
+    finally:
+        K.GUARD_TIMEOUT_S = _prev
+    check("and the bound is stated as a constant, not buried in a call",
+          isinstance(_prev, int) and _prev > 0)
+
+
 def _load_module(path):
     import importlib.util
     spec = importlib.util.spec_from_file_location(f"_t_{Path(path).stem}", path)
@@ -1951,6 +2015,7 @@ def main():
     test_a_criterion_that_cannot_fail_is_not_a_criterion()
     test_a_refutation_survives_every_hop_to_the_verdict()
     test_the_standard_is_run_by_the_thing_that_writes_the_report()
+    test_a_guard_that_could_not_run_has_not_allowed_anything()
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")

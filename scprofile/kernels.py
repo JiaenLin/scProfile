@@ -420,6 +420,19 @@ class Kernel:
         return g if g.exists() else None
 
     @property
+    def guard_unreadable(self):
+        """Why the guard could not be examined, or None. See the one-file shape's copy.
+
+        A directory whose existence cannot be determined - a stat that raises rather than
+        returning False - must not read as a plugin that ships no guard.
+        """
+        try:
+            (self.path / "guard.py").exists()
+            return None
+        except OSError as e:
+            return f"{type(e).__name__}: {e}"
+
+    @property
     def has_guard(self):
         return self.guard is not None
 
@@ -593,10 +606,37 @@ class FileKernel(Kernel):
         return self.path if self.has_guard else None
 
     @property
+    def guard_unreadable(self):
+        """Why this plugin's own file could not be read, or None. A THIRD state.
+
+        `has_guard` answered a two-state question - ships one, or does not - and returned False
+        when the file could not be OPENED. `guard_argv` then returned None, and `guard_verdict`
+        reads a missing argv as "this plugin ships no guard" and ALLOWS. So an `OSError` turned
+        "I could not check" into "the check passed", inside the one mechanism whose entire
+        purpose is to refuse a dataset on which a result would not mean what the report says.
+
+        Not hypothetical on a cluster: plugins are read over NFS, whose directory attributes are
+        cached, and a file another node has just written may not be visible yet.
+
+        The same shape as the defect recorded in `guard_argv` below - converting a guarded
+        plugin to this shape silently dropped its guard, with no error and no log line, and the
+        first dataset the guard existed to refuse was analysed and reported. Same outcome, a
+        different cause, and the two-state answer is what both have in common.
+        """
+        try:
+            self.path.read_text(encoding="utf-8", errors="replace")
+            return None
+        except OSError as e:
+            return f"{type(e).__name__}: {e}"
+
+    @property
     def has_guard(self):
         try:
             return "def guard(" in self.path.read_text(encoding="utf-8", errors="replace")
         except OSError:
+            # Still False, because the question it answers is "does the file say so" and the
+            # file said nothing. `guard_unreadable` carries the difference, and `guard_verdict`
+            # asks it FIRST.
             return False
 
     def guard_argv(self, exe):
@@ -1160,6 +1200,12 @@ def undeclared(kernel, payload):
     return extra
 
 
+#: A guard runs in the host, before anything is resolved, and answers one question about the
+#: dataset. Generous, because a slow guard is not a defect; bounded, because there was no bound
+#: at all and a guard that hangs stops the whole run with no message.
+GUARD_TIMEOUT_S = 300
+
+
 def guard_verdict(kernel, *, describe, constraint, params, log=print):
     """Run a kernel's own guard, if it ships one. Returns (allow, reason, escape_flag).
 
@@ -1172,13 +1218,35 @@ def guard_verdict(kernel, *, describe, constraint, params, log=print):
     import json
     import subprocess
     import sys
+    # A GUARD THAT COULD NOT BE READ IS NOT A GUARD THAT PASSED. Asked BEFORE argv, because an
+    # unreadable plugin file yields no argv and a missing argv means "ships no guard" - so the
+    # one mechanism that exists to refuse an uninterpretable dataset was allowing whenever it
+    # could not open the file that would have told it to refuse. Refusing is the only safe
+    # direction here and it is not costly: the escape is one flag away and is logged.
+    why = getattr(kernel, "guard_unreadable", None)
+    if why:
+        return (False,
+                f"{kernel.name}'s own file could not be read, so whether it ships a guard is "
+                f"unknown: {why}. A guard that could not be READ is not a guard that PASSED.",
+                f"--allow {kernel.name}")
     argv = (kernel.guard_argv(sys.executable) if hasattr(kernel, "guard_argv")
             else ([sys.executable, str(kernel.guard)] if getattr(kernel, "guard", None) else None))
     if not argv:
         return True, "", ""
     payload = json.dumps({"describe": describe, "constraint": constraint,
                           "params": dict(params or {})})
-    r = subprocess.run(argv, input=payload, capture_output=True, text=True)
+    try:
+        r = subprocess.run(argv, input=payload, capture_output=True, text=True,
+                           timeout=GUARD_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        # THE OTHER WAY A CHECK RETURNS NO VERDICT. There was no timeout here at all, so a guard
+        # that hung stopped the run with no message - and a guard is host-side code running
+        # before anything is resolved, which is exactly where a stuck import or a network read
+        # goes unnoticed. A guard that did not finish has not allowed anything.
+        return (False,
+                f"{kernel.name}'s guard did not finish within {GUARD_TIMEOUT_S}s. A guard that "
+                f"did not answer is not a guard that allowed.",
+                f"--allow {kernel.name}")
     if r.returncode == 0:
         return True, (r.stdout or "").strip(), ""
     reason = (r.stdout or "") + (r.stderr or "")
