@@ -339,6 +339,30 @@ class Context:
             return np.ones(self.adata.n_obs, dtype=bool)
         return inputs.sentinel_mask(lab, self.sentinels)[0]
 
+    def estimable(self, obs, terms):
+        """Can this design estimate all of `terms` at once, on these cells?
+
+        THE HOST ANSWERS QUESTIONS ABOUT THE DESIGN; the plugin decides what to do with the
+        answer. A model term that the data cannot carry does not fail politely - it raises from
+        inside the fitting library, after the fit has been paid for, and takes the whole plugin
+        down rather than the one population it was inestimable in.
+
+        Terms are factor names, or interactions written `"a:b"`. A plugin that fits per
+        population must ask PER POPULATION: the cohort can be complete while a subset of it is
+        not, which is exactly the case that has already cost a run.
+        """
+        from . import inputs
+        return inputs.estimable(obs, terms)
+
+    def drop_inestimable(self, obs, terms):
+        """(kept, dropped) in the order given - and DROPPED IS FOR THE REPORT, not the log.
+
+        A term silently missing from a model is a question silently not asked, and "no effect"
+        and "never tested" are the same empty row on a figure. Name them.
+        """
+        from . import inputs
+        return inputs.drop_inestimable(obs, terms)
+
     def populations(self, role="label"):
         """The grouping a per-population result must use, and the caveat that goes with it.
 

@@ -732,5 +732,52 @@ except merge.MergeError as e:
 except Exception as e:                                                   # noqa: BLE001
     ck("it raises MergeError", False, type(e).__name__)
 
+print("\nwhat a design can estimate is a question the host answers")
+# THE COHORT CAN BE COMPLETE WHILE A SUBSET OF IT IS NOT, and a plugin that fits per population
+# fits on the subset. The real table that produced `LinAlgError: Singular matrix` from inside
+# PyDESeq2 - after the fit was paid for, killing the plugin rather than the one population -
+# was [[3, 3], [2, 0]]: one cell of the two-by-two empty in ONE population of many.
+import pandas as _pd                                                            # noqa: E402
+from scprofile import inputs as _IN                                             # noqa: E402
+
+_full = _pd.DataFrame({"a": ["x", "x", "y", "y"] * 2, "b": ["p", "q"] * 4})
+_gap = _pd.DataFrame({"a": ["x"] * 6 + ["y"] * 2,
+                      "b": ["p", "p", "p", "q", "q", "q", "p", "p"]})
+ck("a complete design estimates its interaction", _IN.estimable(_full, ["a", "b", "a:b"]))
+ck("the main effects are still estimable where the interaction is not",
+   _IN.estimable(_gap, ["a", "b"]))
+ck("and the interaction is refused BEFORE the fit is paid for",
+   not _IN.estimable(_gap, ["a", "b", "a:b"]))
+ck("a factor that is not there is not estimable, and does not raise",
+   not _IN.estimable(_gap, ["a", "absent_column"]))
+ck("nor is a factor with one level", not _IN.estimable(_pd.DataFrame({"a": ["x"] * 4}), ["a"]))
+ck("an empty frame is not estimable, and does not raise", not _IN.estimable(_full.iloc[:0], ["a"]))
+_kept, _dropped = _IN.drop_inestimable(_gap, ["a", "b", "a:b"])
+ck("the terms that survive are kept IN THE ORDER GIVEN", _kept == ["a", "b"], str(_kept))
+ck("and the ones that cannot be fitted are NAMED, never merely absent",
+   [t for t, _w in _dropped] == ["a:b"], str(_dropped))
+# WHY, NOT JUST WHICH. "no effect" and "never tested" draw the same empty row, and the sentence
+# that separates them is the only thing on the page that can.
+ck("with the reason, which is what the report needs",
+   _dropped and "collinear" in _dropped[0][1], str(_dropped))
+ck("a term that is not a column says so rather than saying collinear",
+   "not a column" in _IN.drop_inestimable(_gap, ["a", "nope"])[1][0][1],
+   str(_IN.drop_inestimable(_gap, ["a", "nope"])))
+_alias = _pd.DataFrame({"a": ["x", "x", "y", "y"], "c": ["m", "m", "n", "n"],
+                        "b": ["p", "q"] * 2})
+ck("a factor aliased with one already in the model is dropped and names it",
+   _IN.drop_inestimable(_alias, ["a", "c", "b"])[1] == [("c", "it is collinear with a")],
+   str(_IN.drop_inestimable(_alias, ["a", "c", "b"])))
+# ONE STATEMENT OF THE FACT. The plugin that hit this had its own copy of the rank test, written
+# for two factors and their interaction; anything else that fits a model would have needed a
+# second copy, and a second copy is how the check ends up applied to some terms and not others.
+from scprofile import plugin as _PL                                             # noqa: E402
+ck("a plugin asks the host for it rather than reimplementing it",
+   hasattr(_PL.Context, "estimable") and hasattr(_PL.Context, "drop_inestimable"))
+import inspect as _inspect                                                      # noqa: E402
+_de = (Path(__file__).resolve().parents[1] / "kernels" / "de.py").read_text()
+ck("and the plugin that owned the private copy no longer has one",
+   "matrix_rank" not in _de, "a rank test is still computed inside the plugin")
+
 print("\n" + ("all per-unit checks passed" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

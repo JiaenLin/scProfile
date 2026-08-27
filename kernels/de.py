@@ -314,35 +314,18 @@ UNTESTED_REASONS = ("tested", "independent filtering", "Cook's outlier", "no cou
                     "below min_counts")
 
 
-def _identifiable(obs, terms, np, pd):
-    """The terms that can be estimated together, and the ones that cannot. Returns (keep, aliased).
+def _identifiable(ctx, obs, terms):
+    """The terms that can be estimated together, and the ones that cannot, with the reason.
 
-    A DESIGN TABLE CARRIES COVARIATES THAT ARE NOT INDEPENDENT. Where one factor takes one value
-    for every sample in an arm of another, `~ a + b + c + d` has a rank-deficient model matrix and
-    pydeseq2's IRLS inverts it:
+    THE RANK TEST IS THE HOST'S, and the fact that this plugin had its own is what let the
+    interaction be added to the formula without one. The check existed, correctly, and was
+    applied to every main effect - and then a term was appended after it, by a different line,
+    which is not a mistake about interactions but about a check living somewhere a later
+    contributor does not have to go through.
 
-        numpy.linalg.LinAlgError: Singular matrix
-
-    which is a true statement about linear algebra and tells the user nothing. `RUN_PLAN.md` says
-    an imbalance, a confound, even a COMPLETE confound, all run with a caveat - so the terms that
-    add nothing estimable are dropped, in the order given, and NAMED. Dropping is not the same as
-    ignoring: a term aliased with one already in the model contributes no column the model does
-    not already have, and its coefficient would not have been interpretable in isolation anyway.
+    `ctx.drop_inestimable` is the one place that decides, for any plugin fitting any model.
     """
-    cols = [np.ones((len(obs), 1))]
-    keep, aliased = [], []
-    for t in terms:
-        d = pd.get_dummies(obs[t].astype(str), drop_first=True).to_numpy(dtype=float)
-        if d.shape[1] == 0:
-            aliased.append((t, "it has one level here"))
-            continue
-        trial = np.hstack(cols + [d])
-        if np.linalg.matrix_rank(trial) < trial.shape[1]:
-            aliased.append((t, "it is collinear with " + " + ".join(keep or ["the intercept"])))
-            continue
-        cols.append(d)
-        keep.append(t)
-    return keep, aliased
+    return ctx.drop_inestimable(obs, terms)
 
 
 def _fit_type_kwargs(cls, want):
@@ -734,7 +717,7 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
 
 
 
-def _interaction_estimable(obs, a, b, np, pd):
+def _interaction_estimable(ctx, obs, a, b):
     """Is `a:b` estimable here? THE SAME RANK TEST EVERY MAIN EFFECT ALREADY GETS.
 
     `_identifiable` asks it of each main effect, in the same dummy coding, and the interaction
@@ -746,15 +729,13 @@ def _interaction_estimable(obs, a, b, np, pd):
     It was invisible for as long as the plan's contrast never reached the run: with main effects
     only, nothing ever added an interaction column. The first cohort to be handed the decision
     the planner had been making all along was the first to hit it.
+
+    THE RANK TEST ITSELF NOW LIVES IN THE HOST, because it is a fact about a DESIGN and not
+    about differential expression. Asking `ctx.estimable` means the next plugin to fit a model
+    gets the same answer without reimplementing it - and without repeating the omission above,
+    which was not a mistake about interactions but about applying a check to every term.
     """
-    da = pd.get_dummies(obs[a].astype(str), drop_first=True).to_numpy(dtype=float)
-    db = pd.get_dummies(obs[b].astype(str), drop_first=True).to_numpy(dtype=float)
-    if da.shape[1] == 0 or db.shape[1] == 0:
-        return False
-    inter = np.hstack([da[:, [i]] * db[:, [j]]
-                       for i in range(da.shape[1]) for j in range(db.shape[1])])
-    trial = np.hstack([np.ones((len(obs), 1)), da, db, inter])
-    return int(np.linalg.matrix_rank(trial)) >= trial.shape[1]
+    return ctx.estimable(obs, [a, b, f"{a}:{b}"])
 
 
 def _bh_across_families(res, alpha):
@@ -956,7 +937,7 @@ def run(ctx):
 
         # IDENTIFIABLE FIRST. Otherwise the fit raises `Singular matrix` from inside numpy,
         # which is a true statement about linear algebra and tells the user nothing.
-        use, aliased = _identifiable(sub_obs, terms, np, pd)
+        use, aliased = _identifiable(ctx, sub_obs, terms)
         if not use:
             why = [t for t, _w in aliased]
             skipped.append((pop, int(m.sum()), why))
@@ -996,7 +977,7 @@ def run(ctx):
             # ASKED, NOT ASSUMED. See `_interaction_estimable`: the main effects are rank-tested
             # and the interaction was not, so a population with an empty cell of the a-by-b
             # table took down the entire plugin instead of dropping one term.
-            if _interaction_estimable(sub_obs, use[0], use[1], np, pd):
+            if _interaction_estimable(ctx, sub_obs, use[0], use[1]):
                 formula += f" + {use[0]}:{use[1]}"
                 interacted[pop] = (use[0], use[1])
             else:

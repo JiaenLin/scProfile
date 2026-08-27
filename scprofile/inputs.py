@@ -681,3 +681,95 @@ def read_design(path, samples=None, sample_col=None):
                 f"The table has {len(table)}: {sorted(table)[:8]}. "
                 f"Nothing is inferred from a sample name.")
     return table, key, factors
+
+
+# ------------------------------------------------------- what a design can and cannot estimate
+
+def _term_columns(obs, term, np, pd):
+    """Dummy columns for one term. `"a:b"` or `("a", "b")` is the elementwise product."""
+    names = term.split(":") if isinstance(term, str) else list(term)
+    blocks = []
+    for f in names:
+        f = str(f).strip()
+        if f not in obs.columns:
+            return None
+        d = pd.get_dummies(obs[f].astype(str), drop_first=True).to_numpy(dtype=float)
+        if d.shape[1] == 0:                    # a factor with one level contributes nothing
+            return None
+        blocks.append(d)
+    out = blocks[0]
+    for b in blocks[1:]:
+        out = np.hstack([out[:, [i]] * b[:, [j]]
+                         for i in range(out.shape[1]) for j in range(b.shape[1])])
+    return out
+
+
+def estimable(obs, terms):
+    """Can this design estimate all of `terms` at once? Full column rank, intercept included.
+
+    A FACT ABOUT A DESIGN, WHICH IS THE HOST'S TO KNOW. It lived inside one plugin, written for
+    one shape - two factors and their interaction - and every other plugin that fits a model
+    either reimplements it or does what that one did before it had it: appends a term to a
+    formula without asking whether the data can carry it.
+
+    What that costs is specific. A population missing one cell of the a-by-b table produced
+    `numpy.linalg.LinAlgError: Singular matrix` from inside the fitting library, AFTER the fit
+    had been paid for, killing the whole plugin rather than the one population. The check that
+    prevents it was already being applied to every main effect and simply was not applied to the
+    term that was added last - which is the general shape of this defect, and why the answer is
+    a function anyone can call about any set of terms rather than a special case for the one
+    term that happened to break.
+
+    Terms are factor names, or interactions written `"a:b"` (or as a tuple). Dummy coding with
+    the first level dropped, matching what a formula interface builds.
+    """
+    import numpy as np
+    import pandas as pd
+
+    terms = [t for t in (terms or [])]
+    if obs is None or not len(obs):
+        return False
+    blocks = [np.ones((len(obs), 1))]
+    for t in terms:
+        got = _term_columns(obs, t, np, pd)
+        if got is None:
+            return False
+        blocks.append(got)
+    trial = np.hstack(blocks)
+    return int(np.linalg.matrix_rank(trial)) >= trial.shape[1]
+
+
+def drop_inestimable(obs, terms):
+    """(kept, dropped) where dropped is [(term, why), ...] - IN THE ORDER GIVEN.
+
+    A caller's order is its priority, so what survives is its choice. WHY IS RETURNED, not
+    logged: a term silently absent from a model is a question silently not asked, and "no
+    effect" and "never tested" draw as the same empty row. The report needs the sentence.
+
+    A design table carries covariates that are not independent - where one factor takes one
+    value for every sample in an arm of another, the model matrix is rank-deficient and the
+    fitting library reports `Singular matrix`, which is a true statement about linear algebra
+    and tells the user nothing. An imbalance, a confound, even a COMPLETE confound all run;
+    the term that adds no estimable column is dropped and named.
+    """
+    import numpy as np
+    import pandas as pd
+
+    kept, dropped = [], []
+    if obs is None or not len(obs):
+        return ([], [(t, "there are no cells here") for t in (terms or [])])
+    for t in (terms or []):
+        got = _term_columns(obs, t, np, pd)
+        if got is None:
+            names = t.split(":") if isinstance(t, str) else list(t)
+            why = ("it is not a column of the design table"
+                   if any(str(f).strip() not in obs.columns for f in names)
+                   else "it has one level here")
+            dropped.append((t, why))
+            continue
+        if not estimable(obs, kept + [t]):
+            dropped.append((t, "it is collinear with "
+                               + " + ".join([str(k) for k in kept] or ["the intercept"])))
+            continue
+        kept.append(t)
+    return kept, dropped

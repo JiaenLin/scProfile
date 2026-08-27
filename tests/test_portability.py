@@ -982,24 +982,25 @@ print("\nthe first real run of the contrast, and what it found")
 import numpy as _np2, pandas as _pd2                                            # noqa: E402
 
 _desrc = _KSRC["de.py"]
-_ie = None
-for _nd in _ast.parse(_desrc).body:
-    if getattr(_nd, "name", "") == "_interaction_estimable":
-        _ns2 = {}
-        exec(compile(_ast.Module([_nd], []), "<x>", "exec"), {"__builtins__": __builtins__}, _ns2)
-        _ie = _ns2["_interaction_estimable"]
-ck("the interaction gets the same rank test the main effects get", _ie is not None,
+# THE RANK TEST IS NO LONGER IN THE PLUGIN, so this no longer has to AST-extract a function
+# and exec it in a bare namespace to reach it - which was itself the tell. A fact about a DESIGN
+# that can only be tested by dissecting one plugin is a fact the next plugin will not have.
+from scprofile import inputs as _IN2                                            # noqa: E402
+_full = _pd2.DataFrame({"a": list("yyyyoooo"), "b": list("cchhcchh")})
+_gap = _pd2.DataFrame({"a": list("yyoo"), "b": list("cccH")})
+_one = _pd2.DataFrame({"a": list("yyyy"), "b": list("chch")})
+ck("a replicated 2x2 is estimable", _IN2.estimable(_full, ["a", "b", "a:b"]) is True)
+ck("an empty cell of the two-way table is NOT", _IN2.estimable(_gap, ["a", "b", "a:b"]) is False)
+ck("a factor with one level here is NOT", _IN2.estimable(_one, ["a", "b", "a:b"]) is False)
+ck("a full 3x2 is estimable, so the test is not just a 2x2 rule",
+   _IN2.estimable(_pd2.DataFrame({"a": list("yyoomm"), "b": list("chchch")}),
+                  ["a", "b", "a:b"]) is True)
+ck("the interaction gets the same rank test the main effects get",
+   "matrix_rank" not in _desrc and "ctx.estimable" in _desrc,
    "an interaction appended without being asked is the Singular matrix this prevents")
-if _ie:
-    _full = _pd2.DataFrame({"a": list("yyyyoooo"), "b": list("cchhcchh")})
-    _gap = _pd2.DataFrame({"a": list("yyoo"), "b": list("cccH")})
-    _one = _pd2.DataFrame({"a": list("yyyy"), "b": list("chch")})
-    ck("a replicated 2x2 is estimable", _ie(_full, "a", "b", _np2, _pd2) is True)
-    ck("an empty cell of the two-way table is NOT", _ie(_gap, "a", "b", _np2, _pd2) is False)
-    ck("a factor with one level here is NOT", _ie(_one, "a", "b", _np2, _pd2) is False)
-    ck("a full 3x2 is estimable, so the test is not just a 2x2 rule",
-       _ie(_pd2.DataFrame({"a": list("yyoomm"), "b": list("chchch")}), "a", "b", _np2, _pd2) is True)
-ck("the run asks before it adds", "_interaction_estimable(sub_obs" in _desrc)
+ck("and the main-effect check goes through the same host function, not a second copy",
+   "ctx.drop_inestimable" in _desrc, "two copies is how a check gets applied to some terms only")
+ck("the run asks before it adds", "_interaction_estimable(ctx, sub_obs" in _desrc)
 # AN INTERACTION IN THE MODEL AND NOT IN THE OUTPUT. The results loop iterates the MAIN EFFECTS,
 # so `age:diet` entered the design, moved every coefficient in it, and produced no row. The
 # study's primary readout was fitted and never reported, and the caveat said it had been ADDED -
