@@ -99,17 +99,21 @@ if [ -n "${MANAGER_PATH:-}" ]; then export PATH="${MANAGER_PATH}:$PATH"; fi
 if [ "${SNAPSHOT:-1}" = "1" ]; then
   _SNAP="${OUT:-$PWD}/.tool"
   rm -rf "$_SNAP"; mkdir -p "$_SNAP"
-  # `setup` AND `docs` ARE PART OF THE TOOL, and leaving them out did not break the run - it
-  # broke the SUITE that checks the run. Two guards read a file from them (`setup/dev_cycle.pbs`,
-  # `docs/EXECUTION.md`); against a snapshot without those directories both raised
-  # FileNotFoundError, which is not a failing check but an ABORT - so every check after them
-  # never ran, in every job, silently. `test_contract.py` lost roughly its last sixteen.
+  # THE WHOLE TOOL, NOT A LIST OF ITS PARTS. This copied `scprofile kernels tests HEAD.txt`,
+  # and three checks that read a file from elsewhere in the tree - `setup/dev_cycle.pbs`,
+  # `docs/EXECUTION.md`, `README.md` - raised FileNotFoundError against the snapshot. That is
+  # not a failing check but an ABORT, so each one silently deleted every check after it, in
+  # every job.
   #
-  # A snapshot that is not a faithful copy is not a snapshot; it is a subset somebody chose, and
-  # the part left out is invisible until something reads it.
-  for _part in scprofile kernels tests setup docs HEAD.txt; do
-    [ -e "$TOOL/$_part" ] && cp -a "$TOOL/$_part" "$_SNAP/" || true
-  done
+  # It was first fixed by ADDING `setup` and `docs` to the list, which fixed the two aborts
+  # that had been seen and left the third to surface the moment they stopped firing first. A
+  # list of parts is a subset somebody chose, and the part left out is invisible until
+  # something reads it - so the enumeration is the defect, not its contents.
+  #
+  # `.git` is excluded because it is large and a compute node has no git anyway; `__pycache__`
+  # because a `.pyc` is written by RUNNING the code, not by changing it, and the fingerprint
+  # check already excludes it for that reason.
+  tar -C "$TOOL" --exclude=.git --exclude=__pycache__ -cf - . | tar -C "$_SNAP" -xf -
   # `git` is absent on a compute node, so the commit is carried in HEAD.txt and copied above.
   TOOL="$_SNAP"
   # HELD, NOT ECHOED. stdout is not attached to the live log until further down, so echoing here

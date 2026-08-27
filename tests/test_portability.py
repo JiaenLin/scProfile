@@ -38,6 +38,28 @@ def ck(name, cond, detail=""):
         FAIL.append(name)
 
 
+def read_or_fail(path, what=""):
+    """A project file's text, or "" with a FAILED CHECK naming what could not be read.
+
+    THIS SUITE IS MODULE-LEVEL, so an exception anywhere in it stops every check below - and
+    that is not a failing suite, it is a TRUNCATED one, which reads in a log exactly like a
+    suite that finished. In a job it aborted four times over, on four different files the tool
+    snapshot did not copy, each one surfacing only once the one before it was fixed.
+
+    It matters most here: this is the leak guard. Aborting at its second check meant the scan
+    for project names, the portability rules and every check after them never ran in a job at
+    all, while the log said `FAIL test_portability.py` and moved on.
+
+    The snapshot is fixed to copy the whole tool. This is the half that survives the next file
+    somebody forgets.
+    """
+    try:
+        return pathlib.Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        ck(f"{what or path} is readable", False, str(e))
+        return ""
+
+
 print("\nno project, person, machine or cohort appears anywhere")
 BAD = re.compile(r"\bsambo\b|wangyb|duke-nus|hn-10-03|aging[_ ]?hfd|young[_ ]?hfd"
                  r"|/data/wangyb|scratch/2026"
@@ -223,7 +245,11 @@ for _c in ("doctor", "install", "fetch", "run", "plan", "report"):
 for _c in ("validate", "selftest", "scaffold"):
     ck(f"{_c} is marked for the maintainer", f'"{_c}", help="[maintainer]' in _cli)
 _rt = Path(__file__).resolve().parents[1]
-_rm = (_rt / "README.md").read_text()
+# A MISSING FILE IS A FAILING CHECK, NOT THE END OF THE SUITE. Module level, so an exception
+# here stops every check below - and it did, in every job, because the tool snapshot did not
+# copy `README.md`. This suite is the SAMBO-leak guard; aborting here meant the leak scan and
+# every portability rule after it never ran in a job at all.
+_rm = read_or_fail(_rt / "README.md", "README.md")
 # THE INTENT, NOT ONE SENTENCE. This pinned the literal phrase "for people running an analysis",
 # so rewording the README broke it while the property it guards - that a reader can tell which
 # half is addressed to them - was still true.
@@ -322,14 +348,16 @@ print("\nwhat the tool REASONS about is not what a user may DECLARE")
 # `--organism` had its `choices` removed because argparse refused the flag before the tool could
 # refuse the analysis - a user of any other species could not even say what they had. `--assay`
 # was left with `choices=[None, "cell", "nucleus"]`: the same defect, one flag over.
-_cli_src = (Path(__file__).resolve().parents[1] / "scprofile" / "cli.py").read_text()
+_cli_src = read_or_fail(Path(__file__).resolve().parents[1] / "scprofile" / "cli.py",
+                        "scprofile/cli.py")
 ck("--assay does not restrict what can be declared",
    'choices=[None, "cell", "nucleus"]' not in _cli_src)
 ck("--organism does not either", 'choices=[None, "mouse", "human"]' not in _cli_src)
 ck("but an unrecognised assay is REPORTED, so the caveats that will not fire are named",
    _cli_src.count("is not an assay this tool reasons about") >= 2,
    "the plan and the run must both say it")
-_val = (Path(__file__).resolve().parents[1] / "scprofile" / "validate.py").read_text()
+_val = read_or_fail(Path(__file__).resolve().parents[1] / "scprofile" / "validate.py",
+                    "scprofile/validate.py")
 ck("and validate does not warn on every unlisted organism, only on a likely typo",
    "get_close_matches" in _val)
 
@@ -1184,7 +1212,8 @@ ck("a raising candidate does not propagate out of the search", _raised is not Tr
 # SIGKILLed at 48 GB computing neighbours: wrong by more than threefold, in the direction that
 # gets a run killed and keeps nothing.
 print("\nthe memory measurement counts the children")
-_ent = (Path(__file__).resolve().parents[1] / "scprofile" / "_entry.py").read_text()
+_ent = read_or_fail(Path(__file__).resolve().parents[1] / "scprofile" / "_entry.py",
+                    "scprofile/_entry.py")
 ck("RUSAGE_CHILDREN is counted, not only RUSAGE_SELF",
    "RUSAGE_CHILDREN" in _ent and "RUSAGE_SELF" in _ent)
 ck("and they are added, not compared",
@@ -1287,8 +1316,8 @@ ck("the pattern matches an accession and not a gene symbol",
 
 print("\nthe exit standard is measured by the harnesses, not by hand")
 _root = Path(__file__).resolve().parents[1]
-_smk = (_root / "tests" / "smoke" / "run_smoke.sh").read_text()
-_dev = (_root / "setup" / "dev_cycle.pbs").read_text()
+_smk = read_or_fail(_root / "tests" / "smoke" / "run_smoke.sh", "tests/smoke/run_smoke.sh")
+_dev = read_or_fail(_root / "setup" / "dev_cycle.pbs", "setup/dev_cycle.pbs")
 ck("the gate measures it", "cli standard --out" in _smk)
 ck("and fails when it is not met", "does not meet the exit standard" in _smk)
 ck("the run measures it too, on what it just wrote", "cli standard --out" in _dev)
