@@ -243,6 +243,39 @@ ck("it says a release is not automatically a reason to bump",
    "not a reason to bump" in _mt)
 ck("it names what a maintainer does NOT own", "do NOT own" in _mt)
 
+print("\nno fact is stated twice with the same name and the same value")
+# EVERY DRIFT THIS TOOL HAS HAD WAS TWO COPIES OF ONE THING: two wave builders, two smoke
+# checkers, a requirement declared twice, a size formula written twice, an allowed-key set that
+# contradicted the check requiring the key, a rank test in a plugin and in the host. Found by
+# hand each time, after it had drifted. This finds them before.
+#
+# The test is NAME AND VALUE TOGETHER. Two modules may legitimately use one name for different
+# facts - `MAX_DEPTH` is a dict recursion limit in one module and a filesystem walk depth in
+# another - and refusing that would be a check that fires on correct code. Two modules holding
+# the same name at the same LITERAL value is the shape that drifts.
+import ast as _a3                                                               # noqa: E402
+import collections as _coll                                                     # noqa: E402
+
+_consts = _coll.defaultdict(list)
+for _f in sorted(root.joinpath("scprofile").glob("*.py")):
+    for _n in _a3.parse(_f.read_text(encoding="utf-8")).body:
+        if not (isinstance(_n, _a3.Assign) and len(_n.targets) == 1
+                and isinstance(_n.targets[0], _a3.Name)):
+            continue
+        _name = _n.targets[0].id
+        if not (_name.isupper() and len(_name) > 3):
+            continue
+        try:
+            _consts[_name].append((_f.name, repr(_a3.literal_eval(_n.value))))
+        except (ValueError, TypeError):
+            pass                       # a computed constant is a reference, not a restatement
+_twice = sorted(k for k, v in _consts.items()
+                if len({f for f, _ in v}) > 1 and len({val for _, val in v}) == 1)
+ck("no constant is written out in two host modules", not _twice, str(_twice))
+# and the scan is proved able to see one, so a walker that silently stops matching cannot
+# report a clean tree.
+ck("and the scan can find a constant at all", len(_consts) >= 15, f"only {len(_consts)} found")
+
 print("\nthe planner assumes no design shape and no cohort")
 from scprofile import planner as _P                                            # noqa: E402
 # CODE, NOT PROSE. The first version searched the whole source and fired on the docstring

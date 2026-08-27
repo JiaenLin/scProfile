@@ -18,11 +18,17 @@ import re
 from . import manifest
 
 #: Labels an annotator uses to say "no call". Not cell types, and never treated as populations.
-#: These are the ones scAnno writes, and they are a DEFAULT, not a definition - `--sentinels`
-#: replaces them outright, and `--sentinels ""` says this annotation has none. A tool that only
-#: knows one annotator's sentinels treats another's as a cell population, which is the same
-#: failure as not knowing about sentinels at all.
-DEFAULT_SENTINELS = ("EXCLUDED", "UNRESOLVED")
+#: They are a DEFAULT, not a definition - `--sentinels` replaces them outright, and
+#: `--sentinels ""` says this annotation has none. A tool that only knows one annotator's
+#: sentinels treats another's as a cell population, which is the same failure as not knowing
+#: about sentinels at all.
+#:
+#: TAKEN FROM THE CONTRACT, NOT RESTATED. It was written out here as well, so the host and the
+#: manifest each carried their own copy of what a sentinel is - and the one thing that must not
+#: happen is for those two to disagree, because a label the host masks and the contract does not
+#: reaches a kernel as a cell population. `manifest` is the right direction for the dependency:
+#: this module already imports it, and a kernel can read `manifest` without pandas.
+DEFAULT_SENTINELS = manifest.DEFAULT_SENTINELS
 
 #: Candidate names for each role, most specific first. A HINT for detection, never a requirement:
 #: whatever is found is reported, and `--label-key` overrides it outright.
