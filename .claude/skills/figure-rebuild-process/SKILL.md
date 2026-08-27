@@ -1,0 +1,172 @@
+---
+name: figure-rebuild-process
+description: How to run a large figure rebuild with many agents - the orchestration, not the drawing. Use when rebuilding or auditing a whole set of figures for a plugin or a paper, when you have more figures than one person can review, or when a figure set has been rejected and you need to find out why. Covers the panels to run (build, referee, professor, verify-by-looking, compare-against-each-other, compare-against-published, fix, sweep), what each one finds that the others cannot, the empirical yield of repeated looking, and the coordinator failures that no per-figure check can catch. For designing an individual figure, use `plugin-figures` instead.
+---
+
+# Running a figure rebuild with many agents
+
+Written 2026-08-27, from one rebuild: 8 figure families, ~60 rendered figures, ~200 agents, and a
+set that went through 23 plates before anyone noticed a whole level of the data was missing.
+
+`plugin-figures` says how to design one figure. This says how to run the operation, and it exists
+because **the expensive failures in that rebuild were not in any figure. They were in the
+coordination.**
+
+## The three coordinator failures, and they cost the most
+
+Every one of these passed every per-figure check, because none of them lives in a figure.
+
+**1. The enumeration was built from what looks impressive.** Sixteen panels covered two of the
+four entity levels the output table addressed. The finest level - four times as many values as the
+level above it, and the level at which a follow-up experiment is designed - had no representation,
+and the most-published figure type of that whole method family was never offered as a choice.
+
+- **P1** Before offering anything, list every entity level and grouping column the output table can
+  address, and name a candidate figure for each. A level with no candidate is not a level nobody
+  wants; it is a level nobody looked at.
+
+**2. The builders produced the right figures and the coordinator selected the wrong ones.** Agents
+built group-level arm comparisons; the coordinator put the pooled and single-unit panels on the
+page and left the comparisons off. Three times, at three different levels: a missing entity level,
+missing comparison panels, and **nine group-level figures already on disk that were never shown.**
+
+- **P2** After every build round, list everything the builders produced and diff it against what
+  you published. Anything built and not shown needs a stated reason. The bias is systematic and it
+  runs one way: toward what illustrates the METHOD and away from what answers the QUESTION.
+
+**3. A structural fact was measured once, on one input, and propagated into four briefs.** "9
+populations, 49 pathways" was one sample of ten; across all ten it was 13 and 68, with per-sample
+ranges of 8-13 and 27-52.
+
+- **P3** A structural fact that will appear in more than one brief is measured over ALL inputs
+  before the first brief is written, and travels as `(value, N, min, max)`. A per-agent check
+  cannot catch a fact that was already wrong when it was handed out.
+
+## The panels, and what each finds that the others cannot
+
+Running one review panel finds one class of defect. These are not redundant.
+
+| panel | one agent per | finds what nothing else finds |
+|---|---|---|
+| **build** | figure family | the figure |
+| **referee** | figure | craft defects: collisions, clipping, illegibility, undecodable channels |
+| **professor** | figure | whether there is any science, and whether it is already known |
+| **verify-by-looking** | batch of claims | that some reported defects are FALSE - claims that had already been reported upward as fact |
+| **compare-against-each-other** | pair or group | cross-figure contradictions; a figure can be internally perfect and contradict its neighbour |
+| **compare-against-published** | figure family | where the real standard sits, which is often LOWER than what you built |
+| **fix** | figure family | whether a defect is real - a fixer that checks first sometimes finds nothing there |
+| **sweep** | pass over everything | what a first look misses, which is a different kind of thing (below) |
+
+**The verify panel earns its place by refuting.** In this rebuild it overturned findings that had
+already been reported to the scientist as fact, including one from the coordinator's own looking.
+A review panel with no refutation step launders its own errors upward.
+
+- **P4** Does every claim that reached a decision get re-tested by an agent that did not produce
+  it, by opening the artefact? A claim that was only ever produced, never tested, is a rumour.
+
+## Compare figures against each other. This is the panel people skip.
+
+A per-figure review cannot find:
+
+- the same colour meaning different entities in different figures (four figures used the same
+  thirteen colours for different cell types);
+- a fix applied to one member of a family and not its siblings (a colour-vision palette fix, and a
+  disclosure about a singular matrix, each applied to exactly one of two sibling figures);
+- one figure stating that the set contains no X while another draws an X;
+- a figure inverting its own convention **between its own panels** - one panel keyed a factor blue
+  and its neighbour keyed it orange, three rows apart.
+
+- **P5** Build a palette table: colour, and what it means in every figure that uses it. Every row
+  where a colour means two things is a defect. Do the same for absence glyphs.
+- **P6** For every family, diff the disclosures between siblings. A caveat present on one and
+  absent on the other is a defect in the one that lacks it.
+
+## One vocabulary for absence, across the whole set
+
+Absence appeared in this rebuild in eight costumes across different figures: hatched columns,
+hollow rims, open circles, dashed lines, grey tiles, white tiles, outlined swatches,
+double-daggers. A reader who learned one figure could not read the next.
+
+One figure worked out the right answer and nothing else used it. **Fill answers "is there a
+value"; rim answers "is the denominator whole".** Four states, named the same way everywhere:
+
+    value present, scored in all units
+    value present, partial denominator - the mean divides by the full n anyway, so it is an UNDER-READ
+    measured absence - scored everywhere, no value for this comparison
+    never tested - below the method's own floor before scoring
+
+The last two matter most: they look identical in most figures, and reading the second as evidence
+of silence is reading a threshold as biology.
+
+- **P7** Is one absence vocabulary used identically in every figure of the set, with the same four
+  words in every legend? Where a geometry cannot carry a rim, map the same four states onto that
+  geometry's own channels and use the same words.
+
+## How much does repeated looking buy?
+
+Measured, rather than asserted. Sweep 1 over a rebuilt set found a defect in most figures. Later
+sweeps, each told what earlier ones had found and asked for what they missed, kept finding things -
+and the late findings were a **different kind** of thing:
+
+- early sweeps find collisions, clipping, illegibility - what is wrong with the marks;
+- late sweeps find captions describing marks the figure does not draw, numbers on a figure that
+  contradict other numbers on the same figure, a title claiming what the panels do not show, tick
+  values unevenly spaced for even intervals, units that change between panels, and what a reader
+  sees who reads only the graphic and none of the text.
+
+- **P8** Run sweeps until a sweep yields nothing new, and record the yield per sweep. A set still
+  producing findings at sweep six needs rebuilding, not fixing. Falling yield is the only evidence
+  that a set is finished; "we reviewed it" is not.
+- **P9** Push each sweep past what is known by handing it the running list of found defects and
+  asking only for what those missed. A sweep that re-finds sweep one's defects has cost you a
+  sweep.
+
+## What a first look misses, in order of how late it is found
+
+This ordering is the most transferable thing here. Look for these FIRST next time.
+
+1. **A caption describing a mark the figure does not draw**, or omitting one it does. Found late
+   every time, because reading the caption and reading the figure are different acts and reviewers
+   do one of them.
+2. **A number on the figure contradicting another number on the same figure.** Requires reading
+   every number and holding them together.
+3. **A stated bound violated by the figure's own source table.** One panel printed a floor its own
+   data crossed; at the printed floor nothing on it reached significance at all.
+4. **The picture asserting what the caption denies.** A panel visibly sparse next to one visibly
+   dense, with the confound quantified in 5 pt grey underneath. A reader takes the image.
+5. **A channel drawn with no key.** Found in most of one set, and still being found at sweep four,
+   because a missing key is an absence and absences are what eyes skip.
+
+## Coordinator discipline
+
+- **P10** Check by looking, never by grep. A page rebuild was verified with `grep` against the
+  generated HTML and every check passed while three titles rendered entity codes as literal text -
+  the grep found the entity present and reported success. **The check and the defect agreed with
+  each other.** A code check confirms what you thought to ask.
+- **P11** Look at the artefact a reader will actually see. A downscaled or recompressed copy is a
+  different image; one encoding pass silently collapsed a thirteen-colour categorical palette into
+  three confusable pairs, lost an experimental arm to grey, and posterised colour bars into bands -
+  **manufacturing contour thresholds that were not in the data**. It passed every numeric check.
+- **P12** One standalone script per figure, each writing its own artefact and its own source table.
+  A family that renders from a shared driver cannot be regenerated, re-checked or fixed one figure
+  at a time, and every fix then risks its siblings.
+- **P13** When an agent dies mid-task, its output is usually on disk. Read the directory before
+  relaunching, and hand the successor what its predecessor already did - including the defect it
+  had just reported and not yet fixed.
+- **P14** An agent that checks a reported defect before fixing it sometimes finds nothing there. In
+  this rebuild one did, three ways, and closed the defect CLASS instead - removing the default that
+  made the omission silent. **Instruct fixers to verify first; a phantom fix costs more than a
+  missed one.**
+
+## What to expect at the end
+
+In this rebuild, of 23 plates: **19 were about the method, not the biology.** Four presented a
+biological contrast; two of those were self-nullifying by design; the remaining two both failed
+under a control that arrived after they were built.
+
+That is not a failure of the rebuild. It is what the set was built to be, and saying so plainly is
+worth more than four confident panels that do not survive their own denominator. Expect a
+methodological result, and expect the honest biological yield to be small.
+
+- **P15** Before publishing, sort every figure into "about the method" and "about the subject", and
+  state the counts. If nobody has done that sort, the set has not been understood.

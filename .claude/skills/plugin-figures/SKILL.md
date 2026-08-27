@@ -1,6 +1,6 @@
 ---
 name: plugin-figures
-description: Design, declare, draw and verify the figures of a scProfile plugin that wraps an external analysis tool - from cataloguing what the tool actually computes to a rendered page that passes `scprofile standard`. Use whenever you are adding, rebuilding or fixing a plugin's panels, writing `PLUGIN["report"]["figures"]`, calling `ctx.emit_figure`, deciding which figures a page should carry, or a page has failed count/captions/arms/identifiers/repeats. MANDATORY - the choice of WHICH figures the page carries is the USER'S, upstream panels and ones you invent alike: enumerate the candidates from the tool's source and ask, never pick for them. NEVER read an encoding off a rendered image, a screenshot, a blog post or the tool's own prose; read the function definition. Also covers the page figure budget, absence-is-not-zero, panels that hide their own finding by self-scaling, the unit of observation, and the seven things every caption carries.
+description: Design, declare, draw and verify the figures of a scProfile plugin that wraps an external analysis tool - from what the tool actually computes to a page that passes `scprofile standard`. Use whenever you are adding, rebuilding or fixing a plugin's panels, writing `PLUGIN["report"]["figures"]`, calling `ctx.emit_figure`, or a page has failed count/captions/arms/identifiers/repeats. MANDATORY - WHICH figures the page carries is the USER'S choice, upstream panels and ones you invent alike: enumerate candidates from the tool's source and ask, never pick for them. NEVER read an encoding off a rendered image, a screenshot or the tool's own prose; read the function definition. Most wrapped tools ship no plots you would use, so the always-required catalogue is the RETURN CONTRACT - scale, range, whether the value is relative, and what the tool returns when it knows nothing. Also covers the figure budget, absence-is-not-zero, self-scaling that hides a finding, the unit of observation, and the seven caption fields.
 ---
 
 # Plugin figures — upstream source to a page that passes
@@ -10,7 +10,9 @@ Written 2026-08-27. Every constant here was read from `scprofile/figure.py`, `st
 attached to a rule is **one instance**; read each as *the shape this failure takes* and expect it
 in a different costume. The instances came from wrapping tools of two shapes and both are covered
 throughout: a tool that ships a large catalogue of its own published plots, and a tool that ships
-a scoring function, a fitted model or a table and no plotting code at all.
+a scoring function, a fitted model, a table, or a value per observation and a label — and no
+plotting code you would use. **The second shape is the common one here**, so read anything phrased
+as an upstream panel as conditional on the tool having one.
 
 The order below is the order the work happens: establish the encoding → choose which figures →
 declare → draw → look → disclose → budget → verify.
@@ -60,18 +62,25 @@ version the plugin pins, not in whatever is installed on your machine. For an R 
 the method first (`getS3method`, `getAnywhere("fn.default")`): the generic's body is one
 `UseMethod` line, so grepping it reports every formal as unread.
 
-**When the tool publishes no figures at all**, rule zero still binds and points elsewhere: the
-encoding you must read from source is the **return contract**. Catalogue what the tool returns —
-every column, its units, its scale (raw, log, rank, rescaled), its theoretical range, its
-degenerate values, and every branch that assigns a value without computing it. You are then the
-author of the encoding, with nothing upstream to inherit blame, and every check in Steps 5–8
+**When the tool publishes few figures or none**, rule zero still binds and points elsewhere: the
+encoding you must read from source is the **return contract**, catalogued in Step 1a. You are then
+the author of the encoding, with nothing upstream to inherit blame, and every check in Steps 5–8
 applies unchanged.
 
-## Step 1 — Catalogue the upstream calls before designing anything
+**That is the normal case, not the awkward one, and this document is not a retrospective about a
+tool with a big plot catalogue.** Across the 51 shipped figures, **not one calls an upstream
+plotting function.** `velocity` used to call one and says in-line why it stopped: the call "proved
+the tool's plotting imports and nothing about the code that actually draws" (`velocity.py:1624`). A
+catalogue of upstream plots tells you what somebody else chose to show; the return contract is what
+your panels are made of either way. So **Step 1a is required of every plugin, and Step 1b only of a
+plugin whose upstream publishes plots.**
 
-**Where the catalogue lives: in the plugin file.** `PLUGIN["upstream"]` — `docs`, `read`,
-`defaults_changed`, `not_used`, `gotchas` — with the per-call table in the module docstring beside
-them. A plugin is **one file**, `kernels/<name>.py`; `docs/MAINTAINING_PLUGINS.md` states it
+## Step 1 — Catalogue what the tool RETURNS, and what it plots, before designing anything
+
+**Where both catalogues live: in the plugin file.** `PLUGIN["upstream"]` — `docs`, `read`,
+`defaults_changed`, `not_used`, `gotchas` — with the return-contract table and the per-call table
+in the module docstring beside them. A plugin is **one file**, `kernels/<name>.py`;
+`docs/MAINTAINING_PLUGINS.md` states it
 ("What you own. One file… there is no second file to keep in step") and `kernels/decoupler.py`
 says why the record moved in: *"In the directory shape this was a separate `UPSTREAM.md` that had
 to be kept in step with the wrapper; here it is in the file it describes, which is the only place
@@ -80,24 +89,56 @@ no `upstream.docs` (`declare.py:466`), so this is the field the host is looking 
 scaffold`'s `UPSTREAM.md` template is written into `Path(kernel.path)` and therefore only lands
 for the directory-kernel shape, which no shipped plugin uses.
 
-**1a — enumerate and count.** Cheap, and it is what Step 2's list is built from: every plot call
-across every document the tool publishes, with a count and the document list. Grep the docs,
-notebooks, vignettes and tests for the tool's plotting namespace and count. The denominator is a
-**count**, not a verification.
+**1a — the return contract. Required of every plugin, whether or not the tool draws anything.**
+You are reimplementing in matplotlib from what the tool hands back, so what it hands back is the
+material every panel is made of. One row per field the plugin reads — a column, an `obs`/`var`
+key, an `obsm` array, an attribute of a fitted estimator, all of them.
+
+| column | why |
+|---|---|
+| field | the name as it appears in the returned object, and where it lives |
+| what one element is | the entity one element describes — an observation, a pair, a feature, a group, a unit. This is Step 8 field (3), and it is decided here rather than at caption time |
+| units and scale | raw, count, log, rank, probability, rescaled. **Never leave the scale implicit** |
+| theoretical range | what the quantity CAN take, not what this run took. An axis, a colour scale and the null panel of Step 8 are all drawn against the first |
+| relative or absolute | is the value computable from one entity, or does it depend on the set present — a min-max rescale, a rank, a share, a normalisation over whatever is in the object? **A relative value cannot be put on a shared axis across arms, subsets or runs**, and this column is what says so before a panel does it anyway |
+| depends on which choice | the parameter that fixes the value — an origin, a root, a reference level, a baseline, a k, a threshold. A quantity that moves when a parameter moves is a property of the run and the parameter goes on the panel |
+| degenerate values | the sentinel for *not computed*, *not assigned*, *not converged*, and whether it is distinguishable from a measured value. Feeds Step 6 |
+| assigned without computing | every branch returning a value the tool did not measure — an empty-input guard, an exception handler, a constant fallback. Feeds C16 |
+
+**CHECK (A0):** is there a row for every field the plugin reads, each with its scale, its
+theoretical range, an answer to *relative or absolute*, and its sentinel named? Is the count of
+fields read but not catalogued zero? A blank scale column is not a catalogued field, and "the
+numbers the tool returns" is the name of the category rather than the catalogue.
+
+*One instance, from this repository, and the tool draws nothing you could have looked at.*
+`pseudotime` records that the wrapped tool's own commitment score "is MIN-MAX NORMALISED to [0, 1]
+over the cells present, so a dataset in which every cell is evenly split still returns a score
+spanning the full range" — a *relative* value, which on a shared axis across arms would have drawn
+a difference between them out of a constant. It is not used; a raw entropy against its `log2(k)`
+ceiling is drawn instead, absolute and judgeable without knowing the rest of the dataset. Nothing
+in the returned array shows the difference. It came out of reading the function.
+
+**1b — enumerate and count the upstream plot calls**, when the tool has any. Cheap, and it is
+**half** of what Step 2's list is built from — the other half is the coverage enumeration over your
+own output table, which Step 2 says comes first. Every plot call across every document the tool
+publishes, with a count and the document list. Grep the docs, notebooks, vignettes and tests for
+the tool's plotting namespace and count. The denominator is a **count**, not a verification.
 
 **CHECK (A1):** does the catalogue state **N calls across M documents**? *One instance:*
 121 plot calls across 11 documents. Without the denominator you design around the two or three
 usages you read first and meet the fourth pattern after the API is fixed. The other end of the
-range is M = 0 — a tool with no plot call anywhere — and the catalogue says so rather than not
-existing.
+range is M = 0 — a tool with no plot call anywhere — and the catalogue says so in one line rather
+than not existing. **M = 0 does not shorten Step 1**; it moves the whole weight onto 1a, and 1c
+below then resolves the functions that COMPUTE the fields, by the same six columns.
 
-**1b — resolve and verify**, over the calls the user chose in Step 2 and no others. Verifying 121
-calls to build four panels is the wrong spend; not knowing the denominator when you present the
-list is how you present four of twelve as though they were all of them.
+**1c — resolve and verify**, over the calls behind the figures the user chose in Step 2, and — when
+there were no upstream plot calls to choose from — over the functions that COMPUTE the 1a fields.
+No others. Verifying 121 calls to build four panels is the wrong spend; not knowing the denominator
+when you present the list is how you present four of twelve as though they were all of them.
 
 | column | why |
 |---|---|
-| call | the name as the example writes it |
+| call | the plot call as the example writes it, or the computing call as your plugin writes it |
 | defined at | file and line, **as of the pinned version**. A name you cannot resolve is not catalogued |
 | args passed | every argument the example, or your plugin, passes |
 | args read | is each formal's value **reachable at the point of use** — not shadowed, not overwritten by a sibling, not swallowed by `...`? Trace it to the call it reaches |
@@ -140,17 +181,22 @@ select for them, and do not select implicitly by building the ones that are easy
 
 **Two cases, one exchange.**
 
-- *The tool publishes more panels than a page can hold.* Enumerate them from the 1a count.
-- *The tool publishes few or none* — a scoring function, a fitted model, a differential-expression
-  routine. Then the candidates are the quantities it returns and the checks its assumptions
-  require, one row each, and the enumeration is **yours** — which makes asking more important
-  rather than less, because nothing upstream constrains what you would have drawn.
+- *The tool publishes more panels than a page can hold.* Enumerate them from the 1b count.
+- *The tool publishes few or none* — a scoring function, a fitted model, an estimator returning a
+  value per observation and a label. Then the candidates are **the 1a fields, one row each**, the
+  levels of Step 2b, and the checks the method's assumptions require; the enumeration is **yours**,
+  which makes asking more important rather than less, because nothing upstream constrains what you
+  would have drawn. This is the case for most plugins here, not the exception.
+
+*The columns below are the rule. The rows are one tool's, and row 4 is what the second case looks
+like — yours will name different things.*
 
 ```
 #   candidate                  documented in      encodes                          our data supports
 1   <tool>::plot_network       vignette 1, 3, 7   per-pair strength, arc = count    yes
 2   <tool>::role_scores        vignette 2         centrality, 2 channels            NO - singular in 60/68, see A6
 3   (ours) assumption check    none - we draw it  drawn vs. modelled dispersion     yes
+4   (ours) per-unit spread     none - ours        the 1a field per entity, by unit  yes
 ```
 
 Then ask, in one message: **which of these should the plugin carry, and which is the result as
@@ -176,7 +222,8 @@ it, and the level at which an experimental follow-up is actually designed — ha
 and the most-published panel type of that whole method family was never offered as a choice. The
 enumeration had been built by visual distinctiveness and nothing checked it against the table.
 
-- **C2b** For every column of your primary output table that names an entity or a grouping, can you
+- **C2b** For every column of your primary output table that names an entity or a grouping — the
+  levels are 1a's *what one element is*, plus every grouping the design table names — can you
   point to a candidate figure that puts it on an axis, a facet, or a colour channel? If any column
   has none, the enumeration is unfinished — extend it before asking, and if you still would not
   draw that level, put it in the list with the reason so the choice is theirs.
@@ -221,8 +268,11 @@ showed one sample and no comparison. Nothing in the process had asked.
   title, an axis label? Cover the caption and look. A figure whose unit a reader cannot determine
   is the modal published failure of this kind: in one survey of 39 papers using a widely-used
   method, **23% never stated their unit at all**, the same size as every other category but one.
-- **C2g** Does any single unit dominate an arm? Compute each unit's share of its arm's total and
-  print the largest. *One instance:* one animal of five carried **48% of its arm's entire signal**
+- **C2g** Does any single unit dominate an arm? Compute each unit's share of its arm — of the
+  quantity the panel sums, or, where the panel sums nothing, of the observations it draws and of
+  the entities it finds — and print the largest. A per-observation value with no arm total still
+  has this failure: the arm's distribution is whichever unit contributed most of the marks.
+  *One instance:* one animal of five carried **48% of its arm's entire signal**
   and had 595 significant edges against 84-145 for the other four - it was the deepest library in
   the cohort, so "the arm" was substantially "that animal". A comparison in which one unit is half
   of one side is not a comparison between groups, and no summary panel shows it.
@@ -361,6 +411,27 @@ value that means *no difference*; rainbow and jet invent edges.
 **CHECK:** above twelve categories, is every mark direct-labelled or the panel split? Rendered
 through a deuteranopia simulation and through greyscale, is every distinction the caption claims
 still readable? A distinction surviving only in colour needs position, shape, hatch or a label.
+
+**A diverging scale must be centred AND symmetric. Centring alone is not enough.** The usual
+constructor — `TwoSlopeNorm(vmin=data_min, vcenter=neutral, vmax=data_max)` — pins the neutral
+value to the middle of the *bar* and then gives each half whatever slope its own side of the data
+demands. Whenever the data is skewed, the two halves carry different units-per-millimetre, so two
+marks equidistant from the neutral colour mean different magnitudes and the picture invites exactly
+the comparison it cannot support. Set the limit from `max(|min|, |max|)` in both directions
+instead. The cost is that the weaker side's ramp is not fully used, and that is the honest
+rendering of a one-sided contrast, not a defect to tune away — say in the caption what fraction of
+it the data reaches. This applies to every signed quantity a plugin draws: a log fold change, a
+Δ-abundance, a z-score, an enrichment, a residual, a velocity component.
+**ONE INSTANCE.** A signed contrast drawn with `TwoSlopeNorm(vmin=lo, vcenter=0, vmax=hi)` ran two
+factors from the same data through the same code. One was −19.90 to +19.81 and distorted by
+1.005×; the other was −22.50 to +14.63 and distorted by **1.538×**. The bug was invisible on the
+first panel and wrong by half on the second, and both panels rendered without warning and looked
+equally plausible. The ticks compounded it: derived as `[lo, lo/2, 0, hi/2, hi]`, they sat
+asymmetrically on the bar and left both ends unlabelled, so the key confirmed the distortion
+rather than exposing it.
+**CHECK:** for every diverging scale, does `abs(vmin) == abs(vmax)`? Are the tick values symmetric
+about the neutral value, and is the neutral value itself one of them? Would a reader measuring two
+marks equidistant from neutral, one each side, be right that they are equal in magnitude?
 
 **Determinism.** A layout, a chord order, a jitter or a tie-break that varies between runs makes
 the same data draw a different picture, and a reader diffing this report against the last one sees
@@ -501,13 +572,28 @@ Its sixth costume is **occlusion**: at 100k marks the last-drawn arm covers the 
 order, which encodes nothing, decides what a reader sees. *Drawn but invisible* is
 indistinguishable from *absent*.
 
+**How to find your own costume**, because the five above are the ones one session happened to draw
+and yours will not look like them. Take 1a's *degenerate values* column and ask, for each sentinel,
+which legitimately measured value it collides with: zero, the origin, the first category, the
+minimum of a scale, the start of an ordering, an even split across k outcomes. **A tool whose
+output is constrained — probabilities summing to one, shares summing to 100%, a rescale to [0, 1] —
+has no value left with which to say *unknown*, so it says something else and the something else is
+always a state a reader can believe.**
+*One instance, from this repository:* `pseudotime` records that "fate probabilities sum to one by
+construction, so a cell with no clear fate is reported as evenly split rather than as unknown". An
+even split is a real, meaningful, drawable state; it is also what the tool returns when it knows
+nothing, and the two are the same number.
+
 The fix is one shape every time: **draw absence distinctly** (hollow, hatched, a labelled gutter,
 "not drawn"), **name what is absent in words on the figure**, and never let absence share an
-encoding with a measured zero.
+encoding with a measured value — a zero where zero is the collision, and whatever else your 1a
+sentinels collide with where it is not.
 
 - **C13** Fixture: category X absent from an arm, category Y present at exactly 0. Render. Do the
   marks differ in at least one of {RGBA, hatch, position, glyph}? Does the text layer name X? If
-  the marks are pixel-identical anywhere, fail.
+  the marks are pixel-identical anywhere, fail. **Run the same fixture once per sentinel in 1a** —
+  an entity carrying the *not assigned* value against one measured at the value that sentinel
+  collides with — and answer the same question.
 - **C14** For the top-k of any ranked difference, print n per arm. Is the count of top-k items
   with zero observations in an arm, outside a separately-labelled on/off gutter, 0?
 - **C15** For each row- or column-scaled tile, is support printed? Take the two most
@@ -611,7 +697,10 @@ count — **`"0 of 68 dropped"`, never blank.**
 4. **the scale statement**, wherever a panel is normalised
 5. **the direction of a difference**, named in at least two different encodings
 6. **known technical confounds**, with magnitude and the reason they bias the statistic
-7. **departures from the upstream encoding**, each with its reason and the version departed from
+7. **departures from the upstream encoding**, each with its reason and the version departed from.
+   When there is no upstream encoding, the field is not blank and not inapplicable: it reads
+   `no upstream encoding; every channel is ours`, which is the stronger claim, because it says the
+   choices under C23 were made here and are answerable here
 
 **Budget them, because the caption cap is 45 visible words and the host spends about 8 of them.**
 `_panel` prints `Figure N.`, an optional unit code and `vector (PDF) · source data` around your
@@ -630,7 +719,11 @@ number on the panel, never a blank.
 
 **CHECK (F27/D21):** every applicable field present and non-empty on every panel, and every
 inapplicable one carrying an explicit count or `not checked`? Diff your mark spec against the Step
-1 catalogue — is the count of differences not listed under (7) zero? *One instance of (1) and (6):*
+1 catalogue — is the count of differences not listed under (7) zero? **With no upstream plot call
+to diff against, the diff is against 1a**: is every channel drawn from a field the catalogue names,
+and does each obey that field's *units and scale* and *relative or absolute* rows — nothing
+relative on an axis shared across arms, nothing ranked drawn as a length, nothing whose value
+depends on a parameter drawn without that parameter on the panel? *One instance of (1) and (6):*
 `"31 of 79 ordered pairs = 71% of total strength"`, and a 6.6× library-depth span stated with the
 reason it inflates the statistic. *Of (7):* area- rather than diameter-proportional dots, because
 the upstream linear size makes area go as the square of the count and contradicts its own legend.
@@ -762,7 +855,10 @@ twin for `report.unit_metrics` against `ctx.metric(name, value)`.
 
 ## Archetypes worth copying, from the 51 shipped figures
 
-Every plugin opens with **3–5** diagnostics before its first result.
+Every plugin opens with **3–5** diagnostics before its first result. Read the entity names as
+placeholders: "population" below is whatever your 1a *what one element is* column groups by, and
+every one of these archetypes was drawn in matplotlib from a returned table rather than reproduced
+from an upstream plot.
 
 | archetype | plugins | the thing that makes it work |
 |---|---|---|
@@ -794,7 +890,10 @@ picture of one is the samples themselves."*
 | declared-but-not-drawn, drawn-but-not-declared | `feedback.figure_drift`, after every run |
 | the ten page criteria, on the HTML actually written | `standard.check_page` / `check_report`, via `scprofile standard --out` |
 
-Everything else here is you. Not mechanised anywhere: the rendered pixels (Step 5, all eight rows,
+Everything else here is you. Not mechanised anywhere: **the return contract catalogue (A0)** —
+`declare.check` asserts only that `upstream.docs` is a non-empty string (`declare.py:466`), and
+nothing in the host ever looks at what the wrapped tool returns, so a plugin that catalogued no
+field at all validates clean; the rendered pixels (Step 5, all eight rows,
 and `check_page` never opens one); colour, contrast and colour-vision safety; determinism; absence
 as an *encoding* — a host-side gate that refuses the removal of observations does not reach an
 encoding, or a zero in arithmetic; self-scaling (Step 7); the unit of observation; the seven

@@ -872,7 +872,7 @@ def _fig_field(ctx, basis, label_key, colours):
             ctx.log(f"    {kind} not drawn: {e}")
 
 
-def _fig_confidence(ctx, basis, mask, groups, colours):
+def _fig_confidence(ctx, basis, mask, groups, colours, min_confidence):
     """Where the field is trustworthy, on the map and as a distribution per population."""
     import numpy as np
     import pandas as pd
@@ -906,13 +906,22 @@ def _fig_confidence(ctx, basis, mask, groups, colours):
                             gridspec_kw={"width_ratios": [1.0, 1.15]} if has_groups else None)
     ax = axs[0][0]
     o = _draw_order(len(xy))
-    pts = ax.scatter(xy[o, 0], xy[o, 1], c=conf[o], s=_point_size(len(xy)), cmap="RdYlBu_r",
+    # SEQUENTIAL, FOR THE SAME REASON THE FATE PANEL IS. `RdYlBu_r` is a DIVERGING map, so it
+    # puts a pale pivot at the middle of its range - here a hard-wired 0.5 - and a reader takes
+    # that pivot for the threshold. But the threshold is `min_confidence`, a RUN PARAMETER that
+    # can be anything, so on any run that does not leave it at 0.5 the pale band and the actual
+    # gate sit in different places and nothing on the panel says so. A confidence on [0, 1] has
+    # no intrinsic midpoint to diverge about; the gate is drawn explicitly instead, on the bar
+    # and on the boxes, at wherever the run actually put it.
+    gate = float(min_confidence)
+    pts = ax.scatter(xy[o, 0], xy[o, 1], c=conf[o], s=_point_size(len(xy)), cmap="viridis",
                      vmin=0, vmax=1, linewidths=0, rasterized=True)
     _clean(ax, F, basis)
     ax.set_title("per cell, on the layout", loc="left")
     cb = fig.colorbar(pts, ax=ax, fraction=0.045, pad=0.02, shrink=0.82,
-                      ticks=[0, 0.25, 0.5, 0.75, 1])
+                      ticks=sorted({0, 0.25, 0.5, 0.75, 1, round(gate, 3)}))
     cb.set_label("velocity confidence")
+    cb.ax.axhline(gate, color=F.INK, ls="--", lw=0.8)
     cb.outline.set_visible(False)
 
     if has_groups:
@@ -932,9 +941,16 @@ def _fig_confidence(ctx, basis, mask, groups, colours):
         ax2.set_yticklabels(_short(F, order))
         ax2.set_xlabel("velocity confidence")
         _fraction_axis(ax2)
-        # THE LINE NEEDS NO LABEL HERE: 0.5 is one of the axis's own ticks, and the note that used
-        # to name it was drawn above the axes, straight through the panel title.
-        ax2.axvline(0.5, color=F.INK, ls="--", lw=0.6, zorder=3)
+        # NAMED, AND INSIDE THE AXES - the same treatment the per-population panel gives it. This
+        # line used to be hard-wired to 0.5 and unlabelled on the reasoning that 0.5 is one of the
+        # axis's own ticks. That is true of the tick and false of the threshold: set
+        # `min_confidence` to anything else and this report drew two dashed gates, at different
+        # values, on two axes both labelled "velocity confidence", while the run's own partial
+        # verdict used the third value.
+        ax2.axvline(gate, color=F.INK, ls="--", lw=0.6, zorder=3)
+        ax2.text(gate, 0.99, f"min_confidence {gate:g}", transform=ax2.get_xaxis_transform(),
+                 ha="center", va="top", fontsize=5, color=F.INK,
+                 bbox=dict(fc="white", ec="none", pad=0.8))
         ax2.invert_yaxis()
         ax2.spines["left"].set_visible(False)
         ax2.tick_params(axis="y", length=0)
@@ -947,7 +963,10 @@ def _fig_confidence(ctx, basis, mask, groups, colours):
                  "those of its neighbours. Low values mean the arrows in that region disagree "
                  "with each other, so the field there is unresolved rather than pointing "
                  "somewhere. Read the headline panel only where this one is high; the dashed "
-                 "line marks 0.5. Both panels run 0 to 1. Cells are drawn in a fixed random "
+                 f"line on the colour bar and on the boxes is the run's own min_confidence "
+                 f"({float(min_confidence):g}), the threshold its partial verdict uses. Colour "
+                 "is sequential, so no band on it means \u201cthreshold\u201d except that "
+                 "line. Both panels run 0 to 1. Cells are drawn in a fixed random "
                  "order, so no value is systematically painted over another, and n is the cells "
                  "in each box - a box over tens of cells and one over tens of thousands are the "
                  "same width."),
@@ -1454,7 +1473,7 @@ def run(ctx):
     _fig_proportions(ctx, mask, groups)
     _fig_field(ctx, basis, label_key if (label_key and label_key in A.obs) else None,
                colours)
-    _fig_confidence(ctx, basis, mask, groups, colours)
+    _fig_confidence(ctx, basis, mask, groups, colours, C["min_confidence"])
     _fig_phase(ctx, top_genes,
                label_key if (label_key and label_key in A.obs) else None, colours)
     _fig_transitions(ctx, trows, colours)
