@@ -29,6 +29,14 @@ from __future__ import annotations
 from pathlib import Path
 
 #: Journal column widths in inches. Most journals want one or the other, exactly.
+#: Below this share of the page, the panel is mostly margin and shrinking further
+#: buys the declared width with the data area. An over-wide figure scales down
+#: proportionately; a collapsed one does not.
+#: Never shrink a figure below this fraction of the size it declared, however far it
+#: still is from the column. A panel that is mostly tick label cannot reach the target
+#: by shrinking, and trying collapses it.
+MIN_PAGE_SHARE = 0.7
+
 SINGLE = 85 / 25.4
 DOUBLE = 174 / 25.4
 
@@ -237,14 +245,32 @@ def fit_column(fig, target=None):
     plugin needs its own copy. The scale is uniform, so proportions and aspect are preserved.
     """
     import matplotlib.pyplot as plt                                       # noqa: F401
-    want = float(target or (DOUBLE if fig.get_size_inches()[0] > (SINGLE + DOUBLE) / 2
-                            else SINGLE))
+    # CLASSIFY BY WHAT THE PANEL DECLARED, NOT BY WHAT THE LABELS GREW IT TO. This read the
+    # CURRENT canvas and split at the midpoint, so a panel that sized itself from its data -
+    # `side + label band` - could land either side of the cliff: measured, a 46-character
+    # population name gave 85.0 mm and a 47-character one gave 129.7 mm. One character in one
+    # name flipped the saved width by 53%, which is worse than being uniformly over-wide,
+    # because an over-wide figure at least scales down proportionately every time.
+    #
+    # `get_size_inches()` at this point is the figsize the panel asked for; snapping it to the
+    # NEARER of the two columns is stable under any label.
+    w0 = float(fig.get_size_inches()[0])
+    want = float(target) if target else (
+        SINGLE if abs(w0 - SINGLE) <= abs(w0 - DOUBLE) else DOUBLE)
     # ITERATED, because TEXT DOES NOT SCALE WITH THE FIGURE. Shrinking the canvas shrinks the
     # axes and leaves the key, the tick labels and the colourbar at their point size, so one
     # pass over-corrects the axes and still overshoots the target - measured, 98.2 mm went to
     # 89.7 against a target of 85. Three passes converge; the loop exits as soon as it is
     # inside half a millimetre, and never grows a figure that is already narrow enough.
-    for _ in range(6):
+    # A TOTAL FLOOR, NOT A PER-STEP ONE. The clamp used to sit inside the loop as
+    # `k = max(0.55, want/got)`, which bounds one iteration and not the product: six passes at
+    # 0.55 is 0.028, and a panel whose margin is a long tick label collapsed from 85 mm to
+    # 13.7 mm while its axes stayed a constant share of the shrinking page, so the share test
+    # never fired. Measured, and it is the same defect as the thing being fixed - buying the
+    # declared width with the data - only faster.
+    w0, h0 = fig.get_size_inches()
+    prev = None
+    for _ in range(10):
         fig.canvas.draw()
         try:
             got = fig.get_tightbbox(fig.canvas.get_renderer()).width
@@ -252,8 +278,21 @@ def fit_column(fig, target=None):
             return fig.get_size_inches()[0] * 25.4
         if got <= want + 0.5 / 25.4:
             break
+        # NOT CONVERGING. Text does not scale, so a figure that is mostly label reaches a floor
+        # where shrinking the canvas no longer shrinks the saved image. Stop there rather than
+        # iterate into a collapse.
+        # BAIL ONLY WHEN IT STOPS IMPROVING AT ALL. A 2% floor was too strict: a figure whose
+        # margin is a fixed-size key converges slowly but genuinely, and the strict test made
+        # this give up on the ordinary legend case it was written for.
+        if prev is not None and got >= prev - 1e-4:
+            fig.set_size_inches(w0, h0)
+            break
+        prev = got
         w, h = fig.get_size_inches()
-        k = max(0.55, want / got)          # never collapse a panel to reach the target
+        k = want / got
+        if w * k < MIN_PAGE_SHARE * w0:
+            fig.set_size_inches(w0, h0)    # too wide beats unreadable, and beats collapsed
+            break
         fig.set_size_inches(w * k, h * k)
     return got * 25.4
 
