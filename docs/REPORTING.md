@@ -50,7 +50,8 @@ plugins already produce, and arrives for a plugin written next year that does no
 | cross-plugin concordance | per-cell columns of DIFFERENT plugins | a diagnostic is useless on the page of the plugin that computed it - one plugin exists to check that a trajectory is not a cell-cycle axis, and the trajectory is on another page |
 | which factors are aliased | the design | two factors that split the samples identically are one panel, not two |
 | what the constraint binds | the constraint + what each page shows | only the host holds both |
-| folding repeated caveats | the caveats | ten units emit the same sentence with their own numbers in it |
+| folding repeated caveats | the caveats | a per-unit plugin emits the same sentence once per unit, with its own numbers in it |
+| folding repeated refutations | the contradictions | the same problem, and it CANNOT be folded at render time because the exit standard matches the claim verbatim - so the FOLD dedupes on the sentence with its numbers blinded and keeps the first one intact |
 | the per-sample appendix | the figures' units | a page carrying one plot per unit hides its own result |
 | the verdict on the page | the rendered directory | only the host knows what a whole report looks like, and the page that fails is the one nobody opens |
 | what a design can estimate | the design table | `ctx.estimable` - a term the data cannot carry raises from inside a fitting library after the fit is paid for, and every plugin fitting a model needs the same answer |
