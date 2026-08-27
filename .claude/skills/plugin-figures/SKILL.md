@@ -185,6 +185,66 @@ enumeration had been built by visual distinctiveness and nothing checked it agai
   the reply as full coverage converts your omission into their decision, which is worse than the
   omission — a gap is visible, a laundered gap looks settled.
 
+## Step 2b — THE GROUP-LEVEL COMPARISON IS THE MAIN FIGURE. THE UNIT-LEVEL VIEW IS SUPPLEMENTARY.
+
+> **A figure that shows one state of the world compares nothing, however well it is drawn.**
+
+Three levels the word "unit" can mean, and they are not interchangeable:
+
+| | what it is | what it can carry |
+|---|---|---|
+| **one unit** | a single sample, animal, donor, run | that unit, and nothing else |
+| **pooled cohort** | every unit analysed together as one | a description of the cohort, and **no contrast** |
+| **group / arm** | levels of a design factor compared, with the **unit** as the unit of replication | a contrast |
+
+The pooled cohort is the one that gets miscounted. It looks like the whole dataset and it is
+often beautiful, so it is easy to file as the main result — but pooling is what *removes* the
+contrast, and a pooled panel answers no question about the design.
+
+**So: for every figure family, the group-level version is what goes on the page. The pooled or
+per-unit version goes to the supplementary set, and only if it answers something the group-level
+version cannot.** Aggregate per unit FIRST, then compare across units; never pool observations
+across units and compare the pools.
+
+*One instance, and it is the coordinator's error rather than a builder's.* A builder produced four
+panels of one figure family: a faithful single-sample reproduction of the published encoding, a
+coverage panel, **and two group-level arm comparisons**. The coordinator put the reproduction and
+the coverage panel on the review page and left both comparisons off — selecting what illustrated
+the METHOD over what answered the QUESTION. The scientist's first response was that the figure
+showed one sample and no comparison. Nothing in the process had asked.
+
+- **C2d** For every figure family on the page, is there a version whose panels are levels of a
+  design factor, with the unit as the unit of replication? If the only version is pooled or
+  single-unit, it is not finished — build the group-level one or state why the family cannot have
+  one (see the exempt cases below).
+- **C2e** Can a reader determine the unit from the figure ALONE — a stated n per arm, a panel
+  title, an axis label? Cover the caption and look. A figure whose unit a reader cannot determine
+  is the modal published failure of this kind: in one survey of 39 papers using a widely-used
+  method, **23% never stated their unit at all**, the same size as every other category but one.
+- **C2f** For every supplementary figure, name the question it answers that the main figure does
+  not. If you cannot, delete it — a supplementary figure nobody needs is a figure a reader still
+  has to read.
+
+**Families that legitimately have no group-level version**, and the test is that their subject is
+not the biology:
+
+- a **rank- or parameter-selection curve** — its subject is a choice you made;
+- a **demonstration of a defect** in the upstream encoding — its subject is the method, and it is
+  most honest drawn on whatever data shows the defect most plainly;
+- a **manifold or clustering of the pooled result** where the entities being embedded are features
+  rather than units — an arm-split version would embed two manifolds that cannot be compared
+  coordinate-wise;
+- a **coverage panel** whose whole job is to show what a window leaves out.
+
+Mark these deliberately rather than by omission. A family exempted because nobody wanted to
+rebuild it is not exempt, it is unfinished.
+
+**A group-level version you must NOT build:** one whose arms differ in whether an entity is
+present at all. If a population, feature or category is absent from one arm because it fell below
+a per-unit floor, an arm comparison of it compares PRESENCE and will read as the strongest effect
+on the panel. Restrict to entities detected in every unit of both arms, name what the restriction
+removed, and say what the restricted set leaves. See Step 6, D21.
+
 ## Step 3 — Declare, and the budget arithmetic
 
 `PLUGIN["report"]["figures"]`, a list of mappings, checked by `declare._check_report`. ERROR stops
