@@ -377,6 +377,31 @@ mechanised so they cannot come back — a floor, not a ceiling, and the ninth fa
 the way these eight were. **None of them is mechanised in scProfile**; there is no chokepoint
 asserting them, and `standard.check_page` never opens a PNG.
 
+**THE MEASUREMENTS DO NOT REPLACE LOOKING, AND EVERY REDRAW IS RE-SCANNED BY EYE.** The eight
+rows below are failures already found, mechanised so they cannot return. They are a floor. No set
+of assertions covers what a person sees in one glance — that a panel is three-fifths empty, that
+two categories are the same colour to a reader, that a caption and its marks disagree, that the
+thing is simply ugly. So: **after every change that alters a rendered figure, open the image and
+look at it again.** Not the code that made it, not a grep of the output, not the assertions
+re-run — the image. If the figures are being rebuilt by an agent, the re-scan is done by an agent
+*looking at the PNG*, and its report names what it saw and where.
+
+*One instance, and it is the reviewer's rather than the builder's.* A page of figures was rebuilt
+and verified with `grep` against the generated HTML: every check passed. Three panel titles were
+rendering `&mdash;` and `&times;` as literal text, because titles pass through `html.escape` and an
+entity written there survives as characters. `grep` for the entity found it present and reported
+success — the check and the defect agreed with each other. It was found only when somebody looked
+at the page. **A code check confirms what you thought to ask; looking is how you find what you did
+not.**
+
+- **C21** For every figure changed since the last review, is there a record of somebody opening the
+  rendered image afterwards and reporting what they saw? Re-running the assertions is not that
+  record. If the answer is no for any changed panel, the review is not finished.
+- **C22** Was the artefact a reader will actually see the one that was looked at? A downscaled,
+  recompressed or palette-quantised web copy is a different image from the print original, and a
+  quantisation that breaks a diverging scale or blurs 5 pt type is invisible in the original and
+  invisible to every assertion. Look at both.
+
 **Iterate on a fixture, not on the cohort.** Layout, labels, glyphs, paths, aspect and size are
 properties of the *drawing*: build a reduced input with the same shape and the same degeneracies —
 `ctx.fixture` plus the specific absences, ties and extremes of the real data, or
