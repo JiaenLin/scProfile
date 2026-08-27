@@ -657,6 +657,26 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   without that word? Render a deuteranopia and a protanopia simulation, OPEN IT AND LOOK: is the
   colour the sentence names still recognisable as that colour?
 
+- **C23h (a bottom-anchored block that grows upward needs a measuring guard, not vigilance)** Any
+  text block pinned to the bottom of a figure and laid out upward - a footnote, a caveat, a legend
+  column - moves toward the panels every time a sentence is added to it. The text still renders and
+  the file still saves, so nothing objects; the only symptom is type struck through other type, and
+  the only check that finds it is looking at the rendered image. That makes it a defect you will
+  reintroduce, because the whole point of these blocks is that they get edited. Measure instead:
+  compute the lowest INK of every axes - `get_tightbbox`, not `get_position`, because the axes box
+  sits above its own tick labels and axis title - and refuse to draw a block that would cross it.
+  Report the overlap in millimetres so the message says how much to cut.
+  **ONE INSTANCE, twice in one session by the same author.** Adding a derivation to a footnote
+  pushed it through a colourbar's axis label; the text was shortened, and a later edit pushed the
+  same block through a panel's tick labels and x-axis title, 1.62 mm of overlap. Both were caught
+  only by opening the PNG afterwards. A guard was then written, and it fired on the long text and
+  passed on the original - which is the property that matters, because a guard that fires on
+  correct behaviour gets switched off. The lasting fix was not shorter prose: it was moving the
+  derived sentence into the caption file, where a reader can also copy it.
+  **CHECK:** does the layout compute the lowest ink of the panels and refuse to overlap it, or does
+  it rely on whoever edits the prose next remembering to look? Add a sentence and re-render: does
+  anything object?
+
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?
