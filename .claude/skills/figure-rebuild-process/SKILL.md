@@ -308,6 +308,42 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   distinct real-world states its members can be in. Does the label hold for ALL of them? If the
   distinguishing information lives in the caller, is it being passed?
 
+- **P25 (freshness by mtime does not tell you a figure can still be BUILT)** Comparing a rendered
+  file's mtime against its source answers "is this older than the code?" and nothing else. A figure
+  can be newer than every module that draws it and still be unreproducible, because the producer
+  raises the moment you run it - a helper it calls was renamed, a shared module was rewritten under
+  it, an entry point was refactored and its standalone caller left behind. That figure is not a
+  figure of the code you have; it is an artefact of a version that no longer exists, and nobody
+  finds out until someone tries to change it. Before trusting any freshness audit, RUN each
+  producer. Two more traps found the same way: a figure's producer is its entry point AND every
+  module that entry point imports, so matching by filename alone misses the module that actually
+  draws it; and the entry point may not be the live one.
+  **ONE INSTANCE.** A per-producer freshness check reported one figure FRESH. Its named script
+  raised `AttributeError` on the first call - it used an API removed in a refactor. Its actual
+  drawing module was nine hours NEWER than the figure, which the check never compared against
+  because it matched on filename. The live entry point then raised too, on a different missing
+  function. Enumerating what that module needed from its shared dependency: 13 attributes, of which
+  three existed in NEITHER of the two candidate modules. The family could not be regenerated at
+  all, and the figure on disk had been read and reviewed several times as though it could.
+  **CHECK:** for each delivered figure, did you EXECUTE its producer this session and see it write
+  the file? If not, "fresh" means only that a timestamp is in the right order.
+
+- **P26 (one shared module, or none - three API generations is the worst outcome)** A shared module
+  succeeds only if every caller tracks it. Rewrite it while some callers keep the old surface and
+  you get several generations live at once: callers importing different modules for the same
+  concept, the same state under different constant names, and functions that exist in one and not
+  the other. This is strictly worse than each figure having its own copy, because now a reader -
+  and the next agent - believes there is one canon and checks only it.
+  **ONE INSTANCE.** A rebuild finished with TWO modules implementing one four-state vocabulary.
+  They named the same state differently (`MEASURED` in one, `ABSENT` in the other); five figure
+  modules imported one and a sixth imported the other; and one caller had been written against a
+  THIRD generation that called that state `NEVER` and provided helpers neither survivor has. So one
+  of the four states had three spellings across three generations of the module whose entire
+  purpose was to stop exactly that.
+  **CHECK:** how many modules in the tree define your shared vocabulary? If more than one, which is
+  canonical, and does every caller import THAT one? Do the constants have identical names in all of
+  them?
+
 ## What to expect at the end
 
 In this rebuild, of 23 plates: **19 were about the method, not the biology.** Four presented a
