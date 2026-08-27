@@ -158,6 +158,36 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   made the omission silent. **Instruct fixers to verify first; a phantom fix costs more than a
   missed one.**
 
+- **P16 (parallel fixers must not share an output directory, or an input module)** Fan-out is
+  right for FINDING defects, because the angles are independent. It is a trap for FIXING them,
+  because the fixes are not: two agents repairing two different defects in one shared helper each
+  re-render into their own directory, and every file produced is a mixture of one agent's fix and
+  the other's un-fixed state. Nothing is corrupt, every agent reports honestly, and the set is
+  incoherent anyway. Give each fixer either its own module or its own turn, and re-render the whole
+  set ONCE from the final source before anybody looks at it.
+  **ONE INSTANCE.** Four fixers worked in parallel on one figure directory. Their reports were
+  accurate and their code changes were all correct and all landed. But a checker opening the file
+  one of them had signed off as final found text struck through by a key arrow and a declaration
+  reading "3.13 to 3.13 is 1.0x in value and 1.0x in width" - a degenerate case a SIBLING agent had
+  already hardened the shared helper against, forty-one minutes after that PNG was written. Two
+  agents also reported the same file at different byte sizes because a third rewrote it between
+  their reads, and one cited two paths as "before" that were byte-identical to the "after".
+  **CHECK:** does every rendered file in the set post-date the last edit to every module that draws
+  it? Compare mtimes and say the number. If any figure is older than its own source, it is not a
+  figure of that source and no observation about it - defect or clean bill - is about the code you
+  now have.
+
+- **P17 (a stale artifact reads exactly like a current one)** There is no visual difference between
+  a figure rendered from the fixed source and one rendered from the source before the fix, so a
+  reviewer cannot tell them apart and will report defects that are already repaired. Quarantine
+  superseded output directories by RENAMING them, not by remembering which is current: a reviewer
+  pointed at a directory reads what is in it.
+  **ONE INSTANCE.** A review round confirmed 18 defects; 2 of the 18 had been fixed before the
+  round began, and were reported because the brief named a directory that had since been superseded.
+  The reviewers were not wrong about what was on the page - the page was just not the current one.
+  **CHECK:** does the brief name exactly one directory per figure family, and is every other
+  directory renamed so that reading it is impossible by accident?
+
 ## What to expect at the end
 
 In this rebuild, of 23 plates: **19 were about the method, not the biology.** Four presented a
