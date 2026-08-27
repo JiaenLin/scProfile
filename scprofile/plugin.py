@@ -650,6 +650,20 @@ class Context:
         import matplotlib as _mpl
         dpi = _mpl.rcParams.get("savefig.dpi")
         dpi = dpi if isinstance(dpi, (int, float)) else 200
+        # THE DECLARED COLUMN WIDTH IS ENFORCED HERE, because HERE is where every plugin
+        # actually saves. `figure.save()` has the same call and almost nothing uses it: all
+        # nine plugins emit through this method, so a fix placed there was central to the wrong
+        # function and reached no figure at all.
+        #
+        # `bbox_inches="tight"` on the line below is what makes this necessary - it ADDS
+        # everything outside the axes to the canvas rather than fitting it in, so a panel that
+        # asked for the 85 mm single column saved at 98 to 213 mm. Nothing errors; the
+        # typesetter scales the file down to the column and takes every font with it.
+        try:
+            from . import figure as _F
+            _F.fit_column(fig)
+        except Exception:                                                 # noqa: BLE001
+            pass                    # a figure that will not measure is still a figure to write
         fig.savefig(png, dpi=dpi, bbox_inches="tight")
         fig.savefig(pdf, bbox_inches="tight")
         src = None

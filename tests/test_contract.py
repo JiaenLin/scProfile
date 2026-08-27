@@ -2008,6 +2008,50 @@ def test_a_guard_that_could_not_run_has_not_allowed_anything():
           isinstance(_prev, int) and _prev > 0)
 
 
+def test_a_figure_is_saved_at_the_width_it_declared():
+    """`emit_figure` writes the column width the panel asked for, not the canvas tight-bbox.
+
+    `figsize` describes the AXES. `bbox_inches="tight"` ADDS everything outside them — a key in
+    the right margin, a long tick label, a colourbar — so panels declaring the 85 mm single
+    column were measured saving at 98, 143, 195 and 213 mm across the shipped set.
+
+    Nothing errors, which is why it survived every review: a typesetter scales the over-wide
+    file down to the column and takes every font with it, so 7 pt type set at 85 mm prints at
+    5 pt from a 213 mm file. The figure looks right in the report and is illegible in print —
+    invisible exactly where the work is checked.
+
+    ASSERTED HERE, AT `emit_figure`, BECAUSE THAT IS WHERE PLUGINS SAVE. The same fix was first
+    put in `figure.save()`, which every shipped plugin bypasses, so it was central to the wrong
+    function and reached no figure at all.
+    """
+    print("\na figure is saved at the width it declared")
+    import struct
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from scprofile import figure as F
+    from scprofile.plugin import Context
+
+    F.use()
+    dpi = matplotlib.rcParams.get("savefig.dpi")
+    dpi = dpi if isinstance(dpi, (int, float)) else 200
+    with tempfile.TemporaryDirectory() as td:
+        ctx = Context(None, keys={}, out=td, cores=1)
+        for nm, want in (("single", F.SINGLE), ("double", F.DOUBLE)):
+            fig, ax = plt.subplots(figsize=(want, want * 0.6))
+            for i, lab in enumerate(["A long population name", "Another long one", "A third"]):
+                ax.plot([0, 1], [i, i + 1], label=lab)
+            F.legend_outside(fig, ax)
+            ctx.emit_figure(nm, fig, caption="x")
+            raw = Path(td, "figures", f"{nm}.png").read_bytes()
+            px = struct.unpack(">II", raw[16:24])[0]
+            got, target = px / dpi * 25.4, want * 25.4
+            check(f"{nm} column is saved at its declared width",
+                  got <= target * 1.03,
+                  f"declared {target:.0f} mm, saved {got:.1f} mm — a key outside the axes is "
+                  f"added to the canvas, not fitted into it")
+
+
 def _load_module(path):
     import importlib.util
     spec = importlib.util.spec_from_file_location(f"_t_{Path(path).stem}", path)
@@ -2079,6 +2123,7 @@ def main():
     _guarded(test_a_refutation_survives_every_hop_to_the_verdict)
     _guarded(test_the_standard_is_run_by_the_thing_that_writes_the_report)
     _guarded(test_a_guard_that_could_not_run_has_not_allowed_anything)
+    _guarded(test_a_figure_is_saved_at_the_width_it_declared)
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")
