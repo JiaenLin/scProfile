@@ -989,10 +989,26 @@ def run(ctx):
     # node is ten times the machine in dask workers, and the symptom is a wave slower than running
     # the same work serially. `ctx.effect` releases the client on every exit path including a
     # raise, which is the case a `finally` written in a hurry gets wrong.
+    #
+    # AND THE ALLOCATED MEMORY, WHICH WAS THE HALF NEVER DONE. With no `memory_limit`, dask
+    # divides what it believes the machine has by the worker count - so a share of an
+    # allocation became a fraction of a NODE, and on a 32-core instance that is a small
+    # per-worker ceiling with the rest of the job's own memory unreachable. Measured on a
+    # cohort fit: workers pinned near their limit, "full garbage collections took 86% CPU time",
+    # and two thirds of the job's granted memory never used.
+    #
+    # `ctx.memory_gb` is None when the host has no figure, and then dask's own default is
+    # right - inventing one here would be this plugin guessing at an allocation again.
     from distributed import Client, LocalCluster
+    _n_workers = max(1, int(ctx.cores))
+    _mem = ({"memory_limit": f"{max(1.0, float(ctx.memory_gb) / _n_workers):.2f}GB"}
+            if getattr(ctx, "memory_gb", None) else {})
+    if _mem:
+        ctx.log(f"  dask: {_n_workers} worker(s), {_mem['memory_limit']} each, from a "
+                f"{ctx.memory_gb:.1f} GB share")
     client = ctx.effect(
-        lambda: Client(LocalCluster(n_workers=max(1, int(ctx.cores)), threads_per_worker=1,
-                                    processes=False)),
+        lambda: Client(LocalCluster(n_workers=_n_workers, threads_per_worker=1,
+                                    processes=False, **_mem)),
         lambda c: c.close())
     adj = grnboost2(expression_data=ex, tf_names=present, verbose=False,
                     seed=ctx.config["seed"], client_or_address=client)

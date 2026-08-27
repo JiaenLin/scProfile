@@ -732,6 +732,42 @@ except merge.MergeError as e:
 except Exception as e:                                                   # noqa: BLE001
     ck("it raises MergeError", False, type(e).__name__)
 
+print("\na plugin that partitions its allocation is told what the allocation is")
+# THE HOST COMPUTED IT AND DID NOT PASS IT. `demand()` works out a per-instance memory figure
+# from the cells that instance touches, the pool admits the instance on that figure - and the
+# manifest carried `{"cores": n}` and nothing else. So a plugin that starts a worker pool knew
+# its core share exactly and had to infer its memory share from the machine.
+#
+# One did. It sized a dask LocalCluster from `ctx.cores` with no `memory_limit`, dask divided
+# what it believed the node had by the worker count, and a cohort fit spent 86% of its CPU in
+# garbage collection with two thirds of the job's granted memory unreachable. `ctx.cores` exists
+# because the same plugin once sized its pool from `cpu_count()`; only half that fix was made.
+from scprofile import manifest as _MF                                           # noqa: E402
+from scprofile.plugin import Context as _Ctx3                                   # noqa: E402
+
+_c = _Ctx3(None, keys={}, out="/tmp", cores=8, memory_gb=45.5)
+ck("ctx carries the memory share beside the core share", _c.memory_gb == 45.5)
+ck("and None where the host has no figure",
+   _Ctx3(None, keys={}, out="/tmp", cores=8).memory_gb is None,
+   "a plugin must let its framework default rather than invent an allocation")
+
+with tempfile.TemporaryDirectory() as _td3:
+    _p = Path(_td3) / "in.json"
+    _MF.write_input(_p, h5ad="x.h5ad", out_dir=_td3, keys={},
+                    resources={"cores": 8, "memory_gb": 45.5})
+    _got = (json.loads(_p.read_text()).get("resources") or {})
+    ck("the manifest carries BOTH dimensions the host schedules on",
+       _got.get("cores") == 8 and _got.get("memory_gb") == 45.5, str(_got))
+
+# and the plugin that showed the defect now bounds its workers by its share
+_ssrc = (Path(__file__).resolve().parents[1] / "kernels" / "scenic.py").read_text()
+ck("the worker pool is bounded by memory as well as by cores",
+   "memory_limit" in _ssrc and "ctx.memory_gb" in _ssrc)
+ck("and it divides the share by the worker count rather than handing each the whole thing",
+   "/ _n_workers" in _ssrc, "every worker given the full share is the same over-subscription")
+ck("with no figure it lets dask default rather than inventing one",
+   'getattr(ctx, "memory_gb", None) else {}' in _ssrc)
+
 print("\nwhat a design can estimate is a question the host answers")
 # THE COHORT CAN BE COMPLETE WHILE A SUBSET OF IT IS NOT, and a plugin that fits per population
 # fits on the subset. The real table that produced `LinAlgError: Singular matrix` from inside

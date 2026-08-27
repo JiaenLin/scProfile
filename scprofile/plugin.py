@@ -179,7 +179,8 @@ class Context:
     `headline`. What reaches the merged object is exactly what it emitted.
     """
 
-    def __init__(self, adata, *, keys, out, cores=1, unit=None, organism=None, assay=None,
+    def __init__(self, adata, *, keys, out, cores=1, memory_gb=None, unit=None,
+                 organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
                  sentinels=(), provenance=None, constraint="",
                  config=None, log=print):
@@ -190,6 +191,18 @@ class Context:
         #: THE ALLOCATED SHARE. `os.cpu_count()` in a plugin starts the node's worth of threads
         #: per plugin, and four concurrent plugins then start four times the node.
         self.cores = int(cores or 1)
+        #: THE MEMORY SHARE THIS INSTANCE WAS ADMITTED ON, in GB, or None where the host could
+        #: not work one out. The twin of `cores`, and it exists for the identical reason: a
+        #: plugin that starts a worker pool sizes it from what it is given, never from the
+        #: machine. `cores` was added after a plugin built a pool from `cpu_count()` and ran the
+        #: node's worth of workers PER SAMPLE; the memory half was not, so the same plugin then
+        #: passed no memory limit at all and its framework divided the machine by the worker
+        #: count - 86% of CPU in garbage collection, and most of the job's allocation unused.
+        #:
+        #: `None` means the host has no figure, and a plugin must then let its framework default
+        #: rather than invent one. It is a SHARE, not a ceiling the host enforces: several
+        #: instances run at once and each is admitted on this number.
+        self.memory_gb = float(memory_gb) if memory_gb else None
         self.unit = unit
         #: The upstream tool's constraint on use, verbatim, or "" when the object carries none.
         #: `Guard` has had this since it existed and `Context` did not, so a plugin that wanted to

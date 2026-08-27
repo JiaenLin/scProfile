@@ -480,9 +480,10 @@ def _run(a):
                 return None, None, [f"{name}'s interpreter cannot read this object even re-encoded"]
         return kout, {"refs": r, "h5ad": k_h5ad}, None
 
-    def _write_in(inst, kout, ctx):
-        """The in.json, written only once the core share is final."""
+    def _write_in(inst, kout, ctx, need=None):
+        """The in.json, written only once the core share AND the memory share are final."""
         name, unit, cores = inst["plugin"], inst["unit"], inst["cores"]
+        mem_gb = (need or {}).get("memory_gb")
         # ONE DIRECTORY ONLY WHEN ONE IS CORRECT. An upstream that ran once has a single output;
         # a per-unit upstream has one per unit, and the only unambiguous choice is THIS instance's
         # own unit. Where neither holds, `upstream[name]` is left out and the consumer meets a
@@ -507,7 +508,13 @@ def _run(a):
             params=_params_for(name),
             upstream=flat, upstream_units={k_: v_ for k_, v_ in per.items() if v_},
             sentinels=sentinels,
-            provenance=prov, resources={"cores": cores}, unit=unit,
+            # BOTH DIMENSIONS THE HOST SCHEDULES ON. `cores` alone was passed for as long as
+            # this existed, and the plugin that partitions its allocation was left to infer the
+            # other half from the machine.
+            provenance=prov,
+            resources={"cores": cores, **({"memory_gb": round(float(mem_gb), 2)}
+                                          if mem_gb else {})},
+            unit=unit,
             constraint=constraint)
         return kout
 
@@ -564,7 +571,26 @@ def _run(a):
             for x, _k, _c in staged)
               + (f"   [{at_once} at a time of {len(staged)}]"
                  if at_once < len(staged) else ""), flush=True)
-        prepared = [(inst, _write_in(inst, kout, ctx)) for inst, kout, ctx in staged]
+        # PER-INSTANCE MEMORY IS COMPUTED FROM THE CELLS THAT INSTANCE TOUCHES, not from the
+        # cohort. A per-unit instance sees its unit; charging it for the whole object would
+        # serialise a wave that fits comfortably.
+        #
+        # COMPUTED HERE, BEFORE `in.json`, because the plugin needs it too. It used to be
+        # computed after the manifests were written and used only to bound the wave - so the
+        # host worked out what each instance may use, admitted it on that basis, and then told
+        # the instance its core share and nothing about its memory. A plugin that partitions
+        # its allocation could only guess, and one of them did: it sized a worker pool from
+        # `ctx.cores` with no memory limit, dask divided the machine's memory by that count,
+        # and the workers spent 86% of their CPU in garbage collection while 124 GB of the
+        # job's own allocation sat unused.
+        need = {}
+        for inst, _k, _c in staged:
+            u = inst.get("unit")
+            n_cells = int(unit_cells.get(u, A.n_obs)) if u else A.n_obs
+            need[(inst["plugin"], u)] = demand(inst, ks[inst["plugin"]], n_cells)
+        prepared = [(inst, _write_in(inst, kout, ctx,
+                                     need[(inst["plugin"], inst.get("unit"))]))
+                    for inst, kout, ctx in staged]
 
         # Instances in a wave are independent by construction, so they run CONCURRENTLY. The
         # plugins are subprocesses, so threads are the right shape - each blocks on its child and
@@ -609,14 +635,6 @@ def _run(a):
         # being oversubscribed - the two failures a fixed pool has to choose between.
         pool = ResourcePool(budget, memory_gb=mem_budget)
 
-        # PER-INSTANCE MEMORY IS COMPUTED FROM THE CELLS THAT INSTANCE TOUCHES, not from the
-        # cohort. A per-unit instance sees its unit; charging it for the whole object would
-        # serialise a wave that fits comfortably.
-        need = {}
-        for inst, _k in prepared:
-            u = inst.get("unit")
-            n_cells = int(unit_cells.get(u, A.n_obs)) if u else A.n_obs
-            need[(inst["plugin"], u)] = demand(inst, ks[inst["plugin"]], n_cells)
         assumed = sorted({i["plugin"] for i, _k in prepared
                           if need[(i["plugin"], i.get("unit"))]["memory_assumed"]})
         if assumed and mem_budget:

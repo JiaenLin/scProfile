@@ -151,6 +151,7 @@ def main(argv):
     unit = inp.get("unit")
     sentinels = set(inp.get("sentinels") or ())
     cores = int((inp.get("resources") or {}).get("cores", 1))
+    memory_gb = (inp.get("resources") or {}).get("memory_gb")
     log(f"{A.n_obs:,} cells x {A.n_vars:,} genes"
         + (f", unit {unit!r}" if unit else "") + f", {cores} core(s)")
 
@@ -232,7 +233,7 @@ def main(argv):
                               absent=[{"what": "everything", "why": str(e)}])
         return 0
 
-    ctx = Context(A, keys=keys, out=out, cores=cores, unit=unit,
+    ctx = Context(A, keys=keys, out=out, cores=cores, memory_gb=memory_gb, unit=unit,
                   organism=inp.get("organism"), assay=inp.get("assay"),
                   references=inp.get("references"),
                   # BY ROLE, NOT BY NAME. `Context` accepted these from the beginning and nothing
