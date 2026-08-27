@@ -297,6 +297,61 @@ def fit_column(fig, target=None):
     return got * 25.4
 
 
+#: How far a written panel may sit from the width it declared before `save`/`emit_figure` say so.
+#: Not zero: `fit_column` snaps to the declared figsize and a tight bbox still rounds to whole
+#: pixels, which is ~0.06 mm at 400 dpi. One millimetre is under a percent of the single column
+#: and well inside what a typesetter absorbs; past it, the scaling a typesetter applies starts
+#: taking the fonts with it.
+WIDTH_TOLERANCE_MM = 1.0
+
+
+def written_width_mm(path, dpi=None):
+    """The width of a written PNG, in millimetres, read from the FILE. None if unreadable.
+
+    THE ONLY HONEST MEASUREMENT OF WHAT WAS SAVED. `figsize` is what was asked for and
+    `bbox_inches="tight"` is free to ignore it - it ADDS everything outside the axes to the
+    canvas rather than fitting it in. Reporting `figsize` after such a save is a check that
+    cannot fail: it restates the input as though it were the outcome.
+
+    Measured on real panels, a declared 174.00 mm double column wrote at 175.01 mm and every log
+    line said the two agreed, because the number in the log came from the figure object.
+    """
+    import struct
+
+    try:
+        raw = Path(path).read_bytes()
+        if raw[12:16] != b"IHDR":
+            return None
+        px = struct.unpack(">II", raw[16:24])[0]
+    except Exception:                                                     # noqa: BLE001
+        return None
+    if not dpi:
+        import matplotlib as _mpl
+        dpi = _mpl.rcParams.get("savefig.dpi")
+        dpi = dpi if isinstance(dpi, (int, float)) else 200
+    return px / float(dpi) * 25.4
+
+
+def check_written_width(path, want_in, *, log=None, dpi=None):
+    """Compare a written PNG against the width it declared. Returns (got_mm, ok).
+
+    Warns rather than raises. A panel one millimetre over is still a panel worth having, and a
+    hard failure here would be a gate that fires on correct behaviour - which is the kind that
+    gets switched off. What it must not do is stay quiet, because nothing downstream can tell an
+    over-wide figure from a correct one: both render.
+    """
+    got = written_width_mm(path, dpi=dpi)
+    if got is None or not want_in:
+        return got, True
+    want = float(want_in) * 25.4
+    ok = abs(got - want) <= WIDTH_TOLERANCE_MM
+    if not ok and log is not None:
+        log(f"      WIDTH {Path(path).name}: saved {got:.2f} mm against a declared "
+            f"{want:.2f} mm ({got - want:+.2f}). `bbox_inches` added what `fit_column` had "
+            f"fitted; the panel will be rescaled to the column and its type with it.")
+    return got, ok
+
+
 def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"), log=print):
     """Write one figure in every requested format and return its manifest entry.
 
@@ -311,11 +366,15 @@ def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"),
         fit_column(fig)
     except Exception:                                                     # noqa: BLE001
         pass                       # a figure that will not measure is still a figure to write
+    want_in = float(fig.get_size_inches()[0])
     written = {}
     for ext in formats:
         f = d / f"{name}.{ext}"
         fig.savefig(f, format=ext)
         written[ext] = f
+    # WHAT WAS WRITTEN, NOT WHAT WAS ASKED FOR. See `check_written_width`.
+    if "png" in written:
+        check_written_width(written["png"], want_in, log=log)
     entry = {"path": str(written.get("png", list(written.values())[0])), "caption": caption}
     if "pdf" in written:
         entry["vector"] = str(written["pdf"])

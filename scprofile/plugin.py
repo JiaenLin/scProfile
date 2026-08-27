@@ -664,8 +664,19 @@ class Context:
             _F.fit_column(fig)
         except Exception:                                                 # noqa: BLE001
             pass                    # a figure that will not measure is still a figure to write
+        want_in = float(fig.get_size_inches()[0])
         fig.savefig(png, dpi=dpi, bbox_inches="tight")
         fig.savefig(pdf, bbox_inches="tight")
+        # WHAT WAS WRITTEN, NOT WHAT WAS ASKED FOR. `fit_column` snaps the figure to its
+        # declared width and `bbox_inches="tight"` on the two lines above is then free to grow
+        # it again - so the only honest measurement is read back from the file. A test proves
+        # this for one synthetic panel; this proves it for every panel a plugin ever draws,
+        # which is the difference between a check and a check that ran once.
+        try:
+            from . import figure as _Fw
+            _Fw.check_written_width(png, want_in, log=self.log, dpi=dpi)
+        except Exception:                                                 # noqa: BLE001
+            pass
         src = None
         if source is not None:
             if hasattr(source, "to_csv"):

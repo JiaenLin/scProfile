@@ -2052,6 +2052,64 @@ def test_a_figure_is_saved_at_the_width_it_declared():
                   f"added to the canvas, not fitted into it")
 
 
+def test_the_saved_width_is_measured_from_the_file_not_from_the_figure():
+    """`figsize` is the request. The written PNG is the outcome. They are not the same number.
+
+    `fit_column` snaps a figure to its declared column width and `bbox_inches="tight"` is then
+    free to grow it again - it ADDS everything outside the axes to the canvas rather than
+    fitting it in. So any width reported from the figure object after such a save restates the
+    input as though it were the result: a check that cannot fail.
+
+    Measured on real panels, a declared 174.00 mm double column wrote at 175.01 mm and every log
+    line said the two agreed, because the number in the log came from `figsize`.
+
+    TWO ASSERTIONS, AND THE SECOND IS THE ONE THAT MATTERS. That the reader returns the file's
+    own width is worth little on its own - it is proved here by handing it a file whose width is
+    KNOWN to differ from what is declared, and requiring that the mismatch is SAID. A warning
+    nobody has watched fire is indistinguishable from one that cannot.
+    """
+    print("\nthe saved width is measured from the file, not from the figure")
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from scprofile import figure as F
+
+    with tempfile.TemporaryDirectory() as td:
+        png = Path(td) / "w.png"
+        # PINNED, BECAUSE rcParams ARE GLOBAL AND `F.use()` SETS THIS. `bbox_inches=None` means
+        # "use the rcParam", so an earlier test calling `figure.use()` in the same process makes
+        # a tight bbox the default here and a 4.00 in figure writes at 4.03. That is the very
+        # defect under test, and it arrived through test ORDER - which is why the width this
+        # test compares against is MEASURED below rather than assumed from figsize.
+        with matplotlib.rc_context({"savefig.bbox": None, "savefig.pad_inches": 0.0}):
+            fig = plt.figure(figsize=(4.0, 2.0))
+            fig.savefig(png, dpi=100)
+            plt.close(fig)
+
+        got = F.written_width_mm(png, dpi=100)
+        check("the width is read out of the PNG header",
+              got is not None and abs(got - 4.0 * 25.4) < 0.5,
+              f"read {got!r} mm from a 4.00 in file")
+        if got is None:
+            return
+        got_in = got / 25.4
+
+        said = []
+        # Declared half again as wide as what was written - far outside the tolerance, so it
+        # MUST speak, and it must quote BOTH numbers or a reader cannot act on it.
+        _g, ok = F.check_written_width(png, got_in * 1.5, log=said.append, dpi=100)
+        check("a width that disagrees with its declaration is reported not ok", not ok)
+        check("and the disagreement is SAID, with both numbers",
+              len(said) == 1 and f"{got:.2f}" in said[0] and f"{got * 1.5:.2f}" in said[0],
+              f"log was {said!r}")
+
+        # And the converse: a panel at the width it declared must NOT warn, or the check is one
+        # that fires on correct behaviour - which is the kind that gets switched off.
+        quiet = []
+        _g2, ok2 = F.check_written_width(png, got_in, log=quiet.append, dpi=100)
+        check("a panel at its declared width is silent", ok2 and not quiet, f"log was {quiet!r}")
+
+
 def _load_module(path):
     import importlib.util
     spec = importlib.util.spec_from_file_location(f"_t_{Path(path).stem}", path)
@@ -2124,6 +2182,7 @@ def main():
     _guarded(test_the_standard_is_run_by_the_thing_that_writes_the_report)
     _guarded(test_a_guard_that_could_not_run_has_not_allowed_anything)
     _guarded(test_a_figure_is_saved_at_the_width_it_declared)
+    _guarded(test_the_saved_width_is_measured_from_the_file_not_from_the_figure)
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")
