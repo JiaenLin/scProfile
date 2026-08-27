@@ -781,7 +781,27 @@ print("\nthe host draws that comparison, so no plugin writes its own version of 
 _units = [{"unit": f"u{i}", "metrics": {"m": v}} for i, v in enumerate([8194, 17957, 38895])]
 _html = _RP._across_units(_units, [{"id": "m", "question": "how many?"}])
 ck("it renders from the units alone, with no plotting library",
-   "<svg" in _html and "matplotlib" not in inspect.getsource(_RP))
+   "<svg" in _html and "import matplotlib" not in inspect.getsource(_RP))
+# THE PROPERTY IS "MUST NOT REQUIRE", NOT "MUST NOT USE". This searched the reporter's source
+# for the word `matplotlib`, which stopped the design panel from ever being a real figure - and
+# hand-rolled SVG strips are not publication art and cannot be exported as vector for a
+# manuscript. What the guard is FOR is that a report still renders where no plotting stack
+# exists. That is a behaviour, so it is measured as one: make the drawing raise, and the
+# section must still come back with its numbers in it.
+import scprofile.design_panel as _DP2                                           # noqa: E402
+_u2 = [{"unit": f"u{i}", "metrics": {"m": float(v)}}
+       for i, v in enumerate([8194, 17957, 38895, 12000, 30000, 9000])]
+_d2 = {f"u{i}": {"g": ("a" if i < 3 else "b")} for i in range(6)}
+_real = _DP2.draw
+try:
+    _DP2.draw = lambda *a, **k: (_ for _ in ()).throw(ImportError("no plotting stack"))
+    _fb = _RP._units_by_arm(_u2, _d2, [{"id": "m", "question": "how many?"}],
+                            out_dir="/tmp", name="k")
+    ck("the design section still renders when the drawing cannot be made",
+       "Across the design" in _fb and "<svg" in _fb, _fb[:80])
+    ck("and it still carries the per-arm numbers", "<table" in _fb)
+finally:
+    _DP2.draw = _real
 ck("it states the range rather than judging it",
    "4.75x" in _html and "too" not in _html.lower().split("across units")[1][:400])
 ck("it names the extremes so a reader can go to the unit",

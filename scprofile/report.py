@@ -324,7 +324,7 @@ def _svg_strip(values, labels, *, width=560, height=96):
             + "".join(ticks) + "".join(pts) + "</svg>")
 
 
-def _units_by_arm(units, design, declared):
+def _units_by_arm(units, design, declared, *, out_dir=None, name=""):
     """THE PER-UNIT NUMBERS, GROUPED BY ARM. The comparison the study exists to make.
 
     A per-unit plugin already records one comparable number per unit, and the units already sit
@@ -338,7 +338,20 @@ def _units_by_arm(units, design, declared):
     if not design:
         return ""
     named = {str(d.get("id")): d for d in (declared or []) if isinstance(d, dict)}
-    factors = sorted({f for r in design.values() for f in r})
+    # ALIASED FACTORS ARE ONE COMPARISON, NOT TWO. Two factors that split the samples identically
+    # produced two panels with byte-identical numbers and no note - a reader with two panels
+    # showing the same difference under two names has, on the page, two pieces of evidence for
+    # one. The per-CELL path already collapsed them; this one did not, so the same cohort got
+    # the honest treatment on four pages and the duplicated one on three.
+    from .design_panel import aliased as _aliased
+    _alias = _aliased(design)
+    factors, _seen = [], set()
+    for f in sorted({f for r in design.values() for f in r}):
+        if f in _seen:
+            continue
+        factors.append(f)
+        _seen.add(f)
+        _seen.update(_alias.get(f) or [])
     keys = []
     for u in units:
         for k in (u.get("metrics") or {}):
@@ -368,11 +381,21 @@ def _units_by_arm(units, design, declared):
             # DRAWN UP TO THE CAP, TABULATED IN FULL. Two metrics across four factors is eight
             # panels of one shape, and the page budget is twelve for everything. Every pair is
             # still in the table below, so capping the drawing loses no number.
-            if len(blocks) < BY_ARM_PANEL_CAP:
-                blocks.append(f'<figure><figcaption><b><code>{_e(k)}</code> by '
-                              f'<code>{_e(fac)}</code></b> — per arm, one point per sample. '
-                              f'{len(recs)} arms.</figcaption>'
-                              + _arm_rows_numeric(recs) + "</figure>")
+            # EVERY PAIR, NOT THE ALPHABETICALLY FIRST THREE. The cap took whichever factors
+            # sorted first and named nothing it dropped, so on this cohort `diet` - the factor
+            # with the LARGEST split on two of the three plugins that use this path, 3.0x on
+            # one - was the one comparison with no picture, and a second measure got no panel
+            # at all. A page budget is a reason to spend one figure on many strips, not a
+            # reason to hide the largest effect in the study.
+            _ali = _alias.get(fac) or []
+            blocks.append(f'<div class="armpair"><p class="sub"><b><code>{_e(k)}</code> by '
+                          f'<code>{_e(fac)}</code></b> — per arm, one point per sample. '
+                          f'{len(recs)} arms.'
+                          + (' Identical split to '
+                             + ", ".join("<code>" + _e(x) + "</code>" for x in _ali)
+                             + ' — one panel, not two; which of them a difference belongs to '
+                               'is not something this data can say.' if _ali else "")
+                          + '</p>' + _arm_rows_numeric(recs) + "</div>")
             lo, hi = recs[0], recs[-1]
             rows.append(f"<tr><td><code>{_e(k)}</code></td><td><code>{_e(fac)}</code></td>"
                         f"<td>{_e(lo['level'])} {_num(lo['median'])}</td>"
@@ -380,6 +403,43 @@ def _units_by_arm(units, design, declared):
                         f"<td class='sub'>{_e(q[:70])}</td></tr>")
     if not rows:
         return ""
+    # A REAL FIGURE WHERE ONE CAN BE DRAWN. The strips below carry the numbers, but they are
+    # hand-rolled SVG: not exportable as vector art for a manuscript, and a bar of quartiles
+    # hides the very difference it is drawn to show. `design_panel` draws one point per SAMPLE
+    # with the comparison summarised beside it, which is the idiom this kind of claim is held
+    # to (Lord et al., J Cell Biol 2020; Ho et al., Nat Methods 2019). It falls back to the
+    # strips when the drawing cannot be made at all: a report that renders beats one that
+    # refuses over a figure, and the reporter must never REQUIRE a plotting stack.
+    per_sample = {str(u.get("unit")): {k: float(v)
+                                       for k, v in (u.get("metrics") or {}).items()
+                                       if isinstance(v, (int, float))}
+                  for u in units if u.get("unit") is not None}
+    if out_dir and per_sample:
+        try:
+            from . import design_panel
+            rel = f"kernels/{name}/figures/{name}_across_design.png"
+            dest = Path(out_dir) / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            n_cmp = design_panel.draw(per_sample, design, dest)
+            if n_cmp:
+                dupes = sorted({a for f in _alias for a in (_alias.get(f) or [])})
+                return ("<h2>Across the design</h2><figure>"
+                        f'<img src="../{rel}" alt="{_e(name)} across the design">'
+                        f"<figcaption>Every measure this plugin recorded per sample, against "
+                        f"every factor of the design — {n_cmp} comparison(s). One point per "
+                        f"SAMPLE, bar is the median; n is in each panel because the sample is "
+                        f"the unit of replication, not the cell. Right: each comparison as a "
+                        f"standardised difference with a 95% interval, filled where the "
+                        f"interval excludes zero."
+                        + (" A factor marked * splits the samples identically to "
+                           + ", ".join("<code>" + _e(d) + "</code>" for d in dupes)
+                           + ", so it is drawn once." if dupes else "")
+                        + " A DESCRIPTION, not a test.</figcaption></figure>"
+                        + "<div class='wrap'><table><tr><th>metric</th><th>factor</th>"
+                          "<th>arm</th><th>arm</th><th></th></tr>"
+                        + "".join(rows) + "</table></div>")
+        except Exception:                                                 # noqa: BLE001
+            pass
     return ("<h2>Across the design</h2><p class='sub'>This plugin's per-unit numbers grouped by "
             "arm. A DESCRIPTION, not a test: n is the number of samples in each arm.</p>"
             + "".join(blocks)
@@ -545,18 +605,23 @@ def _by_arm_block(by_arm, *, aware):
                     'one, so its page says nothing about the design it claims to describe.'
                     '</div>')
         return ""
-    # A CAP, AND THE REST NAMED. Three columns by three factors is nine panels of the same
-    # shape, and a page a reader does not finish hides its own result. The factors are taken in
-    # a stable order so the same ones appear every run.
-    blocks, shown, omitted = [], 0, []
+    # EVERY PAIR, IN ONE FIGURE. This drew ONE `<figure>` per (column, factor) pair and capped
+    # the count at three, because a page's whole budget is twelve figures - so a plugin with
+    # three per-cell columns over a four-factor design showed three of twelve comparisons and
+    # named the other nine in a sentence. On the cohort this was written for, that meant ONE
+    # column was ever compared and two design factors appeared on no page at all.
+    #
+    # The cap was the wrong lever. These panels are inline SVG strips a few rows tall, not
+    # plots; what cost twelve figures was wrapping each in its own `<figure>`. Collected into a
+    # single figure they cost ONE against the budget and NOTHING is dropped - which is the whole
+    # reason the study exists, and the one thing a reader was not being shown.
+    blocks, omitted = [], []
     for col in sorted(by_arm):
         for fac in sorted(by_arm[col]):
-            if shown >= BY_ARM_PANEL_CAP:
-                omitted.append(f"{col} by {fac}")
-                continue
             d = by_arm[col][fac]
             arms = d.get("arms") or []
             if len(arms) < 2:
+                omitted.append(f"{col} by {fac} (one arm present)")
                 continue
             svg = (_arm_rows_numeric(arms) if d.get("kind") == "numeric"
                    else _arm_rows_categorical(arms, d.get("categories")))
@@ -566,21 +631,22 @@ def _by_arm_block(by_arm, *, aware):
             # under every panel put the same 25 words on the page as many times as there were
             # factors; it belongs to the section, which states it above, not to each figure.
             ali = d.get("aliased_with") or []
-            shown += 1
-            blocks.append(f'<figure><figcaption><b><code>{_e(col)}</code> by '
+            blocks.append(f'<div class="armpair"><p class="sub"><b><code>{_e(col)}</code> by '
                           f'<code>{_e(fac)}</code></b> — {what}, {len(arms)} arms.'
                           + (f' Identical split to '
                              + ", ".join("<code>" + _e(x) + "</code>" for x in ali)
                              + ' — one panel, not two, and which of them a difference belongs '
                                'to is not something this data can say.' if ali else "")
-                          + '</figcaption>' + svg + "</figure>")
+                          + '</p>' + svg + "</div>")
     if not blocks:
         return ""
-    return ("<h2>Across the design</h2><p class='sub'>This plugin's per-cell output across the "
-            "design. A DESCRIPTION, not a test: the unit of replication is the sample, not the "
-            "cell.</p>" + "".join(blocks)
-            + (f"<p class='sub'>Not drawn, same shape: {_e('; '.join(omitted))}. "
-               f"The numbers are in the object.</p>" if omitted else ""))
+    return ("<h2>Across the design</h2>"
+            "<figure><figcaption>Every per-cell measure this plugin wrote, against every factor "
+            f"of the design: {len(blocks)} comparison(s). A DESCRIPTION, not a test — the unit "
+            "of replication is the sample, not the cell.</figcaption>"
+            + "".join(blocks) + "</figure>"
+            + (f"<p class='sub'>Not comparable here: {_e('; '.join(omitted))}.</p>"
+               if omitted else ""))
 
 
 def _concordance_block(name, recs):
@@ -745,21 +811,30 @@ def _fold_caveats(caveats):
     return out
 
 
-def _overview_block(payload):
+def _overview_block(payload, *, plugin=None, by_arm=None):
     """WHAT WAS COMPARED, before any number. First on every page.
 
-    Measured on the report this was written for: no page said how many samples there were, how
-    many arms, or what was contrasted. A reader met "1,654 significant edges" with nothing
-    anywhere to say the study was a replicated two-factor design. A result is not interpretable
-    the design is.
+    THE FACTORS COME FROM THE DESIGN TABLE, which is the thing the user supplied. They were read
+    from `by_arm` - the host's per-arm summaries - and that is a DOWNSTREAM ARTIFACT: it is built
+    only from per-cell columns, so a plugin that writes none contributes nothing to it. Four
+    plugins write none.
+
+    The page then said "No design factor was resolved, so nothing on this page is a comparison
+    between groups" over a cohort whose design resolved perfectly - ten samples, four factors,
+    two levels each - and said it directly above its own per-arm panels. A
+    reader is told the study has no groups by the one block whose job is to say what the groups
+    are.
+
+    A missing PER-CELL COLUMN and a missing DESIGN are different absences with different
+    remedies, and reporting the first as the second sends the reader to the wrong place.
     """
     d = payload.get("describe") or {}
     units = [str(u) for u in (payload.get("units") or [])]
-    arms = {}
-    for cols in (payload.get("by_arm") or {}).values():
-        for per_factor in cols.values():
-            for fac, dd in per_factor.items():
-                arms.setdefault(fac, sorted({str(a.get("level")) for a in (dd.get("arms") or [])}))
+    # {factor: sorted levels}, FROM THE DESIGN ITSELF.
+    factors = {}
+    for row in (payload.get("design") or {}).values():
+        for fac, lvl in (row or {}).items():
+            factors.setdefault(str(fac), set()).add(str(lvl))
     n = d.get("n_obs")
     bits = []
     if n:
@@ -768,22 +843,28 @@ def _overview_block(payload):
         bits.append(f"<b>{len(units)}</b> samples")
     if d.get("organism"):
         bits.append(f"{_e(d['organism'])} {_e(d.get('assay',''))}".strip())
+    head = ("<h2>The cohort</h2><p class='lede'>" + " &middot; ".join(bits) + "</p>"
+            + (f"<p class='sub'>Samples: {_e(', '.join(units))}</p>" if units else ""))
+    if not factors:
+        # THE ONLY CASE THAT EARNS THE EXEMPTION. A cohort with no design table can never draw a
+        # panel comparing arms, so `arms` would fail on every page of every such run with no
+        # remedy anyone could apply. Attached to the design being absent, and to nothing else:
+        # attached to `by_arm` being empty, it exempted runs whose design was perfect.
+        return head + ('<div class="bad" data-standard-exempt="arms">No design table was '
+                       'supplied, so nothing on this page is a comparison between groups.</div>')
     rows = "".join(
-        f"<tr><td><code>{_e(f)}</code></td><td>{_e(' / '.join(v))}</td>"
+        f"<tr><td><code>{_e(f)}</code></td><td>{_e(' / '.join(sorted(v)))}</td>"
         f"<td class='sub'>{len(v)} arms</td></tr>"
-        for f, v in sorted(arms.items()))
-    return ("<h2>The cohort</h2><p class='lede'>" + " &middot; ".join(bits) + "</p>"
-            + (f"<p class='sub'>Samples: {_e(', '.join(units))}</p>" if units else "")
-            + ("<div class='wrap'><table><tr><th>factor</th><th>arms</th><th></th></tr>"
-               + rows + "</table></div>" if rows else
-               # AND IT DECLARES THE EXEMPTION IT EARNS. A cohort with no design table can
-               # never draw a panel comparing arms, so `arms` would fail on every page of
-               # every such run with no remedy anyone could apply - and a standard that a
-               # correct run cannot meet is a standard that gets switched off. The reason is
-               # the visible sentence itself, so a reader meets it and so does the verdict.
-               "<div class='bad' data-standard-exempt=\"arms\">No design factor was "
-               "resolved, so nothing on this page is a comparison between groups.</div>"))
-
+        for f, v in sorted(factors.items()))
+    out = head + ("<div class='wrap'><table><tr><th>factor</th><th>arms</th><th></th></tr>"
+                  + rows + "</table></div>")
+    # AND WHAT THIS PLUGIN CONTRIBUTED TO IT. A NAMED ABSENCE about the plugin, never a claim
+    # about the cohort: the design is right there in the table above.
+    if plugin and not by_arm:
+        out += ("<p class='sub'>" + _e(plugin) + " writes no per-cell column, so its own output "
+                "is not split by these factors below. Where this page compares arms it does so "
+                "through the per-unit measures it declared.</p>")
+    return out
 
 def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
                  spec=None, constraint="", binds=(), by_arm=None, aware=False,
@@ -809,7 +890,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
             f'<p class="lede">status <b>{_e(p.get("status", "?"))}</b> · '
             + _lede(_headline_without(p)) + '</p>',
             _contradiction_block(p.get("contradictions")),
-            _overview_block(payload_all or {}),
+            _overview_block(payload_all or {}, plugin=name, by_arm=by_arm),
             _constraint_block(constraint, binds)]
     if caveats:
         # THE CLAIM VISIBLE, THE ELABORATION COLLAPSED - the same split the captions get, and
@@ -859,7 +940,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     if p.get("per_unit") and units:
         body.append(_across_units(units, (spec or {}).get("unit_metrics")))
         body.append(_units_by_arm(units, (payload_all or {}).get("design") or {},
-                                  (spec or {}).get("unit_metrics")))
+                                  (spec or {}).get("unit_metrics"),
+                                  out_dir=out_dir, name=name))
     body.append(_by_arm_block(by_arm, aware=bool(aware)))
     body.append(_concordance_block(name, concordance))
     # PER-SAMPLE PANELS GO TO AN APPENDIX, AND ARE LINKED. Three plugins here run once per
