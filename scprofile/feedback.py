@@ -427,3 +427,89 @@ def report(diagnoses, log=print):
             "docs/MAINTAINING_PLUGINS.md")
     if by.get(HOST):
         log("  A host defect is a bug in scProfile itself, not in the plugin or the data.")
+
+
+#: How much of an under-declaration is noise, and how much is a job that dies. A declaration is
+#: what the allocator requests; the measurement is what one run of one instance cost. Below this
+#: the difference is not evidence of anything, and firing on it would train a maintainer to
+#: scroll past the message that matters.
+MEMORY_DRIFT_RATIO = 1.25
+
+
+def memory_drift(kernel, payload):
+    """What the instance COST, against what the plugin said it would. A `run -> declare` edge.
+
+    THE FAILURE THIS EXISTS FOR IS SILENT AT EVERY POINT BEFORE THE END. A plugin declares a
+    memory model, the allocator requests it, the scheduler grants it, the run proceeds for
+    hours, and the kernel is killed with a signal at the largest step. Nothing before that
+    moment is distinguishable from a healthy run, and the log ends without an exception,
+    because SIGKILL leaves no traceback to diagnose.
+
+    Measured: an instance reported a 14.4 GB peak, its declaration was sized from that, and the
+    scheduler billed the job 42.7 GB - a 3.0x under-report, and a dead run at a 48 GB request.
+
+    SO IT TAKES THE LARGER OF THE MEASUREMENTS AND SAYS WHICH IT TOOK. A process cannot measure
+    its own peak reliably: `RUSAGE_SELF` excludes children entirely, `RUSAGE_CHILDREN` returns
+    the largest single REAPED child rather than the sum of concurrent ones, and the cgroup
+    counter is exact but covers the whole job. Every one of them is an estimate with a known
+    direction of error, and the only safe rule when two measurements of one cost disagree is to
+    believe the larger and name it: an over-request costs queue time, an under-request costs the
+    run and every hour already spent on it.
+
+    Reported, never repaired. A number the host corrects on the fly is a number the declaration
+    still gets wrong on the next machine.
+    """
+    m = (payload or {}).get("measured") or {}
+    n = m.get("n_cells")
+    if not isinstance(m, dict) or not n:
+        return []
+    peak, source = peak_measurement(m)
+    if peak is None:
+        return []
+    ex = getattr(kernel, "executor", None) or {}
+    base = ex.get("memory_gb_base")
+    rate = ex.get("memory_gb_per_100k")
+    if base is None and rate is None:
+        # NOT SILENCE. A plugin that declares no memory model is one the allocator is guessing
+        # for, and the measurement in hand is the only evidence anyone will ever have of what
+        # it costs. Reported as a declaration to WRITE, not as one that is wrong.
+        return [Diagnosis(
+            DECLARATION,
+            f"declares no memory model, so the allocator sizes it by a default. This instance "
+            f"cost {peak:.1f} GB over {n:,} cells ({source}).",
+            action=f"declare memory_gb_base and memory_gb_per_100k in {kernel.name}",
+            evidence=repr(m))]
+    declared = float(base or 0.0) + float(rate or 0.0) * (float(n) / 100_000.0)
+    if declared <= 0 or peak <= declared * MEMORY_DRIFT_RATIO:
+        return []
+    return [Diagnosis(
+        DECLARATION,
+        f"cost {peak:.1f} GB over {n:,} cells ({source}) against a declared {declared:.1f} GB - "
+        f"{peak / declared:.1f}x. The allocator requests the declared figure, so the next run "
+        f"of this size is sized to be killed, and a kill at the largest step leaves no "
+        f"traceback to diagnose.",
+        action=f"raise memory_gb_base / memory_gb_per_100k in {kernel.name}",
+        evidence=repr(m))]
+
+
+def peak_measurement(measured):
+    """(peak_gb, which measurement it came from) - THE LARGER, NAMED.
+
+    `peak_rss_gb` is a floor: the parent plus the largest single reaped child, so concurrent
+    workers are undercounted and by a factor nobody can bound from inside the process.
+    `cgroup_peak_gb` is what the scheduler bills, and is exact for the JOB - which over-attributes
+    when several instances share one job, and is exact when one does.
+
+    Both errors are known and they point opposite ways, so there is no combination that is right
+    in general. Taking the larger is wrong only in the direction that costs queue time.
+    """
+    m = measured or {}
+    rss = m.get("peak_rss_gb")
+    cg = m.get("cgroup_peak_gb")
+    vals = [(float(v), k) for k, v in (("the process's own floor", rss),
+                                       ("the scheduler's counter for the job", cg))
+            if isinstance(v, (int, float))]
+    if not vals:
+        return (None, "")
+    peak, source = max(vals)
+    return (peak, source)

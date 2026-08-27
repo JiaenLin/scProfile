@@ -209,5 +209,49 @@ ck("and it says outright not to debug the plugin",
 ck("and names the remedy: finish or kill the run before updating",
    "before updating" in _why, _why[:80])
 
+print("\na declaration that under-sizes what the run cost is a defect the run can prove")
+# THE ONE FAILURE THAT PRODUCES NO EVIDENCE. A kernel killed by the OOM killer at its largest
+# step leaves no traceback, so nothing downstream can classify it - which is why this is caught
+# from a run that SUCCEEDED, using what it measured, before the next one is sized to die.
+# The numbers are real: 14.374 GB reported by the process, 42.7 GB billed by the scheduler.
+
+
+class _Kern:
+    name = "k"
+    spec = {}
+    executor = {"memory_gb_base": 8.0, "memory_gb_per_100k": 6.0}
+
+
+_both = {"n_cells": 100_713, "peak_rss_gb": 14.374, "cgroup_peak_gb": 42.7}
+ck("two measurements of one cost: the LARGER is taken",
+   FB.peak_measurement(_both)[0] == 42.7, str(FB.peak_measurement(_both)))
+ck("and it says which one that was", "scheduler" in FB.peak_measurement(_both)[1],
+   FB.peak_measurement(_both)[1])
+ck("a floor on its own is still usable", FB.peak_measurement({"peak_rss_gb": 3.0})[0] == 3.0)
+ck("and no measurement at all is not a zero", FB.peak_measurement({})[0] is None)
+
+_d = FB.memory_drift(_Kern, {"measured": _both})
+ck("the under-declaration is diagnosed", len(_d) == 1, str(_d))
+ck("against the DECLARATION, not the method or the environment",
+   _d and _d[0].layer == FB.DECLARATION, str(_d[0].layer) if _d else "")
+ck("it is not auto-repairable - the host must not silently correct a declaration",
+   _d and _d[0].repairable is False)
+ck("it names the fields to change", _d and "memory_gb_base" in _d[0].action, str(_d[0].action))
+ck("and says why a kill leaves nothing to diagnose",
+   _d and "no traceback" in _d[0].why, str(_d[0].why)[:80])
+
+ck("a declaration that covers the cost is silent",
+   FB.memory_drift(type("K2", (_Kern,), {"executor": {"memory_gb_base": 60.0,
+                                                      "memory_gb_per_100k": 0.0}}),
+                   {"measured": _both}) == [])
+ck("and so is a run that measured nothing", FB.memory_drift(_Kern, {"measured": {}}) == [])
+ck("no declared model at all is reported as one to WRITE, not one that is wrong",
+   len(FB.memory_drift(type("K3", (_Kern,), {"executor": {}}), {"measured": _both})) == 1)
+# A THRESHOLD THAT FIRES ON NOISE IS ONE A MAINTAINER LEARNS TO SCROLL PAST.
+_near = {"n_cells": 100_000, "peak_rss_gb": 14.0 * FB.MEMORY_DRIFT_RATIO * 0.99}
+ck("a small overshoot is noise and is not reported",
+   FB.memory_drift(_Kern, {"measured": _near}) == [], str(FB.memory_drift(_Kern, {"measured": _near})))
+
+
 print("\n" + ("the loop holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

@@ -717,7 +717,7 @@ def _run(a):
             # declaration is right there. A plugin whose `produces` no longer matches what it
             # emits has drifted, and the next person to read the declaration will believe it.
             for dd in (FB.declaration_drift(ks[name], pl) + FB.figure_drift(ks[name], pl)
-                       + FB.metric_drift(ks[name], pl)):
+                       + FB.metric_drift(ks[name], pl) + FB.memory_drift(ks[name], pl)):
                 print(f"      [{dd.layer}] {dd.why}")
                 diagnoses.append(dd)
             # AND THE RULE THE HOST STATES BUT CANNOT APPLY. Only the plugin knows what it groups
@@ -813,12 +813,19 @@ def _run(a):
     # sizes, which is exactly what separates the fixed baseline from the per-cell slope. One
     # point cannot, and the fit says so instead of inventing a rate from it.
     memory_model = {}
-    _by_plugin = {}
+    _by_plugin, _basis = {}, {}
     for _pl in payloads:                       # the RAW per-instance list; `folded` drops measured
         _m = _pl.get("measured")
-        if isinstance(_m, dict) and _m.get("n_cells") and _m.get("peak_rss_gb"):
-            _by_plugin.setdefault(_pl["kernel"], []).append(
-                (_m["n_cells"], _m["peak_rss_gb"]))
+        if not isinstance(_m, dict) or not _m.get("n_cells"):
+            continue
+        # THE LARGER OF THE MEASUREMENTS, by the same rule the drift diagnosis uses. Reading
+        # `peak_rss_gb` here and the larger figure there would have the model and the warning
+        # disagree about what one instance cost, and a maintainer would have to work out which
+        # to believe. `peak_measurement` is the one place that decides.
+        _peak, _src = FB.peak_measurement(_m)
+        if _peak:
+            _by_plugin.setdefault(_pl["kernel"], []).append((_m["n_cells"], _peak))
+            _basis.setdefault(_pl["kernel"], set()).add(_src)
     for _n, _pts in sorted(_by_plugin.items()):
         _b, _r = fit_memory_model(_pts)
         # BOTH None means no usable measurement. A None BASELINE alone means the split was
@@ -828,12 +835,21 @@ def _run(a):
         if _b is None and _r is None:
             continue
         memory_model[_n] = {"base_gb": _b, "gb_per_100k": _r, "points": len(_pts),
+                            # WHICH MEASUREMENT THIS WAS FITTED ON. The floor undercounts
+                            # concurrent workers by a factor nothing inside the process can
+                            # bound, so a model fitted only on floors is a model to add
+                            # headroom to, and the report has to say which it is.
+                            "basis": sorted(_basis.get(_n, ())),
                             "declared_per_100k": ks[_n].executor.get("memory_gb_per_100k")
                             if _n in ks else None,
                             "declared_base_gb": ks[_n].executor.get("memory_gb_base")
                             if _n in ks else None}
     if memory_model:
-        print("\n  measured memory, fitted as baseline + per-cell (declare these):")
+        _floor_only = all(_m.get("basis") == ["the process's own floor"]
+                          for _m in memory_model.values())
+        print("\n  measured memory, fitted as baseline + per-cell (declare these):"
+              + ("\n  FITTED ON THE PROCESS'S OWN FLOOR, which excludes concurrent children: "
+                 "declare above it, not at it." if _floor_only else ""))
         for _n, _m in sorted(memory_model.items()):
             if _m["base_gb"] is None:
                 # one point, or all at one size: the split is unknown and the whole peak is
