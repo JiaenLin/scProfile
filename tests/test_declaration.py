@@ -212,5 +212,43 @@ ck("and a key that really is unknown is still reported",
    any("unknown" in m for _l, m in
        declare.check({**_ok, "report": {**_ok["report"], "nonsense": 1}})))
 
+print("\na plugin cannot declare more panels than a page will carry")
+# THE PLAN AND THE RUN AGREE BY CONSTRUCTION, extended to the report. A cohort plugin's page is
+# its own figures PLUS the per-arm panels the host adds, and only the second half was ever
+# bounded. One shipped plugin declares 9 and renders exactly 12 - the standard's cap, with zero
+# headroom - and the only way its maintainer could have learned that was to run the job.
+from scprofile.report import BY_ARM_PANEL_CAP as _CAP                           # noqa: E402
+from scprofile.standard import MAX_FIGURES as _MAXF                             # noqa: E402
+
+_budget = _MAXF - _CAP
+
+
+def _figs(n):
+    return [{"id": f"f{i}", "question": "q?", "shows": "diagnostic", "source": f"t{i}.csv"}
+            for i in range(n)]
+
+
+_base = {"name": "x", "summary": "s", "cannot_show": ["a"], "api": 1,
+         "executor": {"memory_gb_per_100k": 1}}
+ck("a cohort plugin at the budget is accepted",
+   not errs({**_base, "report": {"figures": _figs(_budget)}}), str(_budget))
+ck("and one panel over it is refused BEFORE the job",
+   any("budget" in m or "at most" in m
+       for m in errs({**_base, "report": {"figures": _figs(_budget + 1)}})),
+   str(errs({**_base, "report": {"figures": _figs(_budget + 1)}})))
+# A PER-UNIT PLUGIN'S PANELS GO TO THE APPENDIX, which is exempt from the page cap by design -
+# per-sample panels ARE repeats and there are many, which is why they were moved off the page a
+# reader reads. Holding them to the cohort budget would refuse them for being what they are.
+ck("a per-unit plugin is not held to the cohort page budget",
+   not errs({**_base, "per_unit": "sample",
+             "report": {"figures": _figs(_budget + 4),
+                        "unit_metrics": [{"id": "m", "question": "q?"}]}}))
+# ONE STATEMENT OF EACH NUMBER. The budget is arithmetic over two constants owned by the two
+# modules that enforce them; restating either here is the defect this file already caught once.
+import inspect as _i2                                                           # noqa: E402
+_dsrc = _i2.getsource(declare)
+ck("the page cap is imported, not restated", f"= {_MAXF}" not in _dsrc.split("MAX_FIGURES")[0][-40:])
+ck("and so is the host's panel allowance", "BY_ARM_PANEL_CAP" in _dsrc)
+
 print("\n" + ("the declaration holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

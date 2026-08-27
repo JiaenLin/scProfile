@@ -219,6 +219,28 @@ def _check_report(spec, out) -> None:
                                     f"and no reason, which reads as an oversight rather than as "
                                     f"a property of the data."))
 
+    # A PAGE HAS A BUDGET AND A PLUGIN IS NOT THE ONLY THING SPENDING IT. The reporter adds its
+    # own panels to any page whose plugin writes a per-cell column - the per-arm views, capped at
+    # `BY_ARM_PANEL_CAP` - so a plugin's declared figures are not the page's figure count. One
+    # shipped plugin declares 9 and its rendered page carries exactly 12, which is the standard's
+    # cap: it passes with ZERO headroom, and nothing anywhere would have told its maintainer.
+    #
+    # Both numbers are imported from the modules that own them rather than restated here. The
+    # restated version of this same fact is the defect two commits ago, where an allowed-key set
+    # written before a key existed contradicted the check that required it. Imported lazily
+    # because a declaration is read on interpreters that have nothing installed.
+    if isinstance(figs, list) and figs and not spec.get("per_unit"):
+        from .report import BY_ARM_PANEL_CAP
+        from .standard import MAX_FIGURES
+        budget = MAX_FIGURES - BY_ARM_PANEL_CAP
+        if len(figs) > budget:
+            out.append(("ERROR", f"declares {len(figs)} figures for one page. A page carries at "
+                                 f"most {MAX_FIGURES} and the reporter adds up to "
+                                 f"{BY_ARM_PANEL_CAP} per-arm panels of its own, so a cohort "
+                                 f"plugin's budget is {budget}. Above it the page fails the exit "
+                                 f"standard on every run, and the maintainer finds out after the "
+                                 f"job rather than before it."))
+
     rw = block.get("reads_with")
     if rw is not None:
         if not isinstance(rw, list) or any(not isinstance(x, str) for x in rw):
