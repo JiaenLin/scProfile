@@ -631,6 +631,30 @@ def _lede(text):
                if rest else ""))
 
 
+def _contradiction_block(items):
+    """What the plugin said against its own headline, beside the headline, never collapsed.
+
+    Two pages on a real cohort carried a claim their own figures refute - "45.5% of cells score
+    S or G2M" in post-mitotic tissue, "3 terminal states" over cells whose fate entropy sits at
+    the maximum three states allow. Neither page was dishonest: the evidence against each was
+    plotted, correctly, further down.
+
+    It reached the page as one sentence among ten in the caveat list, and before that it was
+    prefixed onto the headline - where `_lede` splits at the first clause and folds the rest
+    into a disclosure, so a refutation longer than the lead was rendered CLOSED. A mechanism
+    that survives only while the sentence is short is not a mechanism.
+
+    So it gets a block of its own: after the claim, before anything else, with no `<details>`
+    anywhere inside it. `standard.check_page` looks for exactly this text in exactly the
+    visible part of the page.
+    """
+    got = [str(c).strip() for c in (items or []) if str(c).strip()]
+    if not got:
+        return ""
+    return ('<div class="warn"><b>This result is contradicted by its own diagnostics.</b><ul>'
+            + "".join(f"<li>{_e(c)}</li>" for c in got) + "</ul></div>")
+
+
 def _fold_caveats(caveats):
     """Caveats identical apart from their `[unit]` tag, folded into one line naming the units.
 
@@ -742,12 +766,20 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
                  concordance=(), payload_all=None):
     """One kernel's own page. Ends in its own limits, not a shared block."""
     p = payload or {}
-    caveats = p.get("caveats") or []
+    # ONCE ON THE PAGE, AT THE TOP. `ctx.contradiction` records into `caveats` as well, so that
+    # a refutation survives into any document built from the payload by something that has
+    # never heard of the newer field. On the page that is the same sentence twice, once in a
+    # block that shouts and once ninth in a list - and the list copy is charged to the caveat
+    # budget, so saying it properly would cost a page its `caveats` criterion.
+    _contra = {str(c).strip() for c in (p.get("contradictions") or [])}
+    caveats = [c for c in (p.get("caveats") or [])
+               if str(c).strip() not in _contra]
     absent = p.get("absent") or []
     body = [f"<h1>{_e(name)}</h1>",
             f'<p class="sub">{_e(summary)}</p>',
             f'<p class="lede">status <b>{_e(p.get("status", "?"))}</b> · '
             + _lede(p.get("headline", "")) + '</p>',
+            _contradiction_block(p.get("contradictions")),
             _overview_block(payload_all or {}),
             _constraint_block(constraint, binds)]
     if caveats:

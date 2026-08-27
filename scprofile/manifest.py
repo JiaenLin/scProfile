@@ -30,10 +30,15 @@ from pathlib import Path
 #: 1.2 added `upstream_units`. 1.1 added `upstream`, `sentinels` and the `objects` slot. Only the
 #: MAJOR is compared, so a
 #: kernel written against 1.0 still runs - it simply does not read the new fields.
+# 1.4 adds the optional `contradictions` key: the claims a plugin made AGAINST ITS OWN RESULT.
+# They were recorded only into `caveats`, where they are one sentence among ten and nothing
+# downstream can tell them apart - so the reporter could not show a refutation where the claim
+# is, and the exit standard could not check that it had. A field of its own is what makes the
+# absence of one detectable.
 # 1.3 adds the optional `metrics` key: one comparable number per instance, so a per-unit
 # plugin's units can be put on one axis. A MINOR bump because compatibility is gated on
 # the major version and a reader that does not know the key ignores it.
-CONTRACT_VERSION = "1.3"
+CONTRACT_VERSION = "1.4"
 
 #: What a kernel may declare it produced. Anything else in `out.json` is ignored with a warning -
 #: silently accepting unknown keys is how two versions of a contract drift into three.
@@ -194,7 +199,8 @@ def layer_names(adata):
 
 def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=None, layers=None,
                  tables=None, figures=None, objects=None, absent=None, caveats=None, headline="",
-                 measured=None, metrics=None, contract=CONTRACT_VERSION):
+                 measured=None, metrics=None, contradictions=None,
+                 contract=CONTRACT_VERSION):
     """Write `out.json` from inside a kernel. The only supported way for a kernel to report.
 
     `caveats` is not decoration and is not optional in spirit: it is what the report prints under
@@ -234,6 +240,11 @@ def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=Non
         "objects": {str(k): rel(v) for k, v in (objects or {}).items()},
         "absent": [dict(a) for a in (absent or [])],
         "caveats": [str(c) for c in (caveats or [])],
+        # WHAT THE PLUGIN SAID AGAINST ITS OWN HEADLINE. Kept apart from `caveats` - which it
+        # is also recorded in, so no existing reader loses it - because a refutation that
+        # cannot be distinguished from a qualification cannot be shown where the claim is, and
+        # its absence cannot be noticed by anything.
+        "contradictions": [str(c) for c in (contradictions or [])],
     }
     if status not in STATUSES:
         raise ContractError(f"status {status!r} is not one of {STATUSES}")
@@ -324,6 +335,10 @@ def read_output(out_dir):
             + "\nA declaration the host cannot verify is worse than no declaration: it would be "
               "merged as a promise.")
     d.setdefault("caveats", [])
+    # A 1.3 kernel has none, and absent must read as empty rather than as missing: every
+    # consumer below does `.get("contradictions") or []`, and a default here means the older
+    # payload and the newer one are the same shape at the point they are used.
+    d.setdefault("contradictions", [])
     d.setdefault("absent", [])
     d.setdefault("objects", {})
     return d
@@ -335,7 +350,10 @@ def unknown_keys(payload):
              # what the instance cost, measured by the process that paid it
              "measured",
              # one comparable number per instance, so a per-unit plugin's units share an axis
-             "metrics"}
+             "metrics",
+             # what the plugin said against its own headline, kept apart from `caveats` so the
+             # reporter can put it where the claim is and the standard can check that it did
+             "contradictions"}
     return sorted(set(payload) - known - set(OUTPUT_SLOTS))
 
 

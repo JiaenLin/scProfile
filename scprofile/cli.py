@@ -1906,6 +1906,15 @@ def _standard(a):
     opens, which is why this takes a directory rather than a payload.
     """
     from . import standard as ST
+    # THE RULER IS MEASURED BEFORE IT MEASURES. Five of these criteria have at some point
+    # reported the defect they were written for as absent, and a broken ruler's verdict is
+    # not a weaker verdict - it is the wrong one, delivered with the same confidence. Each
+    # criterion carries a page it must reject; this costs milliseconds and runs every time,
+    # because the report nobody checks is the one that fails.
+    if not ST.summarise_selfcheck(ST.selfcheck()):
+        print("\nTHE STANDARD ITSELF IS BROKEN - no report was judged. Fix the criteria above; "
+              "a verdict from a ruler that cannot fail is worse than no verdict.")
+        return 2
     d = Path(a.out)
     d = d if d.name == "report" else d / "report"
     if not d.is_dir():

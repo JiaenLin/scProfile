@@ -462,7 +462,7 @@ def fold_payloads(payloads, failed=None):
     out = {}
     for name, group in by.items():
         multi = len(group) > 1 or any(g.get("unit") for g in group)
-        units, figs, tabs, cav, absent = [], [], [], [], []
+        units, figs, tabs, cav, absent, contra = [], [], [], [], [], []
         slots = {"obs": {}, "obsm": {}, "layers": {}, "objects": {}}
         for pl in sorted(group, key=lambda g: str(g.get("unit") or "")):
             u = pl.get("unit")
@@ -483,11 +483,16 @@ def fold_payloads(payloads, failed=None):
                     f["caption"] = tag + (f.get("caption") or "")
                 figs.append(f)
             cav += [tag + c for c in (pl.get("caveats") or [])]
+            # UNTAGGED. A contradiction is looked for VERBATIM on the rendered page, so a
+            # per-unit prefix would make every one of them unfindable - the fold would break
+            # the check by making the sentence true of a unit rather than of the result.
+            contra += [c for c in (pl.get("contradictions") or []) if c not in contra]
             absent += [{"what": tag + str(a.get("what", "?")), "why": a.get("why", "")}
                        for a in (pl.get("absent") or [])]
             units.append({"unit": u, "status": pl.get("status", ""),
                           "headline": pl.get("headline", ""),
                           "caveats": list(pl.get("caveats") or []),
+                          "contradictions": list(pl.get("contradictions") or []),
                           "absent": list(pl.get("absent") or []),
                           "metrics": dict(pl.get("metrics") or {}),
                           "dir": base, "n_figures": len(pl.get("figures") or [])})
@@ -518,6 +523,7 @@ def fold_payloads(payloads, failed=None):
                      "obs": slots["obs"], "obsm": slots["obsm"],
                      "layers": slots["layers"], "objects": slots["objects"],
                      "tables": tabs, "figures": figs, "caveats": cav, "absent": absent,
+                     "contradictions": contra,
                      "units": units, "failed_units": gone, "per_unit": multi}
     return out
 
@@ -601,6 +607,7 @@ def provenance(folded, describe, kernel_specs, merged=None):
                 "not_merged": sorted((merged or {}).get(name, {}).get("dropped", [])),
                 "tables": list(p.get("tables") or []),
                 "caveats": list(p.get("caveats") or []),
+                "contradictions": list(p.get("contradictions") or []),
                 "absent": [f"{a.get('what', '?')}: {a.get('why', '')}"
                            for a in (p.get("absent") or [])],
                 "cannot_show": list(kernel_specs.get(name, [])),

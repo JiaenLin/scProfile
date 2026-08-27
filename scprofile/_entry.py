@@ -355,6 +355,10 @@ def main(argv):
         tables=ctx._tables, figures=ctx._figures, objects=ctx._objects,
         absent=ctx.absent, caveats=ctx.caveats,
         metrics=getattr(ctx, "_metrics", None),
+        # AND AS A FIELD OF THEIR OWN, so the reporter can put them where the claim is and the
+        # exit standard can check that it did. Composed into the headline above as well: two
+        # consumers, one recorded fact, neither reading the other's copy.
+        contradictions=list(getattr(ctx, "_contradictions", []) or []),
         measured=getattr(ctx, "measured", None))
     return 0
 

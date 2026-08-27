@@ -1717,6 +1717,93 @@ def test_the_host_answers_the_sentinel_question_once():
     check("decoupler groups through ctx.populations()", "ctx.populations()" in src, src[:200])
 
 
+def test_a_criterion_that_cannot_fail_is_not_a_criterion():
+    """Every criterion in the exit standard rejects a page written to break it.
+
+    Five of the ten were at some point measuring something other than what they claimed: one
+    keyed on an attribute the reporter never emits, one counted the stylesheet, one counted
+    collapsed text, one could not recognise a real arm figure, one read captions instead of the
+    labels a figure is drawn with. All five were PASSING while broken, which is the only way
+    this class of defect ever presents - a ruler that cannot fail reports the very thing it was
+    written for as absent, on every page, until somebody looks.
+
+    So the ruler is measured against its own counterexamples, here and again inside
+    `scprofile standard` on every invocation. And the three ways the set can rot are checked
+    with it: a criterion named and never measured, a criterion measured and never named, and a
+    criterion explained in the docstring that no report is ever held to.
+    """
+    print("\nthe exit standard proves each of its own criteria can fail")
+    from scprofile import standard as ST
+    for cid, ok, detail in ST.selfcheck():
+        check(f"standard/{cid}", ok, detail)
+    check("standard/parity", ST.documented() == set(ST.CRITERIA),
+          f"documented not implemented {sorted(ST.documented() - set(ST.CRITERIA))}; "
+          f"implemented not documented {sorted(set(ST.CRITERIA) - ST.documented())}")
+    # A COUNTEREXAMPLE FOR EVERY CRITERION, refused rather than skipped. `_mutate` raising
+    # KeyError is what stops a criterion being added with no page that breaks it - the
+    # cheapest possible way to add one that cannot fail.
+    missing = [c for c in ST.CRITERIA
+               if not _mutates(ST, c)]
+    check("standard/counterexample", not missing, f"no page written to break {missing}")
+
+
+def _mutates(ST, cid):
+    try:
+        ST._mutate(cid)
+        return True
+    except KeyError:
+        return False
+
+
+def test_a_refutation_survives_every_hop_to_the_verdict():
+    """A contradiction recorded by a plugin reaches the rendered page, visibly, and is checked.
+
+    THE CHAIN IS FIVE HOPS AND EVERY ONE HAS BROKEN A MECHANISM ALREADY. `ctx.contradiction`
+    prefixed the headline and the next line overwrote it. The manifest recorded it only into
+    `caveats`, where nothing downstream can tell a refutation from a qualification. The fold
+    tags per-unit caveats with their unit, which would make the sentence unfindable verbatim.
+    `_lede` splits the headline at the first clause and folds the rest into a `<details>`, so a
+    refutation longer than the lead rendered CLOSED. And the exit standard cannot see an
+    omission from the page at all.
+
+    Testing any one hop passes while the chain is cut. This walks the whole of it.
+    """
+    print("\na refutation survives from ctx.contradiction to the exit standard")
+    import re as _re
+    from scprofile import manifest, merge, report, standard as ST
+    claim = ("Called fraction falls as sequencing depth rises, which is the opposite of what "
+             "the headline above asserts and is not a biological result.")
+
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td)
+        # hop 1-2: a plugin records it; the manifest carries it as a field of its OWN.
+        pl = manifest.write_output(d, kernel="k", status="ok", headline="Everything is fine.",
+                                   caveats=[claim], contradictions=[claim])
+        check("chain/manifest", pl.get("contradictions") == [claim],
+              f"manifest dropped it: {pl.get('contradictions')}")
+        # hop 3: the fold keeps it VERBATIM - no per-unit tag, or it is unfindable on the page.
+        folded = merge.fold_payloads([{**pl, "unit": "u1", "dir": str(d)},
+                                      {**pl, "unit": "u2", "dir": str(d)}])
+        got = (folded.get("k") or {}).get("contradictions") or []
+        check("chain/fold", got == [claim], f"fold changed it: {got}")
+        # hop 4: it renders, VISIBLE - not inside a disclosure, however long it is.
+        written = report.write_kernel(d, "k", folded["k"], [], payload_all={})
+        html = Path(written).read_text(encoding="utf-8")
+        visible = ST._text(_re.sub(r"<details[^>]*>.*?</details>", " ", html, flags=_re.S))
+        check("chain/visible", ST._norm(claim) in ST._norm(visible),
+              "the refutation is not in the visible text of the rendered page")
+        # hop 5: and the criterion FIRES when it is taken back out.
+        page = d / "probe.html"
+        page.write_text(html, encoding="utf-8")
+        by = {c: o for c, o, _ in ST.check_page(page, recorded=(claim,))}
+        check("chain/criterion-passes", by.get("contradiction") is True,
+              "the criterion fails on a page that does show the refutation")
+        page.write_text(html.replace(claim, ""), encoding="utf-8")
+        by = {c: o for c, o, _ in ST.check_page(page, recorded=(claim,))}
+        check("chain/criterion-fires", by.get("contradiction") is False,
+              "the criterion passes on a page the refutation was removed from")
+
+
 def _load_module(path):
     import importlib.util
     spec = importlib.util.spec_from_file_location(f"_t_{Path(path).stem}", path)
@@ -1767,6 +1854,8 @@ def main():
     test_the_compatibility_copy_is_a_record_and_a_cache()
     test_an_array_carries_its_barcodes()
     test_the_host_answers_the_sentinel_question_once()
+    test_a_criterion_that_cannot_fail_is_not_a_criterion()
+    test_a_refutation_survives_every_hop_to_the_verdict()
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")

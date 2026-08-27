@@ -16,18 +16,34 @@ WHY EACH ONE EXISTS. Measured on a real ten-sample, 2x2 cohort whose report had 
   count         57 figures on one page. A page a reader cannot finish is a page that hides its
                 own result.
   captions      Captions were 65% of all words - 13,172 of 20,545 on the worst page.
+  prose         The narration was ten thousand words of the same explanation repeated per
+                sample. Visible words only: collapsed text is charged to `hidden`.
+  caveats       Counted apart from narration and capped generously. A caveat is the most
+                load-bearing prose on a page, and charging it against a narration cap made the
+                way to pass "say less about the limits of the result".
+  hidden        Words behind a disclosure are not in a reader's way, and must not therefore
+                grow without limit - or the cap on prose is escaped by folding it.
   identifiers   The strongest signal in every population of one page was `A0A079HLR9`, an
                 unmapped UniProt accession presented as a regulator.
   contradiction Two pages carried headlines their own diagnostics refute: 45.5% of nuclei
                 "cycling" in post-mitotic tissue, and "3 terminal states" over cells whose fate
-                entropy was at the maximum the three states allow.
+                entropy was at the maximum the three states allow. THE ONLY CRITERION NOT
+                MEASURABLE FROM THE PAGE: an omitted refutation leaves no mark, so what the
+                plugin recorded is read from the payload and looked for on the page.
+
+EVERY CRITERION CARRIES A PAGE IT MUST REJECT, and `selfcheck()` measures the ruler against
+those pages before the ruler is allowed to measure a report. Five of the ten were at some point
+measuring something other than what they claimed, and every one of them was PASSING while it
+was broken.
 
 A page may DECLARE an exemption with a reason; the reason is printed with the result, so an
 exemption is visible rather than silent.
 """
 from __future__ import annotations
 
+import json
 import re
+from html import unescape as html_unescape
 from pathlib import Path
 
 #: A page may carry at most this many figures. Above it, a reader stops.
@@ -52,6 +68,12 @@ ARM_HINT = re.compile(
     # thing reports its absence just as confidently as its presence.
     r"|split by design|by design level|per design level|grouped by design)\b", re.I)
 
+#: THE CRITERIA, NAMED ONCE. `check_page` calls `ck` with these ids, `selfcheck` proves each of
+#: them can fail, and the module docstring explains each. All three read this tuple, so a
+#: criterion cannot be documented and not implemented, or implemented and never proven.
+CRITERIA = ("overview", "arms", "repeats", "count", "captions", "prose",
+            "caveats", "hidden", "identifiers", "contradiction")
+
 
 def _text(html):
     """Visible words. STYLE AND SCRIPT ARE NOT PROSE.
@@ -63,6 +85,18 @@ def _text(html):
     """
     html = re.sub(r"<(style|script)\b[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html))
+
+
+def _norm(text):
+    """Comparable form of a sentence that has been through an HTML renderer.
+
+    A recorded claim is compared against RENDERED text, so it has been escaped (`&` became
+    `&amp;`), possibly re-wrapped, and sits inside markup that was stripped. Unescaping and
+    collapsing whitespace is as far as this goes: normalising punctuation away too would make
+    the criterion pass on a page that merely mentions some of the same words, which is the
+    failure mode this whole module exists to refuse.
+    """
+    return re.sub(r"\s+", " ", html_unescape(str(text))).strip().lower()
 
 
 def _captions(html):
@@ -116,8 +150,14 @@ def _source_accessions(page):
     return found
 
 
-def check_page(path, *, exempt=()):
-    """Every criterion, measured on one rendered page. Returns [(id, ok, detail)]."""
+def check_page(path, *, exempt=(), recorded=()):
+    """Every criterion, measured on one rendered page. Returns [(id, ok, detail)].
+
+    `recorded` is what the PLUGIN said about its own result and the page must therefore show -
+    the contradictions in its payload. It is the one thing on this page that cannot be measured
+    from the page: a refutation that was never rendered leaves no trace in the HTML, and a page
+    that omits it looks exactly like a page that had none to make.
+    """
     html = Path(path).read_text(encoding="utf-8")
     txt = _text(html)
     pairs = _captions(html)
@@ -180,6 +220,42 @@ def check_page(path, *, exempt=()):
     ck("identifiers", not acc or said,
        f"{len(acc)} unmapped accession(s) among the labels and the page never says so, "
        f"e.g. {acc[:4]}")
+    # WHAT THE PLUGIN SAID AGAINST ITSELF, ON THE PAGE, IN PLAIN SIGHT. Two pages carried a
+    # headline their own figures refute; the refutation existed, was recorded, and reached a
+    # `caveats` list indistinguishable from nine other sentences. This is the only criterion
+    # that is not measurable from the page alone, and that is exactly why it is here: an
+    # omission leaves no mark, so a page that dropped it and a page with nothing to drop are
+    # the same document. VISIBLE, not behind a disclosure - the claim it refutes is not.
+    missing = [c for c in recorded
+               if _norm(c) not in _norm(_text(re.sub(r"<details[^>]*>.*?</details>", " ",
+                                                     html, flags=re.S)))]
+    ck("contradiction", not missing,
+       f"{len(missing)} contradiction(s) the plugin recorded do not appear in the visible page, "
+       f"e.g. {missing[:1]}")
+    return out
+
+
+def recorded_claims(report_dir):
+    """{page stem: [contradiction, ...]} from the payload beside the rendered report.
+
+    Read from `report.json` in the run directory, which is the same file `report` renders
+    from - so what the standard holds a page to is what the page was built out of, and not a
+    second opinion assembled from somewhere else.
+
+    An unreadable or absent payload yields nothing rather than raising: this module must stay
+    runnable against a report directory that has been copied away from its run.
+    """
+    d = Path(report_dir)
+    src = (d if d.name != "report" else d.parent) / "report.json"
+    try:
+        payload = json.loads(src.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    out = {}
+    for name, pl in (payload.get("kernels") or {}).items():
+        got = (pl or {}).get("contradictions") or []
+        if got:
+            out[str(name)] = [str(c) for c in got]
     return out
 
 
@@ -187,6 +263,7 @@ def check_report(report_dir, *, exempt=None):
     """Every page in a rendered report. {page: [(id, ok, detail)]}."""
     exempt = exempt or {}
     d = Path(report_dir)
+    claims = recorded_claims(d)
     res = {}
     pages = [f for f in sorted(d.glob("*.html")) if f.stem != "index"]
     # AN APPENDIX IS NOT A REPORT PAGE, and holding it to the report standard would fail it for
@@ -206,7 +283,8 @@ def check_report(report_dir, *, exempt=None):
     for f in pages:
         if f.stem in appendix:
             continue
-        res[f.stem] = check_page(f, exempt=set(exempt.get(f.stem, ())))
+        res[f.stem] = check_page(f, exempt=set(exempt.get(f.stem, ())),
+                                 recorded=claims.get(f.stem, ()))
     return res
 
 
@@ -228,3 +306,114 @@ def summarise(res, log=print):
             if not ok:
                 log(f"  {page:<11} {cid:<12} {detail}")
     return ok_all
+
+
+# --------------------------------------------------------------- the ruler checks itself
+
+#: A page that must MEET every criterion. Without it, a criterion that always fails would look
+#: exactly as healthy below as one that works: "it fired on the counterexample" is only evidence
+#: when the same ruler passed something.
+BASELINE = (
+    "<style>.x{color:red}</style>"
+    "<h2>The cohort</h2><p>Eight units in two arms of one factor.</p>"
+    '<figure><img src="a.png"><figcaption>What it shows, by arm.</figcaption></figure>'
+    '<figure><img src="b.png"><figcaption>What else it shows.</figcaption></figure>'
+)
+
+
+def _mutate(cid):
+    """BASELINE broken in exactly one way: the page `cid` exists to reject."""
+    long_words = " ".join(["word"] * (MAX_PROSE_WORDS + 40))
+    if cid == "overview":
+        return BASELINE.replace("<h2>The cohort</h2><p>Eight units in two arms of one "
+                                "factor.</p>", "<h2>Results</h2>")
+    if cid == "arms":
+        return BASELINE.replace("What it shows, by arm.", "What it shows, per population.")
+    if cid == "repeats":
+        return BASELINE.replace('src="b.png"', 'src="a.png"')
+    if cid == "count":
+        extra = "".join(f'<figure><img src="x{i}.png"><figcaption>Panel {i}.</figcaption>'
+                        f"</figure>" for i in range(MAX_FIGURES + 1))
+        return BASELINE + extra
+    if cid == "captions":
+        return BASELINE.replace("What else it shows.",
+                                " ".join(["word"] * (MAX_CAPTION_WORDS + 5)))
+    if cid == "prose":
+        return BASELINE + f"<p>{long_words}</p>"
+    if cid == "caveats":
+        return BASELINE + ('<div class="warn">'
+                           + " ".join(["word"] * (MAX_CAVEAT_WORDS + 20)) + "</div>")
+    if cid == "hidden":
+        return BASELINE + ("<details>" + " ".join(["word"] * (MAX_HIDDEN_WORDS + 20))
+                           + "</details>")
+    if cid == "identifiers":
+        return BASELINE.replace("What else it shows.", "Strongest signal: A0A079HLR9.")
+    if cid == "contradiction":
+        return BASELINE                    # the claim is supplied, and the page never shows it
+    raise KeyError(cid)                    # a criterion with no counterexample is not provable
+
+
+#: What the `contradiction` counterexample is missing. Every other criterion is broken by the
+#: page alone; this one is broken by what the page LEAVES OUT, which is why it needs a claim.
+_MISSING_CLAIM = "the depth trend refutes the headline above"
+
+
+def selfcheck():
+    """Prove every criterion can fail, and that none of them fails on a clean page.
+
+    A CHECK THAT CANNOT FAIL IS WORSE THAN NO CHECK: it reports the very defect it was written
+    for as absent, and it does so on every page, for as long as nobody looks. Five of the
+    criteria here were at some point measuring something other than what they claimed - one
+    keyed on an attribute the reporter never emits, one counted the stylesheet, one counted
+    collapsed text, one could not recognise a real arm figure, one read captions instead of the
+    labels a figure is drawn with. Every one of them was PASSING while it was broken.
+
+    So each criterion carries a page it must reject, and the whole ruler is measured against
+    those pages before it is allowed to measure anything else. Returns [(id, ok, detail)].
+    """
+    import tempfile
+    out = []
+    with tempfile.TemporaryDirectory() as td:
+        page = Path(td) / "p.html"
+
+        def run(html, recorded=()):
+            page.write_text(html, encoding="utf-8")
+            return {c: (o, d) for c, o, d in check_page(page, recorded=recorded)}
+
+        clean = run(BASELINE)
+        for cid in CRITERIA:
+            if cid not in clean:
+                out.append((cid, False, "named in CRITERIA and never measured by check_page"))
+                continue
+            if not clean[cid][0]:
+                out.append((cid, False, f"fails on a page that meets the standard: "
+                                        f"{clean[cid][1]}"))
+                continue
+            broken = run(_mutate(cid),
+                         recorded=(_MISSING_CLAIM,) if cid == "contradiction" else ())
+            out.append((cid, not broken[cid][0],
+                        "does not fire on the page written to break it"))
+        for cid in sorted(set(clean) - set(CRITERIA)):
+            out.append((cid, False, "measured by check_page and not named in CRITERIA"))
+    return out
+
+
+def documented():
+    """The criteria the module docstring explains, read from the docstring itself.
+
+    A criterion documented and not implemented is an absence nobody meets - `contradiction` was
+    described in this file for a week as one of the standard's reasons for existing, and no
+    report was ever held to it.
+    """
+    body = (__doc__ or "").split("WHY EACH ONE EXISTS", 1)[-1]
+    # EXACTLY two spaces, then the id: a continuation line is indented further, so what
+    # follows its two spaces is another space and never an id.
+    return {m.group(1) for m in re.finditer(r"^  ([a-z_]+)[ ]+\S", body, re.M)}
+
+
+def summarise_selfcheck(res, log=print):
+    """Print it, and return True when every criterion is proven falsifiable."""
+    bad = [(c, d) for c, o, d in res if not o]
+    for cid, detail in bad:
+        log(f"  RULER BROKEN  {cid:<14} {detail}")
+    return not bad
