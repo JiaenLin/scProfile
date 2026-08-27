@@ -188,6 +188,30 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   **CHECK:** does the brief name exactly one directory per figure family, and is every other
   directory renamed so that reading it is impossible by accident?
 
+  **ONE INSTANCE, and it is the coordinator's own.** Having written this rule, the coordinator then
+  named two directories as "the CURRENT ones" in two successive briefs. Both were stale by the time
+  the second brief was written: another agent had edited the shared module an hour after those
+  renders, so the figures the reviewers were sent to were not figures of the code anybody now had.
+  The error was found only because a MANUSCRIPT agent, told to cite what it had opened, cited a
+  third directory the coordinator had never heard of - which was the genuinely current one. Naming
+  a directory as current is a claim with a shelf life measured in minutes on an active tree, and
+  the coordinator is the last person who will notice it has expired, because they are the one who
+  remembers deciding it. Do not name a directory as current from memory. Recompute it - newest
+  render whose mtime beats every module that draws it - at the moment you write the brief.
+
+- **P18 (consolidate to one directory per family, and delete the question)** The remedy for the
+  above is not better bookkeeping, it is fewer directories. An iterating rebuild accumulates output
+  directories the way a shell accumulates history, and every one of them is a trap for the next
+  reader, who has no way to tell a superseded render from a current one by looking - they are all
+  plausible figures. Render once from final source into ONE directory per family, name it
+  unambiguously, and move every other directory out of the tree.
+  **ONE INSTANCE.** One figure family had accumulated 21 output directories - `r1`-`r8`, `alias1`-
+  `alias6`, `baseline`, `final`, `pal`, `pfix`-`pfix4`. `final` was among the oldest, 8 hours
+  behind source. The two most recent were unknown to the coordinator. Consolidating left one
+  directory, two figures, zero stale.
+  **CHECK:** how many directories hold a render of this family? If the answer is more than one, you
+  are relying on somebody remembering which, and that has already failed here.
+
 ## What to expect at the end
 
 In this rebuild, of 23 plates: **19 were about the method, not the biology.** Four presented a
