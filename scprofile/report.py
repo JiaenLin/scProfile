@@ -777,8 +777,13 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     # block that shouts and once ninth in a list - and the list copy is charged to the caveat
     # budget, so saying it properly would cost a page its `caveats` criterion.
     _contra = {str(c).strip() for c in (p.get("contradictions") or [])}
+    # THE FOLD TAGS A PER-UNIT CAVEAT WITH ITS UNIT AND LEAVES THE CONTRADICTION UNTAGGED - it
+    # has to, because the exit standard looks for the claim VERBATIM on the page. So comparing
+    # the two directly matched for a cohort plugin and never for a per-unit one, and the claim
+    # rendered twice: once in the block that shouts and once in the folded caveat list. The tag
+    # is stripped before comparing, which is the one place these two forms are reconciled.
     caveats = [c for c in (p.get("caveats") or [])
-               if str(c).strip() not in _contra]
+               if re.sub(r"^\[[^\]]+\]\s*", "", str(c)).strip() not in _contra]
     absent = p.get("absent") or []
     body = [f"<h1>{_e(name)}</h1>",
             f'<p class="sub">{_e(summary)}</p>',

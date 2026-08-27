@@ -11,6 +11,7 @@ Run: python tests/test_perunit.py
 import inspect
 import pathlib
 import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -731,6 +732,32 @@ except merge.MergeError as e:
     ck("it raises MergeError naming the cause", "not unique" in str(e))
 except Exception as e:                                                   # noqa: BLE001
     ck("it raises MergeError", False, type(e).__name__)
+
+print("\na refutation is shown once, whether or not the fold tagged its caveat copy")
+# `ctx.contradiction` records into `caveats` AS WELL, so the claim survives into any document
+# built from the payload by something that never heard of the newer field. The fold then TAGS a
+# per-unit caveat with its unit and leaves the contradiction UNTAGGED - it must, because the
+# exit standard looks for the claim verbatim on the page. Comparing the two directly therefore
+# matched for a cohort plugin and NEVER for a per-unit one, and the claim rendered twice: once
+# in the block that shouts and once in the folded caveat list.
+_claim = "The score rises with cell count, so this headline describes size and not biology."
+_pl = [{"kernel": "k", "status": "ok", "headline": "h", "caveats": [_claim],
+        "contradictions": [_claim], "unit": _u, "dir": "/tmp", "figures": [], "tables": [],
+        "obs": {}, "obsm": {}, "layers": {}, "objects": {}, "absent": [], "metrics": {}}
+       for _u in ("S1", "S2")]
+_f = merge.fold_payloads(_pl)["k"]
+ck("the fold leaves the contradiction untagged", _f["contradictions"] == [_claim],
+   str(_f["contradictions"]))
+ck("and tags the caveat copy with its unit, as it does every per-unit caveat",
+   all(c.startswith("[") for c in _f["caveats"]), str(_f["caveats"]))
+with tempfile.TemporaryDirectory() as _td4:
+    _w = report.write_kernel(Path(_td4), "k", _f, [], payload_all={})
+    _h = Path(_w).read_text(encoding="utf-8")
+    _vis = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ",
+                  re.sub(r"<details[^>]*>.*?</details>", " ", _h, flags=re.S)))
+    ck("and the claim is rendered exactly once",
+       _vis.lower().count(_claim[:55].lower()) == 1,
+       f"rendered {_vis.lower().count(_claim[:55].lower())} times")
 
 print("\na plugin that partitions its allocation is told what the allocation is")
 # THE HOST COMPUTED IT AND DID NOT PASS IT. `demand()` works out a per-instance memory figure

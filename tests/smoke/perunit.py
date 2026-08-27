@@ -111,6 +111,20 @@ def run(ctx):
     ctx.metric("score_mean", float(score.mean()))
 
     ctx.headline = f"{A.n_obs} cells scored"
+    # A REFUTATION, ON PURPOSE, so the SMOKE GATE exercises the chain rather than the unit
+    # suite alone. `ctx.contradiction` -> manifest field -> fold (untagged, or it is unfindable
+    # verbatim) -> a block beside the claim with no `<details>` -> the exit standard reading the
+    # payload back. Five hops through subprocesses, JSON, a fold and an HTML render, and every
+    # one of them has broken a mechanism already: the headline prefix was overwritten by the
+    # next line, the manifest recorded it only as a caveat, the fold tags per-unit caveats, and
+    # `_lede` folds anything past the first clause into a disclosure.
+    #
+    # WRITTEN AFTER `ctx.headline` DELIBERATELY. The original defect was order-dependent - it
+    # prefixed the headline and the next line overwrote it - so a fixture that called this
+    # first would pass while the mechanism was broken.
+    ctx.contradiction(
+        f"The score this headline reports is drawn from a fixture and rises with cell count, "
+        f"so the {A.n_obs} figure above describes the object's size and not its biology.")
     ctx.caveat(f"Unit {unit} only. Nothing here is comparable across units without a model "
                f"that says so - which is what the across-units section is, and it compares "
                f"the two declared metrics and nothing else.")

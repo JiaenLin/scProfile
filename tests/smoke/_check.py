@@ -59,6 +59,32 @@ def main():
     ck("no two delivered names collide", len({o.name for o in objs}) == len(objs))
 
     html = (R / "report" / f"{P}.html").read_text()
+
+    # THE REFUTATION, ALL FIVE HOPS, ON WHAT A RUN ACTUALLY WROTE. The unit suite calls these
+    # functions directly; this opens the delivered directory, so it proves the claim survived
+    # subprocesses, JSON, the fold across units, an h5ad write and an HTML render. The fixture
+    # records it AFTER assigning `ctx.headline`, because the original defect was order-dependent.
+    contra = k.get("contradictions") or []
+    ck("a recorded refutation reaches report.json as a field of its own", len(contra) == 1,
+       str(contra))
+    if contra:
+        claim = contra[0]
+        ck("the fold does not tag it with a unit, or it is unfindable verbatim",
+           "[" not in claim[:2], claim[:40])
+        visible = re.sub(r"<details[^>]*>.*?</details>", " ", html, flags=re.S)
+        visible = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", visible))
+        ck("and it is on the page, VISIBLE, not behind a disclosure",
+           re.sub(r"\s+", " ", claim).strip()[:60].lower() in visible.lower(),
+           "a refutation a reader must open a disclosure to meet was not read")
+        # ONCE. `ctx.contradiction` records into `caveats` too, so it survives into any
+        # document built from the payload - on the page that is the same sentence twice, and
+        # the caveat copy is charged to the caveat word budget. `or True` was written here
+        # first, which is a check that cannot fail and so is worse than no check at all.
+        n_shown = visible.lower().count(re.sub(r"\s+", " ", claim).strip()[:60].lower())
+        ck("and it appears exactly ONCE on the page", n_shown == 1,
+           f"rendered {n_shown} times; the fold tags a per-unit caveat and leaves the "
+           f"contradiction untagged, so the two forms must be reconciled before comparing")
+
     srcs = re.findall(r'(?:src|href)="\.\./(kernels/[^"]+)"', html)
     missing = [s for s in srcs if not (R / s).exists()]
     ck("every figure and link on the page resolves", not missing, str(missing[:3]))
