@@ -344,6 +344,23 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   canonical, and does every caller import THAT one? Do the constants have identical names in all of
   them?
 
+- **P27 (a set-wide text correction is not done until every producer it touched has been RE-RUN)**
+  Finding one wrong sentence and grepping for it usually turns up several copies, and fixing all of
+  them in one pass is right. Rendering only the one you were looking at is not. Text has layout
+  consequences that differ per figure - the same added clause fits in one key and overflows
+  another - so a correction applied to N files needs N re-runs, and the ones you did not open are
+  exactly where it will have broken something. Re-run all of them, look at the ones that changed,
+  and treat a producer that now REFUSES as the good case.
+  **ONE INSTANCE.** A false claim - an entity described as the largest in the cohort when it was
+  only the largest in its own group - was found in EIGHT files, having been written once and
+  copied. All eight were corrected in a single pass and two were re-rendered. A later sweep that
+  ran every producer in the directory found one of the other six now failing: the longer correct
+  sentence overflowed that figure's key by 0.04 in, and its measuring guard refused to render
+  rather than shipping type over type. The guard did its job; the process had not. Of 33 producers
+  in that directory the sweep found 5 that could not run at all, and only 3 were already known.
+  **CHECK:** after a multi-file text edit, how many producers did you re-run, against how many
+  files you changed? Did you open the rendered result of each one whose text you altered?
+
 ## What to expect at the end
 
 In this rebuild, of 23 plates: **19 were about the method, not the biology.** Four presented a
