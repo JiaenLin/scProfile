@@ -1829,6 +1829,19 @@ def test_a_refutation_survives_every_hop_to_the_verdict():
         by = {c: o for c, o, _ in ST.check_page(page, recorded=(claim,))}
         check("chain/criterion-fires", by.get("contradiction") is False,
               "the criterion passes on a page the refutation was removed from")
+        # THROUGH THE HTML ESCAPER. A claim is compared against text taken off a RENDERED page,
+        # where `'` is `&#x27;` and `&` is `&amp;` - and a real one says "the median cell's fate
+        # entropy". Comparing the raw sentence against the escaped page would report a
+        # refutation as missing from the page it is printed on, which is a false failure in the
+        # criterion whose whole job is to notice a real one. Both sides are unescaped; asserted
+        # rather than assumed, because it is invisible until a claim contains punctuation.
+        punct = ["A cell's entropy & its ceiling differ by <2%.",
+                 'A "quoted" claim: 45.5% of cells score S/G2M.']
+        pl2 = {"kernel": "k", "status": "ok", "headline": "Fine.", "caveats": [],
+               "contradictions": punct, "absent": [], "figures": [], "tables": [], "units": []}
+        w2 = report.write_kernel(d, "k2", pl2, [], payload_all={})
+        by = {c: (o, dd) for c, o, dd in ST.check_page(Path(w2), recorded=punct)}
+        check("chain/entities", by["contradiction"][0] is True, str(by["contradiction"]))
         # MEASURED-AND-CLEAN IS NOT THE SAME AS NOT-MEASURED. A report directory copied away
         # from its run has no payload beside it; reading that as "no contradictions" would make
         # the criterion pass on every page of it, which is absence of evidence rendered as
