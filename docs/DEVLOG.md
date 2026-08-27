@@ -684,3 +684,78 @@ clean:  PBS 689055 — velocity and cellcycle on a 100,713-cell object. velocity
         path a plugin written outside this repository takes. Proven live on the real payload,
         not on a fixture: remove a required panel -> 1 finding naming it; remove an optional one
         -> 0; add an undeclared one -> 1 naming it.
+
+---
+
+## 2026-08-27 — cycle: the exit standard, and the checks that could not fail (PBS 695570, 696390)
+
+tested: ten plugins driven to a rendered-report standard, one plugin per job; then the standard
+        itself, adversarially, against its own criteria.
+
+**All ten meet it.** `scenic` was the last (PBS 695570, exit 0, 5 h 31 m, 56 GB); the other nine
+were already measured. `cellcycle` was re-run once (PBS 696390, exit 0, **5 m 58 s**, 30 GB) for
+one reason: to make the tenth criterion a real check rather than a claim about one.
+
+found:  [host] FIVE of the standard's own criteria had at some point measured something other
+              than what they claimed — one keyed on an attribute the reporter never emits, one
+              counted the stylesheet, one counted collapsed text, one could not recognise a real
+              arm figure, one read captions instead of the labels a figure is drawn with. Every
+              one was PASSING while broken. Each criterion now carries a page written to break
+              it, and the whole ruler is measured against those pages before it measures a
+              report — on every invocation, not only in the suite → 86844d0, a6fcbec
+
+        [host] `contradiction` was DOCUMENTED in the standard for a week as one of its reasons
+              for existing and no report was ever held to it. Found by the parity check added
+              with the counterexamples, not by reading → a6fcbec
+
+        [host] and the criterion, once implemented, reported `ok` on the two plugins it was
+              written for — their payloads predate the field, so an absent key read as an empty
+              list. `n/a` is now a third state, printed as itself → 41ad53b
+
+        [host] `arms` is unmeetable on a cohort with no design table, and `check_page` had taken
+              an `exempt` argument since it was written that nothing ever passed. A criterion a
+              correct run CANNOT satisfy is as bad as one that cannot fail → eba2a8c
+
+        [host] the in-job test suites had been running about two thirds of themselves. Not a
+              failing check — an ABORT: `test_contract` raised `FileNotFoundError` on a file the
+              tool snapshot did not copy and stopped sixteen checks from the end, in every job,
+              reading in the log exactly like a suite that finished. Four files did this, each
+              surfacing only once the one before it was fixed; the enumeration was the defect,
+              so the snapshot now copies the whole tool → 6a9f154, and a missing project file is
+              a failed check rather than an abort.
+
+        [declaration] `declare.check` ERRORED when a per-unit plugin omitted `report.unit_metrics`
+              and, ten lines later, warned that `unit_metrics` was an unknown key the reporter
+              ignores. Both about one declaration; one of them false → 704da33
+
+        [declaration] a guard that could not be READ was ALLOWING. `has_guard` answered a
+              two-state question and returned False when the plugin file could not be opened, so
+              an `OSError` became "the check passed" inside the one mechanism that exists to
+              refuse an uninterpretable dataset. A hanging guard had no timeout at all → 64fe4ef
+
+        [declaration] a plugin that partitions its allocation was told only about cores. The host
+              computes a per-instance memory figure and admits the instance on it; the manifest
+              carried `{"cores": n}`. Measured live: dask workers pinned at 11.25 GiB inside a
+              180 GB job, 86% of CPU in garbage collection, 29% utilisation → b309062
+
+        [declaration] a memory model fitted on a floor. Self-measurement 14.4 GB against 42.7 GB
+              billed — 3.0× — and the declaration sized from it got the plugin killed. Two
+              measurements of one cost now resolve to the LARGER, named → 5216a73
+
+        [portability] the tool's own prose named the development cohort's two factors and their
+              crossing, one diet level, its animal count, and the alias between a biological
+              factor and the reagent lot — an unpublished analytical finding about someone's data,
+              in a public repository. Twelve sentences; every lesson survives being told about
+              `a` and `b` → 02ee150. The leak scan was line-based and could not see a phrase the
+              text wrapper had split, and reported the tree clean while it was not → 3abbb50
+
+clean:  ten of ten meet the standard on rendered reports. `contradiction` is a real check on
+        `cellcycle` (PBS 696390) and `n/a` elsewhere, which is the honest reading rather than a
+        tick. Seven suites green; the leak scan is proved able to fire, on one line and across a
+        wrap.
+
+**The shape of nearly every finding above.** A check produced an answer it had no basis for, and
+the answer was indistinguishable from a real one — a ruler measuring the wrong thing, an absence
+read as an outcome, a suite that aborted where it looked like it had finished. It cost three
+watcher failures in this session's own supervision before it was recognised as one defect wearing
+many hats, and the last one was written while fixing the one before it.
