@@ -732,6 +732,28 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   each appear in the key? Is there any row or region of the panel that contains NONE of the keyed
   appearances?
 
+- **C23l (one legend, two panels: scope every entry, and never reuse a semantic colour)** A legend
+  row placed under a multi-panel figure is read as applying to all of it. If two panels encode
+  different things, an unscoped swatch is a false claim about the panel it does not describe -
+  and the failure is silent, because both panels are individually correct. Prefix every entry with
+  the panel it keys. And where one panel's colours carry a MEANING - group, arm, condition, class -
+  no other panel may draw a mark in those colours for anything else. Give the second panel a
+  neutral, or a channel that is not colour. A colour that means "treated" in one panel and
+  "selected" in another is not a near-miss; a reader who has learned the first mapping applies it.
+  **ONE INSTANCE, and the most serious defect found in this rebuild.** A two-panel figure keyed
+  blue = group 1 and red = group 2. Panel B used them for exactly that. Panel A used the SAME HEX
+  as red to mark membership of a shaded region, and contained no blue at all. So the key told a
+  reader that 40 marks belonged to group 2, when what they had in common was falling inside a
+  band - and it was not even true of them: 2 of the 40 belonged to the other group, and all 6
+  marks of one important class belonged to group 2 yet were drawn unfilled. The panel's own
+  headline said the two groups did not differ, so the key contradicted the figure's conclusion.
+  The 28 unfilled marks in A had no entry at all; the only open swatch keyed a per-UNIT mark in
+  panel B, while A's marks are per-ENTITY. Repair: A's fills became neutral, both were keyed, and
+  every entry gained an "A ·" or "B ·" prefix.
+  **CHECK:** for every legend entry, which panel does it key - and does it key anything at all in
+  the others? Sample the plot rect of each panel: does any panel contain none of a colour the
+  shared legend assigns a meaning to? Does any colour carry two meanings across the figure?
+
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?
