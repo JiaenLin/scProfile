@@ -677,6 +677,24 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   it rely on whoever edits the prose next remembering to look? Add a sentence and re-render: does
   anything object?
 
+- **C23i (two correct numbers that read as a typo of each other are a defect of the page)** A
+  panel usually quotes several counts, and two of them will sooner or later be counts of DIFFERENT
+  things that land close together - a universe and a subset, a raw total and a filtered one, items
+  and item-pairs. When they also happen to be near-anagrams, a reader's first conclusion is that
+  one is a slip, and their second is to distrust the rest of the numbers. The fix is not to change
+  either number: it is to name what each is a count OF, in the same breath, wherever both appear.
+  Name the denominator on every count you print, and say when two denominators differ.
+  **ONE INSTANCE.** A figure's header read "109 of 225 combinations" and a note beneath it "12 rows
+  out of 255". Both were exactly right - 225 is (item x pair) combinations inside the drawn window,
+  255 is the distinct items in the whole cohort, and 109 + 116 = 225 checks - but the reviewer's
+  first move, and mine, was to treat 255 as a transposition of 225 and go looking for the bug. The
+  repair was six words: "of the 255 distinct L-R pairs in the cohort (a different denominator from
+  the 225 combinations counted above)". This is the mirror of the failure where two true facts are
+  fused into one false sentence: here two true facts stay separate and still mislead.
+  **CHECK:** list every count printed on the panel with what it counts and over what universe. Do
+  any two differ by a digit swap or a factor a reader could mistake for a slip? Does the page say,
+  at the point of use, which denominator each belongs to?
+
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?
