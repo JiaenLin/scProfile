@@ -178,6 +178,39 @@ for _fn in ("run", "selftest"):
     except Exception as _e:                                                    # noqa: BLE001
         ck(f"{_fn} refuses until it is written", False, f"raised {type(_e).__name__}")
 
+print("\nthe roadmap's SHIPPED table is checked against what actually ships")
+# A COUNT IN A DOCUMENT IS READ AS A FACT BY PEOPLE WHO WILL NOT OPEN THE SOURCE, and this one
+# travelled: `ROADMAP.md` listed two shipped kernels for as long as it took to build the other
+# seven, and a downstream project's index copied "ships `cellcycle` and `velocity` only" and
+# blocked a stage on a plugin that had been shipping for days.
+#
+# So the list is MEASURED rather than maintained. Both directions: a plugin that ships and is
+# not listed understates the tool, and a name listed that does not ship promises what is not
+# there - and the second is the one somebody plans work around.
+import re as _re2                                                               # noqa: E402
+from scprofile.kernels import discover as _disc                                 # noqa: E402
+
+_rmp = Path(__file__).resolve().parents[1] / "ROADMAP.md"
+try:
+    _rm = _rmp.read_text(encoding="utf-8")
+except OSError as _e:
+    ck("ROADMAP.md is readable", False, str(_e))
+    _rm = ""
+_t0 = _rm.split("## Tier 0", 1)[-1].split("## Tier 1", 1)[0]
+_listed = set(_re2.findall(r"^\| `([a-z_0-9]+)` \|", _t0, _re2.M))
+_ships = set(_disc())
+ck("every shipped plugin is in the roadmap's Tier 0",
+   not (_ships - _listed), f"ships and unlisted: {sorted(_ships - _listed)}")
+ck("and nothing is listed as shipped that does not ship",
+   not (_listed - _ships), f"listed and absent: {sorted(_listed - _ships)}")
+# AND THE PROSE COUNT BESIDE IT. "All nine" and a table of eight is the same defect one line up.
+_words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+          "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+_claim = _re2.search(r"\*\*All ([a-z]+),", _t0)
+ck("the count claimed in prose matches the table",
+   bool(_claim) and _words.get(_claim.group(1)) == len(_listed),
+   f"prose says {_claim.group(1) if _claim else '?'}, table has {len(_listed)}")
+
 print("\nthe keys a report block may carry are stated once, not twice")
 # THE CHECKER DEMANDED A KEY AND THEN WARNED THAT THE KEY WAS UNKNOWN. The allowed-key set was a
 # literal inside the unknown-key check, written before `unit_metrics` existed and never updated

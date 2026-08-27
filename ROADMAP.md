@@ -38,16 +38,36 @@ Two rules that fall out of the gate and are worth stating separately:
 
 ## Tier 0 — shipped
 
+**All nine, as of 2026-08-27, each meeting the exit standard on a rendered report from a real
+run.** This table listed two for as long as it took to build the other seven, and the count
+travelled: a downstream project's index recorded "scProfile ships `cellcycle` and `velocity`
+only" and blocked a stage on a plugin that had been shipping for days. A roadmap's *shipped* row
+is read as a statement of fact by people who will not open the source.
+
 | kernel | answers | needs |
 |---|---|---|
 | `cellcycle` | phase per cell; the check that a trajectory is not a cell-cycle axis | — |
 | `velocity` | direction of transcriptional change | spliced/unspliced (searched for, not assumed) |
+| `pseudotime` | ordering along a trajectory, and its orientation | an embedding, `cellcycle` |
+| `abundance` | whether a population's share shifts across the design | a design table |
+| `de` | which genes change, per population, across the design | a design table |
+| `scenic` | regulon activity per cell | cisTarget references |
+| `decoupler` | pathway and TF activity per cell | a prior knowledge network |
+| `liana` | ligand–receptor communication, consensus across methods | — |
+| `cellchat` | the same question through the R implementation | R |
+
+*Not a tenth method:* `tests/smoke/plugins/silhouette.py` also runs, plans, merges and reports
+like any of the above, and meets the same standard. It is deliberately outside `kernels/` — it
+exists to prove the plugin FORMAT works for a file somebody drops in without speaking to this
+project. Counting it here would overstate the tool by one.
 
 ---
 
-## Tier 1 — next, and in this order
+## Tier 1 — DONE, in this order
 
-The order is a dependency order, not a preference. Each unlocks the ones under it.
+The order was a dependency order, not a preference, and each did unlock the ones under it. Kept
+as written rather than deleted: what each **cannot show** is the part that outlives the build,
+and it is reproduced in every plugin's `cannot_show` and on every page it renders.
 
 ### 1. `pseudotime`
 **Answers** ordering along a trajectory, and — with `velocity` — its orientation.

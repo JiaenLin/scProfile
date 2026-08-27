@@ -689,12 +689,18 @@ clean:  PBS 689055 — velocity and cellcycle on a 100,713-cell object. velocity
 
 ## 2026-08-27 — cycle: the exit standard, and the checks that could not fail (PBS 695570, 696390)
 
-tested: ten plugins driven to a rendered-report standard, one plugin per job; then the standard
+tested: every plugin driven to a rendered-report standard, one plugin per job; then the standard
         itself, adversarially, against its own criteria.
 
-**All ten meet it.** `scenic` was the last (PBS 695570, exit 0, 5 h 31 m, 56 GB); the other nine
-were already measured. `cellcycle` was re-run once (PBS 696390, exit 0, **5 m 58 s**, 30 GB) for
-one reason: to make the tenth criterion a real check rather than a claim about one.
+**All NINE shipped plugins meet it**, and so does a tenth page — `silhouette`, which is not a
+shipped method but the fixture in `tests/smoke/plugins/` that exists to prove the FORMAT works
+for a file dropped in from outside the repository. It meeting the same standard as the nine is
+worth more than a tenth method would be; counting it as one is simply wrong, and this entry said
+"ten plugins" until the review that followed it.
+
+`scenic` was the last (PBS 695570, exit 0, 5 h 31 m, 56 GB); the rest were already measured.
+`cellcycle` was re-run once (PBS 696390, exit 0, **5 m 58 s**, 30 GB) for one reason: to make the
+tenth criterion a real check rather than a claim about one.
 
 found:  [host] FIVE of the standard's own criteria had at some point measured something other
               than what they claimed — one keyed on an attribute the reporter never emits, one
@@ -749,7 +755,8 @@ found:  [host] FIVE of the standard's own criteria had at some point measured so
               `a` and `b` → 02ee150. The leak scan was line-based and could not see a phrase the
               text wrapper had split, and reported the tree clean while it was not → 3abbb50
 
-clean:  ten of ten meet the standard on rendered reports. `contradiction` is a real check on
+clean:  nine of nine shipped plugins meet the standard on rendered reports, and the
+        outside-the-repository fixture meets it too. `contradiction` is a real check on
         `cellcycle` (PBS 696390) and `n/a` elsewhere, which is the honest reading rather than a
         tick. Seven suites green; the leak scan is proved able to fire, on one line and across a
         wrap.
