@@ -693,12 +693,24 @@ def read_design(path, samples=None, sample_col=None):
 # ------------------------------------------------------- what a design can and cannot estimate
 
 def _term_columns(obs, term, np, pd):
-    """Dummy columns for one term. `"a:b"` or `("a", "b")` is the elementwise product."""
-    names = term.split(":") if isinstance(term, str) else list(term)
+    """Dummy columns for one term. `"a:b"` or `("a", "b")` is the elementwise product.
+
+    `None` for anything this design cannot supply a column for - a name that is not there, a
+    factor with one level, or a term that is not a term at all. THE LAST ONE MATTERS BECAUSE
+    THIS IS CALLED BY PLUGINS: raising `TypeError: 'int' object is not iterable` out of a
+    question about a design would kill an instance for a bad argument, at whatever point in a
+    method it was asked, with an error naming neither the term nor the design.
+    """
+    if isinstance(term, str):
+        names = term.split(":")
+    elif isinstance(term, (list, tuple)):
+        names = list(term)
+    else:
+        return None
     blocks = []
     for f in names:
         f = str(f).strip()
-        if f not in obs.columns:
+        if not f or f not in obs.columns:
             return None
         d = pd.get_dummies(obs[f].astype(str), drop_first=True).to_numpy(dtype=float)
         if d.shape[1] == 0:                    # a factor with one level contributes nothing
@@ -768,10 +780,13 @@ def drop_inestimable(obs, terms):
     for t in (terms or []):
         got = _term_columns(obs, t, np, pd)
         if got is None:
-            names = t.split(":") if isinstance(t, str) else list(t)
-            why = ("it is not a column of the design table"
-                   if any(str(f).strip() not in obs.columns for f in names)
-                   else "it has one level here")
+            if not isinstance(t, (str, list, tuple)):
+                why = f"it is not a term - {type(t).__name__} is not a factor name"
+            else:
+                names = t.split(":") if isinstance(t, str) else list(t)
+                why = ("it is not a column of the design table"
+                       if any(str(f).strip() not in obs.columns for f in names)
+                       else "it has one level here")
             dropped.append((t, why))
             continue
         if not estimable(obs, kept + [t]):

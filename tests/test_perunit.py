@@ -772,6 +772,13 @@ ck("a factor aliased with one already in the model is dropped and names it",
 # for two factors and their interaction; anything else that fits a model would have needed a
 # second copy, and a second copy is how the check ends up applied to some terms and not others.
 from scprofile import plugin as _PL                                             # noqa: E402
+# IT IS CALLED BY PLUGINS, so a bad argument must come back as an answer and not as a TypeError
+# raised out of a question about a design, at whatever point in a method it was asked.
+ck("a term that is not a term is refused, not raised",
+   _IN.estimable(_gap, [5]) is False and _IN.estimable(_gap, [None]) is False)
+ck("and it says so rather than blaming the design table",
+   "not a term" in _IN.drop_inestimable(_gap, [5])[1][0][1],
+   str(_IN.drop_inestimable(_gap, [5])))
 ck("a plugin asks the host for it rather than reimplementing it",
    hasattr(_PL.Context, "estimable") and hasattr(_PL.Context, "drop_inestimable"))
 import inspect as _inspect                                                      # noqa: E402
