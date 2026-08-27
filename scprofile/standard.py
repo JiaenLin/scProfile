@@ -267,12 +267,20 @@ def check_page(path, *, exempt=(), recorded=()):
     # that is not measurable from the page alone, and that is exactly why it is here: an
     # omission leaves no mark, so a page that dropped it and a page with nothing to drop are
     # the same document. VISIBLE, not behind a disclosure - the claim it refutes is not.
-    missing = [c for c in recorded
-               if _norm(c) not in _norm(_text(re.sub(r"<details[^>]*>.*?</details>", " ",
-                                                     html, flags=re.S)))]
-    ck("contradiction", not missing,
-       f"{len(missing)} contradiction(s) the plugin recorded do not appear in the visible page, "
-       f"e.g. {missing[:1]}")
+    if recorded is None:
+        # MEASURED IS NOT THE SAME AS CLEAN, and the difference is the whole point of the
+        # criterion. Reported as n/a with the reason, so a report judged without its payload
+        # cannot be quoted as having passed this.
+        out.append(("contradiction", True,
+                    "n/a: no run payload beside this report, so a refutation the plugin "
+                    "recorded and the page omitted cannot be detected"))
+    else:
+        missing = [c for c in recorded
+                   if _norm(c) not in _norm(_text(re.sub(r"<details[^>]*>.*?</details>", " ",
+                                                         html, flags=re.S)))]
+        ck("contradiction", not missing,
+           f"{len(missing)} contradiction(s) the plugin recorded do not appear in the visible "
+           f"page, e.g. {missing[:1]}")
     return out
 
 
@@ -291,7 +299,11 @@ def recorded_claims(report_dir):
     try:
         payload = json.loads(src.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {}
+        # NOT "no contradictions". A report directory copied away from its run has no payload
+        # beside it, and returning an empty mapping would make the criterion pass on every page
+        # of it - absence of evidence rendered as evidence of absence, which is the failure this
+        # whole module exists to refuse. `None` says UNMEASURABLE; `{}` says measured and empty.
+        return None
     out = {}
     for name, pl in (payload.get("kernels") or {}).items():
         got = (pl or {}).get("contradictions") or []
@@ -305,6 +317,9 @@ def check_report(report_dir, *, exempt=None):
     exempt = exempt or {}
     d = Path(report_dir)
     claims = recorded_claims(d)
+    #: `None` from `recorded_claims` means the payload could not be read; every page then gets
+    #: `recorded=None`, which the criterion reports as n/a with the reason rather than as ok.
+    unmeasurable = claims is None
     res = {}
     pages = [f for f in sorted(d.glob("*.html")) if f.stem != "index"]
     # AN APPENDIX IS NOT A REPORT PAGE, and holding it to the report standard would fail it for
@@ -325,7 +340,7 @@ def check_report(report_dir, *, exempt=None):
         if f.stem in appendix:
             continue
         res[f.stem] = check_page(f, exempt=set(exempt.get(f.stem, ())),
-                                 recorded=claims.get(f.stem, ()))
+                                 recorded=None if unmeasurable else claims.get(f.stem, ()))
     return res
 
 
@@ -337,10 +352,10 @@ def summarise(res, log=print):
     for page, checks in sorted(res.items()):
         by = {c: (o, d) for c, o, d in checks}
         log(f"  {page:<10} " + " ".join(
-            f"{('exempt' if by[i][1].startswith('exempt:') else 'ok' if by[i][0] else 'FAIL'):>7}"
+            f"{('exempt' if by[i][1].startswith('exempt:') else 'n/a' if by[i][1].startswith('n/a:') else 'ok' if by[i][0] else 'FAIL'):>7}"
             for i in ids))
         for i in ids:
-            if by[i][1].startswith("exempt:"):
+            if by[i][1].startswith(("exempt:", "n/a:")):
                 log(f"    {i} {by[i][1]}")
         for i in ids:
             if not by[i][0]:

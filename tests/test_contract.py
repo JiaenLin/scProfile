@@ -1829,6 +1829,17 @@ def test_a_refutation_survives_every_hop_to_the_verdict():
         by = {c: o for c, o, _ in ST.check_page(page, recorded=(claim,))}
         check("chain/criterion-fires", by.get("contradiction") is False,
               "the criterion passes on a page the refutation was removed from")
+        # MEASURED-AND-CLEAN IS NOT THE SAME AS NOT-MEASURED. A report directory copied away
+        # from its run has no payload beside it; reading that as "no contradictions" would make
+        # the criterion pass on every page of it, which is absence of evidence rendered as
+        # evidence of absence - the failure the whole module exists to refuse, reintroduced by
+        # the commit that added the criterion.
+        _det = {c: d for c, _o, d in ST.check_page(page, recorded=None)}
+        check("chain/unmeasurable-says-so", _det["contradiction"].startswith("n/a:"),
+              f"an unmeasurable criterion reported as clean: {_det['contradiction']!r}")
+        check("chain/no-payload-is-not-no-claims",
+              ST.recorded_claims(d / "nowhere" / "report") is None,
+              "an unreadable payload came back as an empty one")
 
 
 def test_the_standard_is_run_by_the_thing_that_writes_the_report():
