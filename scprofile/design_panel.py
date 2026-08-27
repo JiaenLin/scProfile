@@ -120,7 +120,7 @@ def _order(factors, alias):
     return keep
 
 
-def draw(per_sample, design, path, *, cells=None, width=7.0):
+def draw(per_sample, design, path, *, cells=None, width=None):
     """The design panel: sample-level points per arm, and every effect on one axis.
 
     A SUPERPLOT (Lord et al., J Cell Biol 2020) without the decorative half: one marker per
@@ -139,6 +139,12 @@ def draw(per_sample, design, path, *, cells=None, width=7.0):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
+    # THE SHARED CONSTANTS, NOT A NUMBER OF MY OWN. This declared 7.0 inches - 177.8 mm against
+    # a 174 mm double column - and saved at 200 dpi while the convention is 400. A module that
+    # sets its own width and its own resolution is a second copy of the page geometry, and the
+    # whole point of `figure.py` is that there is one.
+    from . import figure as F
+    width = float(width or F.DOUBLE)
     alias = aliased(design)
     factors = _order({f for r in design.values() for f in r}, alias)
     measures = sorted({m for v in per_sample.values() for m in v})
@@ -228,6 +234,11 @@ def draw(per_sample, design, path, *, cells=None, width=7.0):
     # explanation in raster text cannot be re-worded without redrawing it. The page states it
     # in the figcaption, where it is selectable, translatable and part of the prose budget.
     fig.tight_layout()
-    fig.savefig(path, dpi=200)
+    try:
+        F.fit_column(fig, target=width)
+    except Exception:                                                     # noqa: BLE001
+        pass
+    _dpi = matplotlib.rcParams.get("savefig.dpi")
+    fig.savefig(path, dpi=_dpi if isinstance(_dpi, (int, float)) else 400)
     plt.close(fig)
     return len(eff)
