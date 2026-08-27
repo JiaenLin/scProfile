@@ -1013,6 +1013,17 @@ def _judge(out):
     d = Path(out) / "report"
     if not d.is_dir():
         return
+    try:
+        _judge_inner(ST, d, out)
+    except Exception as e:                                                # noqa: BLE001
+        # THIS RUNS AFTER EVERY PLUGIN HAS FINISHED, and a measurement that kills the run it is
+        # measuring destroys hours of completed work to report on its readability. The same
+        # shape as the unbound name that killed a design-less run at the last step, and the
+        # same remedy: the verdict is worth having and is worth nothing at that price.
+        print(f"      the exit standard could not be applied: {type(e).__name__}: {e}")
+
+
+def _judge_inner(ST, d, out):
     if not ST.summarise_selfcheck(ST.selfcheck()):
         print("      the exit standard could not be applied: the ruler above is broken")
         return

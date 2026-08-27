@@ -1864,7 +1864,27 @@ def test_the_standard_is_run_by_the_thing_that_writes_the_report():
                         {"write_text", "write_bytes", "unlink", "rmtree"}
                         for c in ast.walk(j[0]) if isinstance(c, ast.Call)))
     check("and it checks the ruler before applying it",
-          j and "selfcheck" in ast.unparse(j[0]))
+          any("selfcheck" in ast.unparse(n) for n in ast.walk(ast.parse(src))
+              if isinstance(n, ast.FunctionDef) and n.name.startswith("_judge")))
+    # AND IT CANNOT KILL THE RUN IT IS MEASURING. This is the LAST step of a run, after every
+    # plugin has finished; an exception here destroys hours of completed work to report on the
+    # report's readability. The same shape as the unbound name that killed a design-less run
+    # after every plugin had succeeded.
+    check("the judge cannot kill the run it measures",
+          j and any(isinstance(n, ast.Try) for n in ast.walk(j[0])),
+          "an exception at the last step of a run costs the whole run")
+    _prev = cli._judge_inner
+    try:
+        cli._judge_inner = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom"))
+        with tempfile.TemporaryDirectory() as _td:
+            (Path(_td) / "report").mkdir()
+            cli._judge(Path(_td))
+        check("proved: a judge that raises does not propagate", True)
+    except Exception as e:                                                # noqa: BLE001
+        check("proved: a judge that raises does not propagate", False,
+              f"{type(e).__name__}: {e}")
+    finally:
+        cli._judge_inner = _prev
 
 
 def _load_module(path):
