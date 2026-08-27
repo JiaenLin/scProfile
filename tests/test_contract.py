@@ -1983,52 +1983,69 @@ def _load_module(path):
     return mod
 
 
+def _guarded(fn, *a):
+    """Run one check function; an exception in it is a FAILURE, not an abort.
+
+    A CHECK THAT RAISES USED TO DELETE EVERY CHECK AFTER IT. Two guards read a file from
+    `setup/` and `docs/`, the job's tool snapshot did not copy those directories, and both
+    raised FileNotFoundError - so this suite stopped roughly sixteen checks from the end, in
+    every job, and reported FAIL for the one that raised while the rest simply never ran.
+    Indistinguishable in the log from a suite that finished.
+
+    The snapshot is fixed too. This is the half that survives the NEXT unreadable file.
+    """
+    try:
+        fn(*a)
+    except Exception as e:                                                # noqa: BLE001
+        check(f"{fn.__name__} completed", False, f"{type(e).__name__}: {e}")
+
+
 def main():
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        test_contract_roundtrip(tmp)
-        test_old_kernel_reads_new_input(tmp)
-        test_objects_slot(tmp)
-        test_captioned_figures(tmp)
-        test_declared_but_absent_is_refused(tmp)
-        test_a_plugin_is_launched_the_way_its_shape_requires(tmp)
-    test_figure_conventions()
-    test_velocity_declaration()
-    test_a_selftest_is_bounded_and_visible()
-    test_a_plugin_gets_its_own_environments_bin_on_path()
-    test_a_failed_build_still_proves_what_it_can()
-    test_the_plan_and_the_run_search_the_same_distance()
-    test_a_reference_can_be_asked_for_by_role()
-    test_the_core_share_reaches_the_thread_pools()
-    test_one_file_plugins_are_importable_by_the_host()
-    test_a_one_file_plugin_can_have_a_guard()
-    test_produces_can_be_conditional_and_globbed()
-    test_lock_is_read_not_delegated()
-    test_r_lock_section()
-    test_every_lock_is_validated_whatever_the_status()
-    test_a_half_built_environment_is_not_a_built_one()
-    test_unmet_names_the_fix()
-    test_ordering()
-    test_schedule()
-    test_the_tool_cannot_change_under_a_running_run()
-    test_no_undefined_names()
-    test_every_ctx_attribute_a_plugin_uses_exists()
-    test_key_map_is_resolved()
-    test_every_data_capability_can_actually_be_delivered()
-    test_scaffold_cannot_produce_a_running_noop()
-    test_validate_catches_what_got_through()
-    test_wrapping_plugins_record_upstream()
-    test_the_builder_builds_what_the_resolver_resolved()
-    test_an_environment_is_found_where_it_was_resolved_to()
-    test_install_does_not_demand_a_lock_from_a_plugin_that_declares_a_requirement()
-    test_a_required_capability_is_checked_before_the_run_not_inside_it()
-    test_the_compatibility_copy_is_a_record_and_a_cache()
-    test_an_array_carries_its_barcodes()
-    test_the_host_answers_the_sentinel_question_once()
-    test_a_criterion_that_cannot_fail_is_not_a_criterion()
-    test_a_refutation_survives_every_hop_to_the_verdict()
-    test_the_standard_is_run_by_the_thing_that_writes_the_report()
-    test_a_guard_that_could_not_run_has_not_allowed_anything()
+        _guarded(test_contract_roundtrip, tmp)
+        _guarded(test_old_kernel_reads_new_input, tmp)
+        _guarded(test_objects_slot, tmp)
+        _guarded(test_captioned_figures, tmp)
+        _guarded(test_declared_but_absent_is_refused, tmp)
+        _guarded(test_a_plugin_is_launched_the_way_its_shape_requires, tmp)
+    _guarded(test_figure_conventions)
+    _guarded(test_velocity_declaration)
+    _guarded(test_a_selftest_is_bounded_and_visible)
+    _guarded(test_a_plugin_gets_its_own_environments_bin_on_path)
+    _guarded(test_a_failed_build_still_proves_what_it_can)
+    _guarded(test_the_plan_and_the_run_search_the_same_distance)
+    _guarded(test_a_reference_can_be_asked_for_by_role)
+    _guarded(test_the_core_share_reaches_the_thread_pools)
+    _guarded(test_one_file_plugins_are_importable_by_the_host)
+    _guarded(test_a_one_file_plugin_can_have_a_guard)
+    _guarded(test_produces_can_be_conditional_and_globbed)
+    _guarded(test_lock_is_read_not_delegated)
+    _guarded(test_r_lock_section)
+    _guarded(test_every_lock_is_validated_whatever_the_status)
+    _guarded(test_a_half_built_environment_is_not_a_built_one)
+    _guarded(test_unmet_names_the_fix)
+    _guarded(test_ordering)
+    _guarded(test_schedule)
+    _guarded(test_the_tool_cannot_change_under_a_running_run)
+    _guarded(test_no_undefined_names)
+    _guarded(test_every_ctx_attribute_a_plugin_uses_exists)
+    _guarded(test_key_map_is_resolved)
+    _guarded(test_every_data_capability_can_actually_be_delivered)
+    _guarded(test_scaffold_cannot_produce_a_running_noop)
+    _guarded(test_validate_catches_what_got_through)
+    _guarded(test_wrapping_plugins_record_upstream)
+    _guarded(test_the_builder_builds_what_the_resolver_resolved)
+    _guarded(test_an_environment_is_found_where_it_was_resolved_to)
+    _guarded(test_install_does_not_demand_a_lock_from_a_plugin_that_declares_a_requirement)
+    _guarded(test_a_required_capability_is_checked_before_the_run_not_inside_it)
+    _guarded(test_the_compatibility_copy_is_a_record_and_a_cache)
+    _guarded(test_an_array_carries_its_barcodes)
+    _guarded(test_the_host_answers_the_sentinel_question_once)
+    _guarded(test_a_criterion_that_cannot_fail_is_not_a_criterion)
+    _guarded(test_a_refutation_survives_every_hop_to_the_verdict)
+    _guarded(test_the_standard_is_run_by_the_thing_that_writes_the_report)
+    _guarded(test_a_guard_that_could_not_run_has_not_allowed_anything)
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")

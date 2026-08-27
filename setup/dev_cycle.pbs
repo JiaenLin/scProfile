@@ -99,7 +99,15 @@ if [ -n "${MANAGER_PATH:-}" ]; then export PATH="${MANAGER_PATH}:$PATH"; fi
 if [ "${SNAPSHOT:-1}" = "1" ]; then
   _SNAP="${OUT:-$PWD}/.tool"
   rm -rf "$_SNAP"; mkdir -p "$_SNAP"
-  for _part in scprofile kernels tests HEAD.txt; do
+  # `setup` AND `docs` ARE PART OF THE TOOL, and leaving them out did not break the run - it
+  # broke the SUITE that checks the run. Two guards read a file from them (`setup/dev_cycle.pbs`,
+  # `docs/EXECUTION.md`); against a snapshot without those directories both raised
+  # FileNotFoundError, which is not a failing check but an ABORT - so every check after them
+  # never ran, in every job, silently. `test_contract.py` lost roughly its last sixteen.
+  #
+  # A snapshot that is not a faithful copy is not a snapshot; it is a subset somebody chose, and
+  # the part left out is invisible until something reads it.
+  for _part in scprofile kernels tests setup docs HEAD.txt; do
     [ -e "$TOOL/$_part" ] && cp -a "$TOOL/$_part" "$_SNAP/" || true
   done
   # `git` is absent on a compute node, so the commit is carried in HEAD.txt and copied above.

@@ -691,7 +691,15 @@ ck("and the assumption is flagged so it can be printed",
 # "budget / smallest_declared_cores", which was the proportional rule replaced on 2026-08-22;
 # leaving it would have kept EXECUTION.md describing an allocator that no longer exists, and
 # this check green for saying so.
-_ex = (_ROOT / "docs" / "EXECUTION.md").read_text()
+# A MISSING FILE IS A FAILING CHECK, NOT THE END OF THE SUITE. This is module level, so an
+# exception here stops every check below it - and it did, in every job, because the tool
+# snapshot did not copy `docs/`. The suite reported FAIL for the crash and simply never ran the
+# rest, which reads in a log exactly like a suite that finished.
+try:
+    _ex = (_ROOT / "docs" / "EXECUTION.md").read_text()
+except OSError as _e:
+    ck("docs/EXECUTION.md is readable", False, str(_e))
+    _ex = ""
 ck("the document states admission is by cores", "Admission is by CORES, not by count" in _ex)
 ck("and names what implements it", "CorePool" in _ex)
 ck("and the replaced rule is recorded as replaced, not deleted",
