@@ -1856,6 +1856,25 @@ def test_a_refutation_survives_every_hop_to_the_verdict():
             {"kernels": {"k": {"kernel": "k", "headline": "h", "contradictions": []}}}))
         got = _ST2.recorded_claims(d2 / "report")
         check("chain/an-empty-field-IS-measured", got.get("k") == [], str(got))
+        # ONCE ON THE PAGE, INCLUDING THE HEADLINE. `_entry` composes the delivered headline as
+        # `contradictions + headline` and must keep doing so - that is what protects every
+        # consumer reading `report.json` without knowing the field. On the plugin's own page it
+        # then appeared twice: once in the composed headline, once in the block below it.
+        # Measured on a real run: 2.
+        claim3 = "DEPTH, NOT CYCLING: the fraction falls as detection rises."
+        pl3 = {"kernel": "k", "status": "ok", "contradictions": [claim3],
+               "headline": f"{claim3} 45.5% of cells score S or G2M.", "caveats": [claim3],
+               "absent": [], "figures": [], "tables": [], "units": []}
+        w3 = report.write_kernel(d, "k3", pl3, [], payload_all={})
+        h3 = Path(w3).read_text(encoding="utf-8")
+        v3 = _re.sub(r"\s+", " ", _re.sub(r"<[^>]+>", " ",
+                     _re.sub(r"<details[^>]*>.*?</details>", " ", h3, flags=_re.S)))
+        check("chain/shown-once-including-the-headline",
+              v3.lower().count("depth, not cycling") == 1,
+              f"rendered {v3.lower().count('depth, not cycling')} times")
+        check("chain/the-plugins-own-claim-survives",
+              "45.5% of cells score S or G2M" in v3,
+              "stripping the refutation took the headline with it")
         # MEASURED-AND-CLEAN IS NOT THE SAME AS NOT-MEASURED. A report directory copied away
         # from its run has no payload beside it; reading that as "no contradictions" would make
         # the criterion pass on every page of it, which is absence of evidence rendered as

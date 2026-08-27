@@ -631,6 +631,25 @@ def _lede(text):
                if rest else ""))
 
 
+def _headline_without(p):
+    """The headline with its refutations stripped - THIS PAGE shows them in a block of their own.
+
+    `_entry` composes the delivered headline as `contradictions + headline`, and that must not
+    change: it is what protects every consumer that reads `report.json` and has never heard of
+    the newer field - the index, the schedule table, anything built from the payload later. A
+    reader takes the headline, so the headline carries the refutation.
+
+    On THIS page it is carried twice, once in the composed headline and once in the block below
+    it, and saying the same sentence twice in the first two lines is the repetition this whole
+    reporting pass exists to remove. The page is the one place both appear, so the page is where
+    it is reconciled - not by weakening the payload.
+    """
+    head = str(p.get("headline") or "")
+    for c in (p.get("contradictions") or []):
+        head = head.replace(str(c).strip(), "").strip()
+    return " ".join(head.split()) or str(p.get("headline") or "")
+
+
 def _contradiction_block(items):
     """What the plugin said against its own headline, beside the headline, never collapsed.
 
@@ -788,7 +807,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     body = [f"<h1>{_e(name)}</h1>",
             f'<p class="sub">{_e(summary)}</p>',
             f'<p class="lede">status <b>{_e(p.get("status", "?"))}</b> · '
-            + _lede(p.get("headline", "")) + '</p>',
+            + _lede(_headline_without(p)) + '</p>',
             _contradiction_block(p.get("contradictions")),
             _overview_block(payload_all or {}),
             _constraint_block(constraint, binds)]
