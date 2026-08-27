@@ -1,7 +1,13 @@
 # scProfile — design
 
-**Status: agreed 2026-08-18, not yet built.** This document is the contract. Where the code and
-this file disagree, one of them is a bug.
+**Status: BUILT and running.** Agreed 2026-08-18; ten plugins now run against a real cohort and
+meet the exit standard on rendered reports (see `docs/DEVLOG.md`, 2026-08-27). This document is
+the contract. Where the code and this file disagree, one of them is a bug — and now that the code
+exists, that is a question to settle by measuring, not by preferring the document.
+
+*The status line read "not yet built" for nine days after it was built, which is the worst way for
+this particular file to be wrong: it tells a reader to trust the document over the code, while
+asserting there is no code.*
 
 scProfile profiles an annotated, optionally integrated single-cell or single-nucleus dataset.
 It is a **host for kernels**, not an analysis: the host knows about manifests, environments,

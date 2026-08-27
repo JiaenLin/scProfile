@@ -205,6 +205,27 @@ When an upstream tool has recorded a constraint on the object — a factor that 
 because it never varies within a batch, say — scProfile reads it and reproduces it, and a method
 whose claim it forbids refuses rather than returning a number.
 
+### The report is measured, and it says so
+
+A rendered report is held to a standard measured on the artifact itself — the HTML that was
+written and the figures it references, never a fixture. Ten criteria: that a page opens with what
+the cohort was, that something on it compares the design, that no panel is the same plot redrawn
+per sample, caps on figures and on prose, that an unmapped identifier is named as one, and that a
+refutation the method made against its own headline appears where the headline is.
+
+Whatever writes a report measures it, so the verdict arrives with the run rather than when
+somebody remembers to ask:
+
+```bash
+scprofile standard --out <run dir>     # non-zero when the standard is not met
+```
+
+`ok` means the criterion was checked and passed. `exempt` means the page declared, with a reason
+printed beside it, that the criterion cannot apply — a cohort with no design table can never draw
+a panel comparing arms. `n/a` means it could not be measured at all. None of the three is
+reported as either of the others: a column of ticks that includes checks nobody could run stops
+meaning anything.
+
 ## Adding a method
 
 A plugin is **one file**: `kernels/<name>.py` with a `PLUGIN` dict and a `run(ctx)`. Dropping it
@@ -247,7 +268,8 @@ Python 3.10+.
 
 ## Documentation
 
-**Users:** [Run plan](docs/RUN_PLAN.md) · [Reference data](docs/REFERENCES.md)
+**Users:** [Run plan](docs/RUN_PLAN.md) · [Reference data](docs/REFERENCES.md) ·
+[What a report owes a reader](docs/REPORTING.md)
 **Maintainers:** [Plugin design](docs/PLUGIN_DESIGN.md) ·
 [Maintaining plugins](docs/MAINTAINING_PLUGINS.md) · [Architecture](docs/ARCHITECTURE.md) ·
 [Execution](docs/EXECUTION.md) · [Design](DESIGN.md) · [Roadmap](ROADMAP.md)

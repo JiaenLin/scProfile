@@ -69,7 +69,7 @@ for capabilities and `decisions_for` says it for decisions: one function, called
 **An absence is named.** A panel that could not be drawn, a metric that never arrived, a
 capability with no provider, an identifier with no gene symbol. Silence and success look the same.
 
-**A check that cannot fail is worse than no check.** Of nine criteria in the exit standard, FIVE
+**A check that cannot fail is worse than no check.** Of the ten criteria in the exit standard, FIVE
 were at some point measuring something other than what they claimed - one keyed on an attribute
 the reporter never emits, one counted the stylesheet, one counted collapsed text, one could not
 see a real arm figure, one read captions instead of the labels a figure is drawn with.

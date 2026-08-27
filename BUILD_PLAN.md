@@ -1,6 +1,17 @@
 # Build plan — the profiling increment
 
-The next two plugins, in the order a real cohort needs them, and **how each can fail.**
+**COMPLETE, 2026-08-27.** All three phases below are built and have run on a real cohort:
+`abundance` (A), `de` (B) and `decoupler` (C) each meet the exit standard on a rendered report,
+alongside the seven plugins that preceded them. Kept rather than deleted, because the plan states
+**how each could fail** and those failure modes are what the guards now in the tree were written
+against — see `docs/DEVLOG.md` for what actually failed, which is not the same list.
+
+*What it did not anticipate:* the plan's risks were all about the METHODS. Every defect that cost
+a run came from the harness around them — a term added to a model without the rank test the other
+terms got, a declaration sized from a measurement that under-reported threefold, and a report
+standard whose own criteria were measuring the wrong thing.
+
+The plugins, in the order a real cohort needs them, and **how each can fail.**
 
 Same shape as the three tools before this one: the tool is built here, tested on a real dataset
 elsewhere, and nothing about that dataset enters this repository. Three rules govern the whole
@@ -175,7 +186,7 @@ against something that was not needs to know.
 
 ---
 
-## Order of work
+## Order of work — all done, 2026-08-27
 
 1. **Measure** pertpy and pyDESeq2 against a current stack. A resolve that changes packages is the
    answer to whether they need their own environments.
