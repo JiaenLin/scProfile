@@ -757,8 +757,13 @@ def _overview_block(payload):
             + (f"<p class='sub'>Samples: {_e(', '.join(units))}</p>" if units else "")
             + ("<div class='wrap'><table><tr><th>factor</th><th>arms</th><th></th></tr>"
                + rows + "</table></div>" if rows else
-               "<div class='bad'>No design factor was resolved, so nothing on this page is "
-               "a comparison between groups.</div>"))
+               # AND IT DECLARES THE EXEMPTION IT EARNS. A cohort with no design table can
+               # never draw a panel comparing arms, so `arms` would fail on every page of
+               # every such run with no remedy anyone could apply - and a standard that a
+               # correct run cannot meet is a standard that gets switched off. The reason is
+               # the visible sentence itself, so a reader meets it and so does the verdict.
+               "<div class='bad' data-standard-exempt=\"arms\">No design factor was "
+               "resolved, so nothing on this page is a comparison between groups.</div>"))
 
 
 def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,

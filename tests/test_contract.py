@@ -1746,6 +1746,32 @@ def test_a_criterion_that_cannot_fail_is_not_a_criterion():
     missing = [c for c in ST.CRITERIA
                if not _mutates(ST, c)]
     check("standard/counterexample", not missing, f"no page written to break {missing}")
+    # AND A CRITERION A CORRECT RUN CANNOT SATISFY IS AS BAD AS ONE THAT CANNOT FAIL. `arms`
+    # is unmeetable on a cohort with no design table; without a live exemption path every such
+    # run fails forever with no remedy, and a standard nobody can meet is one that gets
+    # switched off. `exempt` was a parameter nothing ever passed - the same dead-parameter
+    # defect that made six planner decisions read a flag nobody set.
+    import tempfile as _tf
+    with _tf.TemporaryDirectory() as _td:
+        _pg = Path(_td) / "p.html"
+        _decl = ('<div data-standard-exempt="arms">No design factor was resolved, so nothing '
+                 'on this page is a comparison between groups.</div>')
+        _pg.write_text(ST._mutate("arms") + _decl, encoding="utf-8")
+        _by = {c: (o, d) for c, o, d in ST.check_page(_pg)}
+        check("standard/exempt-honoured", _by["arms"][0] is True, str(_by["arms"]))
+        check("standard/exempt-visible", _by["arms"][1].startswith("exempt: "),
+              "an exemption nobody reads is a criterion quietly switched off")
+        check("standard/exempt-carries-the-reason", "No design factor" in _by["arms"][1])
+        # AN UNEXPLAINED EXEMPTION IS INDISTINGUISHABLE FROM THE DEFECT IT EXCUSES.
+        _pg.write_text(ST._mutate("arms") + '<div data-standard-exempt="arms"></div>',
+                       encoding="utf-8")
+        check("standard/exempt-needs-a-reason",
+              {c: o for c, o, _ in ST.check_page(_pg)}["arms"] is False,
+              "a reasonless exemption was honoured")
+        # AND IT CANNOT SWITCH OFF A CRITERION THE STANDARD DOES NOT HAVE, which is how a
+        # typo becomes a silently disabled check.
+        check("standard/exempt-is-not-a-free-attribute",
+              ST.declared_exemptions('<div data-standard-exempt="nonsense">why</div>') == {})
 
 
 def _mutates(ST, cid):

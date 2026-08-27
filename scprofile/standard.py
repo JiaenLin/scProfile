@@ -36,8 +36,12 @@ those pages before the ruler is allowed to measure a report. Five of the ten wer
 measuring something other than what they claimed, and every one of them was PASSING while it
 was broken.
 
-A page may DECLARE an exemption with a reason; the reason is printed with the result, so an
-exemption is visible rather than silent.
+A page DECLARES an exemption with `data-standard-exempt="<criterion>"`, and the element's own
+visible text is the reason. The reason is printed with the result, so an exemption is visible
+rather than silent, and one with no reason is refused - an unexplained exemption is
+indistinguishable from the defect it excuses. It exists because a criterion a correct run
+CANNOT satisfy is as bad as one that cannot fail: `arms` is unmeetable on a cohort with no
+design table, and a standard nobody can meet is one that gets switched off.
 """
 from __future__ import annotations
 
@@ -150,6 +154,34 @@ def _source_accessions(page):
     return found
 
 
+#: How a page declares that a criterion cannot apply to it. The ATTRIBUTE names the criterion;
+#: the element's own text is the reason, so the reason is on the page a reader opens and not
+#: only in a verdict they never see. An exemption with no reason is refused: an unexplained
+#: exemption is indistinguishable from the defect it excuses.
+EXEMPT_ATTR = re.compile(r'data-standard-exempt="([a-z_]+)"[^>]*>(.*?)<', re.S)
+
+
+def declared_exemptions(html):
+    """{criterion: reason} the page declares for itself, reason required.
+
+    A CRITERION A CORRECT RUN CANNOT SATISFY IS AS BAD AS ONE THAT CANNOT FAIL, pointing the
+    other way: it makes the standard unmeetable and so unused. A cohort with no design table
+    can never draw a panel comparing arms, and `arms` would fail on every page of every such
+    run forever, with no remedy anyone could apply.
+
+    `check_page` took an `exempt` argument from the beginning and nothing ever passed one -
+    a dead parameter, which is the same defect as the dead predicates that made six planner
+    decisions read a flag nobody set. The page is the only party that knows why, so the page
+    declares it.
+    """
+    out = {}
+    for cid, text in EXEMPT_ATTR.findall(html or ""):
+        reason = _text(text).strip()
+        if cid in CRITERIA and reason:
+            out[cid] = reason
+    return out
+
+
 def check_page(path, *, exempt=(), recorded=()):
     """Every criterion, measured on one rendered page. Returns [(id, ok, detail)].
 
@@ -171,8 +203,16 @@ def check_page(path, *, exempt=(), recorded=()):
     ids = [m.rsplit("/", 1)[-1] for m in re.findall(r'src="([^"]+\.png)"', html)]
     out = []
 
+    declared = declared_exemptions(html)
+    exempt = set(exempt) | set(declared)
+
     def ck(cid, ok, detail=""):
-        out.append((cid, bool(ok) or cid in exempt, detail))
+        # EXEMPT IS NOT OK, and it is not reported as ok. The reason travels with the result so
+        # `summarise` prints it: an exemption nobody reads is a criterion quietly switched off.
+        if not ok and cid in exempt:
+            out.append((cid, True, "exempt: " + declared.get(cid, "no reason given")))
+            return
+        out.append((cid, bool(ok), detail))
 
     ck("overview", "The cohort" in html or "the cohort" in txt.lower()[:4000],
        "no cohort overview: a reader meets a number before learning what was compared")
@@ -296,7 +336,11 @@ def summarise(res, log=print):
     for page, checks in sorted(res.items()):
         by = {c: (o, d) for c, o, d in checks}
         log(f"  {page:<10} " + " ".join(
-            f"{('ok' if by[i][0] else 'FAIL'):>7}" for i in ids))
+            f"{('exempt' if by[i][1].startswith('exempt:') else 'ok' if by[i][0] else 'FAIL'):>7}"
+            for i in ids))
+        for i in ids:
+            if by[i][1].startswith("exempt:"):
+                log(f"    {i} {by[i][1]}")
         for i in ids:
             if not by[i][0]:
                 ok_all = False
