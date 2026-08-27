@@ -312,10 +312,33 @@ def main(argv):
         # ONE MEASUREMENT CANNOT SEPARATE THE TWO. Two at different sizes can, and a per-unit
         # plugin produces one per unit for free - so the host fits them afterwards
         # (`kernels.fit_memory_model`) and this reports only what it actually observed.
+        # AND THE KERNEL'S OWN COUNTER, WHERE THERE IS ONE. Measured against PBS's accounting
+        # on a real job: the process tree reported 14.374 GB and `resources_used.mem` was
+        # 42.7 GB - THREE TIMES more - because RUSAGE_CHILDREN is the largest single reaped
+        # child, not the sum of eight concurrent workers. Adding children narrows that gap and
+        # does not close it, and a floor presented as a peak is what got this plugin killed by
+        # its own declaration.
+        #
+        # The cgroup counter is what the scheduler itself bills. It covers the whole JOB, so it
+        # is only attributable to one plugin when one instance runs at a time - which is exactly
+        # the one-plugin-one-job shape these are verified in. Recorded ALONGSIDE, never instead:
+        # the model keeps using the attributable floor, and the discrepancy becomes visible
+        # instead of silent.
+        cg = None
+        for _c in ("/sys/fs/cgroup/memory.peak",
+                   "/sys/fs/cgroup/memory/memory.max_usage_in_bytes"):
+            try:
+                cg = int(Path(_c).read_text().strip()) / (1024.0 ** 3)
+                break
+            except (OSError, ValueError):
+                continue
         ctx.measured = {"peak_rss_gb": round(peak_gb, 3), "n_cells": n,
+                        **({"cgroup_peak_gb": round(cg, 3)} if cg else {}),
                         # NAMED, because it is a floor and not a peak: RUSAGE_CHILDREN is the
                         # largest single reaped child, so concurrent workers are undercounted.
-                        "rss_covers": "parent + largest reaped child (a floor, not the peak)"}
+                        "rss_covers": "parent + largest reaped child (a floor, not the peak); "
+                                      "cgroup_peak_gb, where present, is what the scheduler "
+                                      "bills for the WHOLE job"}
         log(f"  peak memory {peak_gb:.2f} GB over {n:,} cells")
 
     manifest.write_output(

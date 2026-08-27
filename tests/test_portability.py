@@ -1101,6 +1101,18 @@ ck("RUSAGE_CHILDREN is counted, not only RUSAGE_SELF",
    "RUSAGE_CHILDREN" in _ent and "RUSAGE_SELF" in _ent)
 ck("and they are added, not compared",
    "float(_self) + float(_kids)" in _ent)
+# ADDING CHILDREN NARROWS THE GAP AND DOES NOT CLOSE IT. Measured against PBS's own accounting:
+# the process tree reported 14.374 GB where `resources_used.mem` was 42.7 GB - THREE TIMES more -
+# because RUSAGE_CHILDREN is the largest single reaped child, not the sum of eight concurrent
+# workers. The scheduler's own counter is recorded ALONGSIDE, never instead, so the discrepancy
+# is visible rather than silent.
+ck("the scheduler's own counter is read where it exists",
+   "memory.max_usage_in_bytes" in _ent and "memory.peak" in _ent)
+ck("recorded ALONGSIDE the attributable floor, not instead of it",
+   '"cgroup_peak_gb"' in _ent and '"peak_rss_gb"' in _ent)
+ck("and labelled as covering the WHOLE job, since that is what it bills",
+   "WHOLE job" in _ent,
+   "a job-wide number attributed to one plugin is only honest when one instance runs at a time")
 ck("the payload says what the number covers, because it is a FLOOR",
    '"rss_covers"' in _ent and "not the peak" in _ent,
    "RUSAGE_CHILDREN is the largest single reaped child, so concurrent workers are undercounted")
