@@ -286,6 +286,27 @@ SPIKE_ZERO = 1e-3
 CREDIBLE = "#0072B2"
 FOLD = "#E69F00"
 
+#: Okabe-Ito vermillion, for a number the WRAPPED TOOL itself warns about - currently only an
+#: acceptance rate outside its own band. It marks nothing this plugin decides: a warning colour a
+#: reader meets on a value nobody warned about teaches them to ignore it on the value somebody did.
+WARN = "#D55E00"
+
+#: The band behind the reference population's row. Lighter than `figure.GREY`, which is a MARK on
+#: these panels ("not measured"), because a background that reads as a mark puts a third meaning on
+#: a hue already carrying two.
+REF_BAND = "#F0F0F0"
+
+#: The tallest a figure may be. A journal page is 11 inches with margins, and a panel taller than
+#: that is not a figure - it is a figure the reader will be handed at 60% scale, with 4 pt labels.
+#: Every panel here grows with the number of populations, so without a stop one annotation makes
+#: five unusable figures at once.
+PAGE_HEIGHT = 9.4
+
+#: EVERY EFFECT ON THIS PAGE IS RELATIVE TO ONE POPULATION, so which row that is has to be findable
+#: without reading a caption. It is marked three ways - named in capitals in the axis label, bolded,
+#: and given the row band above - because a reader who misses it misreads every other row.
+REF_TAG = "  (REFERENCE)"
+
 
 # ------------------------------------------------------------------------------------ helpers
 
@@ -515,10 +536,130 @@ def _contrasts(fits):
 # sample, the model is fitted on that table, and the honest picture of it is the samples. Nothing
 # below reads an embedding or a layout.
 
-def _strip(ax, np, xs, ys, colour):
-    """One row of per-sample points. Used by the shares panel and by the reference panel."""
-    ax.scatter(np.asarray(xs, dtype=float), np.asarray(ys, dtype=float), s=7, color=colour,
-               linewidths=0, zorder=3)
+def _strip(ax, np, xs, ys, colour, s=13):
+    """One row of per-sample points. Used by the shares panel and by the reference panel.
+
+    A HAIRLINE WHITE EDGE, WHICH IS NOT DECORATION. These are replicate points and the reader's
+    question is how many there are and whether one sits apart; drawn as flat discs at s=7 two
+    samples with near-equal shares were one dot, so a panel whose whole purpose is to show the
+    replicates was under-reporting them. The edge separates touching points and costs nothing -
+    the collection is rasterised.
+    """
+    ax.scatter(np.asarray(xs, dtype=float), np.asarray(ys, dtype=float), s=s, color=colour,
+               edgecolors="white", linewidths=0.35, zorder=3)
+
+
+def _population_axis(ax, np, F, order, ref):
+    """The shared y axis of this page: one row per population, the reference NAMED and bolded.
+
+    Every panel below the shares one is drawn in the same row order, so the axis is built once
+    here rather than four times - a result panel and its credibility panel that disagree about
+    which row is which is a figure that cannot be read across, and that is a whole-page property
+    rather than a per-panel one.
+
+    NAMES ARE CUT TO THE SHORTEST UNAMBIGUOUS TAIL, `figure.short_labels`, because a population
+    name is often an annotation PATH and the full path took a third of the panel width away from
+    the data. Cutting stops as soon as two names would collide, so a shortened label still names
+    exactly one population; the full path stays in the source table under every figure.
+    """
+    short = F.short_labels([str(p) for p in order])
+    ax.set_yticks(np.arange(len(order)))
+    ax.set_yticklabels([short[str(p)] + (REF_TAG if p == ref else "") for p in order])
+    for lab, p in zip(ax.get_yticklabels(), order):
+        if p == ref:
+            lab.set_fontweight("bold")
+    return short
+
+
+def _reference_row(ax, order, ref):
+    """The band behind the reference row, drawn in the panel body rather than only in the label."""
+    if ref in list(order):
+        i = list(order).index(ref)
+        ax.axhspan(i - 0.5, i + 0.5, color=REF_BAND, lw=0, zorder=0)
+
+
+def _rows(ax, F, n, lo=0.0, hi=1.0):
+    """The per-row guide line every panel here is read along.
+
+    It carries more than tidiness: an effect of exactly zero and an inclusion probability of
+    exactly zero both draw NOTHING, and without a line those rows are a label with blank space
+    beside them - which reads as a population the run forgot rather than one the model fixed.
+    """
+    for i in range(int(n)):
+        ax.hlines(i, lo, hi, colors=F.GREY, lw=0.4, zorder=1)
+
+
+def _bare(ax, F, keep_x=False):
+    """Strip an axis of the furniture a categorical row-plot does not use."""
+    ax.spines["left"].set_visible(False)
+    ax.tick_params(axis="y", length=0)
+    if not keep_x:
+        ax.spines["bottom"].set_visible(False)
+        ax.set_xticks([])
+
+
+def _ratio(a, b):
+    """`b / a` as text, or a dash where it cannot be formed. Never a bare `inf` on a figure."""
+    try:
+        a, b = float(a), float(b)
+    except Exception:                                                     # noqa: BLE001
+        return "-"
+    if not (a > 0) or not (b >= 0):
+        return "-"
+    r = b / a
+    return f"{r:.2f}x" if r < 10 else f"{r:.0f}x"
+
+
+def _height(ctx, want, rows, name):
+    """`want` inches, capped at a page - and the cap is SAID when it bites.
+
+    A cap applied silently hands the reader a panel whose labels have merged into a grey band and
+    no reason to distrust it, which is the one failure mode a figure cannot signal for itself.
+    `rows` is the number of DRAWN rows, not of panels: the sentence a reader needs is how much
+    height each row got, and on a stacked panel that is not the same as height per panel.
+    """
+    want, rows = float(want), max(int(rows), 1)
+    if want <= PAGE_HEIGHT:
+        return want
+    ctx.caveat(
+        f"{name} draws {rows} rows and wanted {want:.1f} inches; it was capped at {PAGE_HEIGHT} "
+        f"so it still fits a page, which leaves {PAGE_HEIGHT / rows:.2f} inches per row. Rows may "
+        f"be too close to read at print size - the numbers behind every mark are in the table "
+        f"named as this figure's source.")
+    return PAGE_HEIGHT
+
+
+def _flat_column(axs, np, F, values, note):
+    """Give a column of axes a readable scale when everything in it is exactly zero.
+
+    A COLUMN OF ZEROS AUTOSCALES TO A LIE. Where no effect is called, every fold change the tool
+    returns is exactly 0, and matplotlib answers a range of zero with a default of about +/-0.05 -
+    so the panel arrives with tick labels at two decimal places and no bars, which reads as a
+    scale someone chose and a set of very small changes, rather than as a column of exact zeros.
+    """
+    v = np.asarray(values, dtype=float)
+    if v.size and np.isfinite(v).any() and float(np.nanmax(np.abs(v))) > 0:
+        return
+    for ax in axs:
+        ax.set_xlim(-1, 1)
+    axs[0].text(0.5, 0.5, note, transform=axs[0].transAxes, ha="center", va="center",
+                fontsize=6, color=F.INK)
+
+
+def _call_key(F, ml, ref_short, fdr_note="credible"):
+    """The three-way encoding shared by the credibility panel and the result panel.
+
+    FILLED, HOLLOW, GREY - a shape difference and not only a hue difference, so the distinction
+    survives greyscale printing and every form of colour-vision deficiency. It has to: the
+    difference between "called" and "measured and not called" is the entire result.
+    """
+    return [
+        ml.Line2D([], [], marker="o", ls="", ms=3.2, color=CREDIBLE, label=fdr_note),
+        ml.Line2D([], [], marker="o", ls="", ms=3.2, mfc="none", mec=F.INK, mew=0.7,
+                  color="none", label="measured, not called"),
+        ml.Line2D([], [], marker="s", ls="", ms=3.2, mfc=F.GREY, mec=F.INK, mew=0.4,
+                  color="none", label=f"{ref_short}: not measured"),
+    ]
 
 
 def _fig_shares(ctx, tab, pops, terms, share, order, ref):
@@ -528,6 +669,14 @@ def _fig_shares(ctx, tab, pops, terms, share, order, ref):
     import matplotlib.lines as ml
     F, plt = ctx.figure, ctx.plot()
 
+    # THE LEVEL MEANS ARE COMPUTED ONCE AND DRAWN, and they are computed here rather than by eye
+    # from the points because a reader cannot average five dots on a logarithmic axis. Ten
+    # replicate points answer "does one sample carry it"; they do not answer "by how much", and
+    # this panel is asked both.
+    lvs = {t: sorted({str(x) for x in tab[t]}) for t in terms}
+    means = {t: {l: share.loc[[s for s in tab.index if str(tab.loc[s, t]) == l]].mean(axis=0)
+                 for l in lvs[t]} for t in terms}
+
     rows = []
     totals = tab[pops].sum(axis=1)
     for s in tab.index:
@@ -536,6 +685,15 @@ def _fig_shares(ctx, tab, pops, terms, share, order, ref):
                  "share": float(share.loc[s, p]), "cells_in_sample": float(totals.loc[s])}
             for t in terms:
                 r[t] = str(tab.loc[s, t])
+            # EVERY NUMBER THAT IS DRAWN IS IN THE SOURCE TABLE. The level means and the ratio
+            # between them are marks on the panel now, so a reader must be able to open them
+            # rather than re-derive them from the per-sample column.
+            for t in terms:
+                for l in lvs[t]:
+                    r[f"mean_share[{t}={l}]"] = float(means[t][l][p])
+                ms = [float(means[t][l][p]) for l in lvs[t]]
+                a, b = (ms[0], ms[1]) if len(ms) == 2 else (min(ms), max(ms))
+                r[f"ratio_of_level_means[{t}]"] = (b / a) if a > 0 else np.nan
             rows.append(r)
     src = pd.DataFrame(rows).set_index("sample")
 
@@ -548,57 +706,126 @@ def _fig_shares(ctx, tab, pops, terms, share, order, ref):
                    f"tables/abundance_counts.csv rather than from the panel.")
 
     n = len(terms)
-    fig, axs = plt.subplots(1, n, figsize=(F.SINGLE if n == 1 else F.DOUBLE,
-                                           max(1.8, 0.24 * len(order) + 1.0)),
-                            squeeze=False, sharey=True, layout="constrained")
+    # A NARROW TEXT COLUMN BESIDE EACH TERM. The ratio was tried as an annotation inside the
+    # panel and there is nowhere inside a panel to put it: the axis runs to a share of 1 and a
+    # population can sit anywhere on it, so any x that is empty in one dataset is on top of the
+    # data in the next. A column of its own cannot collide with anything.
+    fig, axs = plt.subplots(1, 2 * n, squeeze=False, sharey=True, layout="constrained",
+                            gridspec_kw={"width_ratios": [1.0, 0.30] * n},
+                            figsize=(F.SINGLE if n == 1 else F.DOUBLE,
+                                     _height(ctx, max(2.2, 0.30 * len(order) + 1.2),
+                                             len(order), "F1_shares")))
     for k, t in enumerate(terms):
-        ax = axs[0][k]
-        lv = sorted({str(x) for x in tab[t]})
+        ax, strip = axs[0][2 * k], axs[0][2 * k + 1]
+        lv = lvs[t]
+        _reference_row(ax, order, ref)
+        _reference_row(strip, order, ref)
+        _rows(ax, F, len(order))
+        step = 0.62 / max(len(lv), 1)
         for i, p in enumerate(order):
-            # `colors`, not `color`: hlines builds a LineCollection and `colors` is its own
-            # parameter. `color` reaches the same artist through a kwargs update, which works
-            # today and is one refactor upstream away from not working.
-            ax.hlines(i, 0, 1, colors=F.GREY, lw=0.4, zorder=0)
+            ys = [i + (j - (len(lv) - 1) / 2.0) * step for j in range(len(lv))]
+            ms = [float(means[t][l][p]) for l in lv]
+            # THE SHIFT, AS ONE MARK. Drawn under the points and over the guide line, so the eye
+            # reads the segment first and the replicates second - which is the order the two
+            # questions come in. On a logarithmic axis its length IS the log ratio.
+            ax.plot(ms, ys, color=F.INK, lw=1.1, alpha=0.55, zorder=2, solid_capstyle="round")
             for j, l in enumerate(lv):
                 sel = [s for s in tab.index if str(tab.loc[s, t]) == l]
-                if not sel:
-                    continue
-                off = (j - (len(lv) - 1) / 2.0) * (0.5 / max(len(lv), 1))
-                _strip(ax, np, share.loc[sel, p].to_numpy(),
-                       np.full(len(sel), i + off), cols[l])
+                if sel:
+                    _strip(ax, np, share.loc[sel, p].to_numpy(), np.full(len(sel), ys[j]), cols[l])
+            # A TICK ACROSS THE ROW, NOT A MARKER ON IT. Drawn as a diamond the mean sat on top of
+            # the replicates it summarises and hid them - in the panel whose first question is how
+            # many replicates there are and whether one sits apart. A perpendicular tick occupies
+            # the row rather than the point, and is dark rather than level-coloured so it reads as
+            # a different KIND of thing from the dots.
+            # Short enough that two adjacent levels' ticks cannot touch: at half a level's
+            # spacing they abutted into one continuous bar with a kink in it, which is a single
+            # mark where there are two means and a shift between them.
+            ax.vlines(ms, [y - 0.10 for y in ys], [y + 0.10 for y in ys],
+                      colors=F.INK, lw=1.4, zorder=6)
         F.rasterize_points(ax)
         # LINEAR BELOW 1%, LOGARITHMIC ABOVE. On a linear axis every rare population sits on the
         # spine and a doubling of a 0.5% population is invisible beside a 40% one - which is the
         # comparison this panel exists to make. symlog is defined at zero, and a zero share is
         # exactly the value a reader must be able to see.
         ax.set_xscale("symlog", linthresh=0.01)
-        ax.set_xlim(0, 1)
-        ax.set_xlabel("share of cells")
+        # A HAIR PAST ZERO ON THE LEFT. A population absent from a sample is drawn at exactly 0
+        # and, with the limit AT zero, half that marker is behind the spine - so the one value a
+        # reader most needs to see on a share axis was the one drawn as a half-disc.
+        ax.set_xlim(-0.0016, 1)
+        # PER CENT, NOT POWERS OF TEN. A composition is read as a percentage by everyone who
+        # reads one, and `10^-2` on a share axis is a translation the reader should not be asked
+        # to make. The dotted line is where the scale stops being logarithmic - unmarked, the
+        # spacing below it looks like a decade and is not.
+        ax.set_xticks([0.0, 0.01, 0.1, 1.0])
+        ax.set_xticklabels(["0", "1%", "10%", "100%"])
+        ax.axvline(0.01, color=F.GREY, lw=0.5, ls=":", zorder=0)
+        ax.set_xlabel("share of cells in the sample")
         ax.set_title(str(t), loc="left")
-        ax.spines["left"].set_visible(False)
-        ax.tick_params(axis="y", length=0)
-    axs[0][0].set_yticks(np.arange(len(order)))
-    axs[0][0].set_yticklabels([f"{p}  (reference)" if p == ref else p for p in order])
-    axs[0][0].invert_yaxis()
-    h = [ml.Line2D([], [], marker="o", ls="", ms=2.5, color=cols[l], label=l) for l in levels]
-    F.legend_outside(fig, axs[0][-1], h, [x.get_label() for x in h],
-                     ncol=1 if len(h) <= 12 else 2)
+        _bare(ax, F, keep_x=True)
+
+        # ---- the ratio column ------------------------------------------------------------
+        head = (f"{lv[1]}\n/ {lv[0]}" if len(lv) == 2 else "widest ratio\nof level means")
+        strip.set_xlim(0, 1)
+        for i, p in enumerate(order):
+            ms = [float(means[t][l][p]) for l in lv]
+            a, b = (ms[0], ms[1]) if len(ms) == 2 else (min(ms), max(ms))
+            txt = _ratio(a, b)
+            heavy = txt != "-" and abs(np.log2(max(b, 1e-12) / max(a, 1e-12))) >= 1.0
+            strip.text(0.5, i, txt, ha="center", va="center", fontsize=6,
+                       color=F.INK, fontweight="bold" if heavy else "normal")
+        strip.set_xlabel(head, fontsize=5.5)
+        _bare(strip, F)
+
+    _population_axis(axs[0][0], np, F, order, ref)
+    # SET, NOT INVERTED. `invert_yaxis` toggles, and on a shared axis any panel that had already
+    # set a descending limit flipped the whole figure back - which put the largest population at
+    # the bottom and every panel of the page in a different order from this one.
+    axs[0][0].set_ylim(len(order) - 0.5, -0.5)
+    # EACH LEVEL NAMED WITH ITS OWN FACTOR, ALONG THE BOTTOM. Two things at once. A flat list of
+    # every level in the study reads as one set of categories and with two factors on one figure
+    # it is two, so a reader matching a hue to the wrong factor's key reads the wrong panel -
+    # hence `factor = level` rather than a bare level name. And the key is below the axes rather
+    # than in the right margin because `figure.fit_column` charges a margin key to the figure's
+    # WIDTH, taking it from the panels; below, it is charged to height, of which a row plot has
+    # as much as it needs.
+    if n > 1:
+        h = [ml.Line2D([], [], marker="o", ls="", ms=2.5, color=cols[l], label=f"{t} = {l}")
+             for t in terms for l in lvs[t]]
+    else:
+        h = [ml.Line2D([], [], marker="o", ls="", ms=2.5, color=cols[l], label=l) for l in levels]
+    h.append(ml.Line2D([], [], marker="|", ls="", ms=5, mew=1.4, color=F.INK,
+                       label="level mean"))
+    fig.legend(h, [x.get_label() for x in h], loc="outside lower center",
+               ncol=min(len(h), 5 if n > 1 else 6), frameon=False, handletextpad=0.4,
+               columnspacing=1.6, markerscale=1.6)
+    two = all(len(lvs[t]) == 2 for t in terms)
     ctx.emit_figure(
         "F1_shares", fig,
         caption=("Every sample's share of every population, one point per sample, split by design "
                  "level. This is the whole of the data the model is fitted on: the fit has as many "
                  "rows as there are points in one column here, so a level whose points do not "
                  "separate from the other level's has no shift for the model to find, and a level "
-                 "carried by one outlying sample has one that belongs to that library. The x axis "
-                 "is linear below 1% and logarithmic above, so a rare population's change is "
-                 "visible beside a common one's. Annotator sentinels are not shown as populations."),
+                 "carried by one outlying sample has one that belongs to that library. The "
+                 "TICK is that level's mean share and the segment joining the ticks is the "
+                 "shift; on a logarithmic axis its length is the log ratio, and the column beside "
+                 "each panel gives that ratio as a number"
+                 + (", larger level over smaller where a factor has more than two levels"
+                    if not two else "")
+                 + " (bold at two-fold or more). Those means are DESCRIPTIVE - the model's own "
+                 "estimate of the same shift is F5, it is measured relative to the reference "
+                 "population, and the two are not required to agree. The x axis is linear below "
+                 "1% and logarithmic above, so a rare population's change is visible beside a "
+                 "common one's; the dotted line is where the scale changes. Population names are "
+                 "cut to their shortest unambiguous tail and given in full in the source table. "
+                 "Annotator sentinels are not shown as populations."),
         source=src)
-
 
 def _fig_reference(ctx, refframe, tab, terms, share, ref, why):
     """The reference, on the tool's own criterion and against the design it must not follow."""
     import numpy as np
-    import pandas as pd
+    import matplotlib.lines as ml
+    from matplotlib.ticker import PercentFormatter
     F, plt = ctx.figure, ctx.plot()
 
     d = refframe.copy()
@@ -615,13 +842,14 @@ def _fig_reference(ctx, refframe, tab, terms, share, ref, why):
     levels = sorted({str(tab.loc[s, t]) for t in terms for s in tab.index})
     cols = F.palette(levels)
     pairs = [(t, l) for t in terms for l in sorted({str(x) for x in tab[t]})]
-    fig, axs = plt.subplots(1, 2, figsize=(F.DOUBLE, max(1.9, 0.22 * max(len(d), len(pairs)) + 1.0)),
-                            squeeze=False, layout="constrained")
+    nrow = max(len(d), len(pairs))
+    short = F.short_labels([str(p) for p in d.index] + [str(ref)])
+    fig, axs = plt.subplots(1, 2, squeeze=False, layout="constrained",
+                            figsize=(F.DOUBLE, _height(ctx, max(2.2, 0.26 * nrow + 1.3), nrow,
+                                                       "F2_reference")))
 
     ax = axs[0][0]
     y = np.arange(len(d))
-    colour = [CREDIBLE if r else (F.INK if e else F.GREY)
-              for r, e in zip(d["is_reference"], d["eligible_as_reference"])]
     # A LOGARITHMIC AXIS, AND POINTS RATHER THAN BARS. Drawn as bars on a linear axis this panel
     # was unreadable in both directions at once: dispersion runs over orders of magnitude, so the
     # single ineligible population squashed every candidate into one indistinguishable sliver -
@@ -632,9 +860,21 @@ def _fig_reference(ctx, refframe, tab, terms, share, ref, why):
     good = np.isfinite(disp) & (disp > 0)
     lo = float(disp[good].min()) / 3.0 if good.any() else 1e-6
     hi = float(disp[good].max()) * 3.0 if good.any() else 1.0
+    _reference_row(ax, list(d.index), ref)
     for i in y:
-        ax.hlines(i, lo, hi, colors=F.GREY, lw=0.4, zorder=0)
-    ax.scatter(np.where(good, disp, lo), y, s=14, color=colour, linewidths=0, zorder=3)
+        ax.hlines(i, lo, hi, colors=F.GREY, lw=0.4, zorder=1)
+    x = np.where(good, disp, lo)
+    elig = d["eligible_as_reference"].to_numpy(dtype=bool)
+    isref = d["is_reference"].to_numpy(dtype=bool)
+    # THREE STATES, AND HOLLOW IS ONE OF THEM. An ineligible candidate was drawn in `figure.GREY`,
+    # which at 15% ink on white is the colour this page uses for "not measured" and reads at a
+    # glance as a value that failed to arrive. It is the opposite: it was measured, and REFUSED.
+    # A hollow marker says refused; only a hue said it before, and faintly.
+    ax.scatter(x[~elig], y[~elig], s=20, facecolors="none", edgecolors=F.INK, linewidths=0.8,
+               zorder=3)
+    ax.scatter(x[elig & ~isref], y[elig & ~isref], s=16, color=F.INK, linewidths=0, zorder=3)
+    ax.scatter(x[isref], y[isref], s=44, marker="D", color=CREDIBLE, edgecolors="white",
+               linewidths=0.8, zorder=5)
     F.rasterize_points(ax)
     ax.set_xscale("log")
     ax.set_xlim(lo, hi)
@@ -648,45 +888,107 @@ def _fig_reference(ctx, refframe, tab, terms, share, ref, why):
               "share did not vary at all across samples, or their mean is zero. They are drawn at "
               "the left edge, which is a position rather than a value.")
     ax.set_yticks(y)
-    ax.set_yticklabels([f"{p}  (reference)" if p == ref else
-                        (f"{p}  (too often absent)" if not e else str(p))
-                        for p, e in zip(d.index, d["eligible_as_reference"])])
-    ax.invert_yaxis()
-    ax.set_xlabel("dispersion of share (variance/mean)")
+    # THE ABSENCE IS GIVEN AS A NUMBER. "too often absent" is the verdict, not the evidence, and
+    # the reader's next question - how much of the threshold did it miss by - was answerable only
+    # from a table that is not on the page.
+    ax.set_yticklabels([
+        short[str(p)] + (REF_TAG if p == ref else
+                         ("" if e else f"  (absent from {100 * float(a):.0f}% of samples)"))
+        for p, e, a in zip(d.index, d["eligible_as_reference"],
+                           d["fraction_of_samples_absent"])])
+    for lab, p in zip(ax.get_yticklabels(), d.index):
+        if p == ref:
+            lab.set_fontweight("bold")
+    ax.set_ylim(len(d) - 0.5, -0.5)
+    ax.set_xlabel("dispersion of share across samples (variance / mean)")
     ax.set_title("what the reference was chosen on", loc="left")
-    ax.spines["left"].set_visible(False)
-    ax.tick_params(axis="y", length=0)
+    _bare(ax, F, keep_x=True)
 
     ax2 = axs[0][1]
+    # THE COHORT MEAN, AS THE LINE THE ARMS ARE READ AGAINST. Without it the arm means are two
+    # points in space and the eye supplies its own baseline - usually the axis, which is zero and
+    # is not the comparison anyone is making. Labelled ON the line rather than in a key: a margin
+    # legend is charged to this panel's WIDTH by `figure.fit_column`, and two marks did not
+    # justify a fifth of it.
+    cohort = float(share[ref].mean())
+    ax2.axvline(cohort, color=F.INK, lw=0.6, ls="--", zorder=2)
+    ax2.text(cohort, -0.62, "cohort mean", ha="center", va="center", fontsize=5.5, color=F.INK)
     for i, (t, l) in enumerate(pairs):
         sel = [s for s in tab.index if str(tab.loc[s, t]) == l]
-        ax2.hlines(i, 0, 1, colors=F.GREY, lw=0.4, zorder=0)
+        ax2.hlines(i, 0, 1, colors=F.GREY, lw=0.4, zorder=1)
         if sel:
+            m = float(share.loc[sel, ref].mean())
             _strip(ax2, np, share.loc[sel, ref].to_numpy(), np.full(len(sel), i), cols[l])
+            ax2.vlines(m, i - 0.16, i + 0.16, colors=F.INK, lw=1.4, zorder=6)
+    # ONE RATIO PER FACTOR, WHICH IS THE ANSWER THIS PANEL WAS ASKED FOR. "Did the reference move"
+    # is a question about a NUMBER, and a reader cannot take the ratio of two clouds of dots by
+    # eye on an axis that starts at zero - which it must, because a share is a proportion and a
+    # zoomed axis makes a one-per-cent wobble look like a shift.
+    seps, at = [], 0
+    for t in terms:
+        lv = sorted({str(x) for x in tab[t]})
+        ms = [float(share.loc[[s for s in tab.index if str(tab.loc[s, t]) == l], ref].mean())
+              for l in lv]
+        a, b = (ms[0], ms[1]) if len(ms) == 2 else (min(ms), max(ms))
+        d[f"reference_ratio_of_level_means[{t}]"] = (b / a) if a > 0 else np.nan
+        # THE NUMBER SAYS WHAT IT IS THE RATIO OF. Unlabelled it was a bold figure floating
+        # between two rows, and a reader who guesses which way round it goes gets the direction of
+        # every effect on the page backwards.
+        head = f"{lv[1]} / {lv[0]}" if len(lv) == 2 else "widest / narrowest"
+        ax2.text(0.985, at + (len(lv) - 1) / 2.0, f"{head}\n{_ratio(a, b)}",
+                 transform=ax2.get_yaxis_transform(), ha="right", va="center",
+                 fontsize=6, color=F.INK, linespacing=1.5)
+        at += len(lv)
+        seps.append(at - 0.5)
+    for s_ in seps[:-1]:
+        ax2.axhline(s_, color=F.GREY, lw=0.6, zorder=0)
     F.rasterize_points(ax2)
     ax2.set_yticks(np.arange(len(pairs)))
     ax2.set_yticklabels([f"{t} = {l}" for t, l in pairs])
     # HALF A SLOT OF MARGIN, EXPLICITLY. Matplotlib's default 5% margin on a handful of rows puts
     # the first and last of them on the frame; these panels have as few as two.
-    ax2.set_ylim(len(pairs) - 0.5, -0.5)
-    ax2.set_xlim(0, max(0.01, float(share[ref].max()) * 1.25))
-    ax2.set_xlabel(f"share of {ref}")
+    ax2.set_ylim(len(pairs) - 0.5, -1.0)
+    ax2.set_xlim(0, max(0.01, float(share[ref].max()) * 1.45))
+    # PER CENT, AS ON THE SHARES PANEL. The same quantity written two ways on one page - `0.020`
+    # here and `1%` there - is a translation the reader has to make between two panels that are
+    # meant to be read against each other.
+    ax2.xaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=1))
+    ax2.set_xlabel(f"share of {short[str(ref)]} in the sample")
     ax2.set_title("did the reference itself move", loc="left")
-    ax2.spines["left"].set_visible(False)
-    ax2.tick_params(axis="y", length=0)
+    _bare(ax2, F, keep_x=True)
+
+    # THREE MARKS, ALONG THE BOTTOM, AND ONLY THE LEFT PANEL'S. A key in the right margin is
+    # charged to the figure's WIDTH - `figure.fit_column` shrinks the whole canvas back to the
+    # declared column afterwards - and a nine-entry key measured a FIFTH of this figure, taken
+    # from the right panel's data. The right panel's two marks are named where they are drawn:
+    # the dashed line carries its own label, and the level-mean tick is the one this page's
+    # first figure teaches.
+    key = [ml.Line2D([], [], marker="D", ls="", ms=3.4, color=CREDIBLE, label="the reference"),
+           ml.Line2D([], [], marker="o", ls="", ms=3.0, color=F.INK, label="eligible candidate"),
+           ml.Line2D([], [], marker="o", ls="", ms=3.0, mfc="none", mec=F.INK, mew=0.8,
+                     color="none", label="refused: too often absent")]
+    fig.legend(key, [k.get_label() for k in key], loc="outside lower center", ncol=3,
+               frameon=False, handletextpad=0.4, columnspacing=1.6, markerscale=1.6)
 
     ctx.emit_figure(
         "F2_reference", fig,
         caption=(f"The reference population, which is {ref} ({why}). LEFT: the criterion it was "
                  f"chosen on - dispersion of each population's share across samples, lowest "
-                 f"first; populations missing from too many samples are named as ineligible and "
-                 f"are not candidates. RIGHT: the assumption itself. Every effect in this "
+                 f"first; a hollow marker is a population that was measured and REFUSED as a "
+                 f"candidate for being absent from too many samples, and its axis label gives the "
+                 f"fraction it was refused on. RIGHT: the assumption itself. Every effect in this "
                  f"plugin's result is a change RELATIVE TO this population, so if its own share "
                  f"differs between the levels drawn here, the effects carry that difference with "
-                 f"the opposite sign and nothing else in the output will say so. The per-sample "
-                 f"values on the right are the {ref} rows of figures/F1_shares.csv."),
+                 f"the opposite sign and nothing else in the output will say so. The bold number "
+                 f"in each factor's block is the ratio of that factor's level means, and the axis "
+                 f"deliberately starts at zero: a share is a proportion, and an axis zoomed onto "
+                 f"the data would make any wobble look like a shift. The tick across each row is "
+                 f"that level's mean, as on the shares figure, and the key below names the marks "
+                 f"of the left panel. "
+                 f"The per-sample values on the "
+                 f"right are the {ref} rows of figures/F1_shares.csv. Population names are cut to "
+                 f"their shortest unambiguous tail; the source table gives them in full."),
         source=d)
-
 
 def _fig_sampling(ctx, fits):
     """Whether the chain settled, checked on the quantity the answer is read off."""
@@ -715,27 +1017,71 @@ def _fig_sampling(ctx, fits):
     src["draws"] = [next((f["n_draws"] for f in fits if f["term"] == t), 0) for t in src["term"]]
     src["chains"] = [next((f["num_chains"] for f in fits if f["term"] == t), 1) for t in src["term"]]
 
+    # WHETHER THE CALL FLIPPED, NOT ONLY WHETHER THE NUMBER MOVED. An inclusion probability that
+    # wandered from 0.11 to 0.19 changed nothing; one that crossed the threshold changed the
+    # answer for that population, and only the second is a reason to re-run. Computed per row so
+    # it is in the source table as well as on the panel.
+    flip = np.zeros(len(src), dtype=bool)
+    if have and "inclusion_first_half" in src.columns:
+        thr = {f["term"]: f["threshold"] for f in fits}
+        t1 = src["inclusion_first_half"].to_numpy(dtype=float)
+        t2 = src["inclusion_second_half"].to_numpy(dtype=float)
+        cut = np.array([thr.get(t, np.nan) for t in src["term"]], dtype=float)
+        flip = np.isfinite(cut) & ((t1 >= cut) != (t2 >= cut))
+    src["call_changed_between_halves"] = flip
+
     terms = [f["term"] for f in fits]
     cols = F.palette(terms)
-    fig, axs = plt.subplots(1, 2, figsize=(F.DOUBLE, max(2.0, 0.20 * len(terms) + 2.0)),
-                            squeeze=False, layout="constrained")
+    # SQUARE, BECAUSE THE CLAIM IS ABOUT A DIAGONAL. On a wider-than-tall axis the y=x line is not
+    # at 45 degrees, and "how far off the diagonal" - the only thing this panel is read for - is
+    # then a judgement the reader makes against a line whose slope the aspect ratio chose.
+    fig, axs = plt.subplots(1, 2, figsize=(F.DOUBLE, max(2.9, 0.24 * len(terms) + 2.6)),
+                            squeeze=False, layout="constrained",
+                            gridspec_kw={"width_ratios": [1.0, 0.85]})
     ax = axs[0][0]
     ax.plot([0, 1], [0, 1], color=F.GREY, lw=0.6, zorder=1)
     for f in have:
         h = f["halves"]
-        ax.scatter(h["inclusion_first_half"].to_numpy(dtype=float),
-                   h["inclusion_second_half"].to_numpy(dtype=float),
-                   s=9, color=cols[f["term"]], linewidths=0, alpha=0.85, zorder=3)
+        a = h["inclusion_first_half"].to_numpy(dtype=float)
+        b = h["inclusion_second_half"].to_numpy(dtype=float)
+        moved = (np.isfinite(f["threshold"])
+                 & ((a >= f["threshold"]) != (b >= f["threshold"]))) if np.isfinite(
+                     f["threshold"]) else np.zeros(len(a), dtype=bool)
+        ax.scatter(a, b, s=11, color=cols[f["term"]], linewidths=0, alpha=0.85, zorder=3)
+        # A RING ROUND EVERY POPULATION WHOSE CALL CHANGED. These are the only points on the panel
+        # that cost anything, and undecorated they are indistinguishable from the dozen ordinary
+        # ones near the same place on the diagonal.
+        if moved.any():
+            ax.scatter(a[moved], b[moved], s=52, facecolors="none", edgecolors=WARN,
+                       linewidths=1.0, zorder=4)
         if np.isfinite(f["threshold"]):
             for line in (ax.axvline, ax.axhline):
                 line(f["threshold"], color=cols[f["term"]], ls="--", lw=0.5, zorder=2)
     F.rasterize_points(ax)
     ax.set_xlim(-0.02, 1.02)
     ax.set_ylim(-0.02, 1.02)
+    ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("inclusion probability, first half of chain")
     ax.set_ylabel("inclusion probability, second half")
     ax.set_title("did the decision stop moving", loc="left")
-    if not have:
+    if have:
+        # THE SUMMARY IN WORDS, IN THE CORNER THE DATA CANNOT REACH. The dashed lines are one per
+        # term and a fourth dashed line labelled in the margin is not a legend anybody reads; the
+        # count is what a reader wants and it is one number per term.
+        lines = []
+        for f in have:
+            h = f["halves"]
+            a = h["inclusion_first_half"].to_numpy(dtype=float)
+            b = h["inclusion_second_half"].to_numpy(dtype=float)
+            nm = int(((a >= f["threshold"]) != (b >= f["threshold"])).sum()) \
+                if np.isfinite(f["threshold"]) else -1
+            thr = f"cut {f['threshold']:.3f}" if np.isfinite(f["threshold"]) else "no cut recorded"
+            got = f"{nm} of {len(a)} calls changed" if nm >= 0 else "cannot say: no cut recorded"
+            lines.append((cols[f["term"]], f"{f['term']}  -  {thr}  -  {got}"))
+        for j, (c, txt) in enumerate(lines):
+            ax.text(0.97, 0.03 + 0.055 * (len(lines) - 1 - j), txt, transform=ax.transAxes,
+                    ha="right", va="bottom", fontsize=5.5, color=c)
+    else:
         # AN EMPTY PANEL SAYS WHY IT IS EMPTY. An axis with a diagonal and no points reads as a
         # check that was made and found nothing, which is the opposite of what happened.
         ax.text(0.5, 0.5, "the posterior draws were not\nrecorded: no chain to split",
@@ -747,15 +1093,28 @@ def _fig_sampling(ctx, fits):
     # diagonal, which is exactly where a corner legend goes.
     ax2 = axs[0][1]
     y = np.arange(len(fits))
-    ax2.axvspan(ACCEPT_LOW, ACCEPT_HIGH, color=F.GREY, zorder=0)
-    # A POINT, NOT A BAR. There are as many rows here as there are terms - usually two - and two
-    # bars in a panel sized for a square scatter beside it are two slabs. A point reads the same
-    # at any number of rows, and a rate that was never recorded simply does not draw, leaving its
-    # guide line and its label rather than a bar of length nan.
-    for i in y:
+    ax2.axvspan(ACCEPT_LOW, ACCEPT_HIGH, color=F.GREY, alpha=0.55, lw=0, zorder=0)
+    # A POINT ON A GUIDE LINE, NOT A BAR AND NOT A STEM FROM ZERO. There are as many rows here as
+    # there are terms - usually two - and two bars in a panel sized for a square scatter beside it
+    # are two slabs. A stem is no better: it encodes the rate as a LENGTH FROM ZERO, and an
+    # acceptance rate is not a magnitude, it is a position inside a band. The point carries the
+    # value; a rate that was never recorded draws none - leaving its label and, in words, why.
+    for i, f in enumerate(fits):
+        a = f["accept"]
         ax2.hlines(i, 0, 1, colors=F.GREY, lw=0.4, zorder=1)
-    ax2.scatter([f["accept"] for f in fits], y, s=18, linewidths=0, zorder=3,
-                color=[cols[f["term"]] for f in fits])
+        if not np.isfinite(a):
+            ax2.text(0.5, i, "not recorded by this version of the tool", ha="center", va="center",
+                     fontsize=5.5, color=F.INK)
+            continue
+        out = not (ACCEPT_LOW <= a <= ACCEPT_HIGH)
+        ax2.scatter([a], [i], s=30, color=cols[f["term"]], zorder=4,
+                    edgecolors=WARN if out else "white", linewidths=1.1 if out else 0.6)
+        # THE NUMBER, BECAUSE THE DECISION IS MADE ON THE NUMBER. pertpy's band is 0.6-0.95 and a
+        # point drawn at 0.58 sits against the edge of the shading; whether it is inside is not a
+        # thing to read off a position, and it is the one judgement this panel exists for.
+        ax2.text(min(a + 0.02, 0.99), i - 0.10, f"{a:.3f}" + ("  outside the band" if out else ""),
+                 ha="left" if a < 0.6 else "right", va="bottom", fontsize=6,
+                 color=WARN if out else F.INK, fontweight="bold" if out else "normal")
     F.rasterize_points(ax2)
     ax2.set_yticks(y)
     ax2.set_yticklabels(terms)
@@ -763,15 +1122,16 @@ def _fig_sampling(ctx, fits):
     ax2.set_xlim(0, 1)
     ax2.set_xlabel("mean acceptance rate")
     ax2.set_title(f"the tool's own band, {ACCEPT_LOW}-{ACCEPT_HIGH}", loc="left")
-    ax2.spines["left"].set_visible(False)
-    ax2.tick_params(axis="y", length=0)
+    _bare(ax2, F, keep_x=True)
 
     # THE CAPTION FOLLOWS WHAT WAS DRAWN. The left panel is empty when the tool stored no draws,
     # and a caption describing points nobody can see is the figure lying about itself.
     left = ("LEFT: the posterior inclusion probability of every effect, computed on the first "
             "half of the chain against the second - a point off the diagonal is an effect the "
-            "chain had not finished deciding, and a point that crosses the dashed threshold "
-            "between halves is a CALL that had not settled. Standard convergence statistics "
+            "chain had not finished deciding, and a point RINGED IN VERMILLION is one whose CALL "
+            "changed between the halves, which is the only kind of movement that changes the "
+            "answer. The count of those is given per term in the corner, with the threshold each "
+            "was counted against. Standard convergence statistics "
             "misread this model, because the spike-and-slab prior fixes many draws at exactly "
             "zero and the reference's effect is zero for the whole chain, so the check is made "
             "on the derived quantity the answer is actually read off."
@@ -783,15 +1143,18 @@ def _fig_sampling(ctx, fits):
         "F3_sampling", fig,
         caption=("Whether the sampler settled. " + left + " RIGHT: the mean acceptance rate "
                  "against the band pertpy warns outside of - it warns through a logger, which in "
-                 "a batch run nobody sees. A term whose rate the tool did not record has its "
-                 "guide line and its label and no point. One hue per term, named on the "
+                 "a batch run nobody sees. The rate is printed as a number beside each point "
+                 "because the judgement is whether it falls inside a band, which is not a thing "
+                 "to read off a position against the edge of a shaded region; a rate outside the "
+                 "band is ringed and named. A term whose rate the tool did not record has its "
+                 "label and, in words, the reason. One hue per term, named on the "
                  "right-hand axis."),
         source=src)
-
 
 def _fig_credibility(ctx, fits, order, ref, src_path):
     """How close each call was to the threshold that decided it."""
     import numpy as np
+    import matplotlib.lines as ml
     contrasts = [(f, c) for f, c in _contrasts(fits)
                  if f["effects"] is not None
                  and "inclusion_probability" in f["effects"].columns]
@@ -799,72 +1162,130 @@ def _fig_credibility(ctx, fits, order, ref, src_path):
         return
     F, plt = ctx.figure, ctx.plot()
     n = len(contrasts)
-    fig, axs = plt.subplots(1, n, figsize=(F.SINGLE if n == 1 else F.DOUBLE,
-                                           max(1.8, 0.22 * len(order) + 1.0)),
-                            squeeze=False, sharey=True, layout="constrained")
+    fig, axs = plt.subplots(1, n, squeeze=False, sharey=True, layout="constrained",
+                            figsize=(F.SINGLE if n == 1 else F.DOUBLE,
+                                     _height(ctx, max(2.2, 0.26 * len(order) + 1.4),
+                                             len(order), "F4_credibility")))
     y = np.arange(len(order))
+    ref_i = list(order).index(ref) if ref in list(order) else None
     for k, (f, cov) in enumerate(contrasts):
         ax = axs[0][k]
         d = f["effects"]
         d = d[d["covariate"] == cov].set_index("population").reindex(order)
         inc = d["inclusion_probability"].to_numpy(dtype=float)
         cred = _flags(np, d["credible"] if "credible" in d.columns else None, len(order))
-        colour = [F.GREY if p == ref else (CREDIBLE if c else F.INK)
-                  for p, c in zip(order, cred)]
+        _reference_row(ax, order, ref)
         # The guide line matters more here than anywhere else: the reference's inclusion
-        # probability is exactly zero, so its bar has no width, and without a line its row would
-        # be a label with nothing beside it - which reads as a population the run forgot.
+        # probability is exactly zero, so its marker has no position to be at, and without a line
+        # its row would be a label with nothing beside it - which reads as a population the run
+        # forgot rather than one the model never tested.
+        _rows(ax, F, len(order))
+        # A STEM AND A POINT, NOT A FILLED BAR. Twelve full-height bars, most of them the INK that
+        # means "measured and not called", put the panel's whole weight on the populations that
+        # are not the result - and at print size two solid bars of similar length are harder to
+        # tell apart than two points against a common line. The stem keeps the length, which is
+        # what "how close to the threshold" is read off.
         for i in y:
-            ax.hlines(i, 0, 1, colors=F.GREY, lw=0.4, zorder=0)
-        ax.barh(y, inc, height=0.72, color=colour, zorder=2)
+            if ref_i is not None and i == ref_i:
+                continue
+            if np.isfinite(inc[i]):
+                ax.hlines(i, 0, inc[i], colors=CREDIBLE if cred[i] else F.INK, lw=1.2, zorder=2)
+        sel = np.array([np.isfinite(v) for v in inc])
+        if ref_i is not None:
+            sel[ref_i] = False
+        hit = sel & cred
+        miss = sel & ~cred
+        ax.scatter(inc[hit], y[hit], s=20, color=CREDIBLE, zorder=4, edgecolors="white",
+                   linewidths=0.5)
+        # HOLLOW, NOT MERELY A DIFFERENT COLOUR. "called" against "measured and not called" is the
+        # entire result of this plugin, and a distinction carried by hue alone is one that a
+        # greyscale print and a colour-blind reader both lose.
+        ax.scatter(inc[miss], y[miss], s=20, facecolors="none", edgecolors=F.INK, linewidths=0.8,
+                   zorder=4)
+        if ref_i is not None:
+            # THE BLANK ROW, EXPLAINED WHERE IT IS BLANK. The reference has no inclusion
+            # probability because its effect is fixed at zero and never sampled; a row with
+            # nothing on it says "the run lost this population", which is a different sentence.
+            ax.text(0.02, ref_i, "not tested: fixed at 0 by construction",
+                    fontsize=5.5, va="center", ha="left", color=F.INK, style="italic", zorder=5)
         if np.isfinite(f["threshold"]):
-            ax.axvline(f["threshold"], color=F.INK, ls="--", lw=0.6)
+            ax.axvline(f["threshold"], color=F.INK, ls="--", lw=0.6, zorder=3)
+            # THE CUT, AS A NUMBER, ON THE PANEL. It is derived from the requested FDR and it
+            # DIFFERS BETWEEN TERMS, so two panels side by side can carry two different decision
+            # rules; a dashed line in each with the value only in the caption invites the reader
+            # to compare them as though they were one.
+            ax.text(f["threshold"], -0.88, f"cut {f['threshold']:.3f}", fontsize=5.5,
+                    ha="center", va="center", color=F.INK)
+        F.rasterize_points(ax)
         ax.set_xlim(0, 1)
-        ax.set_xlabel("inclusion probability")
+        ax.set_xlabel("posterior inclusion probability")
         ax.set_title(str(cov), loc="left")
-        ax.spines["left"].set_visible(False)
-        ax.tick_params(axis="y", length=0)
-    axs[0][0].set_yticks(y)
-    axs[0][0].set_yticklabels([f"{p}  (reference)" if p == ref else p for p in order])
-    axs[0][0].invert_yaxis()
+        _bare(ax, F, keep_x=True)
+    _population_axis(axs[0][0], np, F, order, ref)
+    # A ROW OF BLANK RESERVED AT THE TOP, INSIDE THE AXES. The cut is labelled with its value and
+    # the label has to go somewhere that is neither on a stem nor on the panel title - at SINGLE
+    # column width it landed on the title, which is where a two-panel figure puts the name of the
+    # contrast, so the one number that decided every call was printed through the one word saying
+    # what it decided.
+    axs[0][0].set_ylim(len(order) - 0.5, -1.4)
+    key = _call_key(F, ml, F.short_labels([str(p) for p in order])[str(ref)]
+                    if ref in list(order) else str(ref))
+    # ALONG THE BOTTOM, NOT DOWN THE RIGHT. This panel is as wide as its population names are
+    # long, and a key in the right margin takes that width from the data; three entries in a row
+    # under the axes cost height, of which a row-plot already has as much as it needs.
+    fig.legend(key, [k.get_label() for k in key], loc="outside lower center", ncol=3,
+               frameon=False, handletextpad=0.4, columnspacing=1.6, markerscale=1.6)
     thr = ", ".join(f"{f['term']} {f['threshold']:.3f}" for f in fits
                     if np.isfinite(f["threshold"]))
     ctx.emit_figure(
         "F4_credibility", fig,
         caption=(f"The share of posterior draws in which each effect was NOT switched off by the "
                  f"spike-and-slab prior, against the dashed threshold that turned it into a call "
-                 f"({thr or 'threshold not recorded'}). The threshold is derived from the "
+                 f"({thr or 'threshold not recorded'}), which is marked and numbered on each "
+                 f"panel because it can differ between terms. The threshold is derived from the "
                  f"requested FDR, not chosen: the tool walks the inclusion probabilities "
                  f"downwards and takes the first cut whose implied FDR is below the target - and "
                  f"when none is, it cuts at 1.0 and reports everything as not credible, which "
-                 f"reads exactly like a real negative. A bar just short of the line is an effect "
-                 f"a slightly larger FDR would call; scCODA's own tutorial recommends raising it "
-                 f"as far as 0.2 when nothing is found. Blue is called, black is measured and not "
-                 f"called, and the reference is grey because its effect is fixed at zero by "
-                 f"construction rather than measured at all."),
+                 f"reads exactly like a real negative. A point just short of the line is an "
+                 f"effect a slightly larger FDR would call; scCODA's own tutorial recommends "
+                 f"raising it as far as 0.2 when nothing is found. Filled is called, hollow is "
+                 f"measured and not called, and the reference row carries neither because its "
+                 f"effect is fixed at zero by construction rather than measured at all."),
         source=src_path)
-
 
 def _fig_effects(ctx, fits, order, ref, src_path):
     """The answer: the model's own effect, and the compositional fold change beside it."""
     import numpy as np
+    import matplotlib.lines as ml
     contrasts = [(f, c) for f, c in _contrasts(fits) if f["effects"] is not None]
     if not contrasts:
         return
     F, plt = ctx.figure, ctx.plot()
     n = len(contrasts)
-    per = max(1.5, 0.20 * len(order) + 0.9)
-    fig, axs = plt.subplots(n, 2, figsize=(F.DOUBLE, min(10.0, per * n)),
-                            squeeze=False, sharey=True, layout="constrained")
+    per = max(1.6, 0.24 * len(order) + 1.0)
+    tall = _height(ctx, per * n, len(order) * n, f"F5_effects, {n} contrast(s)")
+    # SHARED X WITHIN EACH COLUMN, WHICH IS THE WHOLE POINT OF DRAWING THEM IN A GRID. Left to
+    # themselves the rows autoscaled independently: one contrast's axis ran to 2.0 and the next
+    # to 1.0, so an effect drawn HALF AS FAR from zero was the LARGER of the two, and the figure
+    # invited exactly the comparison it made wrong. Shared y as well, so the row order is one row
+    # order and a reader can read straight across.
+    fig, axs = plt.subplots(n, 2, figsize=(F.DOUBLE, tall), squeeze=False,
+                            sharex="col", sharey=True, layout="constrained")
     y = np.arange(len(order))
+    short = F.short_labels([str(p) for p in order])
+    sref = short[str(ref)] if ref in list(order) else str(ref)
+    seen_eff, seen_lfc = [], []
     for r, (f, cov) in enumerate(contrasts):
         d = f["effects"]
         d = d[d["covariate"] == cov].set_index("population").reindex(order)
         cred = _flags(np, d["credible"] if "credible" in d.columns else None, len(order))
-        colour = [F.GREY if p == ref else (CREDIBLE if c else F.INK)
-                  for p, c in zip(order, cred)]
+        isref = np.array([p == ref for p in order], dtype=bool)
 
         ax = axs[r][0]
+        _reference_row(ax, order, ref)
+        _reference_row(axs[r][1], order, ref)
+        eff = d["effect"].to_numpy(dtype=float) if "effect" in d.columns else np.full(len(order),
+                                                                                     np.nan)
         if "hdi_low" in d.columns:
             # AS A SEGMENT, NOT AS AN ERROR BAR. `errorbar` demands non-negative xerr, and the
             # interval here is the HDI of the SELECTED draws while the point is the mean of the
@@ -872,16 +1293,28 @@ def _fig_effects(ctx, fits, order, ref, src_path):
             # matplotlib would raise at draw time. hlines has no such constraint and shows the
             # same two numbers.
             ax.hlines(y, d["hdi_low"].to_numpy(dtype=float), d["hdi_high"].to_numpy(dtype=float),
-                      colors=colour, lw=1.0, zorder=2)
-        eff = d["effect"].to_numpy(dtype=float) if "effect" in d.columns else np.full(len(order),
-                                                                                     np.nan)
-        ax.scatter(eff, y, s=12, color=colour, linewidths=0, zorder=3)
+                      colors=[F.GREY if p else (CREDIBLE if c else F.INK)
+                              for p, c in zip(isref, cred)], lw=1.1, zorder=2)
+        # FILLED, HOLLOW, GREY - the same three marks as the credibility panel and in the same
+        # meanings. A hollow point is one the model measured and did NOT call, and its position at
+        # exactly zero is the tool's doing rather than an estimate: `Final Parameter` is set to
+        # zero for every effect the spike-and-slab switched off, which is why a hollow point can
+        # sit outside its own credible interval. Filled and hollow differ in SHAPE, so the
+        # distinction survives a greyscale print.
+        ax.scatter(eff[cred & ~isref], y[cred & ~isref], s=18, color=CREDIBLE, zorder=4,
+                   edgecolors="white", linewidths=0.5)
+        ax.scatter(eff[~cred & ~isref], y[~cred & ~isref], s=18, facecolors="none",
+                   edgecolors=F.INK, linewidths=0.8, zorder=4)
+        ax.scatter(eff[isref], y[isref], s=20, marker="s", facecolors=F.GREY, edgecolors=F.INK,
+                   linewidths=0.4, zorder=4)
+        seen_eff.append(eff)
+        if "hdi_low" in d.columns:
+            seen_eff.append(d["hdi_low"].to_numpy(dtype=float))
+            seen_eff.append(d["hdi_high"].to_numpy(dtype=float))
         F.rasterize_points(ax)
-        ax.axvline(0, color=F.INK, lw=0.6)
-        ax.set_xlabel("effect on log-abundance, relative to the reference")
+        ax.axvline(0, color=F.INK, lw=0.6, zorder=3)
         ax.set_title(str(cov), loc="left")
-        ax.spines["left"].set_visible(False)
-        ax.tick_params(axis="y", length=0)
+        _bare(ax, F, keep_x=True)
 
         ax2 = axs[r][1]
         lfc = (d["log2_fold_change"].to_numpy(dtype=float) if "log2_fold_change" in d.columns
@@ -890,31 +1323,52 @@ def _fig_effects(ctx, fits, order, ref, src_path):
         # was drawn credible-or-grey while the effect beside it was drawn credible-or-black, so a
         # population that was measured and not called was black on one side of the figure and
         # grey on the other - and grey is the tool's mark for a value that was never measured.
-        ax2.barh(y, lfc, height=0.72,
-                 color=[F.GREY if p == ref else (FOLD if c else F.INK)
-                        for p, c in zip(order, cred)])
-        ax2.axvline(0, color=F.INK, lw=0.6)
-        ax2.set_xlabel("log2 fold change in expected share")
-        ax2.set_title("compositional", loc="left")
-        ax2.spines["left"].set_visible(False)
-        ax2.tick_params(axis="y", length=0)
-        axs[r][0].set_yticks(y)
-        axs[r][0].set_yticklabels([f"{p}  (reference)" if p == ref else p for p in order])
-    axs[0][0].invert_yaxis()
+        # The reference keeps an INK edge: its fold change is the one number on this panel a
+        # reader is most likely to be surprised by, and at 15% ink on white it was invisible.
+        ax2.barh(y, lfc, height=0.68, zorder=2,
+                 color=[F.GREY if p else (FOLD if c else "none")
+                        for p, c in zip(isref, cred)],
+                 edgecolor=[F.INK if (p or not c) else "none"
+                            for p, c in zip(isref, cred)], linewidth=0.6)
+        seen_lfc.append(lfc)
+        ax2.axvline(0, color=F.INK, lw=0.6, zorder=3)
+        ax2.set_title("compositional fold change", loc="left")
+        _bare(ax2, F, keep_x=True)
+        _population_axis(ax, np, F, order, ref)
+        if r == n - 1:
+            # THE AXIS LABELS ONLY UNDER THE BOTTOM ROW, because the columns share their scale
+            # and matplotlib prints the tick labels there only. A label repeated under a row whose
+            # ticks are hidden names an axis the reader cannot see.
+            ax.set_xlabel(f"effect on log-abundance, relative to {sref}")
+            ax2.set_xlabel("log2 fold change in expected share")
+    axs[0][0].set_ylim(len(order) - 0.5, -0.5)
+    _flat_column([axs[r][0] for r in range(n)], np, F, np.concatenate(seen_eff) if seen_eff else [],
+                 "every effect is exactly zero:\nnothing was called at this threshold")
+    _flat_column([axs[r][1] for r in range(n)], np, F, np.concatenate(seen_lfc) if seen_lfc else [],
+                 "every fold change is exactly zero:\nno effect was switched on")
+    key = _call_key(F, ml, sref)
+    fig.legend(key, [k.get_label() for k in key], loc="outside lower center", ncol=3,
+               frameon=False, handletextpad=0.4, columnspacing=1.6, markerscale=1.6)
     ctx.emit_figure(
         "F5_effects", fig,
-        caption=("The result, twice, because the two halves can disagree and the disagreement is "
-                 "the method. LEFT: the model's own effect parameter with its credible interval, "
-                 "measured RELATIVE TO the reference population and coloured where the effect was "
-                 "called credible. RIGHT: the same effect as a fold change in expected share - "
-                 "which is COMPOSITIONAL, renormalised to a constant total, so a population with "
-                 "an effect of exactly zero can still carry a fold change driven entirely by "
-                 "other populations moving. The reference is the clearest case: its effect is "
-                 "fixed at zero by construction and its fold change is not, and it is drawn grey "
-                 "for that reason - black is measured and not called. A population with no "
-                 "credible effect has not been shown to hold still."),
+        caption=(f"The result, twice, because the two halves can disagree and the disagreement is "
+                 f"the method. LEFT: the model's own effect parameter with its credible interval, "
+                 f"measured RELATIVE TO {ref} and FILLED where the effect was called credible. A "
+                 f"HOLLOW point was measured and not called, and it sits at exactly zero because "
+                 f"the tool sets it there rather than because the posterior mean was zero - which "
+                 f"is why a hollow point can lie outside its own interval - the interval is "
+                 f"over the draws in which the effect was switched ON, so for a population that "
+                 f"was not called it describes the minority of draws in which it was. RIGHT: the "
+                 f"same effect "
+                 f"as a fold change in expected share - which is COMPOSITIONAL, renormalised to a "
+                 f"constant total, so a population with an effect of exactly zero can still carry "
+                 f"a fold change driven entirely by other populations moving. The reference is "
+                 f"the clearest case: its effect is fixed at zero by construction and its fold "
+                 f"change is not, and it is drawn grey with an outline for that reason. Each "
+                 f"column shares one x scale across every contrast, so a bar twice as long is "
+                 f"twice the change. A population with no credible effect has not been shown to "
+                 f"hold still."),
         source=src_path)
-
 
 # ---------------------------------------------------------------------------------------- run
 

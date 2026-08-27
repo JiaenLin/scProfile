@@ -407,25 +407,165 @@ def _pick_basis(ctx, declared):
                      if wide else ""))
 
 
+def _short(F, labels):
+    """Hierarchical population names cut to their shortest UNAMBIGUOUS tail, in order.
+
+    THE AXIS, NEVER THE SOURCE TABLE. An annotation label is a PATH, and on a real cohort the
+    paths run to fifty or more characters - as a PAIR, on the transitions panel, to a hundred.
+    Drawn in full they take more of a panel than the data does, measured on a twelve-population
+    fixture: the transitions panel saved at 169 mm and the proportions panel at 143 mm, both
+    declared at the 85 mm single column, the excess entirely tick text. The full path stays in the
+    CSV emitted beside every panel, so nothing is lost by shortening the axis.
+    """
+    m = F.short_labels([str(l) for l in labels])
+    return [m[str(l)] for l in labels]
+
+
+def _by_size(counts):
+    """The one order every per-population panel uses: most cells first, ties by name.
+
+    THREE PANELS SORTED THREE WAYS is what this replaces - the proportions panel by unspliced
+    fraction, the confidence boxes alphabetically, the per-population pair by cell count. Same
+    populations, same page, three vertical orders, so a reader comparing a population across the
+    diagnostics had to find it again in each one. Which order is chosen matters far less than that
+    one is.
+    """
+    return [l for l, _ in sorted(counts.items(), key=lambda kv: (-kv[1], str(kv[0])))]
+
+
+def _point_size(n):
+    """Marker area for a scatter of n cells at journal column width.
+
+    A SIZE THAT WAS RIGHT FOR THE FIXTURE. `s=2` was typed against a few thousand cells; at a
+    hundred thousand on an 85 mm panel the same 2 covers the manifold in a solid mat and every
+    structure inside it, which is exactly the size of dataset this plugin is costed for.
+    """
+    return float(min(8.0, max(0.5, 5000.0 / max(int(n), 1) ** 0.7)))
+
+
+def _draw_order(n, seed=0):
+    """A fixed random permutation to scatter in.
+
+    DRAWING ORDER IS AN ARGUMENT. Points drawn last are the points a reader sees: sorting the
+    confidence map by confidence put every high value on top of every low one, and the field came
+    out uniformly confident whatever the data said. In a categorical map the same thing happens by
+    accident, because the object's row order is usually the order the populations were
+    concatenated in. A permutation is the only order that asserts nothing.
+    """
+    import numpy as np
+    return np.random.default_rng(seed).permutation(int(n))
+
+
+def _fraction_axis(ax):
+    """0 to 1 at quarters, on every axis of this page that carries a fraction.
+
+    FIVE AXES ON THIS PAGE CARRY A PROPORTION and every one of them was left to matplotlib, which
+    fits the axis to the data - so a median confidence of 0.75 and an unspliced fraction of 0.35
+    drew bars of the same length in the two halves of ONE figure whose entire question is how the
+    two compare. A fraction has a known range; there is no reason to discover it per panel, and
+    every reason not to.
+    """
+    ax.set_xlim(0, 1)
+    ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
+    ax.set_xticklabels(["0", "0.25", "0.5", "0.75", "1"])
+
+
+def _bar_grid(ax, axis="x"):
+    """Faint rules behind the bars, so a length can be read without opening the CSV."""
+    ax.set_axisbelow(True)
+    ax.grid(axis=axis, color="#E8E8E8", lw=0.5, zorder=0)
+
+
+def _annotate_n(ax, ys, counts, x=1.02):
+    """The cell count each row was computed from, in the right margin.
+
+    A MEDIAN OVER 47 CELLS AND A MEDIAN OVER 37,000 DRAW THE SAME BAR. On a real annotation the
+    populations differ by three orders of magnitude, and a per-population panel that does not
+    carry n invites the reader to weigh them equally - which is the one thing the figure knows to
+    be wrong and the reader cannot see.
+    """
+    for yy, c in zip(ys, counts):
+        ax.text(x, yy, f"{int(c):,}", transform=ax.get_yaxis_transform(),
+                ha="left", va="center", fontsize=5.5, color="#666666", clip_on=False)
+    ax.text(x, 1.0, "n", transform=ax.transAxes, ha="left", va="bottom",
+            fontsize=5.5, color="#666666", clip_on=False)
+
+
+def _fit_width(fig, target):
+    """Shrink the canvas until what is SAVED is `target` inches wide, legend and margins in.
+
+    A FIGURE IS MADE AT THE WIDTH IT WILL BE PRINTED AT - that is the whole reason the shared
+    conventions carry `SINGLE` and `DOUBLE` - and `bbox_inches="tight"` quietly breaks the promise
+    the moment anything is drawn outside the axes. A legend anchored past the right edge is not
+    seen by constrained layout, so the tight bounding box grows to include it and the file comes
+    out wider than it was declared to be: the phase grid saved at 213 mm for a 174 mm column, and
+    a figure scaled back down at submission has 7 pt labels at 5.7 pt.
+
+    Measured rather than guessed, because the width of a legend depends on the labels in it - and
+    those are somebody else's annotation. Three passes, because moving the edge moves the legend
+    with it; it converges in two on everything drawn here.
+    """
+    pad = 0.04                                   # savefig.pad_inches, both sides
+    for _ in range(3):
+        fig.canvas.draw()
+        try:
+            got = fig.get_tightbbox(fig.canvas.get_renderer()).width + pad
+        except Exception:                                                 # noqa: BLE001
+            return
+        w, h = fig.get_size_inches()
+        # IT SHRINKS AND NEVER GROWS. Symmetric, it also widened a figure whose content was
+        # NARROWER than its canvas - which is every grid holding an empty cell - and each pass
+        # widened the canvas without widening the content, so a one-gene phase grid walked from
+        # 174 mm to 409 mm in three passes. The declared width is the intent; overflow is the
+        # defect, and only overflow is corrected here.
+        if got <= target + 0.02:
+            return
+        fig.set_size_inches(max(1.6, w - (got - target)), h)
+
+
 def _clean(ax, F, basis=None):
+    """An embedding panel: no ticks, no frame, TRUE ASPECT, and a corner axis indicator.
+
+    `set_aspect("equal")` IS THE PUBLICATION FIX HERE AND IT WAS MISSING. A UMAP drawn into a
+    box of a different shape from its data is a UMAP with a scale factor in one axis: distances
+    are the entire content of an embedding, and every panel of this page drew them stretched by
+    whatever ratio the figure happened to have.
+
+    A publication panel names its axes even when the values are meaningless. An unlabelled
+    embedding is the commonest reason a reviewer asks what they are looking at - and a corner
+    indicator says it in the space a pair of full-length axis labels wanted, which on a square
+    map is the difference between a legible panel and a cramped one.
+
+    THE ALGORITHM, THEN WHAT IT WAS RUN ON. Uppercasing the whole obsm key gave `UMAP_SCANVI 1`,
+    which reads as an algorithm nobody has heard of. A layout derived from a representation is a
+    UMAP OF that representation, and saying it that way is both shorter and true. The splitter
+    lives in `figure.py`, because four plugins spelling their own axis label is four labels that
+    drift apart.
+    """
+    import matplotlib.patheffects as pe
     ax.set_xticks([])
     ax.set_yticks([])
     for s in ax.spines.values():
         s.set_visible(False)
-    if basis:
-        # A publication panel names its axes even when the values are meaningless. An unlabelled
-        # embedding is the commonest reason a reviewer asks what they are looking at.
-        #
-        # THE ALGORITHM, THEN WHAT IT WAS RUN ON. Uppercasing the whole obsm key gave
-        # `UMAP_SCANVI 1`, which reads as an algorithm nobody has heard of - and is barely better
-        # than the `SCANVI 1` it replaced. A layout derived from a representation is a UMAP OF
-        # that representation, and saying it that way is both shorter and true.
-        # A KNOWN ALGORITHM, LONGEST FIRST - not the first underscore. `partition("_")` turned
-        # `draw_graph_fa` into "DRAW (of graph_fa)", inventing both an algorithm and a provenance
-        # out of one name. A split has to know what it is splitting, and a basis this plugin does
-        # not recognise is printed whole, which is the honest outcome.
-        ax.set_xlabel(F.basis_label(basis, 1), loc="left")
-        ax.set_ylabel(F.basis_label(basis, 2), loc="bottom")
+    # `datalim`, NOT `box`. Both hold the aspect and neither distorts anything; the difference is
+    # which one gives way. `box` shrinks the axes inside the cell the layout gave it and leaves a
+    # margin the colourbar then attaches to the far side of - a small map, a floating bar, and a
+    # band of white between them. `datalim` keeps the cell and widens the limits instead, so the
+    # panel is as large as the figure can make it.
+    ax.set_aspect("equal", adjustable="datalim")
+    if not basis:
+        return
+    halo = [pe.withStroke(linewidth=1.8, foreground="white")]
+    kw = dict(xycoords="axes fraction", textcoords="axes fraction",
+              arrowprops=dict(arrowstyle="-|>,head_width=0.14,head_length=0.3", lw=0.7,
+                              color=F.INK, shrinkA=0, shrinkB=0,
+                              path_effects=[pe.withStroke(linewidth=2.0, foreground="white")]))
+    ax.annotate("", xy=(0.175, 0.02), xytext=(0.02, 0.02), **kw)
+    ax.annotate("", xy=(0.02, 0.175), xytext=(0.02, 0.02), **kw)
+    ax.text(0.19, 0.02, F.basis_label(basis, 1), transform=ax.transAxes, ha="left",
+            va="center", fontsize=5.5, color=F.INK, path_effects=halo)
+    ax.text(0.02, 0.19, F.basis_label(basis, 2), transform=ax.transAxes, ha="left",
+            va="bottom", rotation=90, fontsize=5.5, color=F.INK, path_effects=halo)
 
 
 def _colours_for(ctx, labels):
@@ -454,6 +594,114 @@ def _colours_for(ctx, labels):
                    f"that stay separable; read those points from the per-population panels "
                    f"rather than from the map.")
     return cols
+
+
+def _scatter_cells(ax, xy, labels, colours, F, alpha=1.0):
+    """The cell layer under a field panel: one dot per cell, coloured by population.
+
+    Rasterised, because a hundred thousand vector dots is a 40 MB PDF that opens in nothing, and
+    permuted, because the object's row order is the order the samples were concatenated in.
+    """
+    import numpy as np
+    from matplotlib.colors import to_rgba_array
+    o = _draw_order(len(xy))
+    if labels is not None and colours:
+        cvec = to_rgba_array([colours.get(str(l), F.GREY) for l in labels])[o]
+    else:
+        cvec = F.GREY
+    ax.scatter(xy[o, 0], xy[o, 1], c=cvec, s=_point_size(len(xy)), linewidths=0,
+               alpha=alpha, rasterized=True, zorder=1)
+
+
+def _place_labels(ax, F, xy, labels, colours, sentinels):
+    """Population names ON the map, at each population's median position.
+
+    A LEGEND OF FOURTEEN ENTRIES BESIDE AN 85 mm MAP LEAVES 45 mm OF MAP. It also asks the reader
+    to carry a swatch across the gap and match it against a dot two thirds of a millimetre across,
+    which for the pairs of hues that survive a colour-vision check is not reliably possible. A
+    name written where the population is needs neither. The median, not the mean, so a population
+    with a satellite lobe is still labelled inside itself.
+
+    Returns the names it drew, which is empty only when the annotation is nothing but sentinels -
+    the one case where the caller falls back to a legend, because there is no population to write
+    anywhere.
+    """
+    import numpy as np
+    import matplotlib.patheffects as pe
+    sent = {str(s) for s in sentinels}
+    labs = np.asarray([str(l) for l in labels])
+    real = [l for l in sorted(set(labs)) if l not in sent]
+    if not real:
+        return []
+    pos = {l: (float(np.median(xy[labs == l, 0])), float(np.median(xy[labs == l, 1])))
+           for l in real}
+    short = dict(zip(real, _short(F, real)))
+    # Nudge apart in y only, in data units, so a name never sits on another name. Ten passes is
+    # enough for the crowding a real annotation produces and cannot oscillate the way a free
+    # repulsion can.
+    span = float(np.ptp(xy[:, 1])) or 1.0
+    gap = 0.045 * span
+    for _ in range(25):
+        order = sorted(real, key=lambda l: pos[l][1])
+        moved = False
+        for a, b in zip(order, order[1:]):
+            dy = pos[b][1] - pos[a][1]
+            dx = abs(pos[b][0] - pos[a][0])
+            if dy < gap and dx < 0.14 * (float(np.ptp(xy[:, 0])) or 1.0):
+                pos[a] = (pos[a][0], pos[a][1] - (gap - dy) / 2)
+                pos[b] = (pos[b][0], pos[b][1] + (gap - dy) / 2)
+                moved = True
+        if not moved:
+            break
+    for l in real:
+        # A PLATE, NOT A STROKE. A white outline round the glyphs is enough over a scatter and
+        # not over a stream line, and the stream is drawn in ink at up to a point wide: the
+        # letters and the field ended up the same colour in the same place. A semi-opaque plate
+        # hides a little of the map and makes the name readable on all of it.
+        ax.text(pos[l][0], pos[l][1], short[l], ha="center", va="center", fontsize=5.5,
+                color=F.INK, zorder=5, clip_on=False,
+                path_effects=[pe.withStroke(linewidth=1.6, foreground="white")],
+                bbox=dict(boxstyle="round,pad=0.18", fc="white", ec="none", alpha=0.66))
+    return real
+
+
+def _velocity_on_grid(xy, v, n=50, smooth=0.55, k=None):
+    """The projected field averaged onto a regular grid, with the local cell mass beside it.
+
+    ONE GRID FOR BOTH FIELD PANELS. The stream and the arrow panel are declared as the same field
+    drawn two ways - "which is why this panel and the stream can disagree, and why both are
+    shown" - and that sentence is only true if the disagreement is the drawing. Computed twice at
+    two densities by two calls with two autoscalings, a difference between the panels could as
+    easily have been the two computations, and no reader could tell which.
+
+    Gaussian-weighted mean of the k nearest cells at each node, kernel width set from the node
+    spacing - the same estimator the wrapped tool uses for its own grid, kept here so both panels
+    can share one call and one scale. `mass` is the summed kernel weight and is what decides where
+    there are enough cells to draw an arrow at all: an empty region must stay empty, or the panel
+    interpolates across a gap and asserts a flow through cells that are not there.
+    """
+    import numpy as np
+    from scipy.spatial import cKDTree
+    ok = np.isfinite(xy).all(1) & np.isfinite(v).all(1)
+    xy, v = np.asarray(xy)[ok], np.asarray(v)[ok]
+    grs = []
+    for d in range(2):
+        lo, hi = float(xy[:, d].min()), float(xy[:, d].max())
+        pad = 0.02 * (hi - lo or 1.0)
+        grs.append(np.linspace(lo - pad, hi + pad, int(n)))
+    X, Y = np.meshgrid(grs[0], grs[1])
+    P = np.column_stack([X.ravel(), Y.ravel()])
+    kk = int(k or min(max(len(xy) // 50, 30), 500))
+    kk = max(1, min(kk, len(xy)))
+    dist, idx = cKDTree(xy).query(P, k=kk, workers=-1)
+    if dist.ndim == 1:
+        dist, idx = dist[:, None], idx[:, None]
+    scale = float(np.mean([g[1] - g[0] for g in grs])) * smooth
+    w = np.exp(-0.5 * (dist / scale) ** 2)
+    mass = w.sum(1)
+    V = (v[idx] * w[:, :, None]).sum(1) / np.maximum(mass, 1e-12)[:, None]
+    sh = X.shape
+    return (grs[0], grs[1], V[:, 0].reshape(sh), V[:, 1].reshape(sh), mass.reshape(sh))
 
 
 # ------------------------------------------------------------------------------------ figures
@@ -492,76 +740,133 @@ def _fig_proportions(ctx, mask, groups):
     if not rows:
         return
     F, plt = ctx.figure, ctx.plot()
-    df = pd.DataFrame(rows).sort_values("unspliced_fraction", ascending=False)
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.6, 0.20 * len(df) + 0.9)))
+    df = pd.DataFrame(rows).set_index("label")
+    df = df.loc[_by_size(df["n_cells"].to_dict())]
+    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.7, 0.19 * len(df) + 1.0)),
+                           layout="constrained")
     y = np.arange(len(df))
-    ax.barh(y, df["spliced_fraction"], color="#0072B2", label="spliced", height=0.72)
-    ax.barh(y, df["unspliced_fraction"], left=df["spliced_fraction"], color="#E69F00",
-            label="unspliced", height=0.72)
+    _bar_grid(ax)
+    ax.barh(y, df["spliced_fraction"], color=F.CATEGORY_COLOURS[0], label="spliced", height=0.74,
+            zorder=2)
+    ax.barh(y, df["unspliced_fraction"], left=df["spliced_fraction"],
+            color=F.CATEGORY_COLOURS[1], label="unspliced", height=0.74, zorder=2)
+    # THE NUMBER THE PANEL IS ABOUT, WRITTEN ON THE BAR. Stacked to one, every bar is the same
+    # length and the only thing that varies is an internal boundary - which is a position a reader
+    # has to estimate against a gridline. The unspliced fraction is what the caption asks them to
+    # judge, so it is printed where they are judging it.
+    for yy, sf, uf in zip(y, df["spliced_fraction"], df["unspliced_fraction"]):
+        ax.text(min(sf + uf / 2, 0.96), yy, f"{100 * uf:.0f}%", ha="center", va="center",
+                fontsize=5.5, color=F.INK, zorder=3)
     ax.set_yticks(y)
-    ax.set_yticklabels(df["label"])
+    ax.set_yticklabels(_short(F, df.index))
     ax.invert_yaxis()
-    ax.set_xlim(0, 1)
-    ax.set_xlabel("fraction of counts")
+    _fraction_axis(ax)
+    ax.set_xlabel("fraction of spliced + unspliced counts")
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
-    F.legend_outside(fig, ax)
+    _annotate_n(ax, y, df["n_cells"])
+    # NOT `legend_outside`, AND THE REASON IS THE COLUMN BESIDE IT. The shared placement is the
+    # right-hand margin, which is where this panel writes n - two things in one margin, drawn on
+    # top of each other. A two-key legend is one line of text, so it goes above the axes, which is
+    # outside the data exactly as the convention requires and costs no width at all.
+    ax.legend(loc="lower left", bbox_to_anchor=(0.0, 1.005), ncol=2, frameon=False,
+              handlelength=1.1, handletextpad=0.4, columnspacing=1.4, markerscale=1)
+    _fit_width(fig, F.SINGLE)
     ctx.emit_figure(
         "F1_proportions", fig,
-        caption=("Spliced and unspliced fraction of counts in each population. The unspliced "
-                 "fraction is the material velocity is inferred from: a population near zero has "
-                 "no kinetic signal to fit, whatever arrows are drawn over it. Fractions are of "
-                 "counts, not of cells. Annotator sentinels are not shown as populations."),
-        source=df.set_index("label"))
+        caption=("Spliced and unspliced fraction of counts in each population, most cells first; "
+                 "the unspliced percentage is printed on each bar and n is the cells it was "
+                 "summed over. The unspliced fraction is the material velocity is inferred from: "
+                 "a population near zero has no kinetic signal to fit, whatever arrows are drawn "
+                 "over it. Fractions are of counts, not of cells. Annotator sentinels are not "
+                 "shown as populations. Axis names are shortened to their shortest unambiguous "
+                 "tail; the full labels are in the table beside this panel."),
+        source=df)
 
 
-def _fig_field(ctx, scv, basis, label_key, colours):
-    """The headline field, as a stream and as discrete arrows."""
+def _fig_field(ctx, basis, label_key, colours):
+    """The headline field, as a stream and as discrete arrows - one grid, one scale, one frame."""
     import numpy as np
     import pandas as pd
     A = ctx.adata
     F, plt = ctx.figure, ctx.plot()
     xy = np.asarray(A.obsm[f"X_{basis}"])[:, :2]
     v = np.asarray(A.obsm[f"velocity_{basis}"])[:, :2]
+    labels = A.obs[label_key].astype(str).values if (label_key and label_key in A.obs) else None
     d = {"barcode": A.obs_names.astype(str), "x": xy[:, 0], "y": xy[:, 1],
          "vx": v[:, 0], "vy": v[:, 1]}
-    if label_key and label_key in A.obs:
-        d["label"] = A.obs[label_key].astype(str).values
+    if labels is not None:
+        d["label"] = labels
     src = pd.DataFrame(d).set_index("barcode")
 
-    for kind, fn, cap in (
-        ("F2_stream", scv.pl.velocity_embedding_stream,
+    gx, gy, U, V, mass = _velocity_on_grid(xy, v, n=50)
+    # WHERE THERE ARE TOO FEW CELLS TO AVERAGE, NOTHING IS DRAWN. The threshold is a percentile of
+    # the node mass rather than an absolute, because the mass scale depends on the kernel width,
+    # which depends on the layout's own units - an absolute cut-off would mean something different
+    # on every dataset.
+    thin = mass < np.percentile(mass, 60)
+    speed = np.sqrt(U ** 2 + V ** 2)
+    lo, hi = float(np.nanmin(xy[:, 0])), float(np.nanmax(xy[:, 0]))
+    lo2, hi2 = float(np.nanmin(xy[:, 1])), float(np.nanmax(xy[:, 1]))
+    padx, pady = 0.04 * (hi - lo or 1), 0.04 * (hi2 - lo2 or 1)
+
+    for kind, cap in (
+        ("F2_stream",
          "RNA velocity on the {b} embedding, as a stream. Lines follow the field and are "
-         "INTERPOLATED between cells; arrow length is a direction, never a rate in real time, and "
-         "lengths are not comparable between datasets."),
-        ("F3_grid", scv.pl.velocity_embedding_grid,
-         "The same field as discrete arrows on a grid. Each arrow averages the cells in its cell "
-         "and does not interpolate between them, so an empty region stays empty - which is why "
-         "this panel and the stream can disagree, and why both are shown."),
+         "INTERPOLATED between cells; line width is the local speed of the projected field. "
+         "Arrow length is a direction, never a rate in real time, and lengths are not comparable "
+         "between datasets. Populations are named where they sit rather than in a legend; the "
+         "names are shortened to their shortest unambiguous tail and given in full in the table "
+         "beside this panel."),
+        ("F3_grid",
+         "The same field as discrete arrows on a grid - the same grid, the same kernel and the "
+         "same axes as the stream panel, so any difference between the two is the drawing and "
+         "not the computation. Each arrow averages the cells around its node and does not "
+         "interpolate between them, so a region with too few cells stays empty - which is why "
+         "this panel and the stream can disagree, and why both are shown. Arrow length is scaled "
+         "to the node spacing and is a direction, not a rate."),
     ):
         try:
-            fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.92))
-            # arrow_size is in POINTS and does not scale with the figure. At scvelo's default a
-            # figure built for an 85 mm column comes out with arrowheads the size of a cell type.
-            kw = dict(basis=basis, color=label_key, ax=ax, show=False, legend_loc="none",
-                      size=10, alpha=0.75, arrow_color=F.INK, dpi=400, title="",
-                      frameon=False, colorbar=False)
-            if colours:
-                kw["palette"] = [colours[l] for l in sorted(colours)]
-            if "stream" in kind:
-                kw.update(linewidth=0.35, arrow_size=0.7, density=1.4)
+            fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE), layout="constrained")
+            _scatter_cells(ax, xy, labels, colours, F, alpha=0.85)
+            if kind == "F2_stream":
+                Um, Vm = U.copy(), V.copy()
+                Um[thin] = np.nan
+                Vm[thin] = np.nan
+                lw = 0.25 + 0.85 * (speed / (np.nanmax(speed) or 1.0))
+                ax.streamplot(gx, gy, Um, Vm, color=F.INK, linewidth=lw, density=1.3,
+                              arrowsize=0.55, arrowstyle="-|>", zorder=4,
+                              broken_streamlines=True)
             else:
-                kw.update(arrow_length=1.6, arrow_size=1.6, density=0.7)
-            fn(A, **kw)
-            F.rasterize_points(ax)
+                step = 3                      # 17 x 17 arrows on an 85 mm panel
+                sl = (slice(None, None, step), slice(None, None, step))
+                Xg, Yg = np.meshgrid(gx, gy)
+                keep = ~thin[sl]
+                spacing = float(gx[1] - gx[0]) * step
+                # LENGTH IS SET BY THE NODE SPACING, not by the raw vector magnitude, and off the
+                # 90th percentile rather than the median: projected speed is heavy-tailed, so a
+                # median scaling drew the fastest tenth of the nodes three spacings long, across
+                # their neighbours, and the panel became a hairball exactly where the field is
+                # strongest. At the 90th only that tenth reaches a full spacing.
+                fast = float(np.nanpercentile(speed[sl][keep], 90)) if keep.any() else 0.0
+                q = (fast / spacing) if fast > 0 else 1.0
+                ax.quiver(Xg[sl][keep], Yg[sl][keep], U[sl][keep], V[sl][keep],
+                          angles="xy", scale_units="xy", scale=q, width=0.0042,
+                          headwidth=4.2, headlength=4.6, headaxislength=4.0,
+                          color=F.INK, zorder=4)
+            ax.set_xlim(lo - padx, hi + padx)
+            ax.set_ylim(lo2 - pady, hi2 + pady)
+            named = _place_labels(ax, F, xy, labels, colours, ctx.sentinels) \
+                if (labels is not None and colours) else []
             _clean(ax, F, basis)
-            if colours:
+            if labels is not None and colours and not named:
                 import matplotlib.lines as ml
                 h = [ml.Line2D([], [], marker="o", ls="", ms=2.5, color=c,
                                label=(f"{l} (not a cell type)" if c == F.GREY else l))
                      for l, c in sorted(colours.items())]
-                F.legend_outside(fig, ax, h, [x.get_label() for x in h],
+                F.legend_outside(fig, ax, h, _short(F, [x.get_label() for x in h]),
                                  ncol=1 if len(h) <= 14 else 2)
+            _fit_width(fig, F.SINGLE)
             ctx.emit_figure(kind, fig, caption=cap.format(b=basis), source=src)
         except Exception as e:                                            # noqa: BLE001
             ctx.log(f"    {kind} not drawn: {e}")
@@ -584,100 +889,159 @@ def _fig_confidence(ctx, basis, mask, groups, colours):
     src = pd.DataFrame(d).set_index("barcode")
 
     xy = np.asarray(A.obsm[f"X_{basis}"])[:, :2]
-    ncol = 1 if groups is None else 2
-    # `constrained`, because the right panel's tick labels are cell-type names and the left
-    # panel's colourbar is placed in the gap between them: without it the colourbar was drawn
-    # across four of those labels, which on a real annotation are long. The phase-portrait figure
-    # in this file already used it, for the same reason one panel lower down.
-    fig, axs = plt.subplots(1, ncol, figsize=(F.DOUBLE if ncol == 2 else F.SINGLE,
-                                              F.SINGLE * 0.9), squeeze=False,
-                            layout="constrained")
+    has_groups = groups is not None and len(groups)
+    order = []
+    if has_groups:
+        gi = np.asarray(groups)
+        counts = {l: int((gi == l).sum()) for l in set(gi)}
+        order = _by_size(counts)
+    # THE MAP IS SQUARE AND THE BOXES ARE AS TALL AS THEY HAVE ROWS. One figsize for both put a
+    # square map and a fourteen-row box panel in boxes of the same shape, so whichever needed
+    # more height starved the other; `width_ratios` keeps the map square at 85 mm-equivalent and
+    # gives the rest to the distributions.
+    h = max(F.SINGLE * 0.92, 0.215 * len(order) + 1.0) if has_groups else F.SINGLE * 0.92
+    fig, axs = plt.subplots(1, 2 if has_groups else 1,
+                            figsize=(F.DOUBLE if has_groups else F.SINGLE, h),
+                            squeeze=False, layout="constrained",
+                            gridspec_kw={"width_ratios": [1.0, 1.15]} if has_groups else None)
     ax = axs[0][0]
-    o = np.argsort(conf)
-    pts = ax.scatter(xy[o, 0], xy[o, 1], c=conf[o], s=2, cmap="RdYlBu_r", vmin=0, vmax=1,
-                     linewidths=0, rasterized=True)
+    o = _draw_order(len(xy))
+    pts = ax.scatter(xy[o, 0], xy[o, 1], c=conf[o], s=_point_size(len(xy)), cmap="RdYlBu_r",
+                     vmin=0, vmax=1, linewidths=0, rasterized=True)
     _clean(ax, F, basis)
-    ax.set_title("velocity confidence", loc="left")
-    cb = fig.colorbar(pts, ax=ax, fraction=0.04, pad=0.02)
+    ax.set_title("per cell, on the layout", loc="left")
+    cb = fig.colorbar(pts, ax=ax, fraction=0.045, pad=0.02, shrink=0.82,
+                      ticks=[0, 0.25, 0.5, 0.75, 1])
+    cb.set_label("velocity confidence")
     cb.outline.set_visible(False)
 
-    if groups is not None and len(groups):
+    if has_groups:
         ax2 = axs[0][1]
-        gi = np.asarray(groups)
         sub = conf[np.asarray(mask)]
-        order = sorted(set(gi))
         data = [sub[gi == l] for l in order]
-        bp = ax2.boxplot(data, vert=False, widths=0.62, patch_artist=True, showfliers=False,
-                         medianprops=dict(color=F.INK, lw=0.8))
+        y = np.arange(1, len(order) + 1)
+        _bar_grid(ax2)
+        bp = ax2.boxplot(data, vert=False, widths=0.66, patch_artist=True, showfliers=False,
+                         medianprops=dict(color=F.INK, lw=0.9),
+                         whiskerprops=dict(lw=0.6), capprops=dict(lw=0.6), zorder=2)
         for patch, l in zip(bp["boxes"], order):
             patch.set_facecolor((colours or {}).get(l, F.GREY))
             patch.set_edgecolor(F.INK)
             patch.set_linewidth(0.5)
-        ax2.set_yticklabels(order)
+        ax2.set_yticks(y)
+        ax2.set_yticklabels(_short(F, order))
         ax2.set_xlabel("velocity confidence")
-        ax2.set_xlim(0, 1)
-        ax2.axvline(0.5, color=F.INK, ls="--", lw=0.6)
+        _fraction_axis(ax2)
+        # THE LINE NEEDS NO LABEL HERE: 0.5 is one of the axis's own ticks, and the note that used
+        # to name it was drawn above the axes, straight through the panel title.
+        ax2.axvline(0.5, color=F.INK, ls="--", lw=0.6, zorder=3)
         ax2.invert_yaxis()
-        ax2.set_title("per population", loc="left")
+        ax2.spines["left"].set_visible(False)
+        ax2.tick_params(axis="y", length=0)
+        ax2.set_title("per population, most cells first", loc="left")
+        _annotate_n(ax2, y, [len(x) for x in data])
+    _fit_width(fig, F.DOUBLE if has_groups else F.SINGLE)
     ctx.emit_figure(
         "F4_confidence", fig,
         caption=("Velocity confidence: the agreement between a cell's own velocity vector and "
                  "those of its neighbours. Low values mean the arrows in that region disagree "
                  "with each other, so the field there is unresolved rather than pointing "
                  "somewhere. Read the headline panel only where this one is high; the dashed "
-                 "line marks 0.5."),
+                 "line marks 0.5. Both panels run 0 to 1. Cells are drawn in a fixed random "
+                 "order, so no value is systematically painted over another, and n is the cells "
+                 "in each box - a box over tens of cells and one over tens of thousands are the "
+                 "same width."),
         source=src)
 
 
-def _fig_phase(ctx, scv, genes, label_key, colours):
+def _fig_phase(ctx, genes, label_key, colours):
     """Per-gene unspliced against spliced - the evidence the model fitted anything."""
+    import numpy as np
     import pandas as pd
     A = ctx.adata
     genes = [g for g in genes if g in A.var_names][:6]
     if not genes:
         return
     F, plt = ctx.figure, ctx.plot()
+    labels = A.obs[label_key].astype(str).values if (label_key and label_key in A.obs) else None
     rows = {"barcode": A.obs_names.astype(str)}
-    if label_key and label_key in A.obs:
-        rows["label"] = A.obs[label_key].astype(str).values
+    if labels is not None:
+        rows["label"] = labels
+    cols = {}
     for g in genes:
         j = list(A.var_names).index(g)
         for lay, nm in (("Ms", "spliced_moment"), ("Mu", "unspliced_moment")):
             if lay in A.layers:
                 col = A.layers[lay][:, j]
-                rows[f"{g}_{nm}"] = (col.toarray().ravel() if hasattr(col, "toarray")
-                                     else col.ravel())
+                col = (col.toarray().ravel() if hasattr(col, "toarray")
+                       else np.asarray(col).ravel())
+                rows[f"{g}_{nm}"] = col
+                cols[(g, lay)] = col
     src = pd.DataFrame(rows).set_index("barcode")
+    if not cols:
+        ctx.log("    F5_phase_portraits not drawn: no Ms/Mu moments on the object")
+        return
     try:
-        ncol = 3
+        # NO EMPTY COLUMN, AND THE WIDTH FOLLOWS THE COUNT. Three columns were fixed, so a fit
+        # that ranked one gene drew it in the left third of a 174 mm figure beside two blank
+        # cells - and a blank cell is a panel a reader looks for.
+        ncol = min(3, len(genes))
         nrow = (len(genes) + ncol - 1) // ncol
+        wide = max(F.SINGLE, F.DOUBLE * ncol / 3)
         # constrained_layout, because a title in row 2 lands on row 1's x-axis label otherwise -
         # which is how a grid of panels turns into a grid of overlapping text.
-        fig, axs = plt.subplots(nrow, ncol, figsize=(F.DOUBLE, 1.75 * nrow), squeeze=False,
+        fig, axs = plt.subplots(nrow, ncol, figsize=(wide, 1.95 * nrow), squeeze=False,
                                 layout="constrained")
+        o = _draw_order(A.n_obs)
+        s = _point_size(A.n_obs)
         for i, (ax, g) in enumerate(zip(axs.ravel(), genes)):
-            kw = dict(x="Ms", y="Mu", color=label_key, basis=g, ax=ax, show=False,
-                      legend_loc="none", size=6, alpha=0.6, frameon=True, title=g,
-                      fontsize=7, dpi=400, colorbar=False)
-            if colours:
-                kw["palette"] = [colours[l] for l in sorted(colours)]
-            scv.pl.scatter(A, **kw)
-            F.rasterize_points(ax)
-            ax.set_xlabel("spliced (Ms)")
-            ax.set_ylabel("unspliced (Mu)")
-            # scvelo draws its own "steady-state ratio" key in EVERY panel. One is a legend; six
-            # is noise repeated six times.
-            if i > 0 and ax.get_legend() is not None:
-                ax.get_legend().remove()
+            ms, mu = cols.get((g, "Ms")), cols.get((g, "Mu"))
+            if ms is None or mu is None:
+                ax.set_visible(False)
+                continue
+            from matplotlib.colors import to_rgba_array
+            c = (to_rgba_array([colours.get(str(l), F.GREY) for l in labels])[o]
+                 if (labels is not None and colours) else F.CATEGORY_COLOURS[0])
+            ax.scatter(ms[o], mu[o], c=c, s=s, linewidths=0, alpha=0.8, rasterized=True)
+            # THE STEADY-STATE LINE, WHICH THE CAPTION'S WHOLE CLAIM RESTS ON. "A gene above the
+            # steady-state relation is being induced" is unreadable without the relation drawn:
+            # the fitted ratio is in var, so it is drawn from the fit rather than eyeballed.
+            gcol = next((c_ for c_ in ("velocity_gamma", "fit_gamma") if c_ in A.var), None)
+            gam = float(A.var.loc[g, gcol]) if gcol else float("nan")
+            if np.isfinite(gam):
+                off = (float(A.var.loc[g, "velocity_offset"])
+                       if "velocity_offset" in A.var else 0.0)
+                xs = np.array([0.0, float(np.nanmax(ms))])
+                ax.plot(xs, gam * xs + off, ls="--", lw=0.7, color=F.INK, zorder=3,
+                        label="steady state" if i == 0 else None)
+            ax.set_title(g, loc="left")
+            ax.margins(x=0.02, y=0.04)
+            if i % ncol == 0:
+                ax.set_ylabel("unspliced (Mu)")
+            if i // ncol == nrow - 1 or i + ncol >= len(genes):
+                ax.set_xlabel("spliced (Ms)")
+            ax.tick_params(labelsize=5.5)
         for ax in axs.ravel()[len(genes):]:
             ax.set_visible(False)
+        if labels is not None and colours:
+            import matplotlib.lines as ml
+            h = [ml.Line2D([], [], marker="o", ls="", ms=2.5, color=c,
+                           label=(f"{l} (not a cell type)" if c == F.GREY else l))
+                 for l, c in sorted(colours.items())]
+            h.append(ml.Line2D([], [], ls="--", lw=0.7, color=F.INK, label="steady state"))
+            F.legend_outside(fig, axs[0][ncol - 1], h,
+                             _short(F, [x.get_label() for x in h[:-1]]) + ["steady state"],
+                             ncol=1)
+        _fit_width(fig, wide)
         ctx.emit_figure(
             "F5_phase_portraits", fig,
             caption=("Phase portraits for the highest-scoring velocity genes: unspliced against "
-                     "spliced abundance, one point per cell. A gene above the steady-state "
-                     "relation is being induced and one below is being repressed; that residual, "
-                     "summed over genes, IS the velocity vector. A cloud with no structure means "
-                     "the gene contributed nothing, whatever its rank."),
+                     "spliced abundance, one point per cell, drawn in a fixed random order. The "
+                     "dashed line is the fitted steady-state relation for that gene. A gene above "
+                     "it is being induced and one below is being repressed; that residual, summed "
+                     "over genes, IS the velocity vector. A cloud with no structure means the "
+                     "gene contributed nothing, whatever its rank. Each panel is scaled to its "
+                     "own gene - abundances are not comparable between panels."),
             source=src)
     except Exception as e:                                                # noqa: BLE001
         ctx.log(f"    F5_phase_portraits not drawn: {e}")
@@ -691,23 +1055,31 @@ def _fig_transitions(ctx, rows, colours):
         return
     F, plt = ctx.figure, ctx.plot()
     full = pd.DataFrame(rows).set_index("from")
-    df = pd.DataFrame(rows).sort_values("confidence", ascending=False).head(20)
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.6, 0.20 * len(df) + 0.8)))
+    top = 20
+    df = pd.DataFrame(rows).sort_values("confidence", ascending=False).head(top)
+    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.7, 0.185 * len(df) + 0.95)),
+                           layout="constrained")
     y = np.arange(len(df))
-    ax.barh(y, df["confidence"], height=0.72,
-            color=[(colours or {}).get(f, "#0072B2") for f in df["from"]])
+    _bar_grid(ax)
+    ax.barh(y, df["confidence"], height=0.74, zorder=2,
+            color=[(colours or {}).get(f, F.CATEGORY_COLOURS[0]) for f in df["from"]])
     ax.set_yticks(y)
-    ax.set_yticklabels([f"{a} -> {b}" for a, b in zip(df["from"], df["to"])])
+    ax.set_yticklabels(_short(F, [f"{a} -> {b}" for a, b in zip(df["from"], df["to"])]))
     ax.invert_yaxis()
+    _fraction_axis(ax)
     ax.set_xlabel("transition confidence")
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
+    _fit_width(fig, F.SINGLE)
     ctx.emit_figure(
         "F6_transitions", fig,
-        caption=("Directed transitions between populations, from the velocity graph, strongest "
-                 "first. Bars are coloured by the population the transition leaves. This is the "
-                 "quantitative form of the stream panel: a direction visible there and absent "
-                 "here is a direction within a population, not between them."),
+        caption=(f"Directed transitions between populations, from the velocity graph, strongest "
+                 f"first - the {len(df)} strongest of {len(full)} that survived, all of them in "
+                 f"the table beside this panel. Bars are coloured by the population the "
+                 f"transition leaves and the axis runs the full 0 to 1 of the confidence. This "
+                 f"is the quantitative form of the stream panel: a direction visible there and "
+                 f"absent here is a direction within a population, not between them. Both halves "
+                 f"of each pair are shortened to their shortest unambiguous tail."),
         source=full)
 
 
@@ -720,19 +1092,25 @@ def _fig_pseudotime(ctx, basis):
     src = pd.DataFrame({"barcode": A.obs_names.astype(str),
                         "velocity_pseudotime": pt}).set_index("barcode")
     xy = np.asarray(A.obsm[f"X_{basis}"])[:, :2]
-    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.9))
-    pts = ax.scatter(xy[:, 0], xy[:, 1], c=pt, s=2, cmap="viridis", linewidths=0, rasterized=True)
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.98), layout="constrained")
+    o = _draw_order(len(xy))
+    pts = ax.scatter(xy[o, 0], xy[o, 1], c=pt[o], s=_point_size(len(xy)), cmap="viridis",
+                     vmin=0, vmax=1, linewidths=0, rasterized=True)
     _clean(ax, F, basis)
-    cb = fig.colorbar(pts, ax=ax, fraction=0.04, pad=0.02)
+    cb = fig.colorbar(pts, ax=ax, fraction=0.045, pad=0.02, shrink=0.82,
+                      ticks=[0, 0.25, 0.5, 0.75, 1])
     cb.outline.set_visible(False)
-    cb.set_label("velocity pseudotime")
+    cb.set_label("velocity pseudotime (rank, 0 to 1)")
+    _fit_width(fig, F.SINGLE)
     ctx.emit_figure(
         "F7_pseudotime", fig,
         caption=("Velocity pseudotime: a diffusion ordering computed on the velocity graph, with "
                  "the root inferred from where the arrows point rather than chosen by hand. It is "
-                 "an ORDER, not elapsed time, and it rests on more assumptions than the arrows "
-                 "do - the published single-nucleus validation of velocity is directional and did "
-                 "not extend to a pseudotime derived from it."),
+                 "an ORDER, not elapsed time - the scale is 0 to 1 by construction and the "
+                 "distance between two values means nothing - and it rests on more assumptions "
+                 "than the arrows do: the published single-nucleus validation of velocity is "
+                 "directional and did not extend to a pseudotime derived from it. Cells are drawn "
+                 "in a fixed random order."),
         source=src)
 
 
@@ -745,21 +1123,42 @@ def _fig_drivers(ctx, var_df, cols):
     d = var_df[list(cols)].dropna(subset=[key]).sort_values(key, ascending=False).head(25)
     if not len(d):
         return
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.6, 0.19 * len(d) + 0.8)))
+    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.7, 0.14 * len(d) + 0.95)),
+                           layout="constrained")
     y = np.arange(len(d))
-    ax.barh(y, d[key], height=0.72, color="#009E73")
+    val = np.asarray(d[key], dtype=float)
+    # A DOT, NOT A BAR, AND THE REASON IS THE DATA. The twenty-five top-ranked genes of a real fit
+    # differ in the third decimal: as bars from zero, five sixths of every bar is identical ink
+    # and the ranking the panel exists to show is invisible. A bar has to start at zero to be
+    # honest; a dot carries no such claim, so the axis can be the range the scores actually
+    # occupy.
+    lo, hi = float(np.nanmin(val)), float(np.nanmax(val))
+    pad = 0.08 * (hi - lo) if hi > lo else max(abs(hi), 1.0) * 0.1
+    left = lo - pad
+    _bar_grid(ax)
+    # A LEADER ACROSS THE WHOLE PANEL, NOT A STEM FROM THE LEFT EDGE. A stem drawn from the axis
+    # minimum reads as a bar from a baseline, and this axis has no baseline - the left edge is
+    # wherever the 25th score happened to fall. A dotted rule spanning the panel is a guide from
+    # the gene's name to its dot and cannot be read as a length.
+    ax.hlines(y, left, hi + pad, color="#E0E0E0", lw=0.5, ls=(0, (1, 2)), zorder=1)
+    ax.scatter(val, y, s=13, color=F.CATEGORY_COLOURS[2], zorder=3, linewidths=0)
     ax.set_yticks(y)
     ax.set_yticklabels(d.index)
     ax.invert_yaxis()
-    ax.set_xlabel(key)
+    ax.set_xlim(left, hi + pad)
+    ax.set_xlabel(str(key).replace("_", " "))
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
+    _fit_width(fig, F.SINGLE)
     ctx.emit_figure(
         "F8_drivers", fig,
-        caption=(f"The genes carrying the field, ranked by {key}. These are the genes whose "
-                 f"unspliced/spliced residual contributes most to the velocity vectors; a high "
-                 f"rank means a gene drove the result, not that it is biologically important. "
-                 f"Check them in the phase portraits before naming any of them in text."),
+        caption=(f"The genes carrying the field, ranked by `{key}`, highest first. These are the "
+                 f"genes whose unspliced/spliced residual contributes most to the velocity "
+                 f"vectors; a high rank means a gene drove the result, not that it is "
+                 f"biologically important. THE AXIS DOES NOT START AT ZERO - it spans the range "
+                 f"the top 25 scores occupy, because a ranked score is a position and not a "
+                 f"quantity of anything; read the order, not the length. Check them in the phase "
+                 f"portraits before naming any of them in text."),
         source=d)
 
 
@@ -770,26 +1169,48 @@ def _fig_by_population(ctx, by_label, min_confidence):
         return
     F, plt = ctx.figure, ctx.plot()
     d = by_label
-    fig, axs = plt.subplots(1, 2, figsize=(F.DOUBLE, max(1.6, 0.20 * len(d) + 0.9)), sharey=True)
+    fig, axs = plt.subplots(1, 2, figsize=(F.DOUBLE, max(1.7, 0.20 * len(d) + 1.0)),
+                            sharey=True, sharex=True, layout="constrained")
     y = np.arange(len(d))
-    axs[0].barh(y, d["velocity_confidence_median"], color="#0072B2", height=0.72)
-    axs[0].axvline(float(min_confidence), color=F.INK, ls="--", lw=0.6)
+    for ax_ in axs:
+        _bar_grid(ax_)
+    axs[0].barh(y, d["velocity_confidence_median"], color=F.CATEGORY_COLOURS[0], height=0.74,
+                zorder=2)
+    axs[0].axvline(float(min_confidence), color=F.INK, ls="--", lw=0.6, zorder=3)
+    # NAMED, AND INSIDE THE AXES. min_confidence is a run parameter and can be anything, so unlike
+    # the 0.5 on the confidence panel it is not readable off a tick - and drawn above the axes it
+    # would sit wherever a title goes.
+    axs[0].text(float(min_confidence), 0.99, f"min_confidence {float(min_confidence):g}",
+                transform=axs[0].get_xaxis_transform(), ha="center", va="top",
+                fontsize=5.5, color=F.INK, zorder=4,
+                bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.8))
     axs[0].set_xlabel("velocity confidence (median)")
-    axs[1].barh(y, d["unspliced_fraction"], color="#E69F00", height=0.72)
+    axs[1].barh(y, d["unspliced_fraction"], color=F.CATEGORY_COLOURS[1], height=0.74, zorder=2)
     axs[1].set_xlabel("unspliced fraction of fitted counts")
+    # BOTH PANELS ARE FRACTIONS AND BOTH RUN 0 TO 1. Left to themselves they auto-scaled to their
+    # own maxima - confidence to 0.75, the unspliced fraction to 0.35 - and the right-hand bars
+    # came out nearly as long as the left-hand ones at half the value. The pairing IS the panel's
+    # question, and two axes with different rulers cannot be paired by eye.
+    _fraction_axis(axs[0])
     axs[0].set_yticks(y)
-    axs[0].set_yticklabels(d.index)
+    axs[0].set_yticklabels(_short(F, d.index))
     axs[0].invert_yaxis()
     for ax_ in axs:
         ax_.spines["left"].set_visible(False)
         ax_.tick_params(axis="y", length=0)
+    if "n_cells" in d:
+        _annotate_n(axs[1], y, d["n_cells"])
+    _fit_width(fig, F.DOUBLE)
     ctx.emit_figure(
         "F9_by_population", fig,
-        caption=("Per population, side by side: how much the arrows agree with their neighbours, "
-                 "and how much unspliced signal there was to build them from. The pairing is the "
-                 "point - a population low on both has no velocity to read, and a population low "
-                 "on the left but high on the right has signal the model could not resolve into "
-                 "a direction. Annotator sentinels are not shown as populations."),
+        caption=("Per population, most cells first, side by side: how much the arrows agree with "
+                 "their neighbours, and how much unspliced signal there was to build them from. "
+                 "BOTH AXES ARE FRACTIONS AND BOTH RUN 0 TO 1, so the two halves can be read "
+                 "against each other; n is the cells behind each row. The pairing is the point - "
+                 "a population low on both has no velocity to read, and a population low on the "
+                 "left but high on the right has signal the model could not resolve into a "
+                 "direction. The dashed line is the run's min_confidence. Annotator sentinels are "
+                 "not shown as populations."),
         source=d)
 
 
@@ -1031,10 +1452,10 @@ def run(ctx):
         if label_key and label_key in A.obs else {}
     ctx.log("figures:")
     _fig_proportions(ctx, mask, groups)
-    _fig_field(ctx, scv, basis, label_key if (label_key and label_key in A.obs) else None,
+    _fig_field(ctx, basis, label_key if (label_key and label_key in A.obs) else None,
                colours)
     _fig_confidence(ctx, basis, mask, groups, colours)
-    _fig_phase(ctx, scv, top_genes,
+    _fig_phase(ctx, top_genes,
                label_key if (label_key and label_key in A.obs) else None, colours)
     _fig_transitions(ctx, trows, colours)
     _fig_pseudotime(ctx, basis)
@@ -1196,12 +1617,26 @@ def selftest(ctx):
         ctx.log(f"  {'ok  ' if ok else 'FAIL'} {name}")
     assert not bad, f"the environment cannot fit a velocity: {', '.join(bad)}"
 
-    # The figure path is part of this plugin and part of the environment. matplotlib has a
-    # backend, scvelo's plotting has its own import chain, and neither is exercised by the fit.
+    # THE FIGURE PATH IS PART OF THIS PLUGIN AND PART OF THE ENVIRONMENT, and it is this
+    # plugin's own now rather than the wrapped tool's: the field panels are drawn from
+    # `obsm[velocity_<basis>]` with matplotlib, so what has to be exercised here is
+    # `_velocity_on_grid`, the stream and the quiver - none of which the fit above touches. It
+    # used to call `scv.pl.velocity_embedding_grid`, which proved the tool's plotting imports and
+    # nothing about the code that actually draws.
     plt = ctx.plot()
-    fig, ax = plt.subplots(figsize=(ctx.figure.SINGLE, ctx.figure.SINGLE))
-    scv.pl.velocity_embedding_grid(A, basis="umap", ax=ax, show=False, colorbar=False,
-                                   title="", frameon=False)
+    F = ctx.figure
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE))
+    gx, gy, U, V, mass = _velocity_on_grid(A.obsm["X_umap"][:, :2],
+                                           A.obsm["velocity_umap"][:, :2], n=24)
+    assert U.shape == (24, 24) and np.isfinite(mass).all(), "the grid estimator returned nothing"
+    thin = mass < np.percentile(mass, 60)
+    Um, Vm = U.copy(), V.copy()
+    Um[thin], Vm[thin] = np.nan, np.nan
+    ax.streamplot(gx, gy, Um, Vm, color=F.INK, linewidth=0.4, density=1.0, arrowsize=0.55)
+    Xg, Yg = np.meshgrid(gx, gy)
+    ax.quiver(Xg[~thin], Yg[~thin], U[~thin], V[~thin], angles="xy", scale_units="xy",
+              color=F.INK)
+    _clean(ax, F, "umap")
     plt.close(fig)
-    ctx.log("  ok   scvelo's plotting path imports and draws")
+    ctx.log("  ok   the grid estimator, the stream and the arrows draw")
     ctx.log(f"  fitted {A.n_obs:,} cells on {A.n_vars:,} genes")

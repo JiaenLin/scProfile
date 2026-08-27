@@ -307,11 +307,67 @@ BAR_ROWS = 30
 #: noise.
 PVALUE_BINS = 20
 
+#: The two directions of a contrast, everywhere they are drawn. One pair of hues for F5's
+#: significant genes and F6's bars, so a reader who has learned the key on one panel has learned
+#: it on the other. Both are Okabe-Ito, so they survive the common colour-vision deficiencies and
+#: greyscale printing - and neither is ever the ONLY thing carrying the distinction: F5 also sizes
+#: its significant points up, and F6 puts the count in text at the end of every bar.
+UP_COLOUR, DOWN_COLOUR = "#D55E00", "#0072B2"
+UP_INK, DOWN_INK = "#8A3D00", "#004A75"
+
+#: The pale band behind alternate rows of a long horizontal-bar panel. A reader tracking one row
+#: of thirty across 170 mm to a tick label loses it without one; it is not decoration.
+BAND = "#F2F2F2"
+
+#: The gridline over both. White gridlines look right on the banded rows and vanish on the
+#: unbanded ones, so every second row of a thirty-row panel had no gridline at all - which is the
+#: half a reader is most likely to be lost on.
+GRID = "#D6D6D6"
+
+#: The quantile of |log2 fold change| the shared MA scale is cut at, with everything beyond it
+#: drawn as a triangle ON the boundary rather than dropped. Unshrunken fold changes at low counts
+#: are unbounded - a handful of genes at |lfc| 20 flattens every panel of the grid to a line
+#: through zero, which is the panel saying nothing about the 20,000 genes it was drawn for.
+MA_CLIP_Q = 0.998
+
+#: How much longer than that quantile the union of the panels has to be before the cap is applied
+#: at all. WITHOUT IT THE CAP ALWAYS FIRES: a quantile is never above the maximum, so a grid whose
+#: fold changes are all modest still had its top 0.2% moved onto the boundary to buy back a few
+#: percent of axis - a marker that says "there are more, out this way" drawn where there is
+#: nothing out this way. The cap exists for a heavy tail; this is what says one is present.
+MA_CLIP_TRIGGER = 1.5
+
 #: Why a gene has or has not a usable adjusted p-value, in the order F4 stacks them. The first is
 #: the answer; the rest are genes that left the answer, and DESeq2's own documentation is what
 #: distinguishes them.
 UNTESTED_REASONS = ("tested", "independent filtering", "Cook's outlier", "no counts",
                     "below min_counts")
+
+#: The order F4 STACKS them in, left to right, which is the reverse of the order above and is a
+#: different question. Ordering on the accounting puts `tested` - two thirds of every bar - at the
+#: left, so all four removal routes start at a different x in every row and none of them can be
+#: compared between rows by eye. Stacking the routes OUT of the test first anchors each of them at
+#: zero, and the answer becomes the remainder, which is what it is.
+UNTESTED_STACK = ("below min_counts", "no counts", "Cook's outlier", "independent filtering",
+                  "tested")
+
+#: WHICH BAND MEANS WHAT, chosen rather than sorted. `F.palette` assigns hues by alphabetical
+#: order of the label, which gave the answer and the Cook's-outlier band the two blues of the
+#: Okabe-Ito set - the palest and the darkest - and left a reader to discover from the legend that
+#: adjacent hues meant opposite things. These run warm-to-cool along the stack: the three routes
+#: that mean NOT TESTED are the warm end, `independent filtering` - tested, adjusted p-value
+#: withheld - is green, and the answer is the calm blue at the far end.
+UNTESTED_COLOURS = {"below min_counts": "#E69F00", "no counts": "#CC79A7",
+                    "Cook's outlier": "#D55E00", "independent filtering": "#009E73",
+                    "tested": "#56B4E9"}
+
+#: What each band says about whether the gene was TESTED. The legend prints it, because the
+#: distinction is the whole reason this panel is on the page and no arrangement of five hues
+#: carries it on its own.
+UNTESTED_GROUPS = (("never entered the test", ("below min_counts", "no counts",
+                                               "Cook's outlier")),
+                   ("tested, adjusted p-value withheld", ("independent filtering",)),
+                   ("in the answer", ("tested",)))
 
 
 def _identifiable(ctx, obs, terms):
@@ -443,23 +499,124 @@ def _pseudobulk(ctx, np, pd):
 #                identical in a table of results.
 
 
-def _grid(ctx, n, panel_h=1.5, ncol=3):
-    """A constrained grid of at most `ncol` columns, and the flat axis list to fill.
+def _grid(ctx, n, panel_h=1.5, ncol=3, share=True):
+    """`(fig, axes, ncol)` - a constrained grid of at most `ncol` columns, and the axes to fill.
 
     `layout="constrained"` because these grids carry a title and two axis labels in every panel:
     without it a row-two title lands on row-one's x-axis label, which is how a grid of panels
     becomes a grid of overlapping text.
+
+    `share=True` IS THE WHOLE REASON TO DRAW A GRID. Nine panels side by side are an invitation to
+    compare them, and nine panels that each scaled themselves cannot be compared: the one with the
+    largest effects draws flattest, because it was given the widest axis to draw them on. Sharing
+    also buys back the room eight repetitions of the same axis label were spending - see
+    `_outer_labels`, which is what stops the sharing from taking the tick labels with it.
     """
     F, plt = ctx.figure, ctx.plot()
     ncol = max(1, min(ncol, n))
     nrow = (n + ncol - 1) // ncol
     fig, axs = plt.subplots(nrow, ncol,
                             figsize=(F.SINGLE if ncol == 1 else F.DOUBLE, panel_h * nrow),
-                            squeeze=False, layout="constrained")
+                            squeeze=False, layout="constrained",
+                            sharex=bool(share), sharey=bool(share))
     flat = list(axs.ravel())
     for ax in flat[n:]:
         ax.set_visible(False)
-    return fig, flat[:n]
+    return fig, flat[:n], ncol
+
+
+def _outer_labels(axes, ncol, xlabel, ylabel):
+    """One x label under the grid's bottom edge, one y label down its left, and ticks on both.
+
+    TWO BUGS, AND THE SECOND IS THE ONE THAT BITES. Labelling every panel spent a third of a
+    nine-panel grid printing `log10(baseMean + 1)` eight more times than a reader needs it. And
+    matplotlib, asked to share an axis, strips the tick labels from every row but the LAST - which
+    is right for a full grid and wrong for seven panels in a three-wide one, where two columns end
+    in row two and lose their numbers to an invisible axis below them. The bottom-most VISIBLE
+    panel of each column is computed here rather than assumed.
+    """
+    n = len(axes)
+    for i, ax in enumerate(axes):
+        if i + ncol >= n:                      # nothing visible below it in this column
+            ax.set_xlabel(xlabel)
+            ax.tick_params(axis="x", labelbottom=True)
+        else:
+            ax.set_xlabel("")
+        ax.set_ylabel(ylabel if i % ncol == 0 else "")
+
+
+def _ellipsis(text, n):
+    """`text` cut to at most `n` characters, with the cut marked.
+
+    A panel title is 58 mm wide at 7 pt and a design-matrix column name is not. Truncating
+    silently would leave two different contrasts drawing the same title.
+    """
+    t = str(text)
+    return t if len(t) <= n else t[:max(1, n - 1)].rstrip() + "\u2026"
+
+
+def _decade_label(v, _pos=None):
+    """A tick at `v` on a log10-transformed LINEAR axis, printed as the count it stands for.
+
+    The axis holds log10 of a count, and it printed log10 of a count: `0 1 2 3 4 5`, which every
+    reader has to exponentiate in their head before the panel answers the question it was drawn
+    for. The transform is kept - it is what folds the sub-one dust into one decade instead of
+    spending five of eight decades on it - and only the label is changed.
+    """
+    e = int(round(float(v)))
+    if abs(float(v) - e) > 1e-6:
+        return ""
+    return "1" if e == 0 else ("10" if e == 1 else f"$10^{{{e}}}$")
+
+
+def _quiet_minor_ticks(ax):
+    """Minor ticks visible as ticks rather than as a black band along the axis.
+
+    A log axis over six decades draws about fifty minor ticks, and at 58 mm of panel width
+    matplotlib's default 2 pt tick at 0.6 pt wide merges into a solid rule under the data - which
+    reads as a heavy spine and hides where the decades actually are.
+    """
+    ax.tick_params(which="minor", length=1.0, width=0.3, color="#8C8C8C")
+
+
+def _contrast_label(term, contrast):
+    """`term: HI vs LO` for a level contrast, `term: interaction coefficient` for the other kind.
+
+    The interaction is contrasted on a DESIGN-MATRIX COLUMN, whose name is the two factors and
+    both their levels in the encoder's own notation - fifty characters that truncate to the first
+    factor and tell a reader nothing. It is one thing, so it is named as one thing; the column is
+    in the `contrast` column of the result table for anyone who needs it.
+    """
+    c = str(contrast or "")
+    if not c:
+        return str(term)
+    return f"{term}: {c}" if " vs " in c else f"{term}  (interaction)"
+
+
+def _direction_key(terms_contrasts, cap=3):
+    """Which side of a diverging axis is which arm, in words, per term. `""` when unknowable.
+
+    THE ONE THING THE PANEL IS FOR. `up in the second level` names no level: a reader looking at
+    the result figure of a differential-expression run could not tell which arm of the design the
+    orange bars belonged to without opening the source table. The levels are in the `contrast`
+    column and cost one line of axis label to print.
+    """
+    seen = []
+    for t, c in terms_contrasts:
+        t, c = str(t), str(c)
+        if t and (t, c) not in seen:
+            seen.append((t, c))
+    parts = []
+    for t, c in seen[:cap]:
+        if " vs " in c:
+            hi, lo = c.split(" vs ", 1)
+            parts.append(f"{t}:  left = higher in {lo}   |   right = higher in {hi}")
+        elif c:
+            parts.append(f"{t}:  left = negative coefficient   |   right = positive")
+    if len(seen) > cap:
+        parts.append(f"and {len(seen) - cap} further contrast(s) - each row's pair is in the "
+                     f"source table")
+    return "\n".join(parts)
 
 
 def _capped(items, cap=PANEL_CAP):
@@ -475,6 +632,7 @@ def _fig_replicates(ctx, units, term):
     F, plt = ctx.figure, ctx.plot()
     d = units.sort_values(["population", "sample"]).reset_index(drop=True)
     pops = sorted(d["population"].astype(str).unique())
+    short = F.short_labels(pops)
     ypos = {p: i for i, p in enumerate(pops)}
     levels = sorted({str(x) for x in d["level"] if str(x)})
     cols = F.palette(levels) if levels else {}
@@ -488,30 +646,51 @@ def _fig_replicates(ctx, units, term):
     rng = np.random.default_rng(0)
     y = (np.array([ypos[str(p)] for p in d["population"]], dtype=float)
          + (rng.random(len(d)) - 0.5) * 0.55)
-    fig, axs = plt.subplots(1, 2, figsize=(F.DOUBLE, max(1.9, 0.30 * len(pops) + 1.1)),
+    fig, axs = plt.subplots(1, 2, figsize=(F.DOUBLE, max(2.1, 0.32 * len(pops) + 1.2)),
                             squeeze=False, sharey=True, layout="constrained")
     used = np.asarray(d["used"], dtype=bool)
     face = [cols.get(str(l), F.GREY) if u else F.GREY for l, u in zip(d["level"], used)]
     for ax, col, xlab in (
-            (axs[0][0], "n_cells", "log10(cells in the pseudobulk sample + 1)"),
-            (axs[0][1], "total_counts", "log10(counts in the pseudobulk sample + 1)")):
-        v = np.log10(np.asarray(d[col], dtype=float) + 1.0)
-        ax.scatter(v, y, s=11, c=face, linewidths=0.3, edgecolors=F.INK, rasterized=True)
+            (axs[0][0], "n_cells", "cells summed into the pseudobulk sample"),
+            (axs[0][1], "total_counts", "counts in the pseudobulk sample")):
+        # BANDED ROWS. Twelve populations across 174 mm, twice, with a jitter that deliberately
+        # blurs the row boundary: without a band a reader tracking one point back to its tick
+        # label lands a row out, and the two panels are read as different populations.
+        for i in range(len(pops)):
+            if i % 2:
+                ax.axhspan(i - 0.5, i + 0.5, color=BAND, lw=0, zorder=0)
+        v = np.maximum(np.asarray(d[col], dtype=float), 1.0)
+        ax.set_xscale("log")
+        ax.set_axisbelow(True)
+        ax.grid(axis="x", color=GRID, lw=0.4)
+        ax.scatter(v, y, s=13, c=face, linewidths=0.3, edgecolors=F.INK, rasterized=True,
+                   zorder=3)
+        _quiet_minor_ticks(ax)
         F.rasterize_points(ax)
-        ax.set_xlabel(xlab)
+        # THE VALUE, NOT ITS LOGARITHM. Both axes span four to seven decades and have to be
+        # logarithmic; printing `log10(x + 1)` on the ticks made a reader convert 3.4 back into
+        # 2,500 in their head to answer the question the panel was drawn to answer.
+        ax.set_xlabel(xlab + "  (log scale)")
         ax.spines["left"].set_visible(False)
         ax.tick_params(axis="y", length=0)
-    axs[0][0].axvline(np.log10(float(ctx.config["min_cells"]) + 1.0), color=F.INK, ls="--", lw=0.6)
+    thr = float(ctx.config["min_cells"])
+    axs[0][0].axvline(thr, color=F.INK, ls="--", lw=0.7, zorder=4)
+    # THE LINE, NAMED, INSIDE THE PANEL. Anchored to the data it floated above the figure with
+    # nothing beside it, which is a label for a rule the reader has to guess the meaning of.
+    axs[0][0].annotate(f"min_cells = {int(thr)}", xy=(thr, 1.0),
+                       xycoords=("data", "axes fraction"), xytext=(3, -4),
+                       textcoords="offset points", ha="left", va="top", fontsize=5.5,
+                       color=F.INK)
     axs[0][0].set_yticks(list(range(len(pops))))
-    axs[0][0].set_yticklabels(pops)
-    axs[0][0].invert_yaxis()
+    axs[0][0].set_yticklabels([short.get(p, p) for p in pops])
+    axs[0][0].set_ylim(len(pops) - 0.5, -0.5)
     axs[0][0].set_title("cells", loc="left")
     axs[0][1].set_title("library size", loc="left")
 
     import matplotlib.lines as ml
-    h = [ml.Line2D([], [], marker="o", ls="", ms=3, color=cols[l], label=f"{term} = {l}")
-         for l in levels]
-    h.append(ml.Line2D([], [], marker="o", ls="", ms=3, color=F.GREY,
+    h = [ml.Line2D([], [], marker="o", ls="", ms=3, color=cols[l], mec=F.INK, mew=0.3,
+                   label=f"{term} = {l}") for l in levels]
+    h.append(ml.Line2D([], [], marker="o", ls="", ms=3, color=F.GREY, mec=F.INK, mew=0.3,
                        label=f"below min_cells ({ctx.config['min_cells']}), not summed"))
     F.legend_outside(fig, axs[0][1], h, [x.get_label() for x in h])
     n_drop = int((~used).sum())
@@ -524,9 +703,11 @@ def _fig_replicates(ctx, units, term):
                  f"the level of {term}. A population whose points separate by colour on EITHER "
                  f"axis has cell number or sequencing depth confounded with the factor being "
                  f"tested, and its fold changes are not a clean readout of expression. Both axes "
-                 f"are log10 of the value plus one. Cells carrying an annotator sentinel are in "
-                 f"no row here: a sentinel is not a population, and the count set aside is in "
-                 f"the caveats."),
+                 f"are logarithmic and carry the value itself, so a point can be read off them; "
+                 f"populations are named by the shortest tail of the label that is still unique "
+                 f"to one of them, and the full names are in the source table. Cells carrying an "
+                 f"annotator sentinel are in no row here: a sentinel is not a population, and "
+                 f"the count set aside is in the caveats."),
         source=d.set_index("population"))
 
 
@@ -536,25 +717,41 @@ def _fig_dispersion(ctx, disp, drawn, omitted):
     if not len(disp) or not drawn:
         return
     F, _plt = ctx.figure, ctx.plot()
-    fig, axes = _grid(ctx, len(drawn), panel_h=1.6)
+    fig, axes, ncol = _grid(ctx, len(drawn), panel_h=1.85)
+    short = F.short_labels([str(p) for p in drawn])
     for ax, pop in zip(axes, drawn):
         s = disp[disp["population"] == pop]
-        x = np.log10(np.asarray(s["baseMean"], dtype=float) + 1.0)
-        for key, colour in (("dispersion_genewise", F.GREY), ("dispersion_final", "#0072B2")):
+        x = np.asarray(s["baseMean"], dtype=float) + 1.0
+        # GENEWISE UNDER FINAL, BOTH TRANSLUCENT. Opaque blue drawn over opaque grey hid the one
+        # comparison the panel exists to make: the grey spread is what the shrinkage acted ON, and
+        # a panel that shows only the result of shrinkage cannot show that it happened.
+        for key, colour, size, alpha in (("dispersion_genewise", F.GREY, 3.2, 0.55),
+                                         ("dispersion_final", "#0072B2", 1.5, 0.55)):
             v = np.asarray(s[key], dtype=float)
-            ok = np.isfinite(v) & (v > 0) & np.isfinite(x)
-            ax.scatter(x[ok], np.log10(v[ok]), s=2, c=colour, linewidths=0, rasterized=True)
+            ok = np.isfinite(v) & (v > 0) & np.isfinite(x) & (x > 0)
+            ax.scatter(x[ok], v[ok], s=size, c=colour, linewidths=0, alpha=alpha,
+                       rasterized=True)
         v = np.asarray(s["dispersion_fitted"], dtype=float)
-        ok = np.isfinite(v) & (v > 0) & np.isfinite(x)
+        ok = np.isfinite(v) & (v > 0) & np.isfinite(x) & (x > 0)
         order = np.argsort(x[ok])
-        ax.plot(x[ok][order], np.log10(v[ok][order]), color="#D55E00", lw=0.9)
+        # A HALO, because the trend runs through the densest part of its own scatter. A 0.9 pt
+        # line on twelve thousand points is a line a reader has to be told is there.
+        ax.plot(x[ok][order], v[ok][order], color="#FFFFFF", lw=2.4, solid_capstyle="round",
+                zorder=4)
+        ax.plot(x[ok][order], v[ok][order], color="#D55E00", lw=1.1, zorder=5)
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_axisbelow(True)
+        ax.grid(color="#EDEDED", lw=0.4)
+        _quiet_minor_ticks(ax)
+        ax.text(0.985, 0.94, f"{len(s):,} genes", transform=ax.transAxes,
+                ha="right", va="top", fontsize=5.5, color=F.INK)
         F.rasterize_points(ax)
-        ax.set_title(str(pop), loc="left")
-        ax.set_xlabel("log10(baseMean + 1)")
-        ax.set_ylabel("log10(dispersion)")
+        ax.set_title(_ellipsis(short.get(str(pop), str(pop)), 34), loc="left")
+    _outer_labels(axes, ncol, "mean normalised count + 1", "dispersion")
     import matplotlib.lines as ml
     h = [ml.Line2D([], [], marker="o", ls="", ms=3, color=F.GREY, label="genewise (MLE)"),
-         ml.Line2D([], [], color="#D55E00", lw=1.0, label="fitted trend"),
+         ml.Line2D([], [], color="#D55E00", lw=1.1, label="fitted trend"),
          ml.Line2D([], [], marker="o", ls="", ms=3, color="#0072B2", label="final (shrunk)")]
     F.legend_outside(fig, axes[0], h, [x.get_label() for x in h])
     ctx.emit_figure(
@@ -569,8 +766,11 @@ def _fig_dispersion(ctx, disp, drawn, omitted):
                  f"it. Blue lying exactly on the line everywhere means shrinkage dominated and "
                  f"the genes contributed almost nothing; a flat trend means no mean-variance "
                  f"relationship was found, and `fit_type` is then the parameter to reconsider. "
-                 f"Up to {DISPERSION_GENES:,} genes per population, sampled deterministically; "
-                 f"the points drawn are exactly the rows of the source table."),
+                 f"BOTH AXES ARE LOGARITHMIC and are the SAME on every panel, so a trend that "
+                 f"falls further in one population than another can be read off the grid rather "
+                 f"than inferred from its axis. Up to {DISPERSION_GENES:,} genes per population, "
+                 f"sampled deterministically; the points drawn are exactly the rows of the source "
+                 f"table."),
         source=disp.set_index("population"))
 
 
@@ -580,32 +780,65 @@ def _fig_pvalues(ctx, hist, drawn, omitted):
     if not len(hist) or not drawn:
         return
     F, _plt = ctx.figure, ctx.plot()
-    fig, axes = _grid(ctx, len(drawn), panel_h=1.45)
+    fig, axes, ncol = _grid(ctx, len(drawn), panel_h=1.6)
+    short = F.short_labels([str(p) for p, _t in drawn])
     width = 1.0 / PVALUE_BINS
+    tallest = 0.0
     for ax, (pop, term) in zip(axes, drawn):
         s = hist[(hist["population"] == pop) & (hist["term"] == term)]
         centres = np.asarray(s["bin_left"], dtype=float) + width / 2.0
         counts = np.asarray(s["n_genes"], dtype=float)
-        ax.bar(centres, counts, width=width * 0.92, color="#0072B2", linewidth=0)
+        # THE LEFTMOST BIN IS THE ONE THE CAPTION IS ABOUT, so it is the one that is coloured.
+        # Twenty bars of one hue made the reader find the spike; the spike is the finding.
+        first = np.asarray(s["bin_left"], dtype=float) <= 0.0
+        cols = np.where(first, UP_COLOUR, "#56B4E9")
+        ax.bar(centres, counts, width=width * 0.92, color=list(cols), linewidth=0)
         expected = float(s["expected_if_uniform"].iloc[0]) if len(s) else 0.0
-        ax.axhline(expected, color=F.INK, ls="--", lw=0.6)
-        ax.set_title(f"{pop}\n{term}", loc="left")
+        ax.axhline(expected, color=F.INK, ls="--", lw=0.7, zorder=5)
+        tallest = max(tallest, float(counts.max()) if counts.size else 0.0)
+        # THE NUMBER ON THE BAR, because one shared scale is set by whichever panel spiked
+        # hardest and every other panel then draws its own spike small. The height is comparable
+        # AND the count is readable, which no single choice of axis gives on its own.
+        if counts.size and first.any():
+            ax.text(float(centres[first][0]), float(counts[first][0]),
+                    f" {int(counts[first][0]):,}", ha="left", va="bottom", fontsize=5.5,
+                    color=UP_INK)
+        ax.set_title(f"{_ellipsis(short.get(str(pop), str(pop)), 30)}\n"
+                     f"{_ellipsis(str(term), 30)}", loc="left")
         ax.set_xlim(0, 1)
-        ax.set_xlabel("raw p-value")
-        ax.set_ylabel("genes")
+        ax.set_xticks([0, 0.25, 0.5, 0.75, 1.0])
+        if len(s):
+            ax.text(0.985, 0.94, f"n = {int(s['n_with_pvalue'].iloc[0]):,}",
+                    transform=ax.transAxes, ha="right", va="top", fontsize=5.5, color=F.INK)
+    # ONE HEIGHT ACROSS THE GRID, and it is the point of the panel. Every histogram scaled itself,
+    # so a population with a large excess of small p-values and one with none drew spikes of the
+    # same height on axes that ran to 1,750 and to 1,000 - and the grid, whose only purpose is to
+    # compare populations, reported them as identical.
+    axes[0].set_ylim(0.0, (tallest or 1.0) * 1.10)
+    _outer_labels(axes, ncol, "raw p-value", "genes")
+    import matplotlib.lines as ml
+    import matplotlib.patches as mp
+    h = [mp.Patch(color=UP_COLOUR, label=f"leftmost bin (p < {width:g})"),
+         mp.Patch(color="#56B4E9", label="all other bins"),
+         ml.Line2D([], [], color=F.INK, ls="--", lw=0.7, label="expected if every gene were null")]
+    F.legend_outside(fig, axes[0], h, [x.get_label() for x in h], markerscale=1.0)
     ctx.emit_figure(
         "F3_pvalue_calibration", fig,
         caption=(f"Raw p-values in {PVALUE_BINS} equal bins, per population and term"
                  + (f" ({len(drawn)} of {len(drawn) + len(omitted)} shown; not drawn: "
                     f"{', '.join(f'{p} / {t}' for p, t in omitted)})" if omitted else "")
-                 + ". The dashed line is what a bin would hold if every gene were null. Flat with "
+                 + ". The dashed line is what a bin would hold if every gene were null, and the "
+                 "coloured bar is the leftmost bin - the one the shape below is about. Flat with "
                  "a spike in the leftmost bin is the shape a well-specified test produces when "
                  "something really changed; flat with no spike means nothing was detected, which "
                  "is a result. A slope rising towards 1, or a hump in the middle, means the "
                  "p-values are NOT uniform under the null - a covariate is missing from the "
                  "model, or the dispersions are mis-estimated - and the adjusted p-values cannot "
-                 "then be read as a false-discovery rate. Genes with no p-value at all are "
-                 "excluded here and counted in F4_untested."),
+                 "then be read as a false-discovery rate. THE VERTICAL SCALE IS THE SAME ON EVERY "
+                 "PANEL, so spikes are comparable between populations; each panel gives the "
+                 "number of genes it was drawn from, because that number sets where its own "
+                 "dashed line sits. Genes with no p-value at all are excluded here and counted "
+                 "in F4_untested."),
         source=hist.set_index("population"))
 
 
@@ -621,23 +854,45 @@ def _fig_untested(ctx, acct):
     full = acct.reset_index(drop=True)
     d = full.sort_values("tested", ascending=True).head(BAR_ROWS).reset_index(drop=True)
     hidden = len(full) - len(d)
-    rows = [f"{p} / {t}" for p, t in zip(d["population"], d["term"])]
-    cols = F.palette(list(UNTESTED_REASONS))
-    fig, ax = plt.subplots(figsize=(F.DOUBLE, max(1.7, 0.22 * len(d) + 1.0)),
+    short = F.short_labels([str(p) for p in d["population"]])
+    rows = [f"{short.get(str(p), str(p))} / {t}" for p, t in zip(d["population"], d["term"])]
+    fig, ax = plt.subplots(figsize=(F.DOUBLE, max(1.9, 0.24 * len(d) + 1.1)),
                            layout="constrained")
     y = np.arange(len(d))
+    for i in range(len(d)):
+        if i % 2:
+            ax.axhspan(i - 0.5, i + 0.5, color=BAND, lw=0, zorder=0)
+    ax.set_axisbelow(True)
+    ax.grid(axis="x", color=GRID, lw=0.4)
     left = np.zeros(len(d), dtype=float)
-    for reason in UNTESTED_REASONS:
+    for reason in UNTESTED_STACK:
         v = np.asarray(d[reason], dtype=float)
-        ax.barh(y, v, left=left, height=0.72, color=cols[reason], label=reason)
+        ax.barh(y, v, left=left, height=0.72, color=UNTESTED_COLOURS[reason], label=reason,
+                zorder=3)
         left = left + v
+    # THE SHARE THAT REACHED THE ANSWER, IN TEXT. Every bar is the same length - it is every gene
+    # in the object - so the one quantity a reader wants off this panel is a proportion, and a
+    # proportion read by eye off the fifth band of a stack is read badly.
+    total = np.asarray(d["genes_in_object"], dtype=float)
+    kept = np.asarray(d["tested"], dtype=float)
+    for i in range(len(d)):
+        if total[i] > 0:
+            ax.text(total[i] * 1.012, y[i], f"{100.0 * kept[i] / total[i]:.0f}% tested",
+                    va="center", ha="left", fontsize=5.5, color=F.INK)
+    ax.set_xlim(0.0, (float(np.nanmax(total)) if len(total) else 1.0) * 1.09)
     ax.set_yticks(y)
     ax.set_yticklabels(rows)
-    ax.invert_yaxis()
+    ax.set_ylim(len(d) - 0.5, -0.5)
     ax.set_xlabel("genes in the object")
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
-    F.legend_outside(fig, ax)
+
+    import matplotlib.patches as mp
+    h = []
+    for head, names in UNTESTED_GROUPS:
+        h.append(mp.Patch(facecolor="none", edgecolor="none", label=head.upper()))
+        h += [mp.Patch(color=UNTESTED_COLOURS[r], label=r) for r in names]
+    F.legend_outside(fig, ax, h, [x.get_label() for x in h], markerscale=1.0)
     gone = int(sum(int(full[r].sum()) for r in UNTESTED_REASONS if r != "tested"))
     ctx.emit_figure(
         "F4_untested", fig,
@@ -646,8 +901,10 @@ def _fig_untested(ctx, acct):
                  + (f". The {len(d)} combinations that lost the most genes are drawn; the "
                     f"accounting for all {len(full)} is in the source table"
                     if hidden else "")
-                 + f". {gone:,} gene-tests did not reach it. `below min_counts` never entered "
-                 f"the fit - a power decision made here, at min_counts="
+                 + f". {gone:,} gene-tests did not reach it. The bands are stacked in the order a "
+                 f"gene leaves the test, so each route starts at zero and can be compared "
+                 f"between rows, and the answer is what is left at the right-hand end. `below "
+                 f"min_counts` never entered the fit - a power decision made here, at min_counts="
                  f"{ctx.config['min_counts']}. `no "
                  f"counts` had a mean of zero, so DESeq2 returns NA in every column. `Cook's "
                  f"outlier` had an extreme count in one sample and had its p-value AND its "
@@ -666,24 +923,58 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
         return
     F, _plt = ctx.figure, ctx.plot()
     alpha = float(ctx.config["alpha"])
-    fig, axes = _grid(ctx, len(drawn), panel_h=1.55)
+    from matplotlib.ticker import FuncFormatter, MaxNLocator
+    fig, axes, ncol = _grid(ctx, len(drawn), panel_h=1.9)
+    short = F.short_labels([str(p) for p, _t in drawn])
+
+    # THE CAP THE SHARED SCALE IS ALLOWED, measured before anything is drawn because the panels
+    # need it and the union below has to be tested against it. It is a high quantile of |log2
+    # fold change| over every panel drawn: unshrunken values at low counts are unbounded, and the
+    # union of nine autoscaled panels is therefore set by a dozen genes rather than by twenty
+    # thousand. Whether it is USED is decided after the union is known - see MA_CLIP_TRIGGER.
+    pieces = [np.asarray(res[(res["population"] == p) & (res["term"] == t)]["log2FoldChange"],
+                         dtype=float) for p, t in drawn]
+    allv = np.concatenate(pieces) if pieces else np.zeros(1)
+    allv = allv[np.isfinite(allv)]
+    lim = float(np.quantile(np.abs(allv), MA_CLIP_Q)) if allv.size else 1.0
+    lim = max(lim, 1.0) * 1.06
+
     n_sig = 0
+    panels = []                # (ax, x, lfc, sig, ok) - the second pass needs them, and slicing
+                               # a 20,000-gene frame once per panel twice is a second slice of
+                               # every population for a set of arrays already in hand
     for ax, (pop, term) in zip(axes, drawn):
         s = res[(res["population"] == pop) & (res["term"] == term)]
-        x = np.log10(np.asarray(s["baseMean"], dtype=float) + 1.0)
+        base = np.asarray(s["baseMean"], dtype=float)
         lfc = np.asarray(s["log2FoldChange"], dtype=float)
         padj = np.asarray(s["padj"], dtype=float)
         sig = np.isfinite(padj) & (padj < alpha)
-        ok = np.isfinite(x) & np.isfinite(lfc)
-        ax.scatter(x[ok & ~sig], lfc[ok & ~sig], s=2, c=F.GREY, linewidths=0, rasterized=True)
-        ax.scatter(x[ok & sig], lfc[ok & sig], s=3, c="#D55E00", linewidths=0, rasterized=True)
+        # A GENE WITH A MEAN OF ZERO HAS NO FOLD CHANGE AND NO PLACE ON THIS AXIS. DESeq2 returns
+        # NA in every column for it, so on its own output this mask never bites; it bites on
+        # anything else, where the alternative is a column of points stacked on the axis floor at
+        # a fold change computed from nothing. They are counted, by name, in F4_untested.
+        ok = np.isfinite(base) & (base > 0) & np.isfinite(lfc)
+        x = np.log10(base + 1.0)
+        panels.append((ax, x, lfc, sig, ok))
+        ax.axhline(0.0, color=F.INK, lw=0.6, zorder=2)
+        for hline in (-1.0, 1.0):
+            ax.axhline(hline, color="#B4B4B4", lw=0.5, ls=":", zorder=1)
+        ax.scatter(x[ok & ~sig], lfc[ok & ~sig], s=1.8, c=F.GREY, linewidths=0, alpha=0.55,
+                   rasterized=True, zorder=3)
+        # BIGGER AND OUTLINED, NOT MERELY ORANGE. A reader printing this in greyscale, or one of
+        # the ~8% who cannot separate these two hues, had nothing else to go on: both sets were
+        # dots of the same size. Size and an outline survive both.
+        ax.scatter(x[ok & sig], lfc[ok & sig], s=7.0, c=UP_COLOUR, linewidths=0.25,
+                   edgecolors=UP_INK, rasterized=True, zorder=4)
         n_sig += int((ok & sig).sum())
-        ax.axhline(0.0, color=F.INK, lw=0.6)
+        ax.text(0.985, 0.95,
+                f"{int((ok & sig & (lfc > 0)).sum()):,} up   "
+                f"{int((ok & sig & (lfc < 0)).sum()):,} down",
+                transform=ax.transAxes, ha="right", va="top", fontsize=5.5, color=F.INK)
         F.rasterize_points(ax)
         contrast = str(s["contrast"].iloc[0]) if len(s) else ""
-        ax.set_title(f"{pop}\n{term}: {contrast}", loc="left")
-        ax.set_xlabel("log10(baseMean + 1)")
-        ax.set_ylabel("log2 fold change")
+        ax.set_title(_ellipsis(short.get(str(pop), str(pop)), 32) + "\n"
+                     + _ellipsis(_contrast_label(term, contrast), 38), loc="left")
 
     # ONE SCALE ACROSS THE GRID. Every panel scaled itself, so a fold change of 2 was a different
     # height in each - and the only reason to draw nine panels together is to compare them. On
@@ -691,19 +982,63 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
     # the panel with the LARGEST effects looked flattest.
     #
     # The limits are the union of what the panels hold, symmetric about zero on the fold-change
-    # axis so up and down are the same distance, and no point is clipped out of view.
+    # axis so up and down are the same distance.
     _lo = min((float(np.nanmin(a.get_ylim())) for a in axes[:len(drawn)]), default=-1.0)
     _hi = max((float(np.nanmax(a.get_ylim())) for a in axes[:len(drawn)]), default=1.0)
     _r = max(abs(_lo), abs(_hi)) or 1.0
     _xhi = max((float(a.get_xlim()[1]) for a in axes[:len(drawn)]), default=1.0)
+    # AND THEN CAPPED, WHICH THE UNION ON ITS OWN COULD NOT BE. Unshrunken fold changes at low
+    # counts are unbounded: a dozen genes at |lfc| 12 set the union, and every panel then drew
+    # twenty thousand genes inside the middle fifth of its own axis - one scale, shared, and
+    # useless. The cap is a high quantile of |lfc| over the panels drawn, and what falls outside
+    # it is not dropped: the loop below draws each one as a triangle ON the boundary, at its own
+    # expression level, so the reader sees that there are more and where they sit.
+    if _r > lim * MA_CLIP_TRIGGER:
+        _r = min(_r, lim)
     for _a in axes[:len(drawn)]:
         _a.set_ylim(-_r, _r)
         _a.set_xlim(0.0, _xhi)
+
+    n_clip = 0
+    for ax, x, lfc, sig, ok in panels:
+        out = ok & (np.abs(lfc) > _r)
+        n_clip += int(out.sum())
+        # ON the boundary means just inside it: drawn exactly at the limit, half of every
+        # triangle is outside the axes and clipped away, which turns a marker meaning "there are
+        # more, out this way" into a row of shapes a reader cannot name.
+        for mask, marker, yv in ((out & (lfc > 0), "^", _r * 0.97),
+                                 (out & (lfc < 0), "v", -_r * 0.97)):
+            if mask.any():
+                ax.scatter(x[mask], np.full(int(mask.sum()), yv), s=9.0, marker=marker,
+                           c=np.where(sig[mask], UP_COLOUR, F.GREY).tolist(),
+                           linewidths=0.3, edgecolors=F.INK, rasterized=True, zorder=5)
+        F.rasterize_points(ax)
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+        ax.xaxis.set_major_formatter(FuncFormatter(_decade_label))
+    _outer_labels(axes, ncol, "mean normalised count + 1", "log$_2$ fold change")
+
+    import matplotlib.lines as ml
+    h = [ml.Line2D([], [], marker="o", ls="", ms=2.6, color=UP_COLOUR, mec=UP_INK, mew=0.25,
+                   label=f"padj < {alpha}"),
+         ml.Line2D([], [], marker="o", ls="", ms=1.6, color=F.GREY, label="not significant"),
+         ml.Line2D([], [], marker="^", ls="", ms=2.6, color=F.GREY, mec=F.INK, mew=0.25,
+                   label=f"|fold change| beyond the axis,\ndrawn on the boundary"),
+         ml.Line2D([], [], color=F.GREY, ls=":", lw=0.5, label="2-fold, either way")]
+    F.legend_outside(fig, axes[0], h, [x.get_label() for x in h], markerscale=2.0)
     ctx.emit_figure(
         "F5_ma", fig,
         caption=(f"One point per gene: mean normalised expression against log2 fold change, "
                  f"ONE SCALE ACROSS EVERY PANEL so the heights are comparable, with genes at "
-                 f"padj < {alpha} in orange ({n_sig:,} across the panels shown)"
+                 f"padj < {alpha} in orange and drawn larger ({n_sig:,} across the panels shown; "
+                 f"the split by direction is on each panel). The horizontal axis is logarithmic; "
+                 f"the dotted lines are two-fold up and down. Genes with a mean of zero are not "
+                 f"drawn - they carry no fold change and were never tested, and F4_untested "
+                 f"counts them"
+                 + (f". {n_clip:,} gene(s) lie beyond the vertical axis and are drawn as "
+                    f"triangles on its boundary, so their expression level is still readable and "
+                    f"none is dropped - the axis is cut at a high quantile of |fold change| "
+                    f"because unshrunken values are unbounded and a handful of them would "
+                    f"otherwise flatten every panel" if n_clip else "")
                  + (f". {len(drawn)} of {len(drawn) + len(omitted)} population-term combinations "
                     f"are drawn; not shown: "
                     f"{', '.join(f'{p} / {t}' for p, t in omitted)}" if omitted else "")
@@ -777,27 +1112,69 @@ def _fig_hits(ctx, hits):
          .drop(columns="_rank").reset_index(drop=True))
     full = full.drop(columns="_rank")
     hidden = len(full) - len(d)
-    rows = [f"{p} / {t}" if t else f"{p}" for p, t in zip(d["population"], d["term"])]
-    fig, ax = plt.subplots(figsize=(F.DOUBLE, max(1.7, 0.22 * len(d) + 1.0)),
+    short = F.short_labels([str(p) for p in d["population"]])
+    rows = [f"{short.get(str(p), str(p))} / {t}" if t else f"{short.get(str(p), str(p))}"
+            for p, t in zip(d["population"], d["term"])]
+    fig, ax = plt.subplots(figsize=(F.DOUBLE, max(1.9, 0.22 * len(d) + 1.3)),
                            layout="constrained")
     y = np.arange(len(d))
     tested = np.asarray(d["tested"], dtype=bool)
     up = np.where(tested, np.asarray(d["n_up"], dtype=float), 0.0)
     down = np.where(tested, np.asarray(d["n_down"], dtype=float), 0.0)
-    ax.barh(y, up, height=0.72, color="#D55E00", label="up in the second level")
-    ax.barh(y, -down, height=0.72, color="#0072B2", label="down in the second level")
-    ax.axvline(0.0, color=F.INK, lw=0.6)
+    for i in range(len(d)):
+        if i % 2:
+            ax.axhspan(i - 0.5, i + 0.5, color=BAND, lw=0, zorder=0)
+    ax.set_axisbelow(True)
+    ax.grid(axis="x", color=GRID, lw=0.4)
+    ax.barh(y, up, height=0.72, color=UP_COLOUR, zorder=3,
+            label="higher in the second level (the numerator)")
+    ax.barh(y, -down, height=0.72, color=DOWN_COLOUR, zorder=3,
+            label="higher in the first level (the reference)")
+    ax.axvline(0.0, color=F.INK, lw=0.6, zorder=4)
+    span = float(max(up.max() if up.size else 0.0, down.max() if down.size else 0.0, 1.0))
+    ax.set_xlim(-span * 1.16, span * 1.16)
+    # THE COUNT, ON THE BAR. A bar chart of gene counts spanning three orders of magnitude down
+    # the rows leaves everything below the top few as a stub a reader cannot measure against a
+    # tick - and the number is the finding.
+    for i in range(len(d)):
+        if not tested[i]:
+            continue
+        if up[i] > 0:
+            ax.text(up[i] + span * 0.015, y[i], f"{int(up[i]):,}", va="center", ha="left",
+                    fontsize=5.5, color=UP_INK, zorder=5)
+        if down[i] > 0:
+            ax.text(-down[i] - span * 0.015, y[i], f"{int(down[i]):,}", va="center", ha="right",
+                    fontsize=5.5, color=DOWN_INK, zorder=5)
+        if up[i] <= 0 and down[i] <= 0:
+            ax.text(span * 0.015, y[i], "0, tested", va="center", ha="left", fontsize=5.5,
+                    color=F.INK, zorder=5)
     # A POPULATION THAT WAS NEVER TESTED IS MARKED, not left at zero. Zero hits and no test draw
-    # as the same empty row, and they are opposite statements about the data.
+    # as the same empty row, and they are opposite statements about the data. The REASON is in
+    # the frame already and used to be dropped on the way to the panel, so the row said it had
+    # not been tested and sent the reader to the table to find out why.
+    why = [str(w or "") for w in d["why_not"]] if "why_not" in d.columns else [""] * len(d)
     for i in np.where(~tested)[0]:
-        ax.text(0.0, y[i], "  not tested", va="center", ha="left", color=F.GREY, fontsize=6)
+        ax.axhspan(i - 0.44, i + 0.44, color="#E8E8E8", lw=0, zorder=2)
+        # ANCHORED TO THE PANEL, NOT TO THE DATA. Written at a multiple of the widest bar, this
+        # sentence moved with the largest population's hit count - off the left of the axes on a
+        # run with one big responder, which is a run whose never-tested rows are unlabelled.
+        ax.text(0.012, y[i],
+                "NOT TESTED" + (f" - {_ellipsis(why[i], 62)}" if why[i] else ""),
+                transform=ax.get_yaxis_transform(), va="center", ha="left", fontsize=5.5,
+                color=F.INK, zorder=5)
     ax.set_yticks(y)
     ax.set_yticklabels(rows)
-    ax.invert_yaxis()
-    ax.set_xlabel(f"genes at padj < {ctx.config['alpha']}")
+    ax.set_ylim(len(d) - 0.5, -0.5)
+    # ABSOLUTE ON BOTH SIDES. The axis counts genes, and half of it was labelled -200, -150, -100
+    # - numbers that exist nowhere in the data and read as negative counts. The side carries the
+    # direction; the tick carries the count.
+    from matplotlib.ticker import FuncFormatter
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _p: f"{abs(v):,.0f}"))
+    key = _direction_key(list(zip(d["term"], d["contrast"])))
+    ax.set_xlabel(f"genes at padj < {ctx.config['alpha']}" + (f"\n{key}" if key else ""))
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
-    F.legend_outside(fig, ax)
+    F.legend_outside(fig, ax, markerscale=1.0)
     n_untested = int((~np.asarray(full["tested"], dtype=bool)).sum())
     ctx.emit_figure(
         "F6_hits_by_population", fig,
@@ -807,15 +1184,17 @@ def _fig_hits(ctx, hits):
         # of counts.
         caption=(f"Genes changing across the design, per population and term, at "
                  f"padj < {ctx.config['alpha']} - one row per arm comparison, split by "
-                 f"direction. The second level of each contrast is the numerator, and the "
-                 f"contrast is named in the source table. "
+                 f"direction. The second level of each contrast is the numerator, and the axis "
+                 f"label NAMES the arm on each side; the ticks count genes on both sides and the "
+                 f"count is printed at the end of every bar. The full contrast is in the source "
+                 f"table. "
                  + (f"The {len(d)} rows with the most genes are drawn, never-tested rows first; "
                     f"all {len(full)} are in the source table. " if hidden else "")
-                 + (f"{n_untested} row(s) are marked NOT TESTED: no fit was run for them, so an "
-                    f"empty row there is an absence of evidence and not evidence of absence. "
-                    if n_untested else
+                 + (f"{n_untested} row(s) are marked NOT TESTED, with the reason: no fit was run "
+                    f"for them, so an empty row there is an absence of evidence and not evidence "
+                    f"of absence. " if n_untested else
                     "Every population shown was tested, so an empty row is a test that found "
-                    "nothing. ")
+                    "nothing, and it is labelled as one. ")
                  + "A bar height is a count of genes at a threshold and is not an effect size: a "
                  "population with more pseudobulk samples has more power and shows more genes at "
                  "the same underlying change. Read it beside F1_replicates."),

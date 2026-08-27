@@ -334,11 +334,15 @@ _DB = {"human": "CellChatDB.human", "mouse": "CellChatDB.mouse"}
 _MEAN_TYPES = {"triMean": 0.25, "truncatedMean": None, "thresholdedMean": None}
 
 #: Sender -> receiver pairs the dotplot DRAWS before it stops, while `tables/ccc_edges.csv` keeps
-#: every one. It is a property of the page, not of any dataset: one ordered pair per column at
-#: 6 pt runs off a 174 mm figure somewhere around here, and the count of pairs grows as the SQUARE
-#: of the populations - nine of them is eighty-one columns. It was a bare `15` inside the drawing
-#: function, which is a cap on what the reader is shown that nothing in `config`, nothing in the
-#: caption and nothing in the source table could see.
+#: every one. It is a property of the page, not of any dataset: the count of pairs grows as the
+#: SQUARE of the populations - nine of them is eighty-one - and one pair per ROW at 6 pt is about
+#: 5 mm of page each. It was a bare `15` inside the drawing function, which is a cap on what the
+#: reader is shown that nothing in `config`, nothing in the caption and nothing in the source
+#: table could see.
+#:
+#: *A pair was a COLUMN until the panel was transposed, and the reason it had to be is the reason
+#: this constant is small: a pair of annotation paths is the longest label on the page, and as a
+#: rotated column label fifteen of them took half the height of the figure.*
 _DOT_PAIRS = 15
 
 #: STEP ONE, AND IT IS CHEAP. Reads the database and writes it out interaction by interaction,
@@ -436,6 +440,31 @@ def _nnz_per_gene(m):
     return np.bincount(m.indices[m.data > 0], minlength=m.shape[1])
 
 
+def _wrap_tick(s, limit=18):
+    """A long tick label folded onto two lines at its own separator. Unchanged when short.
+
+    An interaction name is `LIGAND_RECEPTOR` or `LIGAND_SUBUNIT_SUBUNIT`, and rotated ninety
+    degrees a thirty-character one is over a centimetre of page per column - which under
+    `constrained` comes out of the DATA area, not out of the margin. Folded at the separator
+    nearest its middle it costs width, which a double-column figure has, instead of height,
+    which it does not.
+
+    NOTHING IS TRUNCATED. A tick label that no longer names exactly one thing is worse than a
+    tall one, and an ellipsis on a gene symbol is a label a reader cannot look up.
+    """
+    s = str(s)
+    if len(s) <= limit:
+        return s
+    mid = len(s) / 2.0
+    for sep in ("_", "-", ":", " ", "."):
+        at = [i for i, ch in enumerate(s) if ch == sep]
+        if at:
+            i = min(at, key=lambda k: abs(k - mid))
+            if 0 < i < len(s) - 1:
+                return s[:i] + "\n" + s[i + 1:]
+    return s
+
+
 def _read_db(path, log):
     """CellChat's database, one row per interaction, or None when R could not write it.
 
@@ -490,6 +519,9 @@ def _floor_for(mean_type, trim):
 #   permutation  where the p-values sit against the resolution nboot allows.
 #   network      population to population, the answer in counts.
 #   dotplot      the ligand-receptor pairs behind it. CellChat's own bubble plot.
+#
+# Every one of them is drawn at a journal column width by `scprofile.figure`, and none of them
+# uses colour as the only channel for a category.
 
 def _fig_coverage(ctx, db, var_names, detected, edges, thresh):
     """The funnel from CellChat's database to the returned table. True when it was drawn.
@@ -539,19 +571,56 @@ def _fig_coverage(ctx, db, var_names, detected, edges, thresh):
 
     y = np.arange(len(rows))
     vals = [r["n_interactions"] for _, r in rows]
-    # The last stage is the RESULT and the ones above it are the database narrowing down to it;
-    # one colour for all four would make the funnel read as four measurements of one thing.
-    colours = (["#0072B2"] * (len(rows) - 1) + ["#009E73"]) if len(rows) > 1 else ["#0072B2"]
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.6, 0.34 * len(rows) + 0.9)))
-    ax.barh(y, vals, height=0.68, color=colours)
+    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.9, 0.42 * len(rows) + 1.15)),
+                           layout="constrained")
+    # THE WHOLE DATABASE BEHIND EVERY BAR. A funnel is a set of fractions of ONE thing, and
+    # without the ghost the narrowing - which is the entire content of the panel - has to be
+    # reconstructed by reading four bar lengths against a tick axis.
+    ax.barh(y, [n0] * len(rows), height=0.72, color=F.GREY, zorder=1)
+    # SPLIT BY CellChat's OWN ANNOTATION CLASS, because the classes are NOT equally measurable
+    # here and this plugin's caveats say so: around 60% of the database is secreted signalling,
+    # whose transcripts are the ones a nuclear preparation retains least. A single bar reports a
+    # coverage that could be carried entirely by the contact classes and look identical. The
+    # per-class counts were already computed for the source table and drawn nowhere.
+    stacked = bool(classes) and len(classes) <= len(F.CATEGORY_COLOURS)
+    if stacked:
+        left = np.zeros(len(rows))
+        for i, c in enumerate(classes):
+            seg = np.array([float(r[f"n_{c}"]) for _, r in rows])
+            ax.barh(y, seg, left=left, height=0.72, color=F.CATEGORY_COLOURS[i], zorder=2,
+                    label=c)
+            left += seg
+        fig.legend(loc="outside lower center", ncol=min(3, len(classes)), fontsize=5.5,
+                   handlelength=1.0, handleheight=0.9, columnspacing=1.2, handletextpad=0.4,
+                   frameon=False)
+    else:
+        ax.barh(y, vals, height=0.72, color="#0072B2", zorder=2)
+    # THE LABEL GOES INSIDE ONCE THE BAR IS LONG. It sat to the right of the bar unconditionally,
+    # which is why the axis had to run to 1.32x the largest value - a third of the panel width
+    # spent on nothing, and the first bar's label off the end of the data anyway.
     for yi, v in zip(y, vals):
-        ax.text(v, yi, f"  {v:,} ({100 * v / max(1, n0):.0f}%)", va="center", fontsize=6,
-                color=F.INK)
+        inside = v > 0.72 * n0
+        ax.text(v - 0.012 * n0 if inside else v + 0.012 * n0, yi,
+                f"{v:,} ({100 * v / max(1, n0):.0f}%)", va="center",
+                ha="right" if inside else "left", fontsize=6,
+                color="white" if inside and stacked else F.INK, zorder=3)
     ax.set_yticks(y)
     ax.set_yticklabels([l for l, _ in rows])
+    if returned_stage:
+        # THE LAST BAR IS THE RESULT AND THE ONES ABOVE IT ARE THE DATABASE NARROWING TO IT. It
+        # used to be said with a second bar colour, applied to `rows[-1]` WHETHER OR NOT the
+        # returned stage was drawn - so on exactly the runs where the join failed, the "result"
+        # colour was painted onto a diagnostic stage and the panel claimed a result it had just
+        # declined to compute.
+        ax.get_yticklabels()[-1].set_fontweight("bold")
+        ax.axhline(len(rows) - 1.5, color=F.INK, lw=0.5, ls=":", zorder=4)
     ax.invert_yaxis()
-    ax.set_xlim(0, max(vals) * 1.32 if max(vals) else 1)
+    ax.set_xlim(0, n0)
     ax.set_xlabel("interactions")
+    # FOUR OR FIVE TICKS, NOT NINE. Every bar carries its own count and its own percentage, so
+    # the axis is a rough scale and a dense one is only ink.
+    from matplotlib.ticker import MaxNLocator
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=5))
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
     # THE CAPTION DESCRIBES THE BARS THAT ARE THERE. The last stage is dropped whenever the edge
@@ -573,7 +642,14 @@ def _fig_coverage(ctx, db, var_names, detected, edges, thresh):
                  "The gap between the second and third bars is sequencing depth" + tail
                  + "Every bar counts DISTINCT interactions, so the last one is not the number of "
                    "edges in tables/ccc_edges.csv - one interaction returns once per ordered pair "
-                   "of populations that carries it. Per-class counts are in the source table."),
+                   "of populations that carries it. The grey behind each bar is the whole "
+                   "database, so a bar is read as a fraction of it rather than against the axis."
+                 + (" Each bar is split by CellChat's own annotation class: the classes are not "
+                    "equally measurable in every preparation - around 60% of the database is "
+                    "secreted signalling - so a coverage figure carried by one class is a "
+                    "different result from the same figure spread across all of them. Exact "
+                    "per-class counts are in the source table." if stacked
+                    else " Per-class counts are in the source table.")),
         source=src)
     return True
 
@@ -613,30 +689,86 @@ def _fig_population_power(ctx, names, n_cells, sent, received, above_floor, min_
     src = pd.DataFrame(d, index=pd.Index(names, name="population"))
     src = src.sort_values("n_cells", ascending=False)
 
-    panels = [("n_cells", "cells", "#0072B2"),
-              ("n_significant_edges", "significant interactions (sent + received)", "#009E73")]
-    if above_floor is not None:
-        panels.insert(1, ("frac_present_db_genes_above_floor",
-                          "fraction of the database genes\nPRESENT here above the averaging floor",
-                          "#E69F00"))
     # `constrained`, because the shared y axis carries population names and the right-hand
     # panels carry their own x labels; without it the two collide the moment a name is long.
-    fig, axs = plt.subplots(1, len(panels),
-                            figsize=(F.DOUBLE, max(1.7, 0.22 * len(src) + 1.0)),
+    n_panels = 3 if above_floor is not None else 2
+    fig, axs = plt.subplots(1, n_panels,
+                            figsize=(F.DOUBLE, max(2.0, 0.26 * len(src) + 1.35)),
                             sharey=True, squeeze=False, layout="constrained")
+    axs = list(axs[0])
     y = np.arange(len(src))
-    for ax, (col, xlabel, colour) in zip(axs[0], panels):
-        ax.barh(y, src[col].to_numpy(), height=0.7, color=colour)
-        ax.set_xlabel(xlabel)
+    below = src["n_cells"].to_numpy() < float(min_cells)
+    # A BAR IS NOT ALLOWED TO BECOME A SLAB. `0.72` of a row is right at ten populations and
+    # absurd at two, where the panel has a minimum height and the rows divide it between them.
+    bh = min(0.72, 0.12 * len(src) + 0.26)
+
+    # (a) CELLS, ON A LOG AXIS, and that is the whole panel working or not working. Population
+    # sizes inside one object routinely span three orders of magnitude, and on a linear axis
+    # every population anywhere near min.cells - which is the entire subject of this panel - is
+    # a sliver indistinguishable from the axis line. The populations the reader most needs to
+    # see were the ones the scale erased.
+    ax = axs[0]
+    cells = np.maximum(src["n_cells"].to_numpy(dtype=float), 0.0)
+    ax.barh(y, cells, height=bh, color=np.where(below, "#D55E00", "#0072B2"))
+    ax.set_xscale("log")
+    ax.set_xlim(0.7, max(2.0, float(cells.max())) * 2.2)
+    ax.axvline(float(min_cells), color=F.INK, ls="--", lw=0.6, zorder=3)
+    # ANCHORED TO THE AXES, NOT TO A ROW NUMBER. At `-0.9` in data coordinates this label sat
+    # just above the top bar on a twelve-population panel and a long way off the top of the
+    # figure on a two-population one, because a data unit is a row and rows are not a fixed size.
+    ax.text(float(min_cells), 1.005, f" min.cells = {min_cells:,}",
+            transform=ax.get_xaxis_transform(), fontsize=5.5, color=F.INK, ha="left", va="bottom")
+    ax.set_xlabel("cells  (log scale)")
+    # A LOG AXIS DRAWS NINE MINOR TICKS PER DECADE BY DEFAULT, which over four decades is a comb
+    # of forty tick marks under a panel of twelve bars.
+    ax.tick_params(axis="x", which="minor", length=0)
+    # NAMED ON THE FIGURE, NOT ONLY IN THE CAPTION. These populations have no edges in the result
+    # for a reason that is technical, and this is the only figure that can say so.
+    import matplotlib.patches as mpatch
+    keys = ([mpatch.Patch(color="#D55E00", label="below min.cells: edges dropped after scoring")]
+            if below.any() else [])
+
+    # (b) THE AVERAGING FLOOR, when the database could be read out.
+    if above_floor is not None:
+        ax = axs[1]
+        ax.barh(y, src["frac_present_db_genes_above_floor"].to_numpy(), height=bh,
+                color="#E69F00")
+        ax.set_xlim(0, 1)
+        ax.set_xlabel("fraction of the database genes\nPRESENT here above the averaging floor")
+
+    # (c) SENT AND RECEIVED, SIDE BY SIDE IN THE BAR. The docstring above says a population that
+    # only listens and one that only speaks are different findings - and the panel then drew
+    # their SUM, so the one thing it named as the distinction was the one thing it hid. The
+    # stacked total is unchanged, so nothing that was readable here has been dropped.
+    ax = axs[-1]
+    s_arr = src["edges_as_sender"].to_numpy(dtype=float)
+    r_arr = src["edges_as_receiver"].to_numpy(dtype=float)
+    ax.barh(y, s_arr, height=bh, color="#009E73")
+    ax.barh(y, r_arr, left=s_arr, height=bh, color="#56B4E9")
+    ax.set_xlabel("significant interactions\n(sent + received)")
+    # ONE KEY, BELOW THE WHOLE FIGURE, FOR BOTH PANELS THAT NEED ONE. Inside the axes there is
+    # no corner that is reliably free: populations are sorted by cells and not by edges, so the
+    # longest bar can be any row, and on a two-population panel every corner has a bar in it -
+    # which is where a key pinned to one landed on top of the data.
+    keys += [mpatch.Patch(color="#009E73", label="interactions sent"),
+             mpatch.Patch(color="#56B4E9", label="interactions received")]
+    fig.legend(handles=keys, loc="outside lower center", ncol=min(3, len(keys)), fontsize=5.5,
+               handlelength=1.0, handleheight=0.9, columnspacing=1.4, handletextpad=0.4,
+               frameon=False)
+
+    for i, ax in enumerate(axs):
         ax.spines["left"].set_visible(False)
         ax.tick_params(axis="y", length=0)
-        if col == "n_cells":
-            ax.axvline(float(min_cells), color=F.INK, ls="--", lw=0.6)
-        if col == "frac_present_db_genes_above_floor":
-            ax.set_xlim(0, 1)
-    axs[0][0].set_yticks(y)
-    axs[0][0].set_yticklabels(src.index)
-    axs[0][0].invert_yaxis()
+        # PANEL LETTERS. Three panels a caption refers to in order are three panels a reader has
+        # to be able to point at.
+        ax.set_title("abc"[i], loc="left", fontweight="bold", fontsize=8, pad=3)
+    # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL, as F4 and F5 already do. These are annotation
+    # PATHS, and at full length they took a third of a double-column figure's width for text that
+    # repeats the same prefix down every row. The full path stays in the source table.
+    _short = F.short_labels(list(src.index))
+    axs[0].set_yticks(y)
+    axs[0].set_yticklabels([_short[p] for p in src.index])
+    axs[0].invert_yaxis()
 
     rho = ""
     if len(src) >= 4:
@@ -652,21 +784,30 @@ def _fig_population_power(ctx, names, n_cells, sent, received, above_floor, min_
     # THE CAPTION DESCRIBES THE PANELS THAT ARE THERE. The middle one exists only when the
     # database could be read out, and a caption naming three panels over two is how a reader
     # comes to believe they saw a check that was never drawn.
-    middle = ("what fraction of the database genes PRESENT IN THIS OBJECT clear the averaging "
-              "floor in it - which is not a fraction of the database, and F1 is the panel that "
-              "says how much of the database is present at all - " if above_floor is not None
-              else "")
+    middle = ("(b) what fraction of the database genes PRESENT IN THIS OBJECT clear the "
+              "averaging floor in it - which is not a fraction of the database, and F1 is the "
+              "panel that says how much of the database is present at all - and "
+              if above_floor is not None else "")
+    # THE PANELS CARRY LETTERS, SO THE CAPTION USES THEM - and the last letter depends on whether
+    # the middle panel exists at all.
+    last = "c" if above_floor is not None else "b"
     ctx.emit_figure(
         "F2_population_power", fig,
-        caption=("Per population, sorted by size: how many cells it has, " + middle
-                 + "and how many significant interactions came back. "
+        caption=("Per population, sorted by size: (a) how many cells it has, on a LOG axis - "
+                 "population sizes span orders of magnitude and the ones near min.cells are the "
+                 "subject of this panel; " + middle
+                 + f"({last}) how many significant interactions came back, split into those it "
+                   f"sent and those it received. "
                  + (floor_why + ". " if above_floor is not None else "")
-                 + "The dashed line is min.cells, below which CellChat drops a population's "
-                   "edges after scoring. A population low on the left cannot be read as quiet on "
-                   "the right - it was never able to speak." + rho
-                 + f" Sender and receiver counts are separated in the source table. The "
-                   f"{n_sentinel_cells:,} cells carrying an annotator sentinel are not a "
-                   f"population, were not handed to CellChat, and are not drawn here."),
+                 + "The dashed line in (a) is min.cells, below which CellChat drops a "
+                   "population's edges after scoring; populations below it are drawn in a second "
+                   f"colour and their absence from the result is technical. A population low in "
+                   f"(a) cannot be read as quiet in ({last}) - it was never able to speak. A "
+                   f"self-loop is one edge and is counted in both halves of a ({last}) bar." + rho
+                 + f" Population names are shortened to their shortest unambiguous tail; the full "
+                   f"paths are in the source table. The {n_sentinel_cells:,} cells carrying an "
+                   f"annotator sentinel are not a population, were not handed to CellChat, and "
+                   f"are not drawn here."),
         source=src)
 
 
@@ -687,28 +828,66 @@ def _fig_permutation(ctx, edges, nboot, thresh):
     vals, counts = np.unique(pv, return_counts=True)
     src = pd.DataFrame({"n_edges": counts},
                        index=pd.Index(vals, name="pval")).sort_index()
-    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.62))
+    floor = 1.0 / max(nboot, 1)
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.74), layout="constrained")
+    # A p-VALUE OF ZERO IS CENSORED, NOT SMALL, AND IT IS USUALLY THE TALLEST BAR HERE. In one
+    # hue with the rest it reads as the left tail of a distribution, which is precisely the
+    # reading the caption then has to argue the reader out of - and the figure is looked at
+    # before the caption is read, if the caption is read at all. Its own colour says it first.
+    MEASURED, CENSORED = "#0072B2", "#D55E00"
     if len(vals) <= 30:
         # THE VALUES ARE DISCRETE, so they are drawn discrete. A histogram of five attainable
         # values with twenty bins invents a distribution the test cannot produce.
-        w = (1.0 / max(nboot, 1)) * 0.6
-        ax.bar(vals, counts, width=w, color="#0072B2")
+        w = floor * 0.62
+        ax.bar(vals, counts, width=w, zorder=2,
+               color=[CENSORED if v <= 0 else MEASURED for v in vals])
+        # THE COUNT ON ITS OWN BAR. A handful of bars have room for their own numbers, and a
+        # reader who has to measure a bar against a tick in order to quote it will quote it wrong.
+        for v, c in zip(vals, counts):
+            ax.text(v, c, f"{c:,}", ha="center", va="bottom", fontsize=5.5, color=F.INK)
     else:
-        ax.hist(pv, bins=30, color="#0072B2")
-    floor = 1.0 / max(nboot, 1)
-    ax.axvline(floor, color=F.INK, ls="--", lw=0.6)
+        ax.hist(pv, bins=30, color=MEASURED, zorder=2)
+    # BOTH REFERENCE LINES, AND BOTH NAMED ON THE PANEL. There was one dashed line and nothing
+    # on the figure saying what it marked. The threshold matters as much as the resolution does:
+    # it is why nothing is drawn to its right, which otherwise reads as an absence of edges
+    # rather than as the filter that removed them before this plugin saw the table.
+    for x, lab in ((floor, f"1/nboot = {floor:g}\nresolution"),
+                   (float(thresh), f"thresh = {thresh:g}\ntable filtered here")):
+        ax.axvline(x, color=F.INK, ls="--", lw=0.6, zorder=1)
+        # THE THRESHOLD LABEL READS INWARD. It marks the right-hand end of the axis, so anchored
+        # left it hangs off the page and only `bbox_inches="tight"` was keeping it on.
+        right = x >= float(thresh)
+        ax.text(x, 1.01, (lab + " ") if right else (" " + lab),
+                transform=ax.get_xaxis_transform(), ha="right" if right else "left",
+                va="bottom", fontsize=5, color=F.INK, linespacing=1.2)
     ax.set_xlabel("permutation p-value")
     ax.set_ylabel("edges")
-    ax.set_xlim(-floor, max(float(thresh), float(vals.max())) + floor)
+    ax.set_xlim(-1.2 * floor, max(float(thresh), float(vals.max())) + 0.7 * floor)
+    ax.margins(y=0.14)
+    # TICKS ON THE VALUES THE TEST CAN ACTUALLY RETURN. The automatic locator put -0.01 and 0.06
+    # on the axis of a quantity that is a probability and is bounded by the threshold.
+    if len(vals) <= 8:
+        ax.set_xticks(sorted(set(vals.tolist() + [float(thresh)])))
+    if float(vals.min()) <= 0:
+        # THE SECOND HUE NEEDS A KEY ON THE PANEL. A colour that means something and is explained
+        # only in the caption is a colour most readers will read as decoration.
+        import matplotlib.patches as mpatch
+        ax.legend(handles=[mpatch.Patch(color=CENSORED,
+                                        label=f"p = 0, i.e. p < {floor:g}: censored by nboot"),
+                           mpatch.Patch(color=MEASURED, label="resolved by the permutations")],
+                  loc="upper right", bbox_to_anchor=(1.0, 0.94), fontsize=5.5,
+                  handlelength=1.0, handleheight=0.9, borderaxespad=0.15, labelspacing=0.35,
+                  frameon=False)
     ctx.emit_figure(
         "F3_permutation", fig,
         caption=(f"The p-values behind the edges that survived. The test permutes the group "
                  f"labels {nboot:,} times, so a p-value can only be a multiple of "
-                 f"{floor:g} - the dashed line - and every bar here is at or below the "
-                 f"{thresh:g} threshold the table was filtered at. A bar at zero is not a small "
-                 f"probability: it is an upper bound, meaning no permutation of the labels "
-                 f"reached the observed value in {nboot:,} draws. More permutations would "
-                 f"separate those edges; nothing else will."),
+                 f"{floor:g} - the left dashed line - and every bar here is at or below the "
+                 f"{thresh:g} threshold the table was filtered at, which is the right one. The "
+                 f"bar at zero is drawn in a second colour because it is not a small probability: "
+                 f"it is an upper bound, meaning no permutation of the labels reached the observed "
+                 f"value in {nboot:,} draws. More permutations would separate those edges; nothing "
+                 f"else will."),
         source=src)
     return True
 
@@ -737,40 +916,124 @@ def _fig_network(ctx, edges, names):
                          "summed_probability": float(prob.at[a, b])}
                         for a in names for b in names]).set_index(["source", "target"])
 
-    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.95), layout="constrained")
-    im = ax.imshow(counts.to_numpy(), cmap="viridis", aspect="auto",
-                   vmin=0, vmax=max(1, int(counts.to_numpy().max())))
+    # ROWS AND COLUMNS IN THE SAME ORDER, BY TOTAL ACTIVITY. Alphabetical order over annotation
+    # PATHS is arbitrary once the paths are shortened for the axis - the reader sees a sequence
+    # with no rule - and it scatters whatever block structure the matrix has. One order for both
+    # axes is not optional: it is what makes the diagonal mean "within a population".
+    M0 = counts.to_numpy()
+    order = list(np.argsort(-(M0.sum(axis=1) + M0.sum(axis=0)), kind="stable"))
+    disp = [names[i] for i in order]
+    M = counts.loc[disp, disp].to_numpy()
+
+    # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL. These categories are annotation paths, sixty
+    # characters before a real name is reached, and rotated ninety degrees they took three
+    # quarters of the figure height - squeezing the data into a strip. The full path stays in
+    # the source table.
+    _short = F.short_labels(disp)
+    # ADAPTIVE, SO A CELL STAYS BIG ENOUGH TO SEE, AND THE LABELS GET THEIR OWN ROOM. Fixed at
+    # the single-column width, twelve populations gave 4 mm cells and twenty would have given
+    # 2 mm - and because `constrained` fits the tick labels FIRST, a long annotation path was
+    # taken out of the matrix rather than out of the page. Measured off the labels that will
+    # actually be drawn: at 6 pt a character is about 0.042 in, and at 45 degrees it contributes
+    # 0.7 of that to the height.
+    _lab = max((len(v) for v in _short.values()), default=8)
+    band = 0.35 + 0.030 * _lab
+    side = min(F.DOUBLE - band, max(F.SINGLE, 0.19 * n + 0.9))
+    fig, ax = plt.subplots(figsize=(side + band, side + band), layout="constrained")
+    # ZERO IS NOT THE BOTTOM OF THE COLOUR RAMP, IT IS OFF IT. The caption promises that a silent
+    # row is visible rather than missing, and under viridis from vmin=0 a silent pair was dark
+    # purple - the same reading as one, two or three interactions at print size. The one thing
+    # the panel was built to show was the one thing its colour scale could not say.
+    cmap = plt.get_cmap("viridis").copy()
+    cmap.set_bad("#F0F0F0")
+    im = ax.imshow(np.ma.masked_where(M == 0, M), cmap=cmap, aspect="equal",
+                   vmin=1, vmax=max(1, int(M.max())))
     ax.set_xticks(np.arange(n))
     ax.set_yticks(np.arange(n))
-    # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL. These categories are PAIRS of
-    # annotation paths, sixty characters before a real name is reached, and rotated
-    # ninety degrees they took three quarters of the figure height - squeezing the
-    # data into a strip. The full path stays in the source table.
-    _short = F.short_labels(names)
-    ax.set_xticklabels([_short[n] for n in names], rotation=90)
-    ax.set_yticklabels([_short[n] for n in names])
+    ax.set_xticklabels([_short[p] for p in disp], rotation=45, ha="right",
+                       rotation_mode="anchor")
+    ax.set_yticklabels([_short[p] for p in disp])
     ax.set_xlabel("receiver")
     ax.set_ylabel("sender")
     ax.tick_params(length=0)
+    # CELL BOUNDARIES. A twelve by twelve block of flat colour has no landmarks, and tracing a
+    # cell back to its row and its column is the only operation a reader performs on it.
+    ax.set_xticks(np.arange(n + 1) - 0.5, minor=True)
+    ax.set_yticks(np.arange(n + 1) - 0.5, minor=True)
+    ax.grid(which="minor", color="white", lw=0.5)
+    ax.tick_params(which="minor", length=0)
+    # THE DIAGONAL IS A DIFFERENT CLAIM AND THE CAPTION ALREADY SAYS SO. Outlined, it can be
+    # found; unmarked, the reader has to count cells in from both axes to locate it.
+    # DRAWN TWICE, LIGHT UNDER DARK. A single dark outline vanishes on the dark end of viridis -
+    # which is where a quiet diagonal cell sits, and a quiet diagonal is a thing a reader looks
+    # for - and a single light one vanishes at the bright end.
+    for i in range(n):
+        ax.add_patch(plt.Rectangle((i - 0.5, i - 0.5), 1, 1, fill=False, ec="white", lw=1.3,
+                                   zorder=4))
+        ax.add_patch(plt.Rectangle((i - 0.5, i - 0.5), 1, 1, fill=False, ec=F.INK, lw=0.5,
+                                   zorder=5))
+    # THE NUMBERS THEMSELVES, while they still fit. A count is an exact quantity and a colour is
+    # not; above this many populations the digits collide and colour is all there is.
+    if n <= 14:
+        fs = 5.0 if n <= 10 else 4.2
+        for i in range(n):
+            for j in range(n):
+                v = int(M[i, j])
+                if not v:
+                    continue
+                ax.text(j, i, f"{v:,}", ha="center", va="center", fontsize=fs,
+                        color="white" if v < 0.6 * max(1, M.max()) else "#101010", zorder=6)
     for sp in ax.spines.values():
         sp.set_visible(False)
-    cb = fig.colorbar(im, ax=ax, fraction=0.045, pad=0.02)
-    cb.outline.set_visible(False)
-    cb.set_label("significant interactions")
+    # NO COLOURBAR WHEN NOTHING IS ON IT. On a unit where no pair returned a significant
+    # interaction the whole matrix is grey, and the bar still drew - reading 0.92, 0.96, 1.00 on
+    # a count of interactions, a scale with no cell on it and no attainable value on it either.
+    # A scale a reader can read is a scale a reader will use.
+    any_edge = int(M.max()) > 0
+    if any_edge:
+        cb = fig.colorbar(im, ax=ax, fraction=0.045, pad=0.02)
+        cb.outline.set_visible(False)
+        cb.set_label("significant interactions")
+        # AN INTEGER QUANTITY GETS INTEGER TICKS. A colourbar reading 0.0, 2.5, 5.0 on a count
+        # of interactions offers the reader a value the quantity cannot take.
+        from matplotlib.ticker import MaxNLocator
+        if int(M.max()) <= 1:
+            cb.set_ticks([1])
+        else:
+            cb.ax.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=6))
+    import matplotlib.patches as mpatch
+    fig.legend(handles=[mpatch.Patch(facecolor="#F0F0F0", edgecolor="#C8C8C8", lw=0.5,
+                                     label="no significant interaction")],
+               loc="outside lower left", fontsize=5.5, handlelength=1.0, handleheight=0.9,
+               frameon=False)
     ctx.emit_figure(
         "F4_network", fig,
         caption=("Inferred communication from each sender population (rows) to each receiver "
-                 "(columns), counted as significant ligand-receptor interactions. Every "
-                 "population is drawn whether or not it participates, so a silent row is visible "
-                 "rather than missing - and a silent row is the case the diagnostics above "
-                 "exist to explain. The diagonal is signalling within a population, which is "
-                 "inferred exactly as the off-diagonal is and is no more direct. Summed "
-                 "communication probability for every pair is in the source table."),
+                 "(columns), counted as significant ligand-receptor interactions. Rows and "
+                 "columns are in the SAME order, sorted by total activity, so the diagonal is "
+                 "signalling within a population - which is inferred exactly as the off-diagonal "
+                 "is, and is no more direct; it is outlined for that reason. Every population is "
+                 "drawn whether or not it participates, and a pair with no significant "
+                 "interaction is left off the colour scale in flat grey rather than given the "
+                 "bottom of it - so a silent row is visible rather than missing, and a silent row "
+                 "is the case the diagnostics above exist to explain. Names are shortened to "
+                 "their shortest unambiguous tail. Summed communication probability for every "
+                 "pair, and the full paths, are in the source table."
+                 + ("" if any_edge else
+                    " NO PAIR IN THIS UNIT RETURNED A SIGNIFICANT INTERACTION, so every cell is "
+                    "grey and there is no colour scale to draw. That is a result of the "
+                    "inference and not a figure that failed; the diagnostics above say which of "
+                    "its causes applies here.")),
         source=src)
 
 
 def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
-    """CellChat's bubble plot: pairs against sender-receiver, colour probability, size evidence."""
+    """CellChat's bubble plot: sender -> receiver pairs against ligand-receptor interactions.
+
+    Colour is the communication probability; dot size RANKS the permutation p-value. Pairs are on
+    the y axis because a pair of annotation paths is the longest label this page has, and a
+    horizontal label costs margin width rather than figure height.
+    """
     import numpy as np
     import pandas as pd
     if edges is None or not len(edges):
@@ -790,21 +1053,21 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
     if not len(e):
         return False
 
-    rows = list(e.groupby("interaction")["prob"].max().nlargest(int(top_n)).index)
-    sub = e[e["interaction"].isin(rows)]
+    keep_i = list(e.groupby("interaction")["prob"].max().nlargest(int(top_n)).index)
+    sub = e[e["interaction"].isin(keep_i)]
     # HOW MANY PAIRS THERE WERE, BEFORE THE CAP, so the caption can say what the figure dropped.
     # The cap is a page constraint and it is named; it was a bare literal here.
     n_pairs_all = int(sub["pair"].nunique())
-    cols = list(sub["pair"].value_counts().head(_DOT_PAIRS).index)
-    sub = sub[sub["pair"].isin(cols)]
+    keep_p = list(sub["pair"].value_counts().head(_DOT_PAIRS).index)
+    sub = sub[sub["pair"].isin(keep_p)]
     if not len(sub):
         return False
-    # Rows ordered by their strongest edge, columns by how much they carry: a dotplot whose axes
-    # are in database order is a dotplot nobody can read down.
-    rows = list(sub.groupby("interaction")["prob"].max().sort_values(ascending=False).index)
-    cols = list(sub.groupby("pair")["prob"].max().sort_values(ascending=False).index)
-    ri = {r: i for i, r in enumerate(rows)}
-    ci = {c: i for i, c in enumerate(cols)}
+    # Both axes ordered by their strongest edge: a dotplot whose axes are in database order is a
+    # dotplot nobody can read down.
+    pairs = list(sub.groupby("pair")["prob"].max().sort_values(ascending=False).index)
+    inter = list(sub.groupby("interaction")["prob"].max().sort_values(ascending=False).index)
+    yi = {p: i for i, p in enumerate(pairs)}
+    xi = {t: i for i, t in enumerate(inter)}
 
     floor = 1.0 / max(int(nboot), 1)
     p_col = "pval" in sub.columns
@@ -815,27 +1078,41 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
     # `"pval" in sub.columns` alone, so a column R wrote as NA throughout drew every dot at the
     # maximum size under a caption saying no permutation had beaten any of them.
     has_p = bool(finite.any())
-    sig = smax = None
+    levels = None
     if has_p:
-        # A p-value of 0 is not zero probability, it is < 1/nboot; clipped to half the floor so
-        # it takes the largest size the scale has rather than an infinite one.
-        #
-        # AND A p-VALUE THAT IS NOT THERE IS THE WEAKEST POINT ON THE PANEL, NOT THE STRONGEST.
-        # Non-finite entries were replaced by `floor` - the SMALLEST attainable p-value - so an
-        # edge whose p-value could not be read drew at 87% of the largest area on the figure, in
-        # the direction of more evidence rather than less. The table was filtered at `thresh`, so
-        # `thresh` is what a surviving edge is known to be no worse than, and it is the honest
+        # A p-VALUE THAT IS NOT THERE IS THE WEAKEST POINT ON THE PANEL, NOT THE STRONGEST.
+        # Non-finite entries were once replaced by `floor` - the SMALLEST attainable p-value - so
+        # an edge whose p-value could not be read drew at 87% of the largest area on the figure,
+        # in the direction of more evidence rather than less. The table was filtered at `thresh`,
+        # so `thresh` is what a surviving edge is known to be no worse than, and it is the honest
         # stand-in.
         weakest = max(float(thresh), floor)
-        sig = -np.log10(np.clip(np.where(finite, pv, weakest), floor / 2.0, None))
-        smax = float(sig.max()) if float(sig.max()) > 0 else 1.0
-        size = 5.0 + 30.0 * (sig / smax)
-        size_says = (f"DOT SIZE IS EVIDENCE, not strength: it is -log10 of the permutation "
-                     f"p-value, so the largest dots are edges no permutation of the labels beat "
-                     f"in {nboot:,} draws and the smallest sit just under the {thresh:g} "
-                     f"threshold - and because the test is quantised at {floor:g}, only a few "
-                     f"sizes are attainable. The key beside the panel is that scale, which is "
-                     f"normalised WITHIN this figure: a dot area is not comparable with another "
+        pfill = np.round(np.where(finite, pv, weakest), 12)
+        # ORDINAL AND WIDELY SPACED, BECAUSE THE UNDERLYING QUANTITY IS ORDINAL AND NARROW. Size
+        # was -log10(p) rescaled onto its own range, and over the values this test can produce -
+        # at nboot = 100 the whole table lies in {0, .01, .02, .03, .04} - that spans -log10 from
+        # 1.4 to 2.3. As an AREA that is a 25% difference in diameter, which no eye reads off a
+        # scatter: the panel carried an evidence dimension nobody could see, and its own key drew
+        # three markers that were indistinguishable from each other. Ranking the attainable
+        # values and spreading them over the full usable area range makes the dimension legible.
+        # It is a rank, and the caption says so rather than implying a continuous scale.
+        levels = sorted(set(pfill.tolist()))
+        rank = {v: i for i, v in enumerate(sorted(levels, reverse=True))}
+        span = max(1, len(levels) - 1)
+        size = np.array([13.0 + 62.0 * (rank[v] / span) for v in pfill])
+
+        def _plab(v):
+            # `p = 0.005` USED TO APPEAR IN THE KEY, and this test cannot produce it. It came out
+            # of clipping p = 0 to half the floor so the marker would have a finite size, and then
+            # printing the clipped value back as though it were the measurement.
+            return (f"p = 0  (< {floor:g})" if v <= 0 else f"p = {v:g}")
+
+        size_says = (f"DOT SIZE IS EVIDENCE, not strength: it ranks the permutation p-value, "
+                     f"largest for the edges no permutation of the labels beat in {nboot:,} draws "
+                     f"and smallest for those sitting just under the {thresh:g} threshold. The "
+                     f"test is quantised at {floor:g}, so only {len(levels)} size(s) exist here "
+                     f"and the key beside the panel names each one; the steps are equal in area "
+                     f"and NOT proportional to p, and a dot area is not comparable with another "
                      f"run's.")
         n_missing = int((~finite).sum())
         if n_missing:
@@ -846,69 +1123,96 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
     else:
         # SIZE MEANS NOTHING HERE, SO IT IS CONSTANT AND THE CAPTION SAYS SO. A size scale
         # carrying no variable is a scale a reader will read anyway.
-        size = 14.0
+        size = 22.0
         size_says = ("Dot size is constant: the returned table carried no readable permutation "
                      "p-value" + (" in its `pval` column" if p_col else " column") + ", so there "
                      "is no evidence dimension to draw.")
 
     F, plt = ctx.figure, ctx.plot()
-    fig, ax = plt.subplots(figsize=(F.DOUBLE, max(2.0, 0.20 * len(rows) + 1.4)),
+    # PAIRS ON THE Y AXIS, INTERACTIONS ON THE X. A sender -> receiver category is a PAIR of
+    # annotation paths and is the longest label anywhere on this page; rotated ninety degrees
+    # under the panel, those labels took HALF the height of the whole figure - the data was drawn
+    # in a strip and then shrunk again to fit the column. On y they read horizontally and cost
+    # margin WIDTH, which a double-column figure has and height it does not, and the ranking then
+    # runs top to bottom, which is the order a reader wants them in anyway.
+    # THE FIGURE GROWS FOR THE LABELS; THE DATA AREA DOES NOT SHRINK FOR THEM. `constrained`
+    # fits tick labels first, so a fixed height meant a long interaction name was paid for out
+    # of the panel - which is how the old orientation ended up drawing its dots in a strip. The
+    # band is measured off the labels that will actually be drawn, after folding.
+    _xlab = [_wrap_tick(t) for t in inter]
+    _long = max((len(ln) for t in _xlab for ln in t.split("\n")), default=8)
+    band = 0.30 + 0.045 * _long
+    fig, ax = plt.subplots(figsize=(F.DOUBLE, max(2.4, 0.21 * len(pairs) + 1.15 + band)),
                            layout="constrained")
-    pts = ax.scatter([ci[c] for c in sub["pair"]], [ri[r] for r in sub["interaction"]],
+    # A SPARSE GRID NEEDS RULES. Most cells of this panel are empty by construction, and without
+    # them tracing a dot back to its row and its column is guesswork over several centimetres.
+    ax.set_axisbelow(True)
+    ax.grid(True, color="#EDEDED", lw=0.4)
+    pts = ax.scatter([xi[t] for t in sub["interaction"]], [yi[p] for p in sub["pair"]],
                      c=sub["prob"].to_numpy(), s=size, cmap="viridis", linewidths=0)
-    F.rasterize_points(ax)
-    ax.set_xticks(np.arange(len(cols)))
+    # RASTERISED ONLY WHEN IT BUYS SOMETHING. The convention exists for scatters of 100,000
+    # points; a few hundred dots stay vector, so the circles print crisp and stay editable.
+    if len(sub) > 5000:
+        F.rasterize_points(ax)
+    ax.set_yticks(np.arange(len(pairs)))
     # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL. These categories are PAIRS of
-    # annotation paths, sixty characters before a real name is reached, and rotated
-    # ninety degrees they took three quarters of the figure height - squeezing the
-    # data into a strip. The full path stays in the source table.
-    _short = F.short_labels(cols)
-    ax.set_xticklabels([_short[c] for c in cols], rotation=90)
-    ax.set_yticks(np.arange(len(rows)))
-    ax.set_yticklabels(rows)
-    ax.set_xlim(-0.6, len(cols) - 0.4)
-    ax.set_ylim(len(rows) - 0.4, -0.6)
+    # annotation paths, sixty characters before a real name is reached. The full path
+    # stays in the source table.
+    _short = F.short_labels(pairs)
+    ax.set_yticklabels([_short[p] for p in pairs])
+    ax.set_xticks(np.arange(len(inter)))
+    ax.set_xticklabels(_xlab, rotation=90, linespacing=0.95)
+    ax.set_xlabel("ligand-receptor interaction")
+    ax.set_ylabel("sender -> receiver")
+    ax.set_ylim(len(pairs) - 0.4, -0.6)
+    ax.set_xlim(-0.6, len(inter) - 0.4)
     ax.tick_params(length=0)
     for sp in ax.spines.values():
         sp.set_visible(False)
     # HORIZONTAL, so the right-hand margin is free for the size key. A colourbar and a legend both
-    # anchored right is two things in one place under `constrained`.
-    cb = fig.colorbar(pts, ax=ax, orientation="horizontal", location="top", fraction=0.05, pad=0.04)
+    # anchored right is two things in one place under `constrained`. `aspect` is set because the
+    # default of 20 shrank it to half the panel width, leaving it floating over the middle of the
+    # figure with no edge aligned to anything.
+    cb = fig.colorbar(pts, ax=ax, orientation="horizontal", location="top", fraction=0.035,
+                      pad=0.02, aspect=45)
     cb.outline.set_visible(False)
     cb.set_label("communication probability")
-    if smax is not None:
-        # A SIZE SCALE WITH NO KEY IS NOT A SCALE. `smax` is fitted to this figure, so the same
-        # area means a different p-value in the next run, and without these markers a reader can
-        # compare dots inside one panel and nothing else. `s` is an area and Line2D's `ms` is a
+    if levels is not None:
+        # A SIZE SCALE WITH NO KEY IS NOT A SCALE, and this key is now every attainable value
+        # rather than three quantiles of a continuous one. `s` is an area and Line2D's `ms` is a
         # diameter, hence the square root - and the keys are drawn at the size they appear on the
         # panel, magnified by nothing, because a size key that is not to scale is not a key.
         import matplotlib.lines as ml
-        keys = sorted({float(sig.min()), float(np.median(sig)), float(sig.max())})
+        span = max(1, len(levels) - 1)
+        rank = {v: i for i, v in enumerate(sorted(levels, reverse=True))}
+        shown = sorted(levels)[:6]
         handles = [ml.Line2D([], [], marker="o", ls="", color=F.INK,
-                             ms=float(np.sqrt(5.0 + 30.0 * (k / smax))),
-                             label=f"p = {10 ** (-k):.3g}") for k in keys]
+                             ms=float(np.sqrt(13.0 + 62.0 * (rank[v] / span))),
+                             label=_plab(v)) for v in shown]
         # `ax.legend`, not `fig.legend`: the anchor is then in AXES coordinates and the key lands
         # beside the panel. Through `figure.legend_outside` it goes to `fig.legend`, whose
         # bbox_to_anchor is read in FIGURE coordinates, so 1.02 is past the right edge of the
         # whole figure and `bbox_inches="tight"` grows the page to reach it.
         ax.legend(handles, [h.get_label() for h in handles], loc="center left",
-                  bbox_to_anchor=(1.02, 0.5), title="permutation p", labelspacing=1.1,
+                  bbox_to_anchor=(1.02, 0.5), title="permutation p", labelspacing=1.0,
                   handletextpad=0.6, borderaxespad=0, frameon=False,
                   fontsize=6, title_fontsize=6)
 
     src = sub[["interaction", "pair", "source", "target", "prob"]
               + (["pval"] if p_col else [])
               + ([c for c in ("pathway_name", "annotation") if c in sub.columns])]
-    dropped = (f" - {n_pairs_all - len(cols):,} further pair(s) carrying one of these "
-               f"interactions are NOT drawn" if n_pairs_all > len(cols) else "")
+    dropped = (f" - {n_pairs_all - len(pairs):,} further pair(s) carrying one of these "
+               f"interactions are NOT drawn" if n_pairs_all > len(pairs) else "")
     ctx.emit_figure(
         "F5_dotplot", fig,
-        caption=(f"The {len(rows)} strongest ligand-receptor interactions against the "
-                 f"{len(cols)} sender -> receiver pairs that carry them{dropped}. The whole set "
-                 f"is in tables/ccc_edges.csv. Colour is CellChat's communication probability, on "
-                 f"its own scale and not comparable with another method's. " + size_says
-                 + " An empty cell is an interaction that was not significant for that pair, "
-                   "which the panels above may already explain."),
+        caption=(f"The {len(inter)} strongest ligand-receptor interactions (columns) against the "
+                 f"{len(pairs)} sender -> receiver pairs that carry them (rows), both ordered by "
+                 f"their strongest edge{dropped}. The whole set is in tables/ccc_edges.csv. "
+                 f"Colour is CellChat's communication probability, on its own scale and not "
+                 f"comparable with another method's. " + size_says
+                 + " Population names are shortened to their shortest unambiguous tail; the full "
+                   "paths are in the source table. An empty cell is an interaction that was not "
+                   "significant for that pair, which the panels above may already explain."),
         source=src.set_index("interaction"))
     return True
 

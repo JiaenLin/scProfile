@@ -366,6 +366,88 @@ _OVERLAP_BARS = 18      # pairs drawn in F3
 _OVERLAP_ROWS = 200     # pairs written to F3's source table, same order as the bars
 _MAP_PANELS = 4         # regulators drawn in F5
 
+#: HOW AN UNMAPPED REGULATOR IS DRAWN, in one place because it appears on four axes. The prior
+#: supplies a UniProt accession where it has no gene symbol, and `A0A079HLR9` beside `Gata4` on
+#: the same axis is read as a gene by every reader who does not already know the pattern. A
+#: caveat under the figure does not fix that: the eye is on the axis. So the LABEL ITSELF carries
+#: a mark, and the mark is keyed on the panel it appears on.
+#:
+#: MARKED TWICE, ON PURPOSE - a dagger and a colour. Colour alone fails in greyscale and for a
+#: reader with a colour-vision deficiency, which is the whole reason this project ships a palette;
+#: a glyph alone is easy to miss in a column of ninety-degree labels. Together neither has to work
+#: on its own.
+_UNMAPPED_MARK = "†"
+#: Purple, from the shared palette's Tol extension - not one of the hues these panels use for
+#: data, so a coloured LABEL cannot be read as a data category.
+_UNMAPPED_COLOUR = "#AA4499"
+_UNMAPPED_KEY = (_UNMAPPED_MARK + " no gene symbol: a UniProt accession from the prior, "
+                 "not a gene")
+
+
+def _unmapped(names):
+    """The names the prior supplies as a UniProt accession rather than as a gene symbol.
+
+    A set, so a caller can ask about one label without re-matching the pattern per tick.
+    """
+    import re
+    acc = re.compile(_ACCESSION_PATTERN)
+    return {str(n) for n in names if acc.match(str(n))}
+
+
+def _mark(name, unmapped):
+    """`name` with the unmapped mark appended when it is one, unchanged when it is not."""
+    n = str(name)
+    return f"{n} {_UNMAPPED_MARK}" if n in unmapped else n
+
+
+def _colour_marked_ticks(ax, axis, marked):
+    """Tint the tick labels that carry the mark. `marked` is one bool per tick, in tick order."""
+    labs = ax.get_xticklabels() if axis == "x" else ax.get_yticklabels()
+    for t, m in zip(labs, marked):
+        if m:
+            t.set_color(_UNMAPPED_COLOUR)
+
+
+def _diverging():
+    """The one diverging map both result panels use, symmetric about zero by construction.
+
+    BLUE AGAINST WARM, taken from the shared palette rather than from matplotlib, for two reasons
+    a reader can see. It is the diverging pair that survives every common colour-vision
+    deficiency - blue against red is harder for a deuteranope than it looks, and red against green
+    fails outright - and using the palette's own two hues makes the sign mean the SAME THING in
+    every panel of this page: blue is negative in the overlap bars, in the population heatmap and
+    on the per-cell maps.
+
+    THE MIDPOINT IS LIGHT GREY, NOT WHITE. On a white page a white midpoint makes a cell at
+    exactly zero indistinguishable from a hole in the figure, and these panels have real holes -
+    a population whose cells were all set aside carries no mean at all.
+    """
+    from matplotlib.colors import LinearSegmentedColormap
+    return LinearSegmentedColormap.from_list(
+        "activity_diverging",
+        [(0.00, "#0A3A5E"), (0.25, "#0072B2"), (0.42, "#8FC4E2"), (0.50, "#F0F0F0"),
+         (0.58, "#F3B080"), (0.75, "#D55E00"), (1.00, "#6E2F00")])
+
+
+def _symmetric_limit(values, pct=98.0):
+    """A symmetric colour limit at a percentile of |value|, never zero, never NaN.
+
+    THE MAXIMUM IS NOT A SCALE. One extreme cell sets `vmax` for the whole map and everything
+    else lands in the pale middle of it - measured on the first draft of the population panel,
+    where two cells of two hundred and forty held the range and the other two hundred and
+    thirty-eight were a wash. A percentile with the colourbar drawn as EXTENDED says the same
+    thing honestly: values beyond the limit exist and are shown at the end colour.
+    """
+    import numpy as np
+    v = np.abs(np.asarray(values, dtype=float))
+    v = v[np.isfinite(v)]
+    if not v.size:
+        return 1.0, False
+    lim = float(np.percentile(v, pct))
+    if not lim > 0:
+        lim = float(v.max())
+    return (lim if lim > 0 else 1.0), bool((v > lim).any())
+
 
 def _detected(ctx):
     """(genes present, detected genes per cell) - decoupler's own definition of present.
@@ -456,9 +538,16 @@ def _fig_coverage(ctx, cov, min_targets, source_path):
     survivors' scores are a function of that same number. A prior that matched nothing and a
     ranking that is just regulon size are the two ways this result is about the prior rather than
     about the data, and they are one question.
+
+    ONE KEY FOR BOTH PANELS, at the foot of the figure. The bars and the points are the same
+    regulators drawn twice, so two legends would key one population as if it were two - and the
+    unmapped regulators, which are a property of the prior and not of either panel, belong in a
+    key that covers the whole figure.
     """
     import numpy as np
     F, plt = ctx.figure, ctx.plot()
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
     edges, labels = _size_bins(min_targets)
     v = cov["targets_present"].to_numpy(dtype=float)
     counts, dropped_bins = [], []
@@ -468,13 +557,24 @@ def _fig_coverage(ctx, cov, min_targets, source_path):
         dropped_bins.append(lo < min_targets)
     first_scored = int(np.argmin(dropped_bins)) if not all(dropped_bins) else len(edges)
 
-    fig, axs = plt.subplots(1, 2, figsize=(F.DOUBLE, F.SINGLE * 0.72), layout="constrained")
+    fig, axs = plt.subplots(1, 2, figsize=(F.DOUBLE, F.SINGLE * 0.78), layout="constrained")
     ax = axs[0]
     x = np.arange(len(counts))
-    ax.bar(x, counts, width=0.74,
-           color=[F.GREY if d else "#0072B2" for d in dropped_bins])
+    bars = ax.bar(x, counts, width=0.74,
+                  color=[F.GREY if d else "#0072B2" for d in dropped_bins])
+    # THE COUNT IS ON THE BAR. Six bars whose whole content is six integers, and a reader who
+    # needs one of them should not have to measure it against a gridline; this is the panel that
+    # answers "how many regulators did the prior lose here", in the figure rather than in the
+    # source table.
+    ax.bar_label(bars, fmt="{:,.0f}", fontsize=5.5, padding=1.5, color=F.INK)
+    ax.set_ylim(0, max(counts + [1]) * 1.16)
     if 0 < first_scored < len(edges):
         ax.axvline(first_scored - 0.5, color=F.INK, ls="--", lw=0.6)
+        # THE THRESHOLD NAMES ITSELF. A dashed line whose meaning is only in the caption is a
+        # line a reader has to go and look up, and the number it stands for is a parameter of
+        # this run rather than a convention anyone can assume.
+        ax.text(first_scored - 0.42, ax.get_ylim()[1], f"min_targets = {int(min_targets)}",
+                rotation=90, ha="left", va="top", fontsize=5.5, color=F.INK)
     ax.set_xticks(x)
     ax.set_xticklabels(labels)
     ax.set_xlabel("targets of that regulator present in this matrix")
@@ -484,27 +584,88 @@ def _fig_coverage(ctx, cov, min_targets, source_path):
     ax2 = axs[1]
     sc = cov[cov["scored"]]
     rho = _spearman(sc["targets_present"], sc["mean_abs_activity"])
-    ax2.scatter(sc["targets_present"], sc["mean_abs_activity"], s=5, color="#0072B2",
-                alpha=0.65, linewidths=0)
-    F.rasterize_points(ax2)
-    ax2.set_xscale("log")
-    ax2.set_xlabel("targets present (log)")
-    ax2.set_ylabel("mean |activity| over cells")
-    ax2.set_title(f"score against regulon size (Spearman {rho:+.2f})", loc="left")
+    # THE UNMAPPED ONES ARE A SERIES OF THEIR OWN, and this is the panel where that pays for
+    # itself twice: it keys the mark the other panels put on their axes, and it answers a
+    # question the caveat cannot - whether the regulators with no gene symbol are also the ones
+    # the prior barely matched, which would make them a coverage artefact rather than a result.
+    unm = _unmapped(sc.index)
+    # `dtype=bool` IS LOAD-BEARING. An empty list of regulators makes an empty float array, and
+    # `~` on a float array raises - so a run where nothing was scored died in the figure step
+    # rather than drawing the panel that says nothing was scored.
+    is_acc = np.array([str(s) in unm for s in sc.index], dtype=bool)
+    if len(sc):
+        ax2.scatter(sc["targets_present"][~is_acc], sc["mean_abs_activity"][~is_acc], s=5,
+                    color="#0072B2", alpha=0.65, linewidths=0)
+        if is_acc.any():
+            ax2.scatter(sc["targets_present"][is_acc], sc["mean_abs_activity"][is_acc], s=11,
+                        marker="^", facecolors="none", edgecolors=_UNMAPPED_COLOUR,
+                        linewidths=0.6)
+        F.rasterize_points(ax2)
+        ax2.set_xscale("log")
+        ax2.set_xlabel("targets present in this matrix (log scale)")
+        ax2.set_ylabel("mean |activity| over cells  (|t|)")
+        ax2.set_title(f"score against regulon size (Spearman {rho:+.2f}, n = {len(sc):,})"
+                      if np.isfinite(rho) else
+                      f"score against regulon size (n = {len(sc):,}, too few to correlate)",
+                      loc="left")
+    else:
+        # AN EMPTY PANEL IS NOT AN ANSWER. With nothing scored this drew a blank log axis
+        # ticked 10^0 to 10^1 under the title "Spearman +nan" - a panel that looks broken
+        # where the finding is that the prior did not meet these gene names at all, which is
+        # what the panel beside it is showing.
+        ax2.text(0.5, 0.5, "no regulator was scored, so there is\nnothing to plot against "
+                           "regulon size", transform=ax2.transAxes, ha="center", va="center",
+                 fontsize=7, color=F.INK)
+        ax2.set_xticks([])
+        ax2.set_yticks([])
+        for s in ax2.spines.values():
+            s.set_visible(False)
+        ax2.set_title("score against regulon size", loc="left")
+
+    # THE KEY NAMES WHAT IS ON THE PANEL. Keyed on the bins rather than on their contents it
+    # offered "scored" in blue under a panel where every bar was grey, which is a key to a
+    # colour the reader cannot find.
+    handles = []
+    if any(c and not d for c, d in zip(counts, dropped_bins)):
+        handles.append(Patch(facecolor="#0072B2", label="scored"))
+    if any(c and d for c, d in zip(counts, dropped_bins)):
+        handles.append(Patch(facecolor=F.GREY,
+                             label=f"not scored: under {int(min_targets)} targets present"))
+    if is_acc.any():
+        handles.append(Line2D([], [], marker="^", linestyle="none", markerfacecolor="none",
+                              markeredgecolor=_UNMAPPED_COLOUR, markeredgewidth=0.6,
+                              markersize=4,
+                              label=f"{int(is_acc.sum()):,} with no gene symbol: a UniProt "
+                                    f"accession, marked {_UNMAPPED_MARK} throughout"))
+    # ONE ROW, UNDER BOTH PANELS. Stacked it was a paragraph in the corner of a figure whose
+    # panels are 174 mm wide; a key is read against the thing it keys, not below one of them.
+    fig.legend(handles=handles, loc="outside lower center", ncol=len(handles), fontsize=6,
+               frameon=False, handlelength=1.4, handletextpad=0.5, borderaxespad=0.2,
+               columnspacing=1.6)
 
     n_scored = int(cov["scored"].sum())
+    n_unmapped_all = len(_unmapped(cov.index))
     ctx.emit_figure(
         "F1_prior_coverage", fig,
         caption=(f"LEFT: every regulator in the prior, binned by how many of its targets are "
-                 f"present in this matrix. Bars left of the dashed line fall below "
+                 f"present in this matrix, with the count on each bar. Bars left of the dashed "
+                 f"line fall below "
                  f"min_targets={min_targets} and were not scored; {n_scored:,} of "
                  f"{len(cov):,} regulators were. A prior whose mass sits in the low bins has not "
                  f"met these gene names - the usual cause is an identifier mismatch or an "
                  f"organism the prior barely covers, and neither of them errors. RIGHT: for the "
-                 f"scored regulators, mean |activity| against that same target count. A strong "
+                 f"scored regulators, mean |activity| against that same target count, both on the "
+                 f"t-value scale the run produced. A strong "
                  f"positive relation means the ranking below is largely a ranking of regulon "
                  f"size. Presence is counted against the DETECTED genes, which is what decoupler "
-                 f"matches against after dropping all-zero features."),
+                 f"matches against after dropping all-zero features. {n_unmapped_all:,} of the "
+                 f"prior's {len(cov):,} regulators have NO GENE SYMBOL and are named by their "
+                 f"UniProt accession, {int(is_acc.sum()):,} of them among the scored; those are "
+                 f"the open triangles on the right, and they are marked "
+                 f"{_UNMAPPED_MARK} wherever they are named on an axis in this report and "
+                 f"flagged in the `no_gene_symbol` column of the source table. They are kept - "
+                 f"one of them may carry real signal - and an unmapped identifier is not a novel "
+                 f"one."),
         source=source_path)
 
 
@@ -515,23 +676,32 @@ def _fig_depth(ctx, frame, rho):
     sparsely detected cell. So this relation is expected to be nonzero and the panel is not a
     pass/fail: it is the number a reader needs before reading any difference between populations,
     because populations differ in depth.
+
+    BINNED, NOT SUBSAMPLED. It drew 20,000 of the cells as points, which on a cohort is a solid
+    block of one colour: the core - where nearly every cell is - saturates, and the shape the
+    panel exists to show is only visible in the sparse fringe, which is the part that matters
+    least. Counting cells into hexagons draws EVERY cell, shows the density that the overplotted
+    version hid, and removes the one thing a reader could not check by looking: whether the
+    panel in front of them was the whole dataset or a sample of it.
     """
     import numpy as np
     F, plt = ctx.figure, ctx.plot()
+    from matplotlib.colors import LinearSegmentedColormap
     x = frame["genes_detected"].to_numpy(dtype=float)
     y = frame["mean_abs_activity"].to_numpy(dtype=float)
     ok = np.isfinite(x) & np.isfinite(y)
-    # A SUBSAMPLE IS DRAWN AND THE WHOLE IS MEASURED. 100,000 overplotted points hide the shape
-    # they are meant to show, and rho is computed on every cell either way - the caption says so,
-    # because a reader cannot tell a subsampled panel from a complete one by looking.
-    idx = np.where(ok)[0]
-    shown = idx
-    if idx.size > 20000:
-        shown = np.random.default_rng(0).choice(idx, 20000, replace=False)
 
-    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.8))
-    ax.scatter(x[shown], y[shown], s=1.5, color="#0072B2", alpha=0.35, linewidths=0)
-    F.rasterize_points(ax)
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.86), layout="constrained")
+    # One hue, light to dark, so density reads as density in greyscale and for every form of
+    # colour vision; log-scaled counts because a cohort's cells pile into a few bins and a linear
+    # count scale then renders every other bin as the palest colour it has.
+    dens = LinearSegmentedColormap.from_list(
+        "cell_density", ["#EAF3FA", "#9CC7E4", "#0072B2", "#0A3A5E"])
+    hb = None
+    if int(ok.sum()):
+        hb = ax.hexbin(x[ok], y[ok], gridsize=48, bins="log", cmap=dens, mincnt=1,
+                       linewidths=0)
+        hb.set_rasterized(True)
     q = np.unique(np.quantile(x[ok], np.linspace(0, 1, 21))) if ok.any() else np.array([])
     if q.size > 2:
         b = np.digitize(x, q[1:-1], right=False)
@@ -542,21 +712,33 @@ def _fig_depth(ctx, frame, rho):
                 cx.append(float(np.median(x[m])))
                 cy.append(float(np.median(y[m])))
         if len(cx) > 1:
-            ax.plot(cx, cy, color=F.INK, lw=1.0)
+            # Vermillion over the blue density, and NAMED AT ITS OWN END rather than in a legend
+            # box: a legend has to be placed somewhere, and everywhere in this panel is data.
+            ax.plot(cx, cy, color="#D55E00", lw=1.2, solid_capstyle="round")
+            ax.annotate("median", (cx[-1], cy[-1]), textcoords="offset points", xytext=(3, 0),
+                        fontsize=6, color="#D55E00", va="center", ha="left")
+    if hb is not None:
+        cb = fig.colorbar(hb, ax=ax, fraction=0.045, pad=0.02)
+        cb.outline.set_visible(False)
+        cb.set_label("cells per hexagon (log scale)")
     ax.set_xlabel("genes detected in the cell")
-    ax.set_ylabel("mean |activity| over regulators")
-    ax.set_title(f"Spearman {rho:+.2f}", loc="left")
+    ax.set_ylabel("mean |activity| over regulators  (|t|)")
+    ax.set_title(f"activity against detection depth\nSpearman {rho:+.2f} over "
+                 f"{int(ok.sum()):,} cells", loc="left")
     ctx.emit_figure(
         "F2_detection_depth", fig,
-        caption=(f"One point per cell: how many genes were detected in it against how large its "
-                 f"activity scores are. The line is the median in twenty depth bins. ULM scores a "
+        caption=(f"Cells counted into hexagons: how many genes were detected in a cell against "
+                 f"how large its activity scores are, on the t-value scale. The line is the "
+                 f"median in twenty depth bins, drawn where a bin holds at least twenty cells. "
+                 f"ULM scores a "
                  f"cell by correlating the regulator's weights with that cell's expression across "
                  f"every gene, so a shallow cell has fewer non-zero entries carrying the same "
                  f"correlation and some relation here is expected. It matters because populations "
                  f"differ in depth: with Spearman {rho:+.2f}, a difference in activity between "
                  f"two populations of different depth cannot be read as biology without checking "
-                 f"this first. Points are a random subsample of at most 20,000 cells drawn with a "
-                 f"fixed seed; the coefficient and the source table cover every cell."),
+                 f"this first. Every cell with both quantities finite is drawn - the hexagons are "
+                 f"cell counts on a log scale, not a subsample - and the coefficient and the "
+                 f"source table cover the same cells."),
         source=frame)
 
 
@@ -581,17 +763,45 @@ def _fig_overlap(ctx, pairs, n_sources, thr):
     top = ordered.head(_OVERLAP_BARS)
     if not len(top):
         return
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.6, 0.19 * len(top) + 0.9)))
+    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.8, 0.19 * len(top) + 1.25)),
+                           layout="constrained")
     y = np.arange(len(top))
     vals = top["corr"].to_numpy(dtype=float)
+    # THE SIGN MEANS THE SAME THING IN EVERY PANEL OF THIS PAGE. These bars were blue for a
+    # positive correlation while the heatmap and the maps below were blue for a NEGATIVE
+    # activity - the same two hues carrying opposite signs in one report, which is worse than
+    # either convention alone because nothing on either panel says a convention was chosen.
+    ax.set_axisbelow(True)
+    ax.grid(axis="x", color="#ECECEC", lw=0.4)
     ax.barh(y, vals, height=0.72,
-            color=["#D55E00" if v < 0 else "#0072B2" for v in vals])
+            color=["#0072B2" if v < 0 else "#D55E00" for v in vals], zorder=2)
+    unm = _unmapped(list(top["source1"]) + list(top["source2"]))
     ax.set_yticks(y)
-    ax.set_yticklabels([f"{a} / {b}" for a, b in zip(top["source1"], top["source2"])])
+    ax.set_yticklabels([f"{_mark(a, unm)} / {_mark(b, unm)}"
+                        for a, b in zip(top["source1"], top["source2"])])
+    _colour_marked_ticks(ax, "y", [str(a) in unm or str(b) in unm
+                                   for a, b in zip(top["source1"], top["source2"])])
     ax.invert_yaxis()
-    ax.axvline(0, color=F.INK, lw=0.6)
+    ax.axvline(0, color=F.INK, lw=0.6, zorder=3)
+    # THE THRESHOLD THE CAPTION COUNTS, DRAWN. The sentence "n pairs exceed |0.7|" sat under a
+    # panel with no 0.7 on it, so the one number a reader might act on was the one thing the
+    # figure did not show.
+    for s in (-1, 1):
+        ax.axvline(s * float(thr), color=F.INK, ls=":", lw=0.6, zorder=3)
+    # ANCHORED TO THE AXES, NOT TO A ROW. In data coordinates the label floated further above
+    # the panel the fewer bars there were, because "one row above the first" is a different
+    # distance in every version of this figure.
+    ax.text(float(thr), 1.005, f"|{thr}|", transform=ax.get_xaxis_transform(), fontsize=5.5,
+            color=F.INK, ha="center", va="bottom")
     ax.set_xlim(-1, 1)
-    ax.set_xlabel("correlation between the two regulators' target weights")
+    ax.set_xticks([-1, -0.5, 0, 0.5, 1])
+    # TWO LINES, BECAUSE THE PANEL IS 85 mm WIDE. On one line the label ran off the edge of the
+    # figure and `(r)` - the units - was the half that fell off.
+    ax.set_xlabel("correlation between the two regulators'\ntarget weights  (r)")
+    if unm:
+        # NOT the y label: rotated ninety degrees up the left margin, a footnote reads as the
+        # name of the axis, which is the one thing it is not.
+        fig.supxlabel(_UNMAPPED_KEY, fontsize=5.5, color=_UNMAPPED_COLOUR)
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
     n_red = int((pairs["corr"].abs() > thr).sum())
@@ -604,45 +814,80 @@ def _fig_overlap(ctx, pairs, n_sources, thr):
                  f"most of its targets with the same signs and will produce near-identical "
                  f"activities in every cell - not two findings. A pair near -1 shares targets "
                  f"with opposing signs and will be anti-correlated by construction. {n_red:,} "
-                 f"pair(s) among the {n_sources:,} scored regulators exceed |{thr}|. The bars are "
+                 f"pair(s) among the {n_sources:,} scored regulators exceed |{thr}|, the dotted "
+                 f"lines. The bars are "
                  f"the head of {len(pairs):,} compared pairs ranked by |correlation|; the source "
                  f"table holds the strongest {n_src_rows:,} of them, in that same order, so every "
-                 f"bar drawn is in it."),
+                 f"bar drawn is in it. A name marked {_UNMAPPED_MARK} is an unmapped UniProt "
+                 f"accession rather than a gene symbol."),
         source=ordered.head(_OVERLAP_ROWS))
 
 
-def _fig_by_population(ctx, sub, ranked_by, n_ranked):
+def _fig_by_population(ctx, sub, ranked_by, n_ranked, sizes=None):
     """F4 - the answer: mean activity per population, for the regulators that vary most.
 
     `ranked_by` is the criterion the caller actually ranked on, printed rather than assumed. The
     caption used to name the spread of the population means unconditionally, which is false in the
     branch run() falls into when there are fewer than two populations to spread across - and a
     caption naming a criterion the code did not use is a figure that cannot be checked.
+
+    `sizes` is the cell count behind each row. A mean over thirty cells and a mean over thirty
+    thousand are one row each in a heatmap and look equally solid; the count is the only thing
+    on the panel that separates them.
     """
     import numpy as np
     F, plt = ctx.figure, ctx.plot()
     vals = np.asarray(sub.to_numpy(), dtype=float)
-    lim = float(np.nanmax(np.abs(vals))) if np.isfinite(vals).any() else 1.0
-    lim = lim if lim > 0 else 1.0
+    # A ROBUST LIMIT, and the colourbar says so by being drawn with arrowheads. The maximum ran
+    # the scale before: a single extreme population-by-regulator cell set it, and the rest of the
+    # map was pale.
+    lim, clipped = _symmetric_limit(vals, 98.0)
+    cmap = _diverging()
+    cmap.set_bad("#FFFFFF")
     # `constrained`, because the column labels are regulator names rotated vertical and the row
     # labels are whatever the annotation calls its populations: without it the colourbar is drawn
     # across them.
-    fig, ax = plt.subplots(figsize=(F.DOUBLE, max(1.8, 0.20 * len(sub) + 1.6)),
+    fig, ax = plt.subplots(figsize=(F.DOUBLE, max(1.8, 0.20 * len(sub) + 1.9)),
                            layout="constrained")
-    im = ax.imshow(vals, aspect="auto", cmap="coolwarm", vmin=-lim, vmax=lim,
+    im = ax.imshow(vals, aspect="auto", cmap=cmap, vmin=-lim, vmax=lim,
                    interpolation="nearest")
+    # A CELL WITH NO MEAN IS NOT A CELL AT ZERO. It happens where every cell of a population was
+    # set aside by the scorer, and rendered as blank it reads as a population with no activity -
+    # the opposite of nothing having been measured.
+    miss = ~np.isfinite(vals)
+    if miss.any():
+        my, mx = np.nonzero(miss)
+        ax.scatter(mx, my, marker="x", s=9, linewidths=0.6, color=F.INK)
     ax.set_xticks(np.arange(sub.shape[1]))
-    # Shortened to the shortest unambiguous tail: these are annotation PATHS, and rotated
-    # ninety degrees the full ones take more height than the data. The source table keeps
-    # the whole path.
-    _short = F.short_labels(list(sub.columns))
-    ax.set_xticklabels([_short[c] for c in sub.columns], rotation=90)
+    # THE COLUMNS ARE REGULATOR NAMES AND THE ROWS ARE THE ANNOTATION'S PATHS - which is the
+    # other way round from how this read. `short_labels` cuts a hierarchical path to its shortest
+    # unambiguous tail, and it was being applied to the regulator names, where there is no path to
+    # cut and it does nothing, while the rows carried paths at full length across the left margin.
+    unm = _unmapped(sub.columns)
+    ax.set_xticklabels([_mark(c, unm) for c in sub.columns], rotation=90)
+    _colour_marked_ticks(ax, "x", [str(c) in unm for c in sub.columns])
+    _short = F.short_labels(list(sub.index))
+    rows = [_short[str(r)] for r in sub.index]
+    if sizes is not None:
+        rows = [f"{r}  (n = {int(sizes.get(str(i), 0)):,})" if str(i) in sizes else r
+                for r, i in zip(rows, sub.index)]
     ax.set_yticks(np.arange(sub.shape[0]))
-    ax.set_yticklabels(list(sub.index))
+    ax.set_yticklabels(rows)
+    # White cell borders: at twenty columns the eye cannot follow a row across the map without
+    # them, and a mis-read row is a regulator attributed to the wrong population.
+    ax.set_xticks(np.arange(-0.5, sub.shape[1], 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, sub.shape[0], 1), minor=True)
+    ax.grid(which="minor", color="white", lw=0.5)
+    ax.tick_params(which="minor", length=0)
     ax.tick_params(length=0)
+    if unm:
+        ax.set_xlabel(_UNMAPPED_KEY, color=_UNMAPPED_COLOUR, fontsize=6)
     for s in ax.spines.values():
         s.set_visible(False)
-    cb = fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02)
+    # THE BAR IS AS TALL AS THE MAP. A colourbar's height follows its aspect, not the axes it
+    # belongs to, so at the default it floated as a short ribbon beside a tall heatmap.
+    cb = fig.colorbar(im, ax=ax, fraction=0.02, pad=0.02, aspect=max(8.0, 2.6 * sub.shape[0]),
+                      extend="both" if clipped else "neither")
     cb.outline.set_visible(False)
     cb.set_label("mean activity (t-value)")
     ctx.emit_figure(
@@ -651,10 +896,17 @@ def _fig_by_population(ctx, sub, ranked_by, n_ranked):
                  f"regulators the ranking covers, the highest by {ranked_by}. That is a ranking of "
                  f"VARIABILITY and not of importance, and every scored regulator is in the tables "
                  f"whether or not it is drawn here. The rows are every population the annotation "
-                 f"names; the "
+                 f"names, with the number of cells each mean is taken over; the "
                  f"colour scale is symmetric about zero because the sign is the whole of the "
                  f"claim: positive is the regulon's targets moving with their weights, negative "
-                 f"against them. Read it against F1 and F3 - a regulator scored on few targets, "
+                 f"against them. It is clipped at +/-{lim:.2f}, the 98th percentile of |mean "
+                 f"activity| in this panel, so one extreme cell cannot pale the rest"
+                 + (" - the arrowheads on the colourbar mark values beyond it" if clipped else "")
+                 + (". An x marks a population-regulator cell with no mean at all"
+                    if miss.any() else "")
+                 + f". A regulator "
+                 f"marked {_UNMAPPED_MARK} has no gene symbol and is named by its UniProt "
+                 f"accession. Read it against F1 and F3 - a regulator scored on few targets, "
                  f"or one that shares its targets with its neighbour in this panel, is not an "
                  f"independent result. Annotator sentinels are not shown as populations."),
         source=sub)
@@ -666,6 +918,13 @@ def _fig_map(ctx, xy, acts, names, axis_name, obsm_key, ranked_by):
     Four panels is what this figure HOLDS. The count and the criterion are printed in the caption
     because a page showing four regulators out of several hundred, with nothing saying how they
     were chosen or how many there were, reads as a selection somebody made on the biology.
+
+    ONE SCALE ACROSS THE GRID, AND ONE COLOURBAR. Each panel used to scale itself to its own 98th
+    percentile, which makes a grid that cannot be compared: the regulator with the largest
+    activities and the one with the smallest are drawn in the same reds, and the only way to
+    notice is to read four colourbars against each other. The shared limit is stated, and each
+    panel still prints its OWN 98th percentile so the magnitude it lost to the shared scale is
+    on the panel rather than gone.
     """
     import numpy as np
     import pandas as pd
@@ -676,8 +935,25 @@ def _fig_map(ctx, xy, acts, names, axis_name, obsm_key, ranked_by):
         return
     ncol = 2 if len(names) > 1 else 1
     nrow = (len(names) + ncol - 1) // ncol
-    fig, axs = plt.subplots(nrow, ncol, figsize=(F.DOUBLE, 3.1 * nrow), squeeze=False,
+    # ONE PANEL IS A SINGLE-COLUMN FIGURE. Drawn at double width it was one manifold stretched
+    # to 174 mm - and a layout drawn with unequal axes is no longer the picture it was made to
+    # be, which is the whole reason this panel is drawn on a layout and not on a representation.
+    fig, axs = plt.subplots(nrow, ncol, figsize=(F.DOUBLE if ncol > 1 else F.SINGLE,
+                                                 3.15 * nrow), squeeze=False,
                             layout="constrained")
+    drawn = np.concatenate([np.asarray(acts[n].to_numpy(), dtype=float) for n in names])
+    lim, clipped = _symmetric_limit(drawn, 98.0)
+    cmap = _diverging()
+    unm = _unmapped(names)
+    # COUNTED ONCE, OVER THE PANELS DRAWN. The scorer sets a whole cell aside rather than one of
+    # its regulators, so this is the same set in every panel - but counting it inside the loop
+    # left the note describing whichever panel happened to be drawn last.
+    n_unscored = int((~np.isfinite(np.column_stack(
+        [np.asarray(acts[n].to_numpy(), dtype=float) for n in names]))).any(axis=1).sum())
+    # The axes are named ONCE, on the bottom-left panel, where the x label falls under the grid
+    # instead of between two rows of it - and where a reader looks for it.
+    named = axs[-1, 0]
+    pts = None
     for ax, name in zip(axs.ravel(), names):
         a = np.asarray(acts[name].to_numpy(), dtype=float)
         fin = np.isfinite(a)
@@ -685,18 +961,42 @@ def _fig_map(ctx, xy, acts, names, axis_name, obsm_key, ranked_by):
         # manifold that reads as a region with no cells in it.
         if (~fin).any():
             ax.scatter(xy[~fin, 0], xy[~fin, 1], s=1.5, color=F.GREY, linewidths=0)
-        lim = float(np.nanpercentile(np.abs(a[fin]), 98)) if fin.any() else 1.0
-        lim = lim if lim > 0 else 1.0
         o = np.argsort(np.abs(a[fin]))
-        pts = ax.scatter(xy[fin][o, 0], xy[fin][o, 1], c=a[fin][o], s=1.5, cmap="coolwarm",
+        pts = ax.scatter(xy[fin][o, 0], xy[fin][o, 1], c=a[fin][o], s=1.5, cmap=cmap,
                          vmin=-lim, vmax=lim, linewidths=0)
         F.rasterize_points(ax)
-        _clean(ax, F, axis_name)
-        ax.set_title(name, loc="left")
-        cb = fig.colorbar(pts, ax=ax, fraction=0.045, pad=0.02)
-        cb.outline.set_visible(False)
+        # EQUAL, ALWAYS. A layout's two coordinates are in the same units and a panel that
+        # scales them differently shows a manifold that does not exist.
+        ax.set_aspect("equal")
+        _clean(ax, F, axis_name if ax is named else "")
+        ax.set_title(_mark(name, unm), loc="left",
+                     color=_UNMAPPED_COLOUR if str(name) in unm else F.INK)
+        if len(names) > 1:
+            # The magnitude the shared scale costs this panel, on this panel. With one panel
+            # the shared limit IS this panel's, and printing it twice says nothing.
+            own, _ = _symmetric_limit(a, 98.0)
+            ax.text(0.99, 0.01, f"98th pct |t| = {own:.2f}", transform=ax.transAxes,
+                    ha="right", va="bottom", fontsize=5.5, color=F.INK)
     for ax in axs.ravel()[len(names):]:
         ax.set_visible(False)
+    # THE BAR IS AS TALL AS THE GRID IT SERVES. One colourbar for four panels floats beside
+    # them at the default aspect, and a key that does not line up with what it keys reads as
+    # belonging to whichever panel it happens to sit next to.
+    cb = fig.colorbar(pts, ax=axs.ravel().tolist(), fraction=0.022, pad=0.01,
+                      aspect=max(12.0, 20.0 * nrow),
+                      extend="both" if clipped else "neither")
+    cb.outline.set_visible(False)
+    cb.set_label("activity (t-value)" + (", one scale for every panel" if len(names) > 1
+                                        else ""))
+    note = []
+    if n_unscored:
+        note.append(f"grey: {n_unscored:,} cell(s) with no score")
+    if unm:
+        note.append(_UNMAPPED_KEY)
+    if note:
+        # Under the grid rather than in a legend box: every square inch inside these panels is
+        # data, and a key laid over a manifold hides the cells it is explaining.
+        fig.supxlabel("\n".join(note), fontsize=6, color=F.INK)
     # THE COORDINATE COLUMNS ARE PREFIXED. A regulator called `x` would otherwise overwrite the
     # x coordinate in the source table and nothing would say so - the prior chooses these names,
     # this plugin does not, and a name it has never seen is exactly what it must survive.
@@ -710,10 +1010,16 @@ def _fig_map(ctx, xy, acts, names, axis_name, obsm_key, ranked_by):
                  f"scored regulators the ranking covers - the highest by {ranked_by}. "
                  f"{len(names)} is how many "
                  f"panels this figure holds and not a statement about the data; every regulator's "
-                 f"per-cell score is in obsm[X_tf_activity] whether or not it is drawn. Each "
-                 f"panel has its own symmetric scale, clipped at the 98th percentile of "
-                 f"|activity| for that regulator, so panels show shape and not relative "
-                 f"magnitude. Grey cells carry no score. Every cell is drawn including those an "
+                 f"per-cell score is in obsm[X_tf_activity] whether or not it is drawn. All "
+                 f"panels share ONE symmetric scale, clipped at +/-{lim:.2f} - the 98th "
+                 f"percentile of |activity| pooled over the regulators drawn - so a panel that "
+                 f"looks weaker IS weaker"
+                 + ("; each panel also prints its own 98th percentile. " if len(names) > 1
+                    else ". ")
+                 + f"Grey cells carry no score. The axes are named once, on the bottom-left "
+                 f"panel, and every panel is drawn on the same layout. A regulator marked {_UNMAPPED_MARK} has no gene "
+                 f"symbol and is named by its UniProt accession. Every cell is drawn including "
+                 f"those an "
                  f"annotator declined to type: the score is per cell and does not depend on the "
                  f"label. The layout is the object's own - this plugin computes none - so a "
                  f"region where the layout tore the manifold looks the same here as everywhere "
@@ -873,6 +1179,11 @@ def run(ctx):
         per_src["frac_cells_p_below_0.05"] = sig.sum(axis=0) / max(1, n_cells_scored)
     cov = cov.join(per_src, how="left")
     cov.index.name = "source"
+    # THE MARK ON THE AXES IS IN THE TABLE TOO. Four panels now put a dagger beside a regulator
+    # the prior could give no gene symbol for, and a mark a reader cannot resolve to a list is a
+    # mark they have to take on trust: this column is that list, in the file those panels cite.
+    _unm = _unmapped(cov.index)
+    cov["no_gene_symbol"] = [str(s) in _unm for s in cov.index]
     cov = cov.sort_values(["scored", "targets_present"], ascending=[False, False])
     cov_path = ctx.emit_table("regulator_coverage", cov)
 
@@ -930,9 +1241,13 @@ def run(ctx):
     # `activity_by_label.csv` with an `UNRESOLVED` row over 2,139 cells, and the host's own check
     # reported it as a declaration defect. `ctx.populations()` is the host's answer to the
     # question, so every plugin gives the same one and the caveat cannot be forgotten.
-    by_label, no_pop_why = None, ""
+    by_label, no_pop_why, pop_n = None, "", None
     if p.groups is not None and len(p.groups):
         by_label = acts[p.mask].groupby(p.groups).mean()
+        # HOW MANY CELLS EACH OF THOSE MEANS IS OVER. A heatmap row drawn from thirty cells and
+        # one drawn from thirty thousand are the same height and the same colour, and nothing on
+        # the panel separates them unless the count travels with the label.
+        pop_n = pd.Series(p.groups).astype(str).value_counts()
         # THE INDEX IS NAMED. Grouping by a bare array leaves the index with no name at all, so
         # the CSV ships with an empty first header cell - a column of cell-type names that nothing
         # in the file says is a column of cell-type names, in the one table a reader opens by hand.
@@ -1015,7 +1330,7 @@ def run(ctx):
     # say the same thing twice, once in the wrong tone.
     if by_label is not None and len(by_label) and ranked:
         _fig_by_population(ctx, by_label[ranked[:int(ctx.config["top_regulators"])]],
-                           ranked_by, len(ranked))
+                           ranked_by, len(ranked), sizes=pop_n)
     else:
         ctx.log("    F4_by_population not drawn: "
                 + (no_pop_why or "no regulator could be ranked"))

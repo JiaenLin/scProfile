@@ -285,15 +285,70 @@ def _clean(ax, F, key=None):
     looked up; a name derived from it cannot.
 
     A publication panel names its axes even where the values are meaningless - an unlabelled
-    embedding is the commonest reason a reviewer asks what they are looking at.
+    embedding is the commonest reason a reviewer asks what they are looking at. In a GRID of
+    panels drawn on one layout the caller names the first panel of each row and not all of them:
+    the same two words repeated six times is clutter, and the axes are identical by construction.
+
+    EQUAL ASPECT, ALWAYS. Without it each panel stretches its copy of the manifold to whatever
+    shape its grid cell happens to be, so six pictures of one embedding come out six different
+    shapes and a reader compares outlines that differ for a layout reason.
     """
     ax.set_xticks([])
     ax.set_yticks([])
+    ax.set_aspect("equal")
     for s in ax.spines.values():
         s.set_visible(False)
     if key:
         ax.set_xlabel(F.basis_label(key, 1), loc="left")
         ax.set_ylabel(F.basis_label(key, 2), loc="bottom")
+
+
+def _fit_to_column(fig, target):
+    """Shrink the canvas so the SAVED panel is `target` inches wide, legend and labels included.
+
+    `savefig(bbox_inches="tight")` writes the figure PLUS everything hanging outside it - a legend
+    placed in the margin by `legend_outside`, a long tick label - so a panel declared at a journal
+    column width leaves a file WIDER than the column it was declared at. Measured on this
+    plugin's own six panels: 4.08 in and 5.74 in for two figures declared at the 85 mm single
+    column, 7.11 in for one declared at the 174 mm double. A file 22% over its column is scaled
+    down at typesetting, and that is exactly where a 7 pt label becomes 5.6 pt.
+
+    The overhang is TEXT, and text does not change size with the canvas, so it can be measured and
+    taken off the canvas width. MEASURED MORE THAN ONCE, because the two are not independent: an
+    axis label sits inside the canvas until the canvas is small enough that it does not fit, and
+    then it becomes overhang too. One pass left a panel declared at 3.35 in saving at 3.60; three
+    converge. Never enlarging - a panel already inside its column is left alone.
+    """
+    try:
+        for _ in range(3):
+            fig.canvas.draw()
+            w, h = fig.get_size_inches()
+            bb = fig.get_tightbbox(fig.canvas.get_renderer())
+            over = max(0.0, float(bb.width) - float(w))
+            new = max(0.35 * target, target - over)
+            if new >= w - 0.02:
+                break
+            fig.set_size_inches(new, h)
+    except Exception:                                                         # noqa: BLE001
+        pass                        # a figure that will not measure is still a figure worth having
+    return fig
+
+
+def _ink_on(colour, F):
+    """Black or white, whichever is legible ON `colour` - for a median line or a cell label.
+
+    A dark facecolour with a near-black median drawn on it is a box with NO median in it, and the
+    median is the one number a box plot exists to show. Four of this palette's twelve hues are
+    dark enough for that (`#332288`, `#117733`, `#661100`, `#882255`), so the line colour has to
+    follow the fill rather than be fixed.
+    """
+    try:
+        c = str(colour).lstrip("#")
+        r, g, b = (int(c[i:i + 2], 16) / 255 for i in (0, 2, 4))
+        lum = 0.2126 * r + 0.7152 * g + 0.0722 * b               # sRGB relative luminance
+        return "#FFFFFF" if lum < 0.5 else F.INK
+    except Exception:                                                         # noqa: BLE001
+        return F.INK
 
 
 def _colours_for(ctx, labels):
@@ -358,24 +413,52 @@ def _fig_spectrum(ctx, eig, n_requested):
 
     fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.74))
     ax.axhline(1.0, color=F.GREY, lw=0.6, zorder=0)
-    ax.scatter(rank[~is_complex], re_part[~is_complex], s=14, color="#0072B2", linewidths=0,
+    ax.scatter(rank[~is_complex], re_part[~is_complex], s=13, color=F.OKABE_ITO[0], linewidths=0,
                label="real", zorder=3)
     if is_complex.any():
-        ax.scatter(rank[is_complex], re_part[is_complex], s=14, color="#E69F00", linewidths=0,
+        ax.scatter(rank[is_complex], re_part[is_complex], s=13, color=F.OKABE_ITO[1], linewidths=0,
                    label="complex pair", zorder=3)
     F.rasterize_points(ax)
     # THE TWO NUMBERS GO IN THE LEGEND, not in an annotation on the data. Which line is which is
     # the entire content of this panel, and a label placed at an axis limit moves when the data
     # does.
-    if suggested is not None:
-        ax.axvline(suggested + 0.5, color=F.INK, ls="--", lw=0.7,
-                   label=f"eigengap suggests {suggested}")
-    ax.axvline(n_requested + 0.5, color="#CC79A7", ls=":", lw=0.9,
-               label=f"this run asked for {n_requested}")
-    ax.set_xlabel("rank")
+    #
+    # AND WHERE THE TWO NUMBERS ARE THE SAME NUMBER, ONE LINE IS DRAWN, not two. Two lines at one
+    # x coordinate are one line with the second painted over it: the legend then names two
+    # different things and the panel shows one, so agreement between the eigengap and the request
+    # - the best outcome this panel can report - rendered as though a line were missing.
+    agree = suggested is not None and int(suggested) == int(n_requested)
+    if agree:
+        ax.axvline(n_requested + 0.5, color=F.INK, ls="--", lw=0.9,
+                   label=f"eigengap and this run agree: {n_requested}")
+    else:
+        if suggested is not None:
+            ax.axvline(suggested + 0.5, color=F.INK, ls="--", lw=0.7,
+                       label=f"eigengap suggests {suggested}")
+        ax.axvline(n_requested + 0.5, color=F.OKABE_ITO[3], ls=":", lw=1.1,
+                   label=f"this run asked for {n_requested}")
+    ax.set_xlabel("rank of eigenvalue")
     ax.set_ylabel("eigenvalue (real part)")
-    F.legend_outside(fig, ax)
-    gap_says = ("The dashed line is CellRank's own eigengap suggestion; the dotted line is the "
+    # INTEGER TICKS, AND EVERY RANK WHERE THEY FIT. A rank is a count of eigenvalues: the automatic
+    # locator puts 2.5 on the axis, and asked for integers it labels every second one - so a panel
+    # of nine points showed four ticks and a reader counting to the dashed line had to interpolate.
+    from matplotlib.ticker import MaxNLocator
+    if D.size <= 14:
+        ax.set_xticks(rank)
+    else:
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True, nbins=10))
+    ax.set_xlim(0.4, max(D.size, n_requested + 1) + 0.6)
+    # `markerscale=1.0`: the convention's 2.5 exists for a categorical key standing in for dots at
+    # s=2. These are s=13 and already visible, and scaled up the key is three blobs bigger than
+    # any point in the panel.
+    F.legend_outside(fig, ax, markerscale=1.0)
+    _fit_to_column(fig, F.SINGLE)
+    # THE CAPTION HAS TO DESCRIBE THE LINES THAT ARE THERE. With the two numbers equal only one
+    # line is drawn, and a caption promising a dashed line and a dotted one would send a reader
+    # looking for a line the panel does not contain.
+    gap_says = ("The single dashed line is both CellRank's own eigengap suggestion and the number "
+                "this run asked for: they agree. " if agree else
+                "The dashed line is CellRank's own eigengap suggestion; the dotted line is the "
                 "number this run asked for. Where they differ, every count below is the dotted "
                 "line's, not the data's. " if suggested is not None else
                 "The estimator reported NO eigengap, so the only line drawn is the number this "
@@ -413,44 +496,93 @@ def _fig_stability(ctx, coarse_T, source, terminal, threshold, method):
         return
     F, plt = ctx.figure, ctx.plot()
     names = [str(x) for x in coarse_T.index]
-    M = np.asarray(coarse_T, dtype=float)
-    stab = pd.Series(np.diag(M), index=names).sort_values()
+    M0 = np.asarray(coarse_T, dtype=float)
+    # ONE ROW ORDER FOR BOTH PANELS, most stable at the top. The two halves used to be ordered
+    # independently - the matrix in the estimator's own order, the bars sorted by stability - so
+    # row three of the left panel and row three of the right were different states, on a figure
+    # whose whole purpose is to read the diagonal of one against the threshold of the other.
+    # Sorting the matrix on both axes together is a permutation and leaves every probability
+    # where it belongs.
+    idx = list(pd.Series(np.diag(M0), index=names).sort_values(ascending=False).index)
+    pos = [names.index(n) for n in idx]
+    M = M0[np.ix_(pos, pos)]
+    stab = pd.Series(np.diag(M), index=idx)
     term = {str(t) for t in (terminal or [])}
+    # Shortened to the shortest unambiguous tail: these are annotation PATHS, and the full ones
+    # take more room than the data - rotated ninety degrees on the x axis, and a third of the
+    # figure's width on the y. The source table keeps the whole path.
+    _short = F.short_labels(list(names))
+    short = [_short[n] for n in idx]
 
-    fig, axs = plt.subplots(1, 2, figsize=(F.DOUBLE, max(1.9, 0.24 * len(names) + 1.2)),
+    fig, axs = plt.subplots(1, 2, figsize=(F.DOUBLE, max(2.1, 0.26 * len(names) + 1.35)),
                             squeeze=False, layout="constrained")
     ax = axs[0][0]
-    im = ax.imshow(M, cmap="RdYlBu_r", vmin=0, vmax=1, aspect="auto")
+    # SEQUENTIAL, AND THE SAME MAP THE FATE PANEL USES. These are probabilities on [0, 1] with no
+    # meaningful midpoint, and `RdYlBu_r` is a DIVERGING map: it puts a pale pivot at 0.5 that
+    # invents a category boundary halfway up a scale that has none, and its red half is the one
+    # pair of hues this tool's palette exists to avoid.
+    im = ax.imshow(M, cmap="viridis", vmin=0, vmax=1, aspect="equal")
     ax.set_xticks(np.arange(len(names)))
-    # Shortened to the shortest unambiguous tail: these are annotation PATHS, and rotated
-    # ninety degrees the full ones take more height than the data. The source table keeps
-    # the whole path.
-    _short = F.short_labels(list(names))
-    ax.set_xticklabels([_short[n] for n in names], rotation=90)
+    ax.set_xticklabels(short, rotation=90)
     ax.set_yticks(np.arange(len(names)))
-    ax.set_yticklabels(names)
+    ax.set_yticklabels(short)
     ax.set_xlabel("to")
     ax.set_ylabel("from")
     ax.set_title("coarse-grained transitions", loc="left")
+    # THE NUMBERS THEMSELVES, while there is room for them. A stability of 0.958 and one of 0.972
+    # are the same colour to any eye, and on this panel that difference is the whole terminal-state
+    # call. Past eight states the cells are too small for a legible label and the colour is all
+    # there is.
+    if len(names) <= 8:
+        for i in range(len(names)):
+            for j in range(len(names)):
+                ax.text(j, i, f"{M[i, j]:.2f}", ha="center", va="center", fontsize=5,
+                        color="#FFFFFF" if M[i, j] < 0.55 else F.INK)
     cb = fig.colorbar(im, ax=ax, fraction=0.045, pad=0.02)
+    cb.set_label("transition probability", fontsize=6)
     cb.outline.set_visible(False)
 
     ax2 = axs[0][1]
     y = np.arange(len(stab))
     ax2.barh(y, stab.values, height=0.72,
-             color=["#0072B2" if n in term else F.GREY for n in stab.index])
+             color=[F.OKABE_ITO[0] if n in term else F.GREY for n in stab.index])
     ax2.set_yticks(y)
-    ax2.set_yticklabels(stab.index)
-    ax2.set_xlim(0, 1)
+    ax2.set_yticklabels(short)
+    # Same order in both panels means the same direction in both panels: `imshow` puts row 0 at
+    # the top and `barh` puts bar 0 at the bottom, so without this the sort is right and the
+    # picture is upside down against the panel beside it.
+    ax2.invert_yaxis()
+    # ROOM TO THE RIGHT OF 1.0 FOR THE VALUE LABELS. A stability of 0.985 is a bar that reaches
+    # the axis, and its label was printed off the end of the panel and cropped by `bbox_inches`.
+    # The ticks still stop at 1.0, so the scale is unchanged; only the margin is.
+    ax2.set_xlim(0, 1.15)
+    ax2.set_xticks(np.linspace(0, 1, 6))
     ax2.set_xlabel("stability (self-transition probability)")
+    # THE VALUE AT THE END OF THE BAR. "How near was the call" cannot be read off a bar against a
+    # dashed line to three decimal places, and three decimal places is the margin the threshold
+    # is applied at.
+    for yi, v in zip(y, stab.values):
+        ax2.text(v + 0.025, yi, f"{v:.3f}", va="center", ha="left", fontsize=5, color=F.INK)
     # THIS PANEL IS ALSO DRAWN ON THE REFUSAL PATH, where `terminal` is empty - and "terminal in
     # blue" over a chart with no blue bar in it reads as a rendering fault rather than as the
     # result it is. A title has to be true of the figure under it.
     ax2.set_title("terminal in blue" if term else "no state was called terminal", loc="left")
     if method == "stability":
-        ax2.axvline(float(threshold), color=F.INK, ls="--", lw=0.7)
+        # THE LINE IS NAMED ON THE PANEL, not only in the caption. This is the one number that
+        # decided which states the fate probabilities are probabilities OF, and a reader who meets
+        # the figure without the caption sees an unexplained dashed line.
+        #
+        # ABOVE THE AXES, NOT IN A LEGEND. Every bar in this panel starts at zero, so there is no
+        # empty corner inside it: `loc="lower left"` printed the words across the bottom bar, over
+        # the data, which is the one place a key must never go.
+        ax2.axvline(float(threshold), color=F.INK, ls="--", lw=0.8)
+        ax2.annotate(f"terminal at {float(threshold):g}",
+                     xy=(float(threshold), 1.0), xycoords=("data", "axes fraction"),
+                     xytext=(2, 2), textcoords="offset points",
+                     ha="left", va="bottom", fontsize=5.5, color=F.INK)
     ax2.spines["left"].set_visible(False)
     ax2.tick_params(axis="y", length=0)
+    _fit_to_column(fig, F.DOUBLE)
 
     if term:
         thr = (f"The dashed line is the {threshold} threshold that selected them. "
@@ -470,7 +602,9 @@ def _fig_stability(ctx, coarse_T, source, terminal, threshold, method):
                  "coarse-grained onto the states GPCCA found. Right: the diagonal of that matrix, "
                  "which is each state's probability of transitioning to itself and is what "
                  "CellRank means by stability. A terminal state is one a random walk does not "
-                 "leave. " + thr
+                 "leave. Both panels carry the same states in the same order, most stable first; "
+                 "state names are shortened to their shortest unambiguous tail and given whole in "
+                 "the source table. " + thr
                  + ("A state just under the line and a state just over it are nearly the same "
                     "measurement, and only one of them is in the result." if term else
                     "Nothing downstream of this panel exists: with no state to absorb into there "
@@ -511,34 +645,52 @@ def _fig_composition(ctx, macrostates, groups, colours):
     frac = frac.loc[frac.max(axis=1).sort_values().index]
 
     F, plt = ctx.figure, ctx.plot()
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.7, 0.24 * len(frac) + 1.0)))
+    # SHORTENED ON BOTH AXES AND IN THE LEGEND. Measured on twelve populations of hierarchical
+    # names, the legend alone was 2.4 in of a panel declared at the 3.35 in single column - the
+    # key was wider than the data it explained. The source table keeps every path whole.
+    _sm = F.short_labels([str(x) for x in frac.index])
+    _sp = F.short_labels([str(c) for c in frac.columns])
+    n_anchor = tab.sum(axis=1)
+    # THE COLUMN WIDTH FOLLOWS THE NUMBER OF POPULATIONS. A stacked bar of twelve segments inside
+    # the 85 mm single column, once the key has taken its share, leaves each segment about 3 mm
+    # wide - at which point the panel has categories a reader cannot point at. Past eight, it is a
+    # double-column strip.
+    target = F.SINGLE if len(frac.columns) <= 8 else F.DOUBLE
+    fig, ax = plt.subplots(figsize=(target, max(1.7, 0.24 * len(frac) + 1.0)))
     y = np.arange(len(frac))
     left = np.zeros(len(frac))
     for pop in frac.columns:
         v = frac[pop].values
         ax.barh(y, v, left=left, height=0.72, color=(colours or {}).get(str(pop), F.GREY),
-                label=str(pop))
+                label=_sp[str(pop)])
         left = left + v
     ax.set_yticks(y)
-    ax.set_yticklabels(frac.index)
+    # THE DENOMINATOR ON THE ROW IT BELONGS TO. Every fraction here is out of a handful of anchor
+    # cells - CellRank's own default is 30 - and a stacked bar drawn from 30 cells looks exactly
+    # like one drawn from 30,000. A reader who cannot see n cannot tell a composition from noise.
+    ax.set_yticklabels([f"{_sm[str(i)]}  (n={int(n_anchor.get(i, 0)):,})" for i in frac.index])
     # WITHOUT THIS, ROW 0 IS AT THE BOTTOM. `frac` is sorted ascending on its largest fraction, so
     # the most mixed state is row 0 - and matplotlib's y axis grows upward, which put it at the
     # foot of a panel whose caption says "most mixed at the top". The sort, the comment above it
     # and the caption all agreed with each other and disagreed with the picture.
     ax.invert_yaxis()
     ax.set_xlim(0, 1)
+    ax.set_xticks(np.linspace(0, 1, 6))
     ax.set_xlabel("fraction of the state's anchor cells")
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
     F.legend_outside(fig, ax, ncol=1 if len(frac.columns) <= 14 else 2)
+    _fit_to_column(fig, target)
     ctx.emit_figure(
         "F3_macrostate_composition", fig,
         caption=("Population composition of the cells anchoring each macrostate, most mixed at "
-                 "the top. A macrostate is NAMED after whichever population is commonest among "
-                 "these cells, and nothing in that name says whether it was a majority or a bare "
-                 "plurality - a state that is 40% of its own namesake carries that name exactly "
-                 "as confidently as one that is 98%. Counts are of anchor cells only, not of the "
-                 "whole population."),
+                 "the top, with the number of anchor cells beside each state. A macrostate is "
+                 "NAMED after whichever population is commonest among these cells, and nothing in "
+                 "that name says whether it was a majority or a bare plurality - a state that is "
+                 "40% of its own namesake carries that name exactly as confidently as one that is "
+                 "98%. Counts are of anchor cells only, not of the whole population. State and "
+                 "population names are shortened to their shortest unambiguous tail; the source "
+                 "table carries them whole."),
         source=tab)
 
 
@@ -565,49 +717,130 @@ def _fig_certainty(ctx, barcodes, fate, names, groups, colours):
     F, plt = ctx.figure, ctx.plot()
     ncol = 1 if groups is None else 2
     fig, axs = plt.subplots(1, ncol, figsize=(F.DOUBLE if ncol == 2 else F.SINGLE,
-                                              F.SINGLE * 0.85), squeeze=False,
-                            layout="constrained")
+                                              F.SINGLE * 0.92), squeeze=False,
+                            layout="constrained", sharex=True)
     ax = axs[0][0]
-    ax.hist(ent, bins=60, color="#0072B2", linewidth=0)
+    ax.hist(ent, bins=60, color=F.OKABE_ITO[0], linewidth=0)
+    med = float(np.median(ent)) if ent.size else 0.0
+    # THE AXIS IS THE SCALE THE MEASUREMENT LIVES ON, NOT THE RANGE THE DATA HAPPENS TO OCCUPY.
+    # This is the panel the whole page turns on, and with automatic limits it was drawing the
+    # cohort's own 0.13-bit spread across the full width of the axes: a run whose every cell sat
+    # within 1% of the even-split ceiling rendered as a broad, structured distribution, and the
+    # dashed ceiling sat at the right-hand edge looking like an axis limit. Entropy is bounded
+    # below by 0 - one cell, one fate - and above by log2(k), so those are the limits, and the
+    # gap between the distribution and the line is then the finding rather than a rendering
+    # accident. It costs resolution in the case where there IS a spread; the source table has
+    # every cell's value for that.
     if ceiling > 0:
-        ax.axvline(ceiling, color=F.INK, ls="--", lw=0.7)
+        for a in axs[0]:
+            a.set_xlim(0, ceiling * 1.06)
+        ax.axvline(ceiling, color=F.INK, ls="--", lw=0.9)
+        ax.axvline(med, color=F.OKABE_ITO[5], ls="-", lw=0.9)
+        # NAMED WHERE IT IS DRAWN. A dashed line at the edge of a panel is furniture until it is
+        # told what it means, and the caption is not always beside the figure.
+        ax.annotate(f"even split across {k}\nstates = log2({k}) = {ceiling:.2f}",
+                    xy=(ceiling, 1.0), xycoords=("data", "axes fraction"),
+                    xytext=(-3, -2), textcoords="offset points",
+                    ha="right", va="top", fontsize=5.5, color=F.INK)
+        # ON WHICHEVER SIDE OF ITS OWN LINE HAS ROOM, AND ON A WHITE GROUND. Fixed to the left of
+        # the median, this label sat across the histogram whenever the distribution was NOT piled
+        # at the ceiling - vermillion text over blue bars, on the panel carrying the one number
+        # the page turns on.
+        _left = med < 0.5 * ceiling
+        ax.annotate(f"median {med:.2f}\n({100 * (1 - med / ceiling):.0f}% below the ceiling)",
+                    xy=(med, 0.80), xycoords=("data", "axes fraction"),
+                    xytext=(4 if _left else -4, 0), textcoords="offset points",
+                    ha="left" if _left else "right", va="center", fontsize=5.5,
+                    color=F.OKABE_ITO[5],
+                    bbox=dict(boxstyle="square,pad=0.18", fc="white", ec="none", alpha=0.8))
     ax.set_xlabel("fate entropy (bits)")
     ax.set_ylabel("cells")
+    ax.ticklabel_format(axis="y", style="plain")
+    ax.yaxis.set_major_formatter(lambda v, _p: f"{v:,.0f}")
     # `names` WAS ACCEPTED AND NEVER READ. The log2(k) ceiling this panel draws is only
     # interpretable if a reader knows WHICH k states an even split is even across, and they are
     # right here in the argument list.
-    shown = ", ".join(str(n) for n in (names or [])[:4])
-    if names is not None and len(names) > 4:
-        shown += f", +{len(names) - 4} more"
-    ax.set_title(f"{k} terminal state(s)" + (f": {shown}" if shown else ""), loc="left")
+    #
+    # SHORTENED AND WRAPPED, because they are annotation PATHS. Set as one line of raw names, four
+    # hierarchical state names ran off the end of a double-column figure AND straight through the
+    # title of the panel beside it - two titles overprinted into one unreadable line, which is
+    # what a `set_title` does with more characters than the axes are wide.
+    #
+    # AS MANY NAMES AS FIT IN TWO LINES, AND THE REST COUNTED. Wrapping to two lines and slicing
+    # the rest away cut a title off mid-name - "..., Terminal population 3, Terminal" - which
+    # reads as a rendering fault and, worse, as a state called `Terminal`. Names are dropped a
+    # whole one at a time and what was dropped is said.
+    _sn = F.short_labels([str(n) for n in (names or [])])
+    _all = [_sn[str(n)] for n in (names or [])]
+    import textwrap
+    head = f"{k} terminal state{'' if k == 1 else 's'}"
+    lines = [head]
+    for m in range(len(_all), -1, -1):
+        if m == 0:
+            shown = ""
+        elif m < len(_all):
+            shown = ", ".join(_all[:m]) + f", +{len(_all) - m} more"
+        else:
+            shown = ", ".join(_all)
+        lines = textwrap.wrap(head + (f": {shown}" if shown else ""), 52)
+        if len(lines) <= 2:
+            break
+    ax.set_title("\n".join(lines), loc="left")
+    ax.grid(axis="x", color=F.GREY, lw=0.4, alpha=0.7)
+    ax.set_axisbelow(True)
 
     if groups is not None:
         g = np.asarray(groups, dtype=object).astype(str)
         order = sorted(set(g.tolist()))
+        _sg = F.short_labels(order)
         ax2 = axs[0][1]
         bp = ax2.boxplot([ent[g == l] for l in order], vert=False, widths=0.62,
                          patch_artist=True, showfliers=False,
-                         medianprops=dict(color=F.INK, lw=0.8))
-        for patch, l in zip(bp["boxes"], order):
-            patch.set_facecolor((colours or {}).get(l, F.GREY))
+                         whiskerprops=dict(lw=0.6), capprops=dict(lw=0.6))
+        for patch, line, l in zip(bp["boxes"], bp["medians"], order):
+            fc = (colours or {}).get(l, F.GREY)
+            patch.set_facecolor(fc)
             patch.set_edgecolor(F.INK)
             patch.set_linewidth(0.5)
-        ax2.set_yticklabels(order)
+            # THE MEDIAN HAS TO BE VISIBLE ON THE BOX IT IS IN. Four hues in this palette are dark
+            # enough that a near-black median line vanishes into the fill, and the median is the
+            # only number a box plot is read for.
+            line.set_color(_ink_on(fc, F))
+            line.set_linewidth(0.9)
+        ax2.set_yticks(np.arange(1, len(order) + 1))
+        ax2.set_yticklabels([_sg[l] for l in order])
         ax2.invert_yaxis()
         ax2.set_xlabel("fate entropy (bits)")
         if ceiling > 0:
-            ax2.axvline(ceiling, color=F.INK, ls="--", lw=0.7)
-        ax2.set_title("per population", loc="left")
+            ax2.axvline(ceiling, color=F.INK, ls="--", lw=0.9)
+        ax2.xaxis.set_tick_params(labelbottom=True)     # `sharex` hides them; both panels are read
+        ax2.spines["left"].set_visible(False)
+        ax2.tick_params(axis="y", length=0)
+        ax2.grid(axis="x", color=F.GREY, lw=0.4, alpha=0.7)
+        ax2.set_axisbelow(True)
+        # THE SPREAD, IN WORDS, BECAUSE THE PANEL MAY NOT HAVE ROOM TO SHOW IT. Drawn on the full
+        # 0-to-ceiling scale - which is the honest scale and the reason this panel is worth having
+        # - twelve populations all sitting at the ceiling are twelve slivers a millimetre wide. A
+        # reader has to be able to tell "the boxes are narrow" from "the boxes are identical", and
+        # the range of the medians is the number that says which.
+        meds = [float(np.median(ent[g == l])) for l in order if (g == l).any()]
+        spread = (f" (medians {min(meds):.2f}-{max(meds):.2f} bits)" if meds else "")
+        ax2.set_title("per population" + spread, loc="left")
+    _fit_to_column(fig, F.DOUBLE if ncol == 2 else F.SINGLE)
     ctx.emit_figure(
         "F4_fate_certainty", fig,
         caption=(f"Shannon entropy of each cell's fate probabilities, in bits. Zero means the "
                  f"cell is committed to one terminal state; the dashed line at log2(k) = "
                  f"{ceiling:.2f} is an EVEN SPLIT across all {k} of them, which is the value a "
-                 f"cell gets when the method has no information about it. Because the "
-                 f"probabilities are constrained to sum to one, that case is reported as a "
+                 f"cell gets when the method has no information about it. THE AXIS RUNS THE WHOLE "
+                 f"SCALE, 0 to that ceiling, in both panels, so the distance between the "
+                 f"distribution and the line is read directly rather than off a magnified slice; "
+                 f"the solid line is the median, at {med:.2f} bits. Because the probabilities are "
+                 f"constrained to sum to one, a cell with no fate information is reported as a "
                  f"confident-looking row of numbers rather than as missing, and this panel is the "
                  f"only place on the page it is visible. A distribution piled against the line is "
-                 f"a fate map that will still draw."),
+                 f"a fate map that will still draw. Populations are shortened to their shortest "
+                 f"unambiguous tail; boxes are quartiles, whiskers 1.5 IQR, outliers not drawn."),
         source=src)
 
 
@@ -623,32 +856,101 @@ def _fig_fate_map(ctx, barcodes, xy, key, fate, names, order):
         d[f"fate_{nm}"] = fate[:, j]
     src = pd.DataFrame(d).set_index("barcode")
 
-    n_panels = len(show) + 1
-    ncol = min(3, n_panels)
-    nrow = (n_panels + ncol - 1) // ncol
-    fig, axs = plt.subplots(nrow, ncol, figsize=(F.DOUBLE, 1.85 * nrow), squeeze=False,
-                            layout="constrained")
+    # THE ORDERING GETS ITS OWN ROW, and that is not only tidiness. It is a DIFFERENT QUANTITY on
+    # a DIFFERENT SCALE from the panels above it - one minus a probability, bounded by 1 - 1/k -
+    # so it takes its own colourbar, and two colourbars in one column of a grid whose panels
+    # straddle both rows overprinted each other: the ordering's key was drawn through the fate
+    # key's tick labels, and neither could be read. Fate panels fill whole rows, the ordering has
+    # the row below to itself, and each key then has a row of its own to sit in.
+    #
+    # FOUR PANELS OR FEWER GO IN ONE ROW, and then there is no last row to leave holes in: the
+    # shared key lands between the fate panels and the ordering, directly right of the group it
+    # belongs to, and reads as the divider between the two quantities. Three terminal states plus
+    # the ordering is the shape this plugin produces most often, so that is the case worth
+    # laying out properly.
+    n_fate = len(show)
+    one_row = n_fate + 1 <= 4
+    ncol = (n_fate + 1) if one_row else min(3, max(1, n_fate))
+    nrow = 1 if one_row else (n_fate + ncol - 1) // ncol + 1
+    # POINT SIZE AND OPACITY FOLLOW THE CELL COUNT. At s=1.5 and full opacity a cohort of 100,000
+    # is a solid slab of one colour: every dot covers the dot beneath it, so the panel shows the
+    # last value drawn at each pixel and no density at all. Shrinking with n and letting the dots
+    # blend keeps a 5,000-cell object readable and stops a 100,000-cell one from saturating.
+    n_pts = int(xy.shape[0])
+    s_pt = float(np.clip(60000.0 / max(n_pts, 1), 0.55, 4.0))
+    alpha = 0.45 if n_pts > 40000 else (0.65 if n_pts > 8000 else 0.9)
+    # Where the ordering does get a row to itself - five panels or more - that row is drawn taller
+    # than the ones above it. It is what this plugin `provides` and what lands in
+    # `obs[pseudotime]`; the panels above are its parts.
+    #
+    # THE ROW HEIGHT FOLLOWS THE SHAPE OF THE LAYOUT. Every panel here is equal-aspect, so a fixed
+    # row height over a wide, flat embedding gives each panel a band of empty canvas above and
+    # below it that no data can ever reach. Clamped, because an extreme aspect on one axis should
+    # not turn the whole figure into a strip.
+    span_x = float(np.ptp(xy[:, 0])) or 1.0
+    span_y = float(np.ptp(xy[:, 1])) or 1.0
+    shape = float(np.clip(span_y / span_x, 0.5, 1.6))
+    panel_w = max(0.9, (F.DOUBLE - 1.5) / ncol)
+    row_h = panel_w * shape + 0.55                    # + title, axis name and the space they need
+    h = row_h if one_row else row_h * (nrow - 1) + row_h * 1.35
+    fig, axs = plt.subplots(nrow, ncol, figsize=(F.DOUBLE, h), squeeze=False,
+                            layout="constrained",
+                            gridspec_kw=None if one_row else
+                            {"height_ratios": [1] * (nrow - 1) + [1.35]})
     flat = axs.ravel()
+    _sn = F.short_labels([str(n) for n in names])
+    pts = None
     for i, j in enumerate(show):
         ax = flat[i]
         v = fate[:, j]
         o = np.argsort(v)
-        pts = ax.scatter(xy[o, 0], xy[o, 1], c=v[o], s=1.5, cmap="viridis", vmin=0, vmax=1,
-                         linewidths=0, rasterized=True)
-        _clean(ax, F, key)
-        ax.set_title(str(names[j]), loc="left")
-        cb = fig.colorbar(pts, ax=ax, fraction=0.045, pad=0.02)
+        pts = ax.scatter(xy[o, 0], xy[o, 1], c=v[o], s=s_pt, cmap="viridis", vmin=0, vmax=1,
+                         linewidths=0, alpha=alpha, rasterized=True)
+        # The axis name once per row, not once per panel: every panel is the same two coordinates,
+        # and six copies of one label is furniture the data has to make room for.
+        _clean(ax, F, key if i % ncol == 0 else None)
+        ax.set_title(_sn[str(names[j])], loc="left")
+    # ONE COLOURBAR FOR ALL OF THEM, because they are all on one scale. Every fate panel is a
+    # probability on [0, 1] with vmin and vmax fixed, so a colourbar per panel was the same key
+    # printed up to six times - and six keys down the right-hand side of a grid read as six
+    # DIFFERENT scales, which is the one thing they are not.
+    if not one_row:
+        for a in flat[n_fate:(nrow - 1) * ncol]:
+            a.set_visible(False)                   # part-filled last row of the fate block
+    if pts is not None:
+        cb = fig.colorbar(pts, ax=[flat[i] for i in range(n_fate)] if one_row else
+                          [flat[i] for i in range((nrow - 1) * ncol)],
+                          fraction=0.035, pad=0.015)
+        cb.set_label("probability of reaching this state", fontsize=6)
+        cb.set_alpha(1.0)
         cb.outline.set_visible(False)
-    ax = flat[len(show)]
+    if one_row:
+        ax = flat[n_fate]
+    else:
+        # matplotlib's own idiom for merging cells: drop the axes the last row was given and add
+        # one spanning axes in their place, so the panel is not a third of a row wide with two
+        # empty cells beside it.
+        _gs = axs[nrow - 1, 0].get_gridspec()
+        for _a in axs[nrow - 1, :]:
+            _a.remove()
+        ax = fig.add_subplot(_gs[nrow - 1, 0:max(1, ncol - 1)])
     o = np.argsort(order)
-    pts = ax.scatter(xy[o, 0], xy[o, 1], c=order[o], s=1.5, cmap="magma", linewidths=0,
-                     rasterized=True)
+    # THE ORDERING HAS ITS OWN CEILING AND THE SCALE IS SET TO IT. `order` is 1 - the largest fate
+    # probability, so it is bounded by 1 - 1/k: a cohort with no fate resolved sits at that bound
+    # everywhere. Left automatic, the colourmap stretches whatever range those cells occupy across
+    # the full map and paints vivid structure onto a constant - the same magnification that made
+    # the entropy panel misread, in colour rather than in x.
+    o_ceiling = 1.0 - 1.0 / max(int(fate.shape[1]), 1)
+    pts2 = ax.scatter(xy[o, 0], xy[o, 1], c=order[o], s=s_pt, cmap="magma", vmin=0.0,
+                      vmax=o_ceiling, linewidths=0, alpha=alpha, rasterized=True)
     _clean(ax, F, key)
     ax.set_title("ordering", loc="left")
-    cb = fig.colorbar(pts, ax=ax, fraction=0.045, pad=0.02)
+    cb = fig.colorbar(pts2, ax=ax, fraction=0.035, pad=0.015)
+    cb.set_label(f"1 - largest fate probability\n(0 = committed, {o_ceiling:.2f} = even split)",
+                 fontsize=6)
+    cb.set_alpha(1.0)
     cb.outline.set_visible(False)
-    for ax in flat[n_panels:]:
-        ax.set_visible(False)
+    _fit_to_column(fig, F.DOUBLE)
 
     more = ("" if len(show) == fate.shape[1] else
             f" {fate.shape[1] - len(show)} further terminal state(s) are in the source table and "
@@ -656,16 +958,20 @@ def _fig_fate_map(ctx, barcodes, xy, key, fate, names, order):
     ctx.emit_figure(
         "F5_fate_map", fig,
         caption=(f"Probability of reaching each terminal state, one panel per state, on the "
-                 f"object's own two-column layout. The last panel is the ordering: one minus each "
-                 f"cell's largest fate probability, so a committed cell is low and an uncommitted "
-                 f"one is high. It is an ORDER along this manifold and not elapsed time, and its "
-                 f"direction is a property of the kernel that produced it.{more} Read beside the "
-                 f"entropy panel: a cell can be mid-scale on every fate here simply because the "
-                 f"probabilities had to sum to one."),
+                 f"object's own two-column layout; all state panels share one colour scale, fixed "
+                 f"at 0 to 1. The last panel is the ordering: one minus each cell's largest fate "
+                 f"probability, so a committed cell is low and an uncommitted one is high, and "
+                 f"its scale is fixed at 0 to the even-split bound {o_ceiling:.2f} rather than to "
+                 f"the range these cells occupy. It is an ORDER along this manifold and not "
+                 f"elapsed time, and its direction is a property of the kernel that produced "
+                 f"it.{more} Points are drawn at {s_pt:.2g} pt and {alpha:.0%} opacity for "
+                 f"{n_pts:,} cells, so colour in a dense region is a blend and not a single cell. "
+                 f"Read beside the entropy panel: a cell can be mid-scale on every fate here "
+                 f"simply because the probabilities had to sum to one."),
         source=src)
 
 
-def _fig_ordering_by_population(ctx, order, groups, colours):
+def _fig_ordering_by_population(ctx, order, groups, colours, ceiling=None):
     """The ordering per population - the form of the result most readers will quote."""
     import numpy as np
     import pandas as pd
@@ -690,21 +996,46 @@ def _fig_ordering_by_population(ctx, order, groups, colours):
     df = pd.DataFrame(rows).sort_values("ordering_median").set_index("population")
 
     F, plt = ctx.figure, ctx.plot()
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.7, 0.22 * len(df) + 0.9)))
+    _sg = F.short_labels([str(i) for i in df.index])
+    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.8, 0.24 * len(df) + 1.0)))
     y = np.arange(len(df))
     bp = ax.boxplot([order[g == l] for l in df.index], vert=False, widths=0.62,
                     patch_artist=True, showfliers=False,
-                    medianprops=dict(color=F.INK, lw=0.8))
-    for patch, l in zip(bp["boxes"], df.index):
-        patch.set_facecolor((colours or {}).get(str(l), F.GREY))
+                    whiskerprops=dict(lw=0.6), capprops=dict(lw=0.6))
+    for patch, line, l in zip(bp["boxes"], bp["medians"], df.index):
+        fc = (colours or {}).get(str(l), F.GREY)
+        patch.set_facecolor(fc)
         patch.set_edgecolor(F.INK)
         patch.set_linewidth(0.5)
+        line.set_color(_ink_on(fc, F))         # a near-black median vanishes into a dark fill
+        line.set_linewidth(0.9)
     ax.set_yticks(y + 1)
-    ax.set_yticklabels(df.index)
+    # n ON THE ROW. These boxes are drawn from wildly unequal populations - a quartile from 40
+    # cells and one from 40,000 draw identically - and the count is already in the source frame.
+    ax.set_yticklabels([f"{_sg[str(i)]}  (n={int(df.loc[i, 'n_cells']):,})" for i in df.index])
     ax.invert_yaxis()
+    # THE SAME FULL SCALE AS THE ENTROPY PANEL, AND FOR THE SAME REASON. The ordering is bounded:
+    # 0 is a cell committed to one terminal state and 1 - 1/k is an even split across all of them,
+    # which is where a cohort with no fate resolved sits. Automatic limits magnified a 0.1-wide
+    # band across the full axis, so populations that are identical to two decimal places looked
+    # ordered along a trajectory. The bound is drawn as a line, so "everything is at the ceiling"
+    # and "these populations differ" are told apart at a glance instead of being the same picture.
+    if ceiling and ceiling > 0:
+        ax.set_xlim(0, ceiling * 1.04)
+        ax.axvline(ceiling, color=F.INK, ls="--", lw=0.9)
+        # NAMED ABOVE THE AXES. A legend under the xlabel needs an offset in axes fractions, and
+        # this panel's height changes with the number of populations - so the one anchor that
+        # looked right at twelve floated away from the axis at four.
+        ax.annotate(f"even split across the terminal states ({ceiling:.2f})",
+                    xy=(ceiling, 1.0), xycoords=("data", "axes fraction"),
+                    xytext=(-2, 2), textcoords="offset points",
+                    ha="right", va="bottom", fontsize=5.5, color=F.INK)
     ax.set_xlabel("ordering (1 - largest fate probability)")
+    ax.grid(axis="x", color=F.GREY, lw=0.4, alpha=0.7)
+    ax.set_axisbelow(True)
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
+    _fit_to_column(fig, F.SINGLE)
     ctx.emit_figure(
         "F6_ordering_by_population", fig,
         # THE AXIS IS INVERTED, SO THE TOP IS THE LOWEST MEDIAN. This said "a population at the
@@ -716,9 +1047,15 @@ def _fig_ordering_by_population(ctx, order, groups, colours):
                  "inverted, so the lowest sits at the TOP. Low means committed to one terminal "
                  "state and high means uncommitted between several, so this reads as a commitment "
                  "axis rather than as a clock; the population at the top is the one nearest a "
-                 "terminal state on this manifold, which does not make it older. Populations, not "
-                 "clusters: annotator sentinels are excluded from the grouping and the count is "
-                 "in the caveats. Boxes are quartiles, whiskers 1.5 IQR, outliers not drawn."),
+                 "terminal state on this manifold, which does not make it older. "
+                 + (f"The axis runs the whole scale, 0 to the even-split bound {ceiling:.2f} "
+                    f"marked by the dashed line, so boxes crowded against it are populations "
+                    f"with no fate resolved rather than populations at the end of a trajectory. "
+                    if ceiling and ceiling > 0 else "")
+                 + "Populations, not clusters: annotator sentinels are excluded from the grouping "
+                   "and the count is in the caveats. Names are shortened to their shortest "
+                   "unambiguous tail and given whole in the source table, with the cell count "
+                   "beside each. Boxes are quartiles, whiskers 1.5 IQR, outliers not drawn."),
         source=df)
 
 
@@ -926,7 +1263,11 @@ def run(ctx):
                    "summarised per population and the macrostates have no names beyond GPCCA's "
                    "own indices. The per-cell ordering is unaffected.")
     else:
-        _fig_ordering_by_population(ctx, order, groups, colours)
+        # THE BOUND, NOT THE OBSERVED RANGE. `order` is 1 - the largest fate probability, so it
+        # cannot exceed 1 - 1/k however the cells fall; handing the panel that bound is what lets
+        # it draw the same full scale the entropy panel does.
+        _fig_ordering_by_population(ctx, order, groups, colours,
+                                    ceiling=1.0 - 1.0 / max(int(fate.shape[1]), 1))
 
     # ITS OWN NUMBER, AGAINST ITS OWN HEADLINE. log2(k) is the entropy of an even split over k
     # fates and an absolute ceiling; a cohort sitting at that ceiling has fate probabilities of

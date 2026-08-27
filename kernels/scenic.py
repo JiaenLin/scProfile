@@ -410,6 +410,50 @@ _OVERLAP_ROWS = 25
 _LAYOUT_PANELS = 4
 
 
+#: The hue a panel uses for the part that is a WARNING rather than a result - the cells whose AUC
+#: is not licensed, the step where the funnel should have narrowed, the pairs that are one finding
+#: reported twice. Okabe-Ito vermillion, so it stays separable from every other hue these panels
+#: use under any common form of colour vision, and in greyscale.
+_ALERT = "#D55E00"
+
+#: The hue for the ordinary, un-flagged part of the same panel. Okabe-Ito blue.
+_PLAIN = "#0072B2"
+
+
+def _ink_on(colour, F):
+    """`F.INK` or white, whichever stays readable ON `colour`.
+
+    A median line drawn in ink on a dark box is a median a reader cannot place, and the shared
+    palette reaches dark navy and dark green before it runs out - so which population happens to
+    be given which hue was deciding whether its median was visible at all. Rec. 709 relative
+    luminance, which is what the accessibility guidance is written in.
+    """
+    from matplotlib.colors import to_rgb
+    r, g, b = to_rgb(colour)
+    return "#FFFFFF" if (0.2126 * r + 0.7152 * g + 0.0722 * b) < 0.5 else F.INK
+
+
+def _symmetric_limit(Z, pct=98.0):
+    """`(limit, n_clipped)` for a diverging map, set by a PERCENTILE of |Z| and never its maximum.
+
+    `vmax = nanmax(abs(Z))` is the commonest way a heatmap is made unreadable, and it is not a
+    style problem: one saturated cell sets the scale and every other cell collapses to within a
+    few percent of white, so a panel drawn to show WHERE a regulon is active shows one square per
+    row and nothing else. The extreme cells stay the extreme cells - they clip to the end of the
+    bar - and the count of clipped cells is returned so the caption can say so rather than leave a
+    reader wondering why two visibly different values share a colour.
+    """
+    import numpy as np
+    a = np.abs(np.asarray(Z, dtype=float))
+    a = a[np.isfinite(a)]
+    if a.size == 0:
+        return 1.0, 0
+    lim = float(np.percentile(a, pct))
+    if not lim > 0:
+        lim = float(a.max()) or 1.0
+    return lim, int((a > lim).sum())
+
+
 def _colours(ctx, names):
     """A colour per population, and the pairs that share a hue NAMED rather than left silent.
 
@@ -453,14 +497,26 @@ def _fig_ranking_depth(ctx, detected, cutoff, n_universe, pops, colours):
     AUC moves with library depth rather than with regulon activity. Nothing warns: the number
     comes back between 0 and 1 like every other cell's.
 
-    The right-hand panel is the half that matters for a designed experiment. A depth shortfall
-    spread evenly across populations weakens every regulon equally; one concentrated in a single
-    population has converted a library property into an apparent biological difference, and no
-    downstream test can undo that.
+    The middle and right panels are the half that matters for a designed experiment. A depth
+    shortfall spread evenly across populations weakens every regulon equally; one concentrated in
+    a single population has converted a library property into an apparent biological difference,
+    and no downstream test can undo that. The right panel answers that question as a NUMBER -
+    what fraction of each population is left of the line - because a box plot shows where the
+    middle of a distribution sits and the question is about its left tail.
+
+    THREE THINGS HERE ARE ABOUT BEING READ RATHER THAN ABOUT BEING RIGHT, and each was wrong:
+
+      one x axis      the two panels autoscaled separately, so the SAME cut-off sat at two
+                      different places on two panels a reader is meant to compare across.
+      the shortfall   the cells at risk were drawn in the same colour as every other cell, on a
+                      panel whose entire subject is those cells.
+      worst first     populations were in alphabetical order, which answers "is the shortfall
+                      even?" only by accident.
     """
     import numpy as np
     import pandas as pd
     F, plt = ctx.figure, ctx.plot()
+    det = np.asarray(detected, dtype=float)
     d = {"barcode": np.asarray(ctx.adata.obs_names).astype(str),
          "genes_detected": np.asarray(detected, dtype=int)}
     if pops.groups is not None:
@@ -469,36 +525,127 @@ def _fig_ranking_depth(ctx, detected, cutoff, n_universe, pops, colours):
         d["label"] = lab
     src = pd.DataFrame(d).set_index("barcode")
 
+    below = float(np.mean(det < cutoff)) if det.size else 0.0
     two = pops.groups is not None and len(pops.names) >= 2
-    fig, axs = plt.subplots(1, 2 if two else 1,
-                            figsize=(F.DOUBLE if two else F.SINGLE, F.SINGLE * 0.72),
-                            squeeze=False, layout="constrained")
-    ax = axs[0][0]
-    ax.hist(np.asarray(detected, dtype=float), bins=60, color="#0072B2")
-    ax.axvline(cutoff, color=F.INK, ls="--", lw=0.8)
+
+    # ONE UPPER LIMIT, SHARED, and it is a percentile rather than the maximum: a single
+    # 12,000-gene cell otherwise compresses every other cell in the object into the left third of
+    # both panels. The cells past it are counted and named in the caption rather than piled into
+    # the last bin, which would draw a spike that is not there. `cutoff` is kept inside the limit
+    # whatever the depths are, because a cut-off drawn off the edge of its own panel is the one
+    # failure this figure cannot survive.
+    xhi = max(float(np.nanpercentile(det, 99.5)) if det.size else 1.0, float(cutoff) * 1.15, 1.0)
+    n_beyond = int((det > xhi).sum())
+
+    frac, order = {}, []
+    if two:
+        gi = np.asarray(pops.groups)
+        sub = det[np.asarray(pops.mask)]
+        for l in pops.names:
+            v = sub[gi == l]
+            frac[l] = float(np.mean(v < cutoff)) if v.size else float("nan")
+        order = sorted(pops.names, key=lambda l: (-np.nan_to_num(frac[l], nan=-1.0), l))
+        fig, axs = plt.subplots(
+            1, 3, figsize=(F.DOUBLE, max(2.3, 0.235 * len(order) + 1.45)),
+            gridspec_kw=dict(width_ratios=[1.2, 1.2, 0.55]), layout="constrained")
+        ax, ax2, ax3 = axs
+    else:
+        fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.78), layout="constrained")
+        ax2 = ax3 = None
+
+    # THE AT-RISK CELLS ARE A DIFFERENT COLOUR, which is the whole subject of the panel. Drawn
+    # from an explicit histogram rather than `ax.hist` so each bar can carry its own colour.
+    counts, edges = np.histogram(det, bins=60, range=(0.0, xhi))
+    centres = 0.5 * (edges[:-1] + edges[1:])
+    short = centres < cutoff
+    ax.bar(centres, counts, width=np.diff(edges), align="center", linewidth=0,
+           color=[(_ALERT if s else _PLAIN) for s in short])
+    ax.axvline(cutoff, color=F.INK, ls="--", lw=0.9, zorder=3)
+    ax.set_xlim(0, xhi)
     ax.set_xlabel("genes detected per cell")
     ax.set_ylabel("cells")
-    ax.set_title("the AUC cut-off against the detection limit", loc="left")
+    ax.set_title(f"{100 * below:.1f}% of cells fall short of the AUC cut-off", loc="left")
+    # THE LABEL MOVES TO THE OTHER SIDE OF ITS OWN LINE rather than being written into the legend.
+    # Both sit at the top of the axes, so on a dataset shallow enough to put the cut-off in the
+    # right half they would have been printed over each other - and a collision that depends on
+    # the data is one no single test render can find.
+    _right = float(cutoff) > 0.55 * xhi
+    ax.annotate(f"cut-off  {cutoff:,.0f} genes", xy=(cutoff, 0.99),
+                xycoords=("data", "axes fraction"), xytext=(-3 if _right else 3, 0),
+                textcoords="offset points", ha="right" if _right else "left", va="top",
+                fontsize=6, color=F.INK)
+    from matplotlib.patches import Patch
+    from matplotlib.lines import Line2D
+    ax.legend(handles=[Patch(facecolor=_ALERT, label="AUC tracks library depth"),
+                       Patch(facecolor=_PLAIN, label="AUC licensed")],
+              loc="upper right", bbox_to_anchor=(1.0, 0.90), handlelength=1.1,
+              handleheight=0.8, borderaxespad=0.2)
 
     if two:
-        ax2 = axs[0][1]
-        sub = np.asarray(detected, dtype=float)[np.asarray(pops.mask)]
-        gi = np.asarray(pops.groups)
-        order = list(pops.names)
         bp = ax2.boxplot([sub[gi == l] for l in order], vert=False, widths=0.62,
                          patch_artist=True, showfliers=False,
-                         medianprops=dict(color=F.INK, lw=0.8))
-        for patch, l in zip(bp["boxes"], order):
-            patch.set_facecolor((colours or {}).get(l, F.GREY))
+                         medianprops=dict(lw=1.0), whiskerprops=dict(lw=0.6),
+                         capprops=dict(lw=0.6))
+        for patch, med, l in zip(bp["boxes"], bp["medians"], order):
+            c = (colours or {}).get(l, F.GREY)
+            patch.set_facecolor(c)
             patch.set_edgecolor(F.INK)
             patch.set_linewidth(0.5)
-        ax2.set_yticklabels(order)
-        ax2.set_xlabel("genes detected per cell")
-        ax2.axvline(cutoff, color=F.INK, ls="--", lw=0.8)
+            # A MEDIAN IN INK ON A DARK BOX IS AN INVISIBLE MEDIAN, and which populations got a
+            # dark box was decided by the palette, not by anything about them.
+            med.set_color(_ink_on(c, F))
+        # The names are annotation PATHS and the full ones take more width than the boxes. Cut to
+        # the shortest tail that still names exactly one population; the source table keeps whole.
+        #
+        # AND THE CELL COUNT IS ON THE LABEL, because the right panel is a RATE and a rate over
+        # twelve cells is not evidence of anything. Without n beside it, the population at the top
+        # of the order looks like the finding whether it is 4,000 cells or 40.
+        _short = F.short_labels(list(order))
+        _n = {l: int((gi == l).sum()) for l in order}
+        ax2.set_yticks(np.arange(1, len(order) + 1))
+        ax2.set_yticklabels([f"{_short[l]}  n={_n[l]:,}" for l in order])
+        ax2.axvspan(0, cutoff, color=_ALERT, alpha=0.12, lw=0, zorder=0)
+        ax2.axvline(cutoff, color=F.INK, ls="--", lw=0.9, zorder=3)
+        ax2.set_xlim(0, xhi)
         ax2.invert_yaxis()
-        ax2.set_title("per population", loc="left")
+        ax2.set_xlabel("genes detected per cell")
+        ax2.set_title("depth per population", loc="left")
 
-    below = float(np.mean(np.asarray(detected) < cutoff))
+        # THE DECLARED QUESTION, AS A NUMBER. The boxes show where the middle of each population
+        # sits; what was asked is how much of each population is LEFT OF THE LINE, which is a
+        # property of the tail and which two populations with identical medians can differ in
+        # completely. The dotted line is the whole-object rate, so a bar past it is a population
+        # carrying more than its share of the risk.
+        pct = [100 * np.nan_to_num(frac[l], nan=0.0) for l in order]
+        ax3.barh(np.arange(len(order)), pct, height=0.62,
+                 color=[(colours or {}).get(l, F.GREY) for l in order],
+                 edgecolor=F.INK, linewidth=0.5)
+        ax3.axvline(100 * below, color=F.INK, ls=":", lw=0.9, zorder=3)
+        xmax = max(1.0, max(pct) * 1.42) if pct else 1.0
+        # INSIDE THE BAR WHERE THERE IS ROOM. Printed outside, the value on a bar that ends near
+        # the whole-object rate lands on the dotted line marking it - and on a cohort where the
+        # shortfall IS even, which is the good outcome, every bar ends near that line and every
+        # label was printed on top of it.
+        for yi, (v, l) in enumerate(zip(pct, order)):
+            if v >= 0.35 * xmax:
+                ax3.text(v - 0.03 * xmax, yi, f"{v:.0f}", va="center", ha="right", fontsize=5.5,
+                         color=_ink_on((colours or {}).get(l, F.GREY), F))
+            else:
+                ax3.text(v + 0.03 * xmax, yi, f"{v:.0f}", va="center", ha="left", fontsize=5.5,
+                         color=F.INK)
+        ax3.set_yticks(np.arange(len(order)))
+        ax3.set_yticklabels([])
+        ax3.tick_params(axis="y", length=0)
+        ax3.invert_yaxis()
+        ax3.set_xlim(0, xmax)
+        ax3.set_xlabel("% of cells left\nof the line")
+        ax3.set_title("shortfall", loc="left")
+        ax3.spines["left"].set_visible(False)
+        # THE REFERENCE LINE SAYS WHAT IT IS ON THE PANEL. A dotted line a reader has to open the
+        # caption to identify is a line they will read as whatever they expect it to be.
+        ax3.legend(handles=[Line2D([0], [0], color=F.INK, ls=":", lw=0.9, label="all cells")],
+                   loc="lower right", handlelength=1.4, borderaxespad=0.2)
+
     n_aside = int((~np.asarray(pops.mask)).sum())
     # THE CAPTION DESCRIBES THE PANEL THAT WAS DRAWN, NOT THE ONE THIS FUNCTION CAN DRAW. It
     # said "the right panel asks whether that shortfall is even" unconditionally, on a figure
@@ -506,15 +653,24 @@ def _fig_ranking_depth(ctx, detected, cutoff, n_universe, pops, colours):
     # object the caption pointed at a panel that is not there, which reads as a figure with half
     # of it missing. The declared question asks about populations either way, so the absence has
     # to be answered here in words.
-    second = (f"The right panel asks whether that shortfall is even: a deficit concentrated in "
-              f"one population is a technical property wearing a biological one. Annotator "
-              f"sentinels are not a population - the {n_aside:,} cell(s) carrying one are in the "
-              f"histogram and in no box."
-              if two else
-              "There is no per-population panel: fewer than two populations remain once the "
-              "annotator's sentinels are set aside, so nothing here says whether the shortfall "
-              "is even across populations - which is the half that decides whether a depth "
-              "deficit can pass as a biological difference.")
+    if two:
+        worst, best = order[0], order[-1]
+        _s = F.short_labels(list(order))
+        second = (
+            f"The middle and right panels ask whether that shortfall is EVEN: a deficit "
+            f"concentrated in one population is a technical property wearing a biological one. "
+            f"Populations are ordered worst first, and the right panel is the fraction of each "
+            f"one left of the line against the whole-object rate (dotted). Here the extremes are "
+            f"{_s[worst]} at {100 * np.nan_to_num(frac[worst], nan=0.0):.0f}% and {_s[best]} at "
+            f"{100 * np.nan_to_num(frac[best], nan=0.0):.0f}%. Population names are cut to their "
+            f"shortest unambiguous tail; the source table keeps the whole path. Annotator "
+            f"sentinels are not a population - the {n_aside:,} cell(s) carrying one are in the "
+            f"histogram and in no box.")
+    else:
+        second = ("There is no per-population panel: fewer than two populations remain once the "
+                  "annotator's sentinels are set aside, so nothing here says whether the "
+                  "shortfall is even across populations - which is the half that decides whether "
+                  "a depth deficit can pass as a biological difference.")
     ctx.emit_figure(
         "F1_ranking_depth", fig,
         caption=(f"Genes detected per cell, against the rank the AUC is integrated out to "
@@ -523,7 +679,12 @@ def _fig_ranking_depth(ctx, detected, cutoff, n_universe, pops, colours):
                  f"recovery curve up to that rank; genes tied at zero are ordered by a seeded "
                  f"random shuffle, so for a cell to the LEFT of the line part of the curve is "
                  f"integrated over an arbitrary tail and its AUC tracks library depth rather "
-                 f"than regulon activity. Here {100 * below:.1f}% of cells are left of it. "
+                 f"than regulon activity. Those cells are drawn in vermillion: "
+                 f"{100 * below:.1f}% of cells are left of the line. Both depth axes are the "
+                 f"same, and both stop at {xhi:,.0f} genes so one deep cell does not compress "
+                 f"the rest"
+                 + (f" - {n_beyond:,} cell(s) detected more than that and are beyond the axis, "
+                    f"in the source table and in no bar. " if n_beyond else ". ")
                  + second),
         source=src)
 
@@ -540,36 +701,88 @@ def _fig_pruning_funnel(ctx, rows):
     Counted in TRANSCRIPTION FACTORS at every stage, so the bars are comparable with each other.
     Edges and modules are in the source table, where the units can differ without misleading a
     reader who is looking at a picture.
+
+    THE ATTRITION IS THE SUBJECT, AND FIVE BARS DO NOT SHOW IT. Bar lengths give five counts and
+    leave every drop between them to be done in the reader's head - which is exactly the
+    arithmetic the panel exists to save them, and the arithmetic that decides whether the result
+    is a regulon set or a correlation table. So each step now carries the fraction that survived
+    it, drawn as the WEDGE between one bar and the next, and the one step that separates a regulon
+    from a co-expression module is drawn in the alert hue and stated in the title. On a real
+    cohort the last two bars are a few percent of the first and are visually indistinguishable
+    from each other; the counts and the retentions are what make that end of the funnel readable,
+    and they are why a linear axis - where a bar's length is still honestly its count - can stay.
     """
     import numpy as np
     import pandas as pd
     if not rows:
         return
     F, plt = ctx.figure, ctx.plot()
-    df = pd.DataFrame(rows).set_index("stage")
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.5, 0.30 * len(df) + 0.8)))
-    y = np.arange(len(df))
-    ax.barh(y, df["transcription_factors"], height=0.7, color="#009E73")
+    # `is_pruning` MARKS THE STEP RATHER THAN ITS POSITION. A panel that highlighted `rows[3]`
+    # would go on highlighting the fourth row after a stage was ever inserted, and would look
+    # exactly as deliberate as it does now.
+    prune_at = next((i for i, r in enumerate(rows) if r.get("is_pruning")), None)
+    df = pd.DataFrame([{k: v for k, v in r.items() if k != "is_pruning"} for r in rows]
+                      ).set_index("stage")
+    v = df["transcription_factors"].to_numpy(dtype=float)
+    n = len(df)
+    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.8, 0.46 * n + 0.9)), layout="constrained")
+    y = np.arange(n)
+    h = 0.58
+    ax.barh(y, v, height=h, color="#009E73", zorder=2)
+    span = float(np.nanmax(v)) if n else 1.0
+    span = span or 1.0
+
+    # THE WEDGES. Each is the shape of one step's loss: as wide as the stage above at its top and
+    # as wide as the stage below at its bottom, so the narrowing IS the attrition and a step that
+    # removed nothing draws as a rectangle. Behind the bars, in the gap they leave.
+    from matplotlib.patches import Polygon
+    for i in range(n - 1):
+        top, bot = y[i] + h / 2, y[i + 1] - h / 2
+        is_prune = (prune_at is not None and i + 1 == prune_at)
+        # A CONNECTOR MUST NOT READ AS A BAR. At full opacity a step that lost nothing drew a
+        # grey rectangle almost as long as the bars either side of it, so the panel appeared to
+        # have nine bars of two kinds instead of five bars and four connectors.
+        ax.add_patch(Polygon([(0, top), (v[i], top), (v[i + 1], bot), (0, bot)], closed=True,
+                             facecolor=_ALERT if is_prune else F.GREY,
+                             edgecolor=_ALERT if is_prune else "none",
+                             alpha=0.55 if is_prune else 0.45,
+                             lw=0.5 if is_prune else 0, zorder=1))
+        keep = (v[i + 1] / v[i]) if v[i] else float("nan")
+        if keep == keep:
+            ax.text(max(v[i], v[i + 1]) + 0.02 * span, 0.5 * (top + bot),
+                    f"{100 * keep:.0f}% kept", va="center", ha="left",
+                    fontsize=6.5 if is_prune else 6,
+                    fontweight="bold" if is_prune else "normal",
+                    color=_ALERT if is_prune else "#6E6E6E", zorder=3)
+
     ax.set_yticks(y)
     ax.set_yticklabels(df.index)
-    ax.invert_yaxis()
+    ax.set_ylim(n - 0.5, -0.5)
     ax.set_xlabel("transcription factors")
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
-    span = float(df["transcription_factors"].max()) or 1.0
-    for yi, v in zip(y, df["transcription_factors"]):
-        ax.text(float(v) + 0.01 * span, yi, f"{int(v):,}", va="center", ha="left", fontsize=6,
-                color=F.INK)
-    ax.set_xlim(0, span * 1.18)
+    for yi, val in zip(y, v):
+        ax.text(float(val) + 0.02 * span, yi, f"{int(val):,}", va="center", ha="left",
+                fontsize=6.5, fontweight="bold", color=F.INK, zorder=3)
+    ax.set_xlim(0, span * 1.24)
+
+    kept = (v[prune_at] / v[prune_at - 1]
+            if prune_at not in (None, 0) and v[prune_at - 1] else float("nan"))
+    ax.set_title(f"motif pruning kept {100 * kept:.0f}% of the regulators\nthat had a module"
+                 if kept == kept else "how many regulators survive each stage", loc="left")
     ctx.emit_figure(
         "F2_pruning_funnel", fig,
         caption=("How many transcription factors survive each stage, from the candidate list to "
-                 "the delivered regulons. The step that matters is motif pruning: it is the only "
-                 "thing separating a regulon from a co-expression module, so a funnel that "
-                 "barely narrows there is reporting correlation under a regulon's name, and one "
-                 "that collapses there usually means the ranking database and these gene symbols "
-                 "are not describing the same organism. Edge, module and regulon counts are in "
-                 "the source table beside this panel."),
+                 "the delivered regulons, with the fraction that survived each step written in "
+                 "the wedge between one bar and the next. The step that matters is motif pruning "
+                 "- drawn in vermillion, and the only thing separating a regulon from a "
+                 "co-expression module - so a funnel that barely narrows there is reporting "
+                 "correlation under a regulon's name, and one that collapses there usually means "
+                 "the ranking database and these gene symbols are not describing the same "
+                 "organism. Every bar is counted in transcription factors so the five are "
+                 "comparable with each other; the edge, module and regulon counts, which are "
+                 "different quantities and would not be, are in the source table beside this "
+                 "panel."),
         source=df)
 
 
@@ -581,6 +794,13 @@ def _fig_regulon_overlap(ctx, regulons):
     the evidence by exactly the amount they overlap. The Jaccard heatmap is the standard check in
     the SCENIC family's own tooling; what is drawn here is its most actionable slice, the closest
     partner each regulon has, because that is what decides whether a name may be reported alone.
+
+    TWO PANELS, BECAUSE THE BARS ALONE CANNOT CARRY THE SENTENCE UNDER THEM. The caption states
+    how many of ALL the regulons sit at or above 0.5, and the bars show at most `_OVERLAP_ROWS`
+    pairs - so on any run with more regulons than that, the figure was making a claim about a set
+    it did not draw. The strip above the bars IS that set: for every regulon, how far its closest
+    partner reaches. It shares the x axis with the bars, so 0.5 is one line through both panels
+    and the shaded fraction is exactly the count the caption quotes.
     """
     import numpy as np
     import pandas as pd
@@ -628,29 +848,82 @@ def _fig_regulon_overlap(ctx, regulons):
     pair = top.apply(lambda r: tuple(sorted((r["regulon"], r["closest_regulon"]))), axis=1)
     show = top[~pair.duplicated()].head(_OVERLAP_ROWS)
 
+    n_high = int((top["jaccard"] >= 0.5).sum())
+    size = dict(zip(names, (len(s) for s in sets)))
+
     F, plt = ctx.figure, ctx.plot()
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.5, 0.19 * len(show) + 0.8)))
+    # DOUBLE, AND IT WAS MEASURED RATHER THAN CHOSEN. Every row label here is TWO regulon names
+    # and their two target counts; at the single-column width the label block did not fit and
+    # `bbox_inches="tight"` quietly grew the saved figure to 100 mm - which is neither of the two
+    # widths a journal accepts, and which nothing in the pipeline would have reported.
+    strip = 0.62
+    # A ONE-BAR PANEL IS NOT A ONE-INCH PANEL. The floor was an inch of axes for however few pairs
+    # survived, so a run that delivered two regulons drew its single bar adrift in the middle of a
+    # tall empty box - which reads as a panel that failed rather than a dataset with one pair.
+    body = max(0.55, 0.17 * len(show) + 0.15)
+    fig, (axd, ax) = plt.subplots(
+        2, 1, sharex=True, figsize=(F.DOUBLE, strip + body + 0.95),
+        gridspec_kw=dict(height_ratios=[strip, body]), layout="constrained")
+
+    # ---- the strip: EVERY regulon, not only the ones with a bar --------------------------
+    js = top["jaccard"].to_numpy(dtype=float)
+    grid = np.linspace(0.0, 1.0, 201)
+    surv = np.array([float((js >= g).mean()) for g in grid])
+    axd.fill_between(grid, 0.0, surv, where=grid >= 0.5, color=_ALERT, alpha=0.30, lw=0)
+    axd.plot(grid, surv, color=F.INK, lw=1.0)
+    axd.axvline(0.5, color=F.INK, ls="--", lw=0.7)
+    axd.set_ylim(0, 1.05)
+    axd.set_yticks([0, 0.5, 1.0])
+    axd.set_ylabel("fraction of\nregulons")
+    axd.set_title(f"how far each of all {n} regulons' closest partner reaches", loc="left")
+    axd.annotate(f"{n_high} of {n}\nat or above 0.5", xy=(0.53, 0.96),
+                 xycoords=("data", "axes fraction"), ha="left", va="top", fontsize=6,
+                 color=_ALERT if n_high else "#6E6E6E")
+
+    # ---- the bars: the strongest distinct pairs ------------------------------------------
     y = np.arange(len(show))
-    ax.barh(y, show["jaccard"], height=0.72, color="#CC79A7")
+    j = show["jaccard"].to_numpy(dtype=float)
+    # THE THRESHOLD IS ON THE BARS, NOT ONLY IN THE CAPTION. A dashed line with every bar the
+    # same colour makes the pairs that may not be reported separately - the only actionable
+    # thing on the panel - look exactly like the pairs that may.
+    ax.barh(y, j, height=0.72, color=[(_ALERT if v >= 0.5 else _PLAIN) for v in j])
     ax.set_yticks(y)
-    ax.set_yticklabels([f"{a} / {b}" for a, b in zip(show["regulon"], show["closest_regulon"])])
+    # THE TARGET COUNTS ARE ON THE LABEL. A Jaccard of 0.8 between two 12-target regulons and
+    # between two 400-target ones are not the same statement, and the panel had no way to tell
+    # them apart - `n_targets` was computed, put in the exported table, and never drawn.
+    # `n=` RATHER THAN A BARE NUMBER. A regulon name already ends in a bracketed direction, so a
+    # loose integer beside it reads as part of the name until the caption is consulted.
+    ax.set_yticklabels([f"{a} n={size.get(a, 0)}  /  {b} n={size.get(b, 0)}"
+                        for a, b in zip(show["regulon"], show["closest_regulon"])])
     ax.invert_yaxis()
     ax.set_xlim(0, 1)
     ax.set_xlabel("Jaccard overlap of target genes")
-    ax.axvline(0.5, color=F.INK, ls="--", lw=0.6)
+    ax.axvline(0.5, color=F.INK, ls="--", lw=0.7)
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
-    n_high = int((top["jaccard"] >= 0.5).sum())
+    # THE VALUE GOES INSIDE A LONG BAR. Printed outside, the label on a bar that ends near 0.5
+    # lands on top of the threshold line - and the pairs whose bars end near 0.5 are precisely
+    # the ones a reader is trying to place against it.
+    for yi, v in zip(y, j):
+        if v >= 0.12:
+            ax.text(v - 0.012, yi, f"{v:.2f}", va="center", ha="right", fontsize=5.5,
+                    color="#FFFFFF")
+        else:
+            ax.text(v + 0.012, yi, f"{v:.2f}", va="center", ha="left", fontsize=5.5, color=F.INK)
     ctx.emit_figure(
         "F3_regulon_overlap", fig,
-        caption=(f"For each regulon, its largest target-gene overlap with any other, strongest "
-                 f"first: the {len(show)} strongest distinct pair(s) among {n} regulons are drawn, "
-                 f"a mutually-closest pair once rather than once per direction. Two regulons that "
-                 f"share their targets are scored on nearly the same genes and their AUC is "
-                 f"correlated by construction, so they are one finding and not two. {n_high} of "
-                 f"{n} regulons sit at or above 0.5 (dashed line) - counted over every regulon, "
-                 f"not only the bars shown. The source table is the FULL pairwise matrix, so any "
-                 f"pair can be checked, not only the closest."),
+        caption=(f"For each regulon, its largest target-gene overlap with any other. Two regulons "
+                 f"that share their targets are scored on nearly the same genes and their AUC is "
+                 f"correlated by construction, so they are one finding and not two. TOP: the same "
+                 f"quantity for all {n} regulons - the fraction whose closest partner reaches at "
+                 f"least the value on the x axis - so the {n_high} at or above 0.5 (shaded) are "
+                 f"counted over every regulon and not only over the bars. BOTTOM: the "
+                 f"{len(show)} strongest distinct pair(s), strongest first, a mutually-closest "
+                 f"pair once rather than once per direction; vermillion is at or above 0.5. The "
+                 f"number after each name is that regulon's target count, because the same "
+                 f"Jaccard between two small regulons and two large ones is not the same "
+                 f"statement. The source table is the FULL pairwise matrix, so any pair can be "
+                 f"checked, not only the closest."),
         source=full)
 
 
@@ -681,7 +954,7 @@ def _population_means(auc, pops):
     return by
 
 
-def _fig_activity_by_population(ctx, by, n_aside=0):
+def _fig_activity_by_population(ctx, by, n_aside=0, sizes=None):
     """Mean activity per regulon per population - the answer, with its own scale problem handled.
 
     ROWS ARE Z-SCORED ACROSS POPULATIONS, and that is not decoration. AUC is an area under a
@@ -692,6 +965,24 @@ def _fig_activity_by_population(ctx, by, n_aside=0):
 
     Takes the means already computed and emitted by run(): this function draws, and produces
     nothing a reader would miss if the drawing failed.
+
+    THREE THINGS DECIDED WHETHER THE PANEL COULD BE READ AT ALL, and all three were wrong:
+
+      the scale     `vmax = max(|z|)` let the single most specific regulon in the run set the
+                    scale for all of them. With twelve populations a perfectly specific row
+                    reaches z = 3.3, so every other row collapsed to within a few percent of
+                    white and the panel showed one dark square per row and no gradient anywhere.
+                    The limit is a percentile now, the colourbar grows arrows where it clips, and
+                    the caption says how many cells clipped.
+      the order     rows were drawn by descending maximum z, so a regulon specific to the first
+                    population and one specific to the last sat next to each other and the block
+                    structure - which population has a regulon programme and which has none - was
+                    scattered. SELECTION is still by maximum z, which is what the caption
+                    promises; only the drawing order is grouped, by the population each row peaks
+                    in.
+      the n         a column of forty cells and a column of forty thousand were the same width
+                    and the same colour. The count is on the column now, because "active in this
+                    population" over forty cells is not the same claim.
     """
     import numpy as np
     M = by.T                                     # regulons x populations
@@ -710,39 +1001,64 @@ def _fig_activity_by_population(ctx, by, n_aside=0):
     spread = np.where(flat, 1.0, sd)
     Z = (M.to_numpy() - mu) / spread
     Z[flat.ravel(), :] = 0.0
-    order = np.argsort(-np.nanmax(Z, axis=1))[:min(_HEATMAP_ROWS, M.shape[0])]
+    # SELECTED by how population-specific a regulon is, DRAWN grouped by which population it
+    # peaks in. The two are different jobs and were being done by one `argsort`: the caption
+    # promises the most specific regulons, and a reader needs to see which populations carry a
+    # programme at all, which a panel with its rows interleaved cannot show.
+    pick = np.argsort(-np.nanmax(Z, axis=1))[:min(_HEATMAP_ROWS, M.shape[0])]
+    Zp = Z[pick]
+    grouped = np.lexsort((-np.nanmax(Zp, axis=1), np.argmax(np.nan_to_num(Zp, nan=-np.inf),
+                                                            axis=1)))
+    order = pick[grouped]
     Z, rows = Z[order], [M.index[i] for i in order]
     cols = list(M.columns)
 
     F, plt = ctx.figure, ctx.plot()
     wide = len(cols) > 8
     fig, ax = plt.subplots(figsize=(F.DOUBLE if wide else F.SINGLE,
-                                    max(1.8, 0.16 * len(rows) + 1.1)), layout="constrained")
-    lim = float(np.nanmax(np.abs(Z))) or 1.0
+                                    max(2.0, 0.17 * len(rows) + 1.5)), layout="constrained")
+    lim, n_clip = _symmetric_limit(Z, pct=98.0)
     im = ax.imshow(Z, aspect="auto", cmap="RdBu_r", vmin=-lim, vmax=lim)
     ax.set_xticks(np.arange(len(cols)))
     # Shortened to the shortest unambiguous tail: these are annotation PATHS, and rotated
     # ninety degrees the full ones take more height than the data. The source table keeps
-    # the whole path.
+    # the whole path. The cell count goes on a SECOND LINE, which rotated ninety degrees costs
+    # width and not height - the axis is as tall as the longest single line either way.
     _short = F.short_labels(list(cols))
-    ax.set_xticklabels([_short[c] for c in cols], rotation=90)
+    _n = dict(sizes or {})
+    ax.set_xticklabels([f"{_short[c]}\nn={int(_n[c]):,}" if c in _n else _short[c] for c in cols],
+                       rotation=90)
     ax.set_yticks(np.arange(len(rows)))
     ax.set_yticklabels(rows)
     ax.tick_params(length=0)
+    # SEPARATORS, so a row can be followed across a wide map. Without them a reader tracking one
+    # regulon across twelve near-white columns loses the row, which is the only thing the panel
+    # asks them to do.
+    ax.set_xticks(np.arange(-0.5, len(cols), 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, len(rows), 1), minor=True)
+    ax.grid(which="minor", color="white", lw=0.35)
+    ax.tick_params(which="minor", length=0)
     for s in ax.spines.values():
         s.set_visible(False)
-    cb = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
+    cb = fig.colorbar(im, ax=ax, fraction=0.028, pad=0.02, shrink=0.62, aspect=16,
+                      extend="both" if n_clip else "neither")
     cb.outline.set_visible(False)
-    cb.set_label("mean AUC, standardised across populations")
+    cb.set_label("mean AUC, standardised\nacross populations (z)")
     ctx.emit_figure(
         "F4_activity_by_population", fig,
         caption=(f"Mean regulon activity per population, standardised ACROSS POPULATIONS within "
                  f"each row: red is where a regulon is most active relative to its own average, "
                  f"blue where it is least. Rows are not comparable with each other and are not "
                  f"meant to be - AUC scales with the number of targets a regulon has. The "
-                 f"{len(rows)} most population-specific of {M.shape[0]} regulons are drawn; the "
-                 f"source table holds the raw, unstandardised mean for EVERY regulon, as does "
-                 f"tables/regulon_activity_by_label.csv. Annotator sentinels are not a "
+                 f"{len(rows)} most population-specific of {M.shape[0]} regulons are drawn, "
+                 f"grouped by the population each peaks in rather than by how specific it is, so "
+                 f"the populations that carry a regulon programme and the ones that carry none "
+                 f"can be told apart. The colour scale stops at z = +/-{lim:.1f}, the 98th "
+                 f"percentile of |z| in the panel"
+                 + (f"; {n_clip:,} cell(s) are more extreme than that and are clipped to the ends "
+                    f"of the bar, which is drawn with arrows to say so. " if n_clip else ". ")
+                 + f"The source table holds the raw, unstandardised mean for EVERY regulon, as "
+                 f"does tables/regulon_activity_by_label.csv. Annotator sentinels are not a "
                  f"population: the {n_aside:,} cell(s) carrying one are in no column."),
         # THE SOURCE IS THE WHOLE TABLE, BECAUSE THE CAPTION SAYS IT IS. This was
         # `M.iloc[order]` - the drawn rows alone - under a caption promising every regulon, so
@@ -753,12 +1069,32 @@ def _fig_activity_by_population(ctx, by, n_aside=0):
     return [str(r) for r in rows]
 
 
-def _fig_activity_on_layout(ctx, auc, picks, ranked_by="most variable across cells"):
+def _fig_activity_on_layout(ctx, auc, picks, ranked_by="most variable across cells",
+                            sizes=None):
     """The same activity against the manifold, where a table cannot show incoherence.
 
     A regulon whose high-AUC cells sit together on the layout is describing a state; one whose
     high-AUC cells are sprayed evenly over it is describing noise, or depth. Both give the same
     per-population mean, and only the picture separates them.
+
+    THE PANEL IS THE ARGUMENT HERE, so three drawing decisions are load-bearing rather than
+    cosmetic:
+
+      EQUAL ASPECT   a layout's two axes are the same kind of thing and the distance between two
+                     cells is the whole content of the picture. Drawn to fill a rectangular axes
+                     the manifold is STRETCHED - by whatever ratio the grid cell happened to have
+                     - and "concentrated in a region" against "spread along one direction", which
+                     is the distinction the panel exists to make, becomes a property of the figure
+                     layout. This is the one defect here that makes the picture say something
+                     false rather than merely say it badly.
+      A ROBUST TOP   AUC has a long right tail. With `vmax` at the maximum, a handful of cells set
+                     the scale and the whole manifold renders as one flat mid-tone - which reads
+                     as "no structure", the opposite of what a panel drawn to show structure
+                     should say when it cannot. Clipped at the 99th percentile, with the colourbar
+                     drawn with an arrow to say it was clipped.
+      MARKER SIZE    a point size that suits ten thousand cells is a solid mass at a hundred
+                     thousand, and the local density - which is what coherence looks like - is
+                     exactly what it destroys. Scaled to the number of cells actually drawn.
 
     THE LAYOUT, NEVER THE REPRESENTATION. `ctx.layout()` returns two columns produced to be
     looked at, or None. There is no fallback to the first two columns of anything wider: a
@@ -806,19 +1142,43 @@ def _fig_activity_on_layout(ctx, auc, picks, ranked_by="most variable across cel
     F, plt = ctx.figure, ctx.plot()
     ncol = 2 if len(picks) > 1 else 1
     nrow = (len(picks) + ncol - 1) // ncol
-    fig, axs = plt.subplots(nrow, ncol,
-                            figsize=(F.DOUBLE if ncol == 2 else F.SINGLE, 2.15 * nrow),
+    n_drawn = int(ok.sum())
+    pt = float(np.clip(20_000.0 / max(n_drawn, 1), 0.8, 3.0))
+    xs, ys = xy[ok][:, 0], xy[ok][:, 1]
+    # THE ROW HEIGHT COMES FROM THE LAYOUT'S OWN ASPECT, because the panels are drawn to equal
+    # aspect and something has to give. Fixed at 2.55 in a row, a square manifold left about half
+    # an inch of white down the right of every panel, `bbox_inches="tight"` trimmed it, and the
+    # figure was saved at 160 mm - neither of the two widths this tool exists to hit. Sizing the
+    # row from the data instead keeps the panels at the declared width for any layout, and the
+    # clamp stops a degenerate one from asking for a page-tall or a hairline-thin figure.
+    width = F.DOUBLE if ncol == 2 else F.SINGLE
+    sx = float(np.ptp(xs)) or 1.0
+    sy = float(np.ptp(ys)) or 1.0
+    row_h = float(np.clip((width / ncol - 0.60) * (sy / sx) + 0.55, 1.4, 3.4))
+    fig, axs = plt.subplots(nrow, ncol, figsize=(width, row_h * nrow),
                             squeeze=False, layout="constrained")
+    n_clipped, sz = 0, dict(sizes or {})
     for ax, reg in zip(axs.ravel(), picks):
         v = np.asarray(auc[reg], dtype=float)
         o = np.argsort(v[ok])                     # the active cells drawn last, not buried
-        pts = ax.scatter(xy[ok][o, 0], xy[ok][o, 1], c=v[ok][o], s=2, cmap="viridis",
+        vv = v[ok][o]
+        lo = float(np.nanmin(vv)) if vv.size else 0.0
+        hi = float(np.nanpercentile(vv, 99)) if vv.size else 1.0
+        if not hi > lo:                           # a constant regulon, or one 99% at its floor
+            hi = float(np.nanmax(vv)) if vv.size else 1.0
+            hi = hi if hi > lo else lo + 1e-9
+        n_clipped += int((vv > hi).sum())
+        pts = ax.scatter(xs[o], ys[o], c=vv, s=pt, cmap="viridis", vmin=lo, vmax=hi,
                          linewidths=0, rasterized=True)
         F.rasterize_points(ax)
+        # A LAYOUT DRAWN OUT OF ASPECT IS A LAYOUT THAT SAYS SOMETHING FALSE. See the docstring.
+        ax.set_aspect("equal")
         _clean(ax, F, name)
-        ax.set_title(str(reg), loc="left")
-        cb = fig.colorbar(pts, ax=ax, fraction=0.045, pad=0.02)
+        ax.set_title(f"{reg}   {int(sz[reg]):,} targets" if reg in sz else str(reg), loc="left")
+        cb = fig.colorbar(pts, ax=ax, fraction=0.040, pad=0.015, shrink=0.55, aspect=13,
+                          extend="max" if (vv > hi).any() else "neither")
         cb.outline.set_visible(False)
+        cb.ax.tick_params(length=1.5, pad=1.2)
         cb.set_label("AUC")
     for ax in axs.ravel()[len(picks):]:
         ax.set_visible(False)
@@ -838,9 +1198,14 @@ def _fig_activity_on_layout(ctx, auc, picks, ranked_by="most variable across cel
                  f"cells are not buried. Read coherence, not level: activity concentrated in a "
                  f"region of the manifold is a state, activity sprayed evenly across it is noise "
                  f"or sequencing depth, and the two give the same per-population mean. The "
-                 f"colour scale is per panel because AUC is not comparable between regulons of "
-                 f"different size. {int((~ok).sum()):,} cell(s) had no finite coordinates and "
-                 f"are absent from the panels but present in the source table."),
+                 f"colour scale is per panel - and the target count is printed beside each name - "
+                 f"because AUC is not comparable between regulons of different size; each panel "
+                 f"runs from its own minimum to its own 99th percentile"
+                 + (f", and {n_clipped:,} cell(s) above that are clipped to the top of their bar, "
+                    f"which carries an arrow to say so" if n_clipped else "")
+                 + f". Both axes are drawn to the same scale, so a shape on this page is the "
+                 f"shape the layout has. {int((~ok).sum()):,} cell(s) had no finite coordinates "
+                 f"and are absent from the panels but present in the source table."),
         source=src)
 
 
@@ -1073,8 +1438,14 @@ def run(ctx):
         {"stage": "with a co-expression module",
          "transcription_factors": len({_tf(m) for m in modules}),
          "items": len(modules), "unit": "modules offered to cisTarget"},
+        # THE ONE STEP THE PANEL HIGHLIGHTS, MARKED HERE RATHER THAN COUNTED THERE. The figure
+        # draws the step that ARRIVES at this stage in the alert hue and puts its retention in the
+        # title, and it finds it by this flag: a panel that highlighted the fourth row instead
+        # would go on highlighting the fourth row after anyone inserted a stage, and would look
+        # exactly as deliberate afterwards as it does now. The key never reaches the source table.
         {"stage": "motif-enriched", "transcription_factors": len({_tf(r) for r in all_regulons}),
-         "items": len(all_regulons), "unit": "regulons out of cisTarget, before the size floor"},
+         "items": len(all_regulons), "unit": "regulons out of cisTarget, before the size floor",
+         "is_pruning": True},
         {"stage": f"kept (>= {ctx.config['min_genes_per_regulon']} targets)",
          "transcription_factors": len({_tf(r) for r in regulons}),
          "items": len(regulons), "unit": "regulons delivered"},
@@ -1209,8 +1580,14 @@ def run(ctx):
             "per-cell AUC is unaffected.")
     else:
         ctx.emit_table("regulon_activity_by_label", by_pop.T)
+        # HOW MANY CELLS EACH COLUMN OF THAT PANEL STANDS ON. `by_pop` is a mean and a mean says
+        # nothing about how many cells it was taken over, so a population of forty and one of
+        # forty thousand arrive at the panel indistinguishable. Counted here from the same
+        # positional grouping `_population_means` used, so the two cannot disagree.
+        _g = np.asarray(pops.groups)
+        pop_sizes = {str(l): int((_g == l).sum()) for l in pops.names}
         try:
-            picks = _fig_activity_by_population(ctx, by_pop, n_aside)
+            picks = _fig_activity_by_population(ctx, by_pop, n_aside, pop_sizes)
             ranked_by = "most population-specific in the panel above"
         except Exception as e:                                            # noqa: BLE001
             ctx.log(f"    F4_activity_by_population not drawn: {type(e).__name__}: {e}")
@@ -1223,7 +1600,11 @@ def run(ctx):
         if not picks:
             picks, ranked_by = (list(auc.var().sort_values(ascending=False).index),
                                 "most variable across cells")
-        _fig_activity_on_layout(ctx, auc, picks, ranked_by)
+        # THE TARGET COUNT TRAVELS WITH THE NAME. Every panel there carries its own colour scale,
+        # because AUC is not comparable between regulons of different size - and a reader has no
+        # way to see the size that makes that true unless it is printed beside the name.
+        _fig_activity_on_layout(ctx, auc, picks, ranked_by,
+                                {str(r.name): len(r.genes) for r in regulons})
     except Exception as e:                                                # noqa: BLE001
         ctx.log(f"    F5_activity_on_layout not drawn: {type(e).__name__}: {e}")
 

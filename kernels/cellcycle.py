@@ -493,6 +493,111 @@ def _stability_table(ref, alt):
 #   F1 by population     the answer per population: which populations carry the signal.
 
 
+def _fit_column(fig, width, *, pad=0.06, tries=6, grow=True):
+    """Size the axes so the WHOLE panel - key, tick labels and all - prints at `width`.
+
+    `figsize=(F.SINGLE, ...)` sizes the AXES, and `emit_figure` saves with `bbox_inches="tight"`,
+    so everything outside them is ADDED to the file rather than fitted into it. Measured on this
+    plugin's own panels: a three-entry key in the right margin made F1 119 mm wide and F4 105 mm,
+    against the 85 mm single column they were all declared at. Nothing fails - the figure is
+    simply scaled down when it is placed, and 7 pt labels arrive at 5 pt, which is the one
+    publication defect that is invisible in the file and obvious on the page.
+
+    A candidate for the shared module; it stays here until a second plugin has used it.
+    """
+    try:
+        fig.canvas.draw()
+        cap, last, best = float(width) * 1.8, None, None
+        for _ in range(int(tries)):
+            try:
+                bb = fig.get_tightbbox()
+            except TypeError:                                   # older matplotlib wants a renderer
+                bb = fig.get_tightbbox(fig.canvas.get_renderer())
+            over = float(bb.width) + float(pad) - float(width)
+            w, h = fig.get_size_inches()
+            if over <= 0.03 and (best is None or w > best):
+                best = w                       # the widest canvas that still fits the column
+            if abs(over) <= 0.03 or (over < 0 and not grow):
+                return
+            new = min(cap, max(1.5, w - over))
+            if last is not None and abs(new - last) < 0.01:    # a constraint the width cannot move
+                return
+            last = new
+            fig.set_size_inches(new, h)
+            fig.canvas.draw()
+        # AN ARTIST THAT DOES NOT SCALE - a long annotation, a wide tick label - can hold the
+        # panel over the column however narrow the canvas gets. End on the widest size that was
+        # measured to fit rather than on wherever the last iteration happened to stop.
+        if best is not None:
+            fig.set_size_inches(best, fig.get_size_inches()[1])
+    except Exception:                                                     # noqa: BLE001
+        return                       # a panel slightly off the column beats a panel not drawn
+
+
+def _key_above(fig, ax, *, ncol=3):
+    """The categorical key as one row ABOVE the panel, where it costs height and not width.
+
+    `F.legend_outside` is the tool's convention and is right for a panel whose data is a cloud;
+    for a stacked bar it is not, because the bar already spans the full width and the key in the
+    right margin is pure overflow - see `_fit_column` for what that cost in millimetres.
+    """
+    h, l = ax.get_legend_handles_labels()
+    fig.subplots_adjust(top=0.97)          # the key sits above the figure; the margin was white
+    return fig.legend(h, l, loc="lower center", bbox_to_anchor=(0.5, 1.0), ncol=int(ncol),
+                      handletextpad=0.4, columnspacing=1.1, borderaxespad=0)
+
+
+def _pct_axis(ax, axis="x"):
+    """Ticks as percentages. A fraction axis labelled 0.0-1.0 is read as a percentage anyway."""
+    from matplotlib.ticker import FuncFormatter
+    getattr(ax, f"{axis}axis").set_major_formatter(FuncFormatter(lambda v, _p: f"{100 * v:g}"))
+
+
+def _wilson(k, n, z=1.96):
+    """95% interval for a proportion, closed form - scipy is not a dependency of this plugin.
+
+    On the depth panel the bins hold thousands of cells and the interval is hairline thin, which
+    is the point: it says the trend there is not sampling noise, and it would widen visibly on a
+    cohort where the bins are small.
+    """
+    import numpy as np
+    k, n = np.asarray(k, dtype=float), np.maximum(np.asarray(n, dtype=float), 1.0)
+    p = k / n
+    d = 1.0 + z * z / n
+    c = (p + z * z / (2 * n)) / d
+    h = z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d
+    return np.clip(c - h, 0, 1), np.clip(c + h, 0, 1)
+
+
+def _free_corner(x, y, top, *, box=(0.66, 0.30)):
+    """The corner of an axes the data is not in, as `annotate` keywords: `xy`, `ha`, `va`.
+
+    A number printed on a panel has to sit somewhere, and a fixed corner is right for one shape
+    of data and wrong for its mirror image - which on a trend panel is not a rare case but the
+    other half of the outcome the panel is drawn to distinguish. Corners are tried in reading
+    order and the first one no point falls into wins; where every corner is occupied the last is
+    returned, because a legible overlap in a known place beats a search that returns nothing.
+    """
+    import numpy as np
+    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    xf = (x - np.nanmin(x)) / max(float(np.nanmax(x) - np.nanmin(x)), 1e-9)
+    yf = y / max(float(top), 1e-9)
+    bw, bh = box
+    corners = ((0.03, 0.03, "left", "bottom"), (0.03, 0.97, "left", "top"),
+               (0.97, 0.03, "right", "bottom"), (0.97, 0.97, "right", "top"))
+    pick = corners[-1]
+    for c in corners:
+        cx, cy, ha, va = c
+        x0 = cx if ha == "left" else cx - bw
+        y0 = cy if va == "bottom" else cy - bh
+        hit = ((xf > x0 - .02) & (xf < x0 + bw + .02)
+               & (yf > y0 - .02) & (yf < y0 + bh + .02)).any()
+        if not hit:
+            pick = c
+            break
+    return dict(xy=(pick[0], pick[1]), ha=pick[2], va=pick[3])
+
+
 def _fig_panel_detection(ctx, det):
     """Detection rate of every matched panel gene, ranked - the licence for everything below."""
     import numpy as np
@@ -507,28 +612,49 @@ def _fig_panel_detection(ctx, det):
             "them is missing.")
         return
     F, plt = ctx.figure, ctx.plot()
-    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.78))
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.72))
+    dead, widest = [], 1
     for panel in ("S", "G2M"):
         d = det[det["panel"] == panel].sort_values("detection_rate", ascending=False)
         if not len(d):
             continue
-        ax.plot(np.arange(1, len(d) + 1), d["detection_rate"].values,
-                color=PHASE_COLOURS[panel], lw=0.9, marker="o", ms=1.8,
-                label=f"{panel} ({len(d)} genes)")
-    ax.set_xlabel("matched panel genes, ranked by detection")
+        y = np.asarray(d["detection_rate"].values, dtype=float)
+        x = np.arange(1, len(y) + 1)
+        widest = max(widest, len(y))
+        ax.plot(x, y, color=PHASE_COLOURS[panel], lw=0.9, marker="o", ms=2.0,
+                mec="none", label=f"{panel} panel  ({len(y)} genes matched)")
+        # THE DEAD TAIL, MARKED WHERE IT IS rather than only counted in the caption. These genes
+        # are in var_names, contribute nothing to the panel mean, and still count toward
+        # ctrl_size - so the length of this tail is what separates "not cycling" from "nothing
+        # was scored", and it was the one quantity the panel did not show.
+        z = y <= 0
+        if z.any():
+            ax.plot(x[z], y[z], ls="none", marker="o", ms=3.0, mfc="white",
+                    mec=PHASE_COLOURS[panel], mew=0.8)
+            dead.append(f"{panel} {int(z.sum())}/{len(y)}")
+    ax.set_xlabel("panel genes, ranked within their own panel")
     ax.set_ylabel("fraction of cells with a non-zero value")
     ax.set_ylim(0, 1)
-    F.legend_outside(fig, ax)
+    ax.set_xlim(0, widest + 1)
+    if dead:
+        ax.annotate("hollow = detected in NO cell (" + ", ".join(dead) + ")\n"
+                    "these still count toward the control-set size",
+                    xy=(0.98, 0.72), xycoords="axes fraction", ha="right", va="top",
+                    fontsize=6, color=F.INK, linespacing=1.35)
+    ax.legend(loc="upper right", markerscale=2.0, handletextpad=0.5, borderaxespad=0.2)
+    _fit_column(fig, F.SINGLE)
     n_zero = int((det["detection_rate"] <= 0).sum())
     ctx.emit_figure(
         "F3_panel_detection", fig,
         caption=(f"Every panel gene that matched this object's gene names, ranked by the "
-                 f"fraction of cells it is detected in, on the values that were scored. A curve "
-                 f"that falls to the floor early means most of the panel contributes nothing, "
-                 f"and a score built from the rest is a score over a handful of genes - which is "
-                 f"arithmetically fine and reads as a resting population. {n_zero} of "
-                 f"{len(det)} matched genes are detected in no cell at all; they still count "
-                 f"toward the control-set size, because that is the number of NAMES matched."),
+                 f"fraction of cells it is detected in, on the values that were scored. Each "
+                 f"panel is ranked within itself, so a position on the x axis is not the same "
+                 f"gene in the two curves. A curve that falls to the floor early means most of "
+                 f"the panel contributes nothing, and a score built from the rest is a score over "
+                 f"a handful of genes - which is arithmetically fine and reads as a resting "
+                 f"population. {n_zero} of {len(det)} matched genes are detected in no cell at "
+                 f"all (hollow markers); they still count toward the control-set size, because "
+                 f"that is the number of NAMES matched."),
         source=det.set_index("gene"))
 
 
@@ -543,25 +669,59 @@ def _fig_scores(ctx, S, G2M, phase):
     lab = ctx.obs("label")
     if lab is not None:
         dd["label"] = lab.astype(str).values
-    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.9))
-    for phase_name in PHASES:
-        m = np.asarray(phase) == phase_name
-        if m.any():
-            ax.scatter(S[m], G2M[m], s=2, c=PHASE_COLOURS[phase_name], label=phase_name,
-                       linewidths=0, rasterized=True)
-    F.rasterize_points(ax)
-    # THE RULE, DRAWN, because the distance from these three lines IS the confidence of the call
-    # and there is no other confidence to report. Below both axes is G1; above them the diagonal
-    # separates S from G2M. A cell sitting on a line is one control draw from the other answer.
+    ph = np.asarray(phase)
+    n_cells = int(ph.size)
+    # TALLER THAN THE COLUMN IS WIDE, because the axes below is SQUARE: with equal aspect the
+    # box takes the smaller of the two, so a square canvas leaves the panel height-limited and
+    # `bbox_inches="tight"` then trims the unused width off the sides - a panel declared at 85 mm
+    # that arrives at 75 mm. The extra height is what lets the square grow to the full column.
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 1.16))
     lo = float(min(np.nanmin(S), np.nanmin(G2M)))
     hi = float(max(np.nanmax(S), np.nanmax(G2M)))
-    if hi > lo:
-        ax.plot([lo, hi], [lo, hi], color=F.INK, lw=0.5, ls=":", zorder=0)
-    ax.axhline(0, color=F.INK, lw=.5)
-    ax.axvline(0, color=F.INK, lw=.5)
-    ax.set_xlabel("S score")
-    ax.set_ylabel("G2M score")
-    F.legend_outside(fig, ax)
+    pad = 0.04 * (hi - lo) if hi > lo else 1.0
+    # ONE SQUARE AXIS FOR BOTH SCORES, and it is not cosmetic. The S/G2M boundary is the line
+    # y = x, and on an axis whose scales differ that line is not drawn at 45 degrees - so the
+    # panel showed points assigned by a rule the picture contradicted. Equal limits and equal
+    # aspect are what make "whichever score is larger" readable off the figure.
+    ax.set_xlim(lo - pad, hi + pad)
+    ax.set_ylim(lo - pad, hi + pad)
+    ax.set_aspect("equal", adjustable="box")
+    ax.fill_between([lo - pad, 0.0], lo - pad, 0.0, color="#F4F4F4", lw=0, zorder=0)
+    for phase_name in PHASES:
+        m = ph == phase_name
+        if m.any():
+            ax.scatter(S[m], G2M[m], s=1.4, c=PHASE_COLOURS[phase_name], label=phase_name,
+                       alpha=0.45, linewidths=0, rasterized=True)
+    F.rasterize_points(ax)
+    # THE RULE, DRAWN, because the distance from these lines IS the confidence of the call and
+    # there is no other confidence to report. Below and left of the axes is G1 (shaded); above
+    # them the diagonal separates S from G2M. A cell sitting on a line is one control draw from
+    # the other answer.
+    #
+    # THE DIAGONAL IS CLIPPED AT THE ORIGIN, and drawing it into the third quadrant was wrong:
+    # both scores are negative there, every cell is G1 whichever is larger, and a boundary drawn
+    # across a region it does not divide invents a distinction the rule does not make.
+    if hi > 0:
+        ax.plot([0, hi + pad], [0, hi + pad], color=F.INK, lw=0.6, ls=":", zorder=2)
+    ax.axhline(0, color=F.INK, lw=.5, zorder=2)
+    ax.axvline(0, color=F.INK, lw=.5, zorder=2)
+    ax.set_xlabel("S score  (panel mean - control mean)")
+    ax.set_ylabel("G2M score  (panel mean - control mean)")
+    # THE KEY IS THE REGIONS THEMSELVES. A swatch in the margin makes a reader map three colours
+    # onto three areas that the axes have already named; the count belongs where the cells are,
+    # and it keeps the panel at one column wide.
+    frac = {p: float((ph == p).mean()) for p in PHASES}
+    cnt = {p: int((ph == p).sum()) for p in PHASES}
+    where = {"G1": (0.03, 0.03, "left", "bottom"), "S": (0.97, 0.03, "right", "bottom"),
+             "G2M": (0.03, 0.97, "left", "top")}
+    for p in PHASES:
+        x, y, ha, va = where[p]
+        ax.annotate(f"{p}\n{cnt[p]:,}  ({100 * frac[p]:.1f}%)",
+                    xy=(x, y), xycoords="axes fraction", ha=ha, va=va, fontsize=6.5,
+                    color=(F.INK if p == "G1" else PHASE_COLOURS[p]), linespacing=1.3,
+                    bbox=dict(boxstyle="square,pad=0.25", ec="none", alpha=0.72,
+                              fc=("#F4F4F4" if p == "G1" else "white")))
+    _fit_column(fig, F.SINGLE)
     # THE ASSAY IS READ, NOT ASSUMED. This sentence used to be written for every object: "on
     # single nuclei that is expected, because cell-cycle transcripts are partly cytoplasmic".
     # It is true of nuclei and false of whole cells, and a caption is where a reader is least
@@ -581,14 +741,18 @@ def _fig_scores(ctx, S, G2M, phase):
                   f"cell-cycle transcripts does not explain it")
     ctx.emit_figure(
         "F2_scores", fig,
-        caption=(f"S against G2M score, one point per cell, with the boundary the phase call is "
-                 f"made on. The rule has no threshold in it: a cell is G1 only where BOTH scores "
-                 f"are negative (below and left of the solid lines), and otherwise it is "
-                 f"whichever score is larger (either side of the dotted diagonal). So a cell just "
+        caption=(f"S against G2M score, one point per cell ({n_cells:,} cells), with the boundary "
+                 f"the phase call is made on; both axes carry the same scale, so the dotted line "
+                 f"is the true y = x boundary. The rule has no threshold in it: a cell is G1 only "
+                 f"where BOTH scores are negative (the shaded quadrant), and otherwise it is "
+                 f"whichever score is larger (either side of the dotted diagonal, which divides "
+                 f"nothing where both scores are negative and is not drawn there). So a cell just "
                  f"above a line is reported exactly like one far above it, and a cloud sitting at "
-                 f"the origin means the panel found little to score - {origin}. Every cell of the "
-                 f"object is drawn, annotator sentinels included: this is a per-cell result, and "
-                 f"only the per-population panel excludes them."),
+                 f"the origin means the panel found little to score - {origin}. Counts are "
+                 f"printed in the region they belong to. Every cell of the object is drawn, "
+                 f"annotator "
+                 f"sentinels included: this is a per-cell result, and only the per-population "
+                 f"panel excludes them."),
         source=pd.DataFrame(dd).set_index("barcode"))
 
 
@@ -603,34 +767,49 @@ def _fig_stability(ctx, tab, seeds):
     F, plt = ctx.figure, ctx.plot()
     cols = [p for p in PHASES]
     frac = d[cols].div(d[cols].sum(axis=1), axis=0)
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.6, 0.34 * len(frac) + 0.9)))
+    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.35, 0.36 * len(frac) + 1.0)))
     y = np.arange(len(frac))
+    # ONLY THE DISAGREEMENT IS DRAWN, and the full-composition version could not show it. Each
+    # row of that bar was its own colour from end to end - a call that moves 1% of the time and
+    # one that moves 30% both render as a solid bar, because the quantity the panel exists to
+    # report was 1% of the axis. Here the axis is the moved fraction, so the check is legible
+    # whether it passes or fails, and the colours say WHICH phase the cells moved to.
     left = np.zeros(len(frac))
     for c in cols:
-        ax.barh(y, frac[c], left=left, color=PHASE_COLOURS[c], label=f"re-called {c}", height=.66)
-        left += frac[c].values
+        v = np.array([0.0 if p == c else float(frac.loc[p, c]) for p in frac.index])
+        ax.barh(y, v, left=left, color=PHASE_COLOURS[c], label=f"re-called {c}", height=.68,
+                edgecolor="white", linewidth=0.3)
+        left += v
+    top = float(max(left.max(), 1e-3))
+    ax.set_xlim(0, top * 1.34)
+    for i, p in enumerate(frac.index):
+        ax.annotate(f"{100 * left[i]:.2f}% moved", xy=(left[i] + top * 0.03, y[i]),
+                    va="center", ha="left", fontsize=6, color=F.INK)
     ax.set_yticks(y)
     ax.set_yticklabels([f"{p}  (n={int(d.loc[p, 'n_cells']):,})" for p in frac.index])
-    ax.invert_yaxis()
-    ax.set_xlim(0, 1)
-    ax.set_xlabel("fraction of (cell, seed) pairs")
+    ax.set_ylim(len(frac) - 0.5, -0.5)          # one row is one row, not the whole panel
+    _pct_axis(ax)
+    ax.set_xlabel("% of (cell, seed) pairs re-called as a DIFFERENT phase")
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
-    F.legend_outside(fig, ax)
+    _key_above(fig, ax, ncol=3)
+    _fit_column(fig, F.SINGLE)
     total = int(d["n_cells"].sum()) * len(seeds)
     agree = int(sum(int(d.loc[p, p]) for p in frac.index))
     moved = 1.0 - (agree / total if total else 1.0)
     ctx.emit_figure(
         "F4_seed_stability", fig,
-        caption=(f"Each row is the cells called that phase at the reference control draw; the "
-                 f"bar is what {len(seeds)} further draw(s) made of the same cells, at seeds "
-                 f"{', '.join(str(s) for s in seeds)}. Only the control set changes - the gene "
-                 f"panels, the values and the cells are identical - so everything off the "
-                 f"diagonal is a call that belongs to the draw rather than to the cell. "
-                 f"{100 * moved:.1f}% of (cell, seed) pairs changed phase. A high figure does "
-                 f"not mean the scoring is wrong; it means the cells sit near the boundary in "
-                 f"F2, and that the phase COUNTS should not be quoted to more precision than "
-                 f"this."),
+        caption=(f"Each row is the cells called that phase at the reference control draw; the bar "
+                 f"is the fraction of those cells that {len(seeds)} further control draw(s) "
+                 f"(seeds {', '.join(str(s) for s in seeds)}) called something ELSE, coloured by "
+                 f"what they were called instead. The rest of each row - the number in brackets - kept "
+                 f"its phase and is not drawn, so that the moved fraction is readable at any "
+                 f"size; note the axis maximum. Only the control set changes: the gene panels, "
+                 f"the values and the cells are identical, so everything here is a call that "
+                 f"belongs to the draw rather than to the cell. {100 * moved:.1f}% of (cell, "
+                 f"seed) pairs changed phase. A high figure does not mean the scoring is wrong; "
+                 f"it means the cells sit near the boundary in F2, and that the phase COUNTS "
+                 f"should not be quoted to more precision than this."),
         source=tab)
 
 
@@ -674,34 +853,98 @@ def _fig_depth(ctx, detected, phase, S, G2M):
         _rx = pd.Series(_x).rank().to_numpy()
         _ry = pd.Series(_y).rank().to_numpy()
         _rho = float(np.corrcoef(_rx, _ry)[0, 1])
-    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.72))
-    ax.plot(g["detected_genes_median"].values, g["cycling_fraction"].values,
-            color=F.INK, lw=1.0, marker="o", ms=3.0)
-    ax.set_xlabel("genes detected per cell (bin median)")
-    ax.set_ylabel("fraction called S or G2M")
-    ax.set_ylim(bottom=0)
+    # TWO PANELS ON ONE DEPTH AXIS: the call, and the scores it is made from. The medians were
+    # already in this panel's own source table and nothing drew them, so the page could report
+    # that the CALL tracks depth without ever showing that the SCORES do - which is the
+    # mechanism, and the half a reader needs to believe the first.
+    fig, (ax, ax2) = plt.subplots(
+        2, 1, sharex=True, figsize=(F.SINGLE, F.SINGLE * 1.02),
+        gridspec_kw=dict(height_ratios=[1.55, 1.0], hspace=0.12))
+    lo95, hi95 = _wilson(g["cycling_fraction"].values * g["n_cells"].values, g["n_cells"].values)
+    ax.fill_between(_x, lo95, hi95, color=F.GREY, lw=0, zorder=1)
+    ax.plot(_x, _y, color=F.INK, lw=1.2, marker="o", ms=3.4, zorder=3, clip_on=False)
+    cohort = float(df["cycling"].mean())
+    ax.axhline(cohort, color=F.INK, lw=0.5, ls="--", zorder=2)
+    ax.annotate(f"cohort {100 * cohort:.1f}%", xy=(_x[-1], cohort), xytext=(0, 3),
+                textcoords="offset points", ha="right", va="bottom", fontsize=6, color=F.INK)
+    ax.set_ylabel("cells called S or G2M (%)")
+    # A PERCENTAGE AXIS DOES NOT GO ABOVE 100, and one that spans a tenth of a point turns a
+    # hairline interval into a band across the panel. Headroom for the annotation, floored at two
+    # points and capped at the only value the quantity can reach.
+    top_y = min(1.0, max(0.02, float(np.nanmax(hi95)), cohort) * 1.32)
+    ax.set_ylim(0, top_y)
+    _pct_axis(ax, "y")
+    # THE FINDING, STATED ON THE FIGURE. This is the panel that decides whether the cycling
+    # fraction on this page is biology or library depth, and it carried no number at all: a
+    # reader had to eyeball a slope and take the direction on trust.
+    if _rho is not None:
+        drift = 100.0 * (_y[-1] - _y[0])
+        # SHORT LINES ON PURPOSE. A caption can run to sixty characters and a label inside an
+        # 85 mm panel cannot: text does not shrink with the axes, so a long annotation pushes the
+        # panel off the column instead of wrapping. The reasoning is in the caption; what is on
+        # the figure is the direction, the coefficient and the two ends of the trend.
+        verdict = ("FALLS as depth rises" if _rho <= -0.6 else
+                   "RISES with depth" if _rho >= 0.6 else "is not monotone in depth")
+        # AND IT GOES IN A CORNER THE DATA IS NOT IN. Fixed at the bottom left it was legible
+        # on a falling trend and sat on the first three points of a rising one - and this panel
+        # is drawn precisely because either can happen.
+        # The cohort line is data too - it spans the whole width, and a corner it runs through
+        # is not free.
+        corner = _free_corner(np.r_[_x, _x], np.r_[_y, np.full(_x.shape, cohort)], top_y)
+        ax.annotate(f"the cycling call {verdict}\n"
+                    f"Spearman rho = {_rho:+.2f} over {len(_x)} depth bins\n"
+                    f"{100 * _y[0]:.1f}% to {100 * _y[-1]:.1f}% ({drift:+.1f} pts) across them",
+                    xycoords="axes fraction", fontsize=6, color=F.INK, linespacing=1.5,
+                    **corner)
+    for name, col in (("S", "S_score_median"), ("G2M", "G2M_score_median")):
+        ax2.plot(_x, g[col].values, color=PHASE_COLOURS[name], lw=1.2, marker="o", ms=3.0,
+                 mec="none", label=f"{name} score")
+    ax2.axhline(0, color=F.INK, lw=0.5)
+    # THE NOTE GOES ON THE SIDE OF THE LINE THE CURVES ARE NOT ON, and inside the panel: where
+    # every score is negative the zero line sits against the top spine, and a label placed above
+    # it lands in the panel overhead.
+    _lo2, _hi2 = ax2.get_ylim()
+    _zf = (0.0 - _lo2) / max(_hi2 - _lo2, 1e-9)
+    _above = float(np.nanmedian(g["S_score_median"].values[-2:])) < 0
+    if _above and _zf > 0.88:                      # the line is against the top spine
+        _above = False
+    elif not _above and _zf < 0.12:                # and against the bottom one
+        _above = True
+    ax2.annotate("zero - the phase boundary", xy=(_x[-1], 0), xytext=(0, 2 if _above else -3),
+                 textcoords="offset points", ha="right", va=("bottom" if _above else "top"),
+                 fontsize=6, color=F.INK)
+    ax2.set_ylabel("median score")
+    ax2.set_xlabel("genes detected per cell (bin median)")
+    ax2.legend(loc="best", markerscale=2.0, handletextpad=0.5, borderaxespad=0.2)
+    _fit_column(fig, F.SINGLE)
     # TEN BINS WERE ASKED FOR AND ARE NOT WHAT WAS DRAWN. `duplicates="drop"` collapses quantile
     # edges that tie, so an object whose cells share detected-gene counts gets fewer - the guard
     # above accepts as few as three - and the caption said "ten" whatever came out. It is
     # counted, and the smallest bin is named, because a bin holding two cells has a cycling
     # fraction of 0, 0.5 or 1 whatever the biology.
     n_bins_drawn, smallest = int(len(g)), int(g["n_cells"].min())
+    trend = ("" if _rho is None else
+             f"Over these bins the fraction called S or G2M has Spearman rho {_rho:+.2f} against "
+             f"the bin's median detected-gene count, printed on the panel. ")
     ctx.emit_figure(
         "F5_score_vs_detection", fig,
-        caption=(f"Cells in {n_bins_drawn} bins of how many genes were detected in them (ten were "
-                 f"asked for; quantile edges that tie are collapsed), against the fraction of "
-                 f"each bin called S or G2M. The smallest bin holds {smallest:,} cell(s), and a "
-                 f"bin holding few cells moves in steps rather than smoothly. The control set is "
-                 f"matched to the panel on a GENE's abundance and on nothing about the CELL, so a "
-                 f"cell with few detected genes has a noisier panel mean and a noisier control "
-                 f"mean at once. A line that rises with depth means part of the cycling call is "
-                 f"the library rather than the biology, and any comparison of cycling fractions "
-                 f"between groups that differ in depth is reading that first. A flat line is the "
-                 f"check passing."),
+        caption=(f"TOP: cells in {n_bins_drawn} bins of how many genes were detected in them "
+                 f"(ten were asked for; quantile edges that tie are collapsed), against the "
+                 f"fraction of each bin called S or G2M, with a 95% interval on each bin "
+                 f"(shaded) and the "
+                 f"cohort fraction dashed. BOTTOM: the median of the two scores the call is made "
+                 f"from, on the same depth axis, against the zero the call compares them to - the "
+                 f"mechanism behind whatever the top panel shows. The smallest bin holds "
+                 f"{smallest:,} cell(s), and a bin holding few cells moves in steps rather than "
+                 f"smoothly. {trend}The control set is matched to the panel on a GENE's abundance "
+                 f"and on nothing about the CELL, so a cell with few detected genes has a noisier "
+                 f"panel mean and a noisier control mean at once. A line with ANY slope - rising "
+                 f"or falling - means part of the cycling call is the library rather than the "
+                 f"biology, and any comparison of cycling fractions between groups that differ in "
+                 f"depth is reading that first. A flat line is the check passing."),
         source=g)
-
-
     return _rho
+
 
 def _fig_by_population(ctx, phase):
     """Scored phase per population - the result, and the panel the trajectory check is made on."""
@@ -725,30 +968,56 @@ def _fig_by_population(ctx, phase):
         if c not in ct:
             ct[c] = 0
     ct = ct[list(PHASES)]
-    frac = ct.div(ct.sum(axis=1), axis=0).sort_values("G1")
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.6, 0.20 * len(frac) + 0.9)))
+    n_per = ct.sum(axis=1)
+    # STABLE, so populations that tie - every one of them, where nothing scored - keep the
+    # order they came in rather than a different one on every run.
+    frac = ct.div(n_per, axis=0).sort_values("G1", kind="mergesort")
+    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.6, 0.21 * len(frac) + 0.95)))
     left = np.zeros(len(frac))
     for c in PHASES:
         ax.barh(np.arange(len(frac)), frac[c], left=left, color=PHASE_COLOURS[c], label=c,
-                height=.72)
+                height=.72, edgecolor="white", linewidth=0.3)
         left += frac[c].values
+    # THE COHORT'S OWN G1 FRACTION, so a population can be read against the page's headline
+    # rather than against the eye. Bars are stacked G1 first, so this line is where a population
+    # with exactly the cohort's cycling fraction would break.
+    cohort_g1 = float(ct["G1"].sum()) / max(1, int(n_per.sum()))
+    ax.axvline(cohort_g1, color=F.INK, lw=0.6, ls="--", zorder=3)
+    _right = cohort_g1 > 0.6                      # the label goes on the side with room for it
+    ax.annotate(f"cohort {100 * (1 - cohort_g1):.1f}% cycling", xy=(cohort_g1, -0.62),
+                xytext=(-3 if _right else 3, 0), textcoords="offset points",
+                ha=("right" if _right else "left"), va="bottom", fontsize=6, color=F.INK)
+    # NAMES CUT TO THEIR SHORTEST UNAMBIGUOUS TAIL, and the n kept beside them. A hierarchical
+    # label is a path, and at full length twelve of them took half the width of a panel declared
+    # at one column - while the one number that says whether a population's fraction means
+    # anything, how many cells it holds, was not on the figure at all.
+    short = F.short_labels(list(frac.index))
     ax.set_yticks(np.arange(len(frac)))
-    ax.set_yticklabels(frac.index)
+    ax.set_yticklabels([f"{short.get(p, p)}  ({int(n_per[p]):,})" for p in frac.index])
     ax.invert_yaxis()
     ax.set_xlim(0, 1)
-    ax.set_xlabel("fraction of cells")
+    ax.set_ylim(len(frac) - 0.5, -0.95)
+    _pct_axis(ax)
+    ax.set_xlabel("% of cells in the population")
     ax.spines["left"].set_visible(False)
     ax.tick_params(axis="y", length=0)
-    F.legend_outside(fig, ax)
+    _key_above(fig, ax, ncol=3)
+    _fit_column(fig, F.SINGLE)
+    smallest = int(n_per.min())
     ctx.emit_figure(
         "F1_phase_by_population", fig,
-        caption=("Scored cell-cycle phase per population. Phase is SCORED from a gene panel, not "
-                 "measured: a cell called G2M is one whose G2M panel genes are relatively high, "
-                 "and G1 is the bucket for cells where neither panel scored above zero. Use this "
-                 "to check whether a trajectory follows the cycling fraction - if it does, the "
-                 "trajectory may be a cell-cycle axis. Read it against F4: a population whose "
-                 "calls move between control draws has a fraction here that moves with them. "
-                 "Annotator sentinels are not shown as populations."),
+        caption=(f"Scored cell-cycle phase per population, ordered by the fraction called S or "
+                 f"G2M, with the number of cells in each population in brackets - the smallest "
+                 f"here holds {smallest:,}, and a small population's fraction moves in steps "
+                 f"rather than smoothly. Names are cut to their shortest unambiguous tail; the "
+                 f"full labels are in the source table. The dashed line is the cohort's own "
+                 f"cycling fraction. Phase is SCORED from a gene panel, not measured: a cell "
+                 f"called G2M is one whose G2M panel genes are relatively high, and G1 is the "
+                 f"bucket for cells where neither panel scored above zero. Use this to check "
+                 f"whether a trajectory follows the cycling fraction - if it does, the trajectory "
+                 f"may be a cell-cycle axis. Read it against F4: a population whose calls move "
+                 f"between control draws has a fraction here that moves with them. Annotator "
+                 f"sentinels are not shown as populations."),
         source=ct.assign(n_cells=ct.sum(axis=1)))
 
 
