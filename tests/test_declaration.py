@@ -178,5 +178,39 @@ for _fn in ("run", "selftest"):
     except Exception as _e:                                                    # noqa: BLE001
         ck(f"{_fn} refuses until it is written", False, f"raised {type(_e).__name__}")
 
+print("\nthe keys a report block may carry are stated once, not twice")
+# THE CHECKER DEMANDED A KEY AND THEN WARNED THAT THE KEY WAS UNKNOWN. The allowed-key set was a
+# literal inside the unknown-key check, written before `unit_metrics` existed and never updated
+# when it became a REQUIREMENT of every per-unit plugin - so three shipped plugins carried a
+# permanent warning saying the reporter ignores a key the reporter uses. Two statements of one
+# fact, drifting, in the same function.
+import ast as _ast                                                              # noqa: E402
+import inspect as _insp                                                         # noqa: E402
+
+_read = {n.args[0].value
+         for n in _ast.walk(_ast.parse(_insp.getsource(declare._check_report)))
+         if isinstance(n, _ast.Call)
+         and getattr(n.func, "attr", "") == "get"
+         and getattr(n.func.value, "id", "") == "block"
+         and n.args and isinstance(n.args[0], _ast.Constant)}
+ck("every key the checker reads is a key it allows",
+   _read <= set(declare.REPORT_KEYS), str(sorted(_read - set(declare.REPORT_KEYS))))
+# AND THE OTHER DIRECTION: a key allowed and never read is a setting that does nothing.
+_elsewhere = _insp.getsource(declare)
+ck("and every key it allows is read somewhere",
+   all(f'"{k}"' in _elsewhere for k in declare.REPORT_KEYS),
+   str([k for k in declare.REPORT_KEYS if f'"{k}"' not in _elsewhere]))
+
+_ok = {"name": "x", "summary": "s", "cannot_show": ["a"], "api": 1, "per_unit": "sample",
+       "executor": {"memory_gb_per_100k": 1},
+       "report": {"figures": [{"id": "f", "question": "q?", "shows": "diagnostic",
+                               "source": "t.csv"}],
+                  "unit_metrics": [{"id": "m", "question": "q?"}]}}
+ck("a per-unit plugin declaring what it is required to declare gets no warning",
+   declare.check(_ok) == [], str(declare.check(_ok)))
+ck("and a key that really is unknown is still reported",
+   any("unknown" in m for _l, m in
+       declare.check({**_ok, "report": {**_ok["report"], "nonsense": 1}})))
+
 print("\n" + ("the declaration holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

@@ -141,6 +141,17 @@ def report_figures(spec) -> list:
     return figures_in((spec or {}).get("report"))
 
 
+#: EVERY KEY THE `report` BLOCK MAY CARRY, stated once. It was a set literal inside the
+#: unknown-key check, written before `unit_metrics` existed and never updated when it became a
+#: REQUIREMENT - so `check` demanded the key of every per-unit plugin and then warned, on the
+#: same declaration, that the key was unknown and "the reporter ignores them". Three shipped
+#: plugins carried that warning permanently, and it was false: the reporter uses it.
+#:
+#: A guard asserts this tuple against the keys `_check_report` actually reads, so the list and
+#: the checker cannot say different things again.
+REPORT_KEYS = ("figures", "reads_with", "unit_metrics")
+
+
 def _check_report(spec, out) -> None:
     """The `report` block: a contract the reporter reads and the run is held to.
 
@@ -215,11 +226,12 @@ def _check_report(spec, out) -> None:
         elif spec.get("name") and spec["name"] in rw:
             out.append(("ERROR", "`report.reads_with` names this plugin itself"))
 
-    extra = sorted(set(block) - {"figures", "reads_with"})
+    extra = sorted(set(block) - set(REPORT_KEYS))
     if extra:
         out.append(("WARN", f"`report` carries unknown key(s) {', '.join(extra)}. The reporter "
                             f"ignores them, so they are a note to a human that reads as a "
                             f"setting."))
+
 
 def check(spec, name="<plugin>"):
     """Every problem with a declaration, as a list. Empty means it is usable.
