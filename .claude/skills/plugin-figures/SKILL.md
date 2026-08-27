@@ -583,6 +583,29 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   prove that is the data's doing and not the plumbing's. And after changing how absence is counted,
   re-check every derived count that shares the denominator.
 
+- **C23d (provenance is a channel, and an undeclared one must be LOUD)** A panel that does not say
+  what it was drawn from reads as though it were drawn from everything: the reader supplies the
+  cohort the picture never claimed. This is not a caption problem — a qualification that lives only
+  in a caption does not travel with the image into a slide, a grant or a referee's PDF. Put the
+  unit, the n, and the denominator ON THE FACE. And make the DEFAULT loud: a drawing function whose
+  `provenance` argument is omitted should print "PROVENANCE NOT DECLARED" on the panel rather than
+  print nothing, because a red line is a defect somebody fixes and a blank corner is a defect
+  nobody can see. Escalate when n = 1: a single-unit panel drawn in the idiom of a cohort panel is
+  the one case where the reader's default assumption is wrong and nothing on the page contradicts
+  it. Any plugin that can be run on one object and on many has this failure available to it — a
+  trajectory fitted on one sample, a doublet rate from one library, a motif enrichment from one
+  peak set, a spatial neighbourhood from one section.
+  **ONE INSTANCE.** Six delivered panels of one family were each a SINGLE animal and not one
+  carried a sample name, an n, a group, or the word "unit". The selecting function printed the name
+  to stdout and nowhere else. The animal was the one separately measured to carry ~48% of its arm's
+  signal, so the panels a reader would take as the cohort's structure were closest to that one
+  animal's. The same panels drew 9 sectors where the study has 13, with nothing saying the other
+  four were removed by the method's per-object cell floor rather than being biologically absent.
+  **CHECK:** does every panel name its unit(s) and its n ON THE FACE, not only in the caption? If a
+  panel shows fewer entities than the study has, does it say how many are missing and why? Run the
+  drawing function with provenance omitted — does the rendered panel say so, or does it just look
+  finished?
+
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?
