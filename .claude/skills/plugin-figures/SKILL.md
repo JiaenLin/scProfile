@@ -535,6 +535,29 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
 - **C23** For every visual channel in the panel (position, length, area, colour value, colour hue,
   opacity, texture), name the quantity it encodes and point at the key, axis or tick scale a reader
   recovers a value from. Any channel without one is either keyed or removed.
+- **C23b (a floor makes a channel AFFINE, and affine is not proportional)** A size or width
+  channel drawn as `floor + k * f(value)` is not proportional to the value, and a key drawn only
+  at large values will not reveal it — the key confirms the mapping over the range where the
+  intercept is negligible and says nothing about the range where it dominates. Do not write
+  "proportional", "= count" or "area = X" over an affine map. State the mapping including its
+  intercept, and draw a key at the SMALLEST value actually plotted, not just at round large ones:
+  two keys a decade apart that come out nearly the same size make the floor self-evident and need
+  no prose. Note also which end the floor is at — an additive offset on a RADIUS inflates every
+  disc, not only the small ones, so a footnote saying "the smallest are drawn slightly larger than
+  proportional" misdescribes the mechanism as a clamp when it is a shift.
+  **ONE INSTANCE.** A network panel declared "node area = significant L-R pairs (in + out)" and
+  drew keys at 100 / 500 / 2,000 whose measured areas were 1 : 1.69 : 3.41 — a 20x value rendered
+  at 3.4x the ink, the 100 disc carrying 5.9x and the middle 500 disc 1.99x the area proportionality
+  gives them, because radius was `rmin + (rmax - rmin) * sqrt(v / vmax)`. Its edge widths were
+  affine too: over a 466x range in the data the drawn ink spanned 10.3x. The page carried a
+  footnote about the floor and it described a clamp on the small end, which is not what the code
+  did. The floor itself was right to exist — without it a small-but-present entity draws the same
+  as an absent one, which is a worse error — so the repair is the declaration and the key, not the
+  floor.
+  **CHECK:** for every size, width, area or opacity channel, write down the actual mapping from
+  value to ink including any intercept, clamp or `min()`. Is the word on the page true of THAT
+  mapping? Does the key include the smallest value the panel actually draws? Measure two keys a
+  decade apart in the rendered file: is their ink ratio the ratio the caption claims?
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?
