@@ -799,6 +799,27 @@ def _patterns(arr, pathways, pops, direction="outgoing", k=None, k_range=range(2
     return (w, rows), (h, list(pathways)), k, curve
 
 
+def _snn(mat, k, prune=1.0 / 15.0):
+    """CellChat's `buildSNN`, over the ROWS of a similarity matrix.
+
+    Euclidean kNN on the rows, shared-neighbour count `s`, Jaccard `s / (2k - s)`, then every
+    entry below `prune.SNN` set to zero. Separated from `_similarity` because it is the step
+    that actually isolates a pathway, and a reader checking that claim should be able to find
+    it on its own.
+    """
+    import numpy as np
+
+    n = mat.shape[0]
+    d = np.sqrt(((mat[:, None, :] - mat[None, :, :]) ** 2).sum(-1))
+    knn = np.zeros((n, n))
+    for i in range(n):
+        knn[i, np.argsort(d[i], kind="stable")[:k]] = 1.0
+    shared = knn @ knn.T
+    snn = shared / (2.0 * k - shared)
+    snn[snn < prune] = 0.0
+    return snn
+
+
 def _similarity(arr, pathways):
     """(similarity, kept, dropped) - `computeNetSimilarity(type="functional")`, recomputed.
 
@@ -806,9 +827,17 @@ def _similarity(arr, pathways):
     computes and is worth stating plainly: it discards magnitude entirely. Two pathways are
     "functionally similar" when they use the same cell pairs, however strongly.
 
-    CellChat then multiplies by a shared-nearest-neighbour mask and DROPS every pathway whose
-    off-diagonal similarities are all zero, with no message. Those are the most distinctive
-    pathways in the object. They are returned here so the page can name them.
+    CellChat then multiplies by a shared-nearest-neighbour mask, and `netEmbedding` refuses to
+    place any pathway whose MASKED off-diagonal similarities are all zero - with no message.
+    Those are the most distinctive pathways in the object. They are returned as `dropped` so a
+    page can name them instead of quietly embedding 65 points and captioning it 68.
+
+    THE MASK IS THE WHOLE POINT, and this function did not apply it. Until it did, `dropped` was
+    computed from the raw Jaccard graph - which is dense, so nothing is ever isolated and the
+    list came back empty on every real object. A returned list that is structurally always
+    empty is worse than no list: the page prints "none dropped" and the reader believes it.
+    Measured on one real cohort, the mask drops three of sixty-eight where the raw graph
+    dropped none.
     """
     import numpy as np
 
@@ -820,9 +849,17 @@ def _similarity(arr, pathways):
             inter = float((g[:, :, i] * g[:, :, j]).sum())
             union = float((g[:, :, i] + g[:, :, j] - g[:, :, i] * g[:, :, j]).sum())
             sim[i, j] = sim[j, i] = inter / union if union > 0 else 0.0
-    isolated = [pathways[i] for i in range(n) if sim[i].sum() <= 1.0 + 1e-12]
-    keep = [i for i in range(n) if sim[i].sum() > 1.0 + 1e-12]
-    return sim[np.ix_(keep, keep)], [pathways[i] for i in keep], isolated
+    if n < 3:
+        return sim, list(pathways), []
+    # CellChat documents `k = ceiling(sqrt(P)) + 1`. The clamp to [1, n-1] is OURS: k neighbours
+    # cannot exceed the points available, and an unclamped k silently returns a saturated graph
+    # in which nothing can be isolated - the same failure this function already had once.
+    k = max(1, min(n - 1, int(np.ceil(np.sqrt(n))) + 1))
+    masked = sim * _snn(sim, k)
+    off = masked.sum(1) - np.diag(masked)
+    keep = [i for i in range(n) if off[i] > 1e-12]
+    dropped = [pathways[i] for i in range(n) if off[i] <= 1e-12]
+    return masked[np.ix_(keep, keep)], [pathways[i] for i in keep], dropped
 
 
 def _fig_coverage(ctx, db, var_names, detected, edges, thresh):
