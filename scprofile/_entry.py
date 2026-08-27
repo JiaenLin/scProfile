@@ -281,7 +281,20 @@ def main(argv):
     peak_gb = None
     try:
         import resource
-        raw = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        # CHILDREN TOO. RUSAGE_SELF is the calling process ALONE, and the libraries these
+        # plugins wrap parallelise with SUBPROCESSES - joblib, loky, pynndescent - so the memory
+        # that actually decides whether a job survives is invisible to it. Measured on a real
+        # cohort: a plugin reported a 14.4 GB peak in three separate runs, its declaration was
+        # fitted to that number, the host scheduled on the declaration, and the plugin was
+        # SIGKILLed at 48 GB while computing neighbours. Its own measurement was wrong by more
+        # than threefold, in the direction that gets a run killed and keeps nothing.
+        #
+        # RUSAGE_CHILDREN is the maximum of any single REAPED child, not the sum of concurrent
+        # ones, so this is still a floor - but a floor that includes the workers beats a ceiling
+        # that pretends they do not exist.
+        _self = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        _kids = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
+        raw = float(_self) + float(_kids)
         # ru_maxrss is KILOBYTES on Linux and BYTES on macOS/BSD. Getting this wrong reports a
         # 1024x error in whichever direction, and both directions look plausible.
         peak_gb = raw / (1024.0**2 if sys.platform != "darwin" else 1024.0**3)
@@ -299,7 +312,10 @@ def main(argv):
         # ONE MEASUREMENT CANNOT SEPARATE THE TWO. Two at different sizes can, and a per-unit
         # plugin produces one per unit for free - so the host fits them afterwards
         # (`kernels.fit_memory_model`) and this reports only what it actually observed.
-        ctx.measured = {"peak_rss_gb": round(peak_gb, 3), "n_cells": n}
+        ctx.measured = {"peak_rss_gb": round(peak_gb, 3), "n_cells": n,
+                        # NAMED, because it is a floor and not a peak: RUSAGE_CHILDREN is the
+                        # largest single reaped child, so concurrent workers are undercounted.
+                        "rss_covers": "parent + largest reaped child (a floor, not the peak)"}
         log(f"  peak memory {peak_gb:.2f} GB over {n:,} cells")
 
     manifest.write_output(

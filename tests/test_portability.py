@@ -1089,6 +1089,22 @@ ck("a raising candidate does not propagate out of the search", _raised is not Tr
 # key, whose whole content is how big the marker is. At 2.5 the three keys overlapped into one
 # blob in the margin - a size key a reader cannot read, which makes the panel's size channel
 # mean nothing.
+# THE MEMORY A JOB ACTUALLY USES INCLUDES ITS CHILDREN. `RUSAGE_SELF` is the calling process
+# alone, and every library these plugins wrap parallelises with SUBPROCESSES - so the memory that
+# decides whether a job survives was invisible to the number the host schedules on. One plugin
+# reported a 14.4 GB peak in three separate runs, its declaration was fitted to that, and it was
+# SIGKILLed at 48 GB computing neighbours: wrong by more than threefold, in the direction that
+# gets a run killed and keeps nothing.
+print("\nthe memory measurement counts the children")
+_ent = (Path(__file__).resolve().parents[1] / "scprofile" / "_entry.py").read_text()
+ck("RUSAGE_CHILDREN is counted, not only RUSAGE_SELF",
+   "RUSAGE_CHILDREN" in _ent and "RUSAGE_SELF" in _ent)
+ck("and they are added, not compared",
+   "float(_self) + float(_kids)" in _ent)
+ck("the payload says what the number covers, because it is a FLOOR",
+   '"rss_covers"' in _ent and "not the peak" in _ent,
+   "RUSAGE_CHILDREN is the largest single reaped child, so concurrent workers are undercounted")
+
 print("\na size key is drawn at true size")
 import inspect as _insp2                                                        # noqa: E402
 from scprofile import figure as _FIG2                                           # noqa: E402
