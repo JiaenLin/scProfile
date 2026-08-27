@@ -270,9 +270,9 @@ def check(spec, name="<plugin>"):
     #
     # It runs separately on every unit and its page is that many single-unit reports in
     # sequence. Each panel is true and the question a cohort study asks - do the units agree? -
-    # is answered nowhere, because the numbers never share an axis. Measured on a ten-animal
-    # cohort: one plugin's per-unit count ran 8,194 to 38,895, a 4.7-fold range across ten
-    # animals of one tissue, and its page put those ten numbers in ten separate figures.
+    # is answered nowhere, because the numbers never share an axis. Measured on a real cohort:
+    # one plugin's per-unit count ran 8,194 to 38,895, a 4.7-fold range across the units of a
+    # single tissue, and its page put every one of those numbers in a figure of its own.
     #
     # The host draws the comparison itself for any plugin that records the number, so this
     # declaration is the whole of what a plugin owes - and it is checked against what the run

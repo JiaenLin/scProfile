@@ -81,14 +81,54 @@ for f in sorted(root.rglob("*")):
     if f.suffix.lower() in BINARY:
         continue
     scanned += 1
-    for i, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+    _lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+    for i, line in enumerate(_lines, 1):
         if BAD.search(line) and not OK_LINE.search(line):
             hits.append(f"{f.relative_to(root)}:{i}")
+    # AND ACROSS THE LINE BREAKS. Prose in this tree is wrapped at 100 columns, so a leak of
+    # more than one word has a good chance of being SPLIT - and a line-based scan cannot see a
+    # phrase it is split by. Found the day the design vocabulary was added to the pattern: the
+    # guard reported the tree clean while `ten animals of one tissue` sat in `declare.py` with
+    # the break falling between `ten` and `animals`. The same failure as a ruler that cannot
+    # recognise a real arm figure - an absence reported as confidently as a presence.
+    #
+    # Comment markers go with the break, or `# ten\n# animals` rejoins as `# ten # animals`.
+    _joined = re.sub(r"\s+", " ", re.sub(r"\n\s*(?:#|//|--)?\s*", " ", "\n".join(_lines)))
+    for _m in BAD.finditer(_joined):
+        _phrase = _m.group(0)
+        if " " not in _phrase:
+            continue                      # a single word was already reachable line by line
+        _first = _phrase.split()[0]
+        _at = next((n for n, l in enumerate(_lines, 1) if _first.lower() in l.lower()), 0)
+        _hit = f"{f.relative_to(root)}:{_at} (wrapped: {_phrase!r})"
+        if _hit not in hits:
+            hits.append(_hit)
 ck(f"no project or host names in the tree ({scanned} files scanned)", not hits,
    "; ".join(hits[:4]))
 # The count is asserted, not merely printed: a glob that silently starts matching nothing reports
 # a clean tree, and a clean report from a check that ran on zero files is the worst kind.
 ck("and the scan actually opened the tree", scanned >= 40, f"only {scanned} files")
+
+
+def _scan_text(text):
+    """The same two passes this check runs over the tree, applied to one string."""
+    lines = text.splitlines()
+    if any(BAD.search(l) and not OK_LINE.search(l) for l in lines):
+        return True
+    joined = re.sub(r"\s+", " ", re.sub(r"\n\s*(?:#|//|--)?\s*", " ", "\n".join(lines)))
+    return bool(BAD.search(joined))
+
+
+# THE SCAN IS PROVED ABLE TO FIRE, on the exact shape that got past it. A leak guard that has
+# only ever reported clean is indistinguishable from one that cannot report anything else, and
+# this one WAS: the line-based version passed while the phrase sat in `declare.py` with the
+# wrap falling between its two words. `\u0074en` etc. keep the control out of the guard's own reach.
+_probe_word = "\u0074en" + " " + "\u0061nimals"
+ck("a leak on one line is caught", _scan_text(f"# measured on {_probe_word} of one tissue"))
+ck("and the same leak split by a line wrap is caught too",
+   _scan_text("# measured on \u0074en\n# \u0061nimals of one tissue"),
+   "a phrase the text wrapper broke is a phrase a line-based scan cannot see")
+ck("and clean prose is not", not _scan_text("# measured on ten units of one cohort"))
 
 print("\nevery role a user might name differently is DETECTED and OVERRIDABLE")
 for role in ("label", "sample", "batch", "compartment", "counts_layer", "lognorm_layer",
