@@ -58,8 +58,8 @@ audit (see The audit) fails it, and it must be resolved — by searching harder,
 
 **SKIP** requires a positive statement about the experiment:
 
-> *"`de` is skipped: `diet` has one level (`HFD`) across all 10 samples, so no diet contrast
-> exists."*
+> *"`de` is skipped: `treatment` has one level (`treated`) across every sample, so no
+> treatment contrast exists."*
 
 **BLOCKED** requires a positive statement about the search:
 
@@ -187,7 +187,7 @@ A verdict of RUN is not a plan. For every plugin that runs, the plan states:
 
 If a plugin is not built in this installation, **that is the plan's problem to solve, not the
 user's problem to be told about.** The plan still gives it a full verdict against the project —
-"on your data this would run at full, over 10 samples, testing the age×diet interaction" — and
+"on your data this would run at full, over every sample, testing the `a`-by-`b` interaction" — and
 lists the preparation separately, marked by who does it:
 
 ```

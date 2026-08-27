@@ -10,8 +10,8 @@ property of somebody's experiment - and downstream that is indistinguishable fro
 genuinely lacking the data. A plan containing an UNRESOLVED is not a plan; it is a list of things
 to go and find out, and `audit()` fails it.
 
-SKIP requires a positive statement about the EXPERIMENT ("diet has one level across all 10
-samples"). BLOCKED requires a positive statement about the SEARCH ("no spliced layer, and no loom
+SKIP requires a positive statement about the EXPERIMENT ("`treatment` has one level across
+every sample"). BLOCKED requires a positive statement about the SEARCH ("no spliced layer, and no loom
 under the 6 directories listed"). "No design table found" is not a design fact - it is a missing
 input, and the verdict is BLOCKED.
 

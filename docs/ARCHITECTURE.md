@@ -194,8 +194,8 @@ It reads the object and the design table and gives every plugin a verdict, its s
 highest capacity the project supports, and a place in the run order.
 
 **It never refuses for a build reason.** A plugin that is not built still gets its full verdict
-against the project — *"on your data this would run at full, over 10 samples, testing the
-age×diet interaction"* — and the build gap is listed separately and handed to the builder. A
+against the project — *"on your data this would run at full, over every sample, testing the
+`a`-by-`b` interaction"* — and the build gap is listed separately and handed to the builder. A
 plugin that is not built is not a limitation of the user's data.
 
 **It skips only what the design cannot express**: a factor with one level, or no level with two

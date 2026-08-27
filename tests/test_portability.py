@@ -48,7 +48,18 @@ BAD = re.compile(r"\bsambo\b|wangyb|duke-nus|hn-10-03|aging[_ ]?hfd|young[_ ]?hf
                  r"|\b(?:aging|young)[ _]?\d+\b"
                  # and the tissue the cohort came from: naming it identifies the study as
                  # surely as naming a sample does.
-                 r"|heart study|myocard|cardiomyocyte", re.I)
+                 r"|heart study|myocard|cardiomyocyte"
+                 # AND THE DESIGN ITSELF. A cohort is identified by its shape and vocabulary as
+                 # surely as by its name, and this half was missed entirely while the sample
+                 # names were being guarded: the tool's own prose named the study's two factors
+                 # and their crossing, one of its diet levels, its animal count, and - worst -
+                 # the confound between a biological factor and the reagent lot, which is an
+                 # unpublished analytical finding about somebody's data sitting in a public
+                 # repository. Every lesson those sentences carried survives being told about
+                 # `a` and `b`; none of them needed the study.
+                 r"|\bage\s*(?:x|\u00d7|by)\s*diet\b"
+                 r"|\bhigh[- ]fat\b|\bHFD\b"
+                 r"|\bten (?:animals|mice|hearts)\b", re.I)
 #: Two exemptions, both narrow, because a check that fires on correct code is a check somebody
 #: switches off. A repository URL contains its owner's account name and is not a leak; and the
 #: OTHER leak guard has to contain the strings it looks for.
@@ -207,7 +218,10 @@ for _n in _a2.walk(_tree):
                 and isinstance(_n.body[0].value.value, str)):
             _n.body.pop(0)
 _psrc = _a2.unparse(_tree)
-for lit in ("2x2", "young", "aged", "chow", "HFD", "cell_type", "sample_id",
+# `chow`/`HFD`-style level names are covered TREE-WIDE by the leak guard at the top of
+# this file, not here: a literal listed in two places is one that gets removed from one
+# of them. What is left is the vocabulary a PLANNER specifically must not reason about.
+for lit in ("2x2", "young", "aged", "cell_type", "sample_id",
             "mouse", "human", "nucleus"):
     ck(f"the planner's CODE does not mention {lit!r}", lit not in _psrc)
 ck("no minimum sample count is hard-coded except the statistical one",
@@ -638,7 +652,7 @@ ck("the constraint defect asks what a plugin TESTS, not what container it reads"
 # It runs separately on every unit, and its page is that many single-unit reports in sequence.
 # Every panel is true; the question a cohort study asks - do the units agree? - is answered
 # nowhere, because the numbers never share an axis. Measured on a ten-animal cohort: one
-# plugin's per-unit count ran 8,194 to 38,895 across ten animals of one tissue, in ten separate
+# plugin's per-unit count ran 8,194 to 38,895 across the units of a single tissue, in that many
 # figures, and a reader taking the first unit's strongest result as a finding had nothing on the
 # page to warn them.
 # ---------------------------------------------------------------------------------------------

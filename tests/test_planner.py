@@ -45,7 +45,7 @@ def design(rows):
 
 print("\na 2x2 with replication supports an interaction")
 d = design({f"s{i}": {"age": a, "diet": t} for i, (a, t) in enumerate(
-    [(a, t) for a in ("young", "old") for t in ("chow", "hf") for _ in range(3)])})
+    [(a, t) for a in ("young", "old") for t in ("ctrl", "trt") for _ in range(3)])})
 f = P.design_facts(d, ["age", "diet"], "sample", list(d))
 ck("both factors testable", f["testable"] == ["age", "diet"], str(f["testable"]))
 ck("the crossed pair is found", f["crossed_pairs"] == [["age", "diet"]], str(f["crossed_pairs"]))
@@ -92,7 +92,7 @@ for label, rows in (("every arm n=1", {"a": {"g": "x"}, "b": {"g": "y"}, "c": {"
 print("\nconfounding is a caveat and the run proceeds")
 dc = {f"s{i}": {"age": ("old" if i < 4 else "young"),
                 "chem": ("V2" if i < 4 else "V3"),
-                "diet": ("hf" if i % 2 else "chow")} for i in range(8)}
+                "diet": ("trt" if i % 2 else "ctrl")} for i in range(8)}
 fc = P.design_facts(design(dc), ["age", "chem", "diet"], "sample", list(dc))
 cf = P.confounding(fc)
 ck("a complete confound is found", any(c["agreement"] == 1.0 for c in cf), str(cf)[:120])
@@ -316,7 +316,7 @@ from scprofile import plan_report as PR                                         
 # A FRESH design, not `d` - which an earlier section rebinds. A test that silently reads a name
 # some other block redefined is testing whatever ran last.
 _rd = {f"s{i}": {"age": a, "diet": t2} for i, (a, t2) in enumerate(
-    [(a, t2) for a in ("young", "old") for t2 in ("chow", "hf") for _ in range(3)])}
+    [(a, t2) for a in ("young", "old") for t2 in ("ctrl", "trt") for _ in range(3)])}
 _plan = {
     "version": "0.1.0", "h5ad": "/x/o.h5ad",
     "describe": {"n_obs": 100713, "n_vars": 34290},

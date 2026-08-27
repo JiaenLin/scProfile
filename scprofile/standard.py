@@ -5,12 +5,13 @@ written and the PNG files it actually references, in the directory a run actuall
 standard measured on a synthetic page proves the checker runs; it proves nothing about the
 report a reader will open.
 
-WHY EACH ONE EXISTS. Measured on a real ten-sample, 2x2 cohort whose report had 191 figures:
+WHY EACH ONE EXISTS. Measured on a real multi-sample, two-factor cohort whose report had
+191 figures:
 
   overview      No page said what the cohort was. A reader met "1,654 significant edges" with
                 no statement anywhere of how many samples, how many arms, or what was compared.
-  arms          NOT ONE figure of 191 split anything by a design factor. The study is
-                age x diet; every panel was per-population or per-cell.
+  arms          NOT ONE figure of 191 split anything by a design factor. The study was a
+                two-factor design; every panel was per-population or per-cell.
   repeats       140 of the 191 were fifteen plots redrawn once per sample. Three plugins
                 infer per sample, so those panels are not even comparable with each other.
   count         57 figures on one page. A page a reader cannot finish is a page that hides its

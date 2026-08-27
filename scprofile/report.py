@@ -393,8 +393,8 @@ def _across_units(units, declared):
     A per-unit plugin runs separately on each unit and its page is that many single-unit
     reports in sequence. Every panel on it is true, and the one question a cohort study asks -
     do the units agree? - is answered nowhere, because the numbers never share an axis.
-    Measured on a ten-animal cohort: one plugin's per-unit interaction count ran from 8,194 to
-    38,895, a 4.7-fold range across ten animals of one tissue, and a reader taking the strongest
+    Measured on a real cohort: one plugin's per-unit interaction count ran from 8,194 to
+    38,895, a 4.7-fold range across the units of a single tissue, and a reader taking the strongest
     interaction off the first unit's panel had nothing on the page to warn them.
 
     So the host renders it rather than each plugin: one implementation, no per-plugin drawing
@@ -731,7 +731,7 @@ def _overview_block(payload):
 
     Measured on the report this was written for: no page said how many samples there were, how
     many arms, or what was contrasted. A reader met "1,654 significant edges" with nothing
-    anywhere to say the study was ten animals in a 2x2. A result is not interpretable before
+    anywhere to say the study was a replicated two-factor design. A result is not interpretable
     the design is.
     """
     d = payload.get("describe") or {}
