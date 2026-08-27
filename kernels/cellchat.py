@@ -523,6 +523,299 @@ def _floor_for(mean_type, trim):
 # Every one of them is drawn at a journal column width by `scprofile.figure`, and none of them
 # uses colour as the only channel for a category.
 
+# ---------------------------------------------------------------- derived from the edge list
+#
+# EVERYTHING BELOW IS RECOMPUTED FROM `tables/ccc_edges.csv`, IN PYTHON, AND NEEDS NO SECOND R
+# CALL. Read against the CellChat source (v2.2.0.9001) rather than its tutorials, because the
+# tutorials describe the object and the object is not what crosses the R/Python boundary here.
+#
+#   aggregateNet             count  = apply(prob > 0, c(1,2), sum) after prob[pval >= thresh] <- 0
+#                            weight = apply(prob,     c(1,2), sum) after the same masking
+#   computeCommunProbPathway plain sum of the significant LR probabilities within each pathway
+#   centrality outdeg/indeg  igraph::strength(G, "out"/"in") = weighted row / column sums
+#
+# The edge list is already p-value filtered and carries `pathway_name`, so each of those is a
+# groupby away. What it does NOT carry is the non-significant probabilities, and nothing here
+# needs them: every CellChat function above masks them to zero first.
+
+
+def _pops_and_matrices(df, pops=None):
+    """(populations, count, weight) - `aggregateNet`, recomputed.
+
+    `count` is the number of significant L-R pairs for an ordered cell pair; `weight` is their
+    summed communication probability. Self-signalling is KEPT on the diagonal, as CellChat keeps
+    it everywhere except its spatial plot.
+    """
+    import numpy as np
+
+    pops = list(pops) if pops is not None else sorted(set(df["source"]) | set(df["target"]))
+    ix = {p: i for i, p in enumerate(pops)}
+    k = len(pops)
+    count = np.zeros((k, k), dtype=float)
+    weight = np.zeros((k, k), dtype=float)
+    for s, t, pr in zip(df["source"], df["target"], df["prob"]):
+        if s in ix and t in ix:
+            count[ix[s], ix[t]] += 1.0
+            weight[ix[s], ix[t]] += float(pr)
+    return pops, count, weight
+
+
+def _pathway_array(df, pops, pathways=None):
+    """(pathways, K x K x P) - `computeCommunProbPathway`, recomputed.
+
+    Pathways are ordered by DESCENDING total probability, which is what CellChat does and what
+    every downstream index assumes - `netP$pathways` is a ranking, not the database order.
+    """
+    import numpy as np
+
+    ix = {p: i for i, p in enumerate(pops)}
+    have = [p for p in df["pathway_name"].dropna().unique()]
+    paths = list(pathways) if pathways is not None else sorted(have)
+    pix = {p: i for i, p in enumerate(paths)}
+    arr = np.zeros((len(pops), len(pops), len(paths)), dtype=float)
+    for s, t, pr, pw in zip(df["source"], df["target"], df["prob"], df["pathway_name"]):
+        if s in ix and t in ix and pw in pix:
+            arr[ix[s], ix[t], pix[pw]] += float(pr)
+    order = np.argsort(arr.sum(axis=(0, 1)))[::-1]
+    return [paths[i] for i in order], arr[:, :, order]
+
+
+def _information_centrality(net):
+    """Stephenson-Zelen information centrality, rescaled to sum 1 - CellChat's "Influencer".
+
+    `sna::infocent(net, diag=TRUE, rescale=TRUE, cmode="lower")`. Implemented rather than
+    approximated: C = (D - A + J)^-1 with A the symmetrised weights, D its degree diagonal and
+    J all-ones; then I_i = 1 / (C_ii + mean_j C_jj - 2 * mean_j C_ij). CellChat wraps this in a
+    `tryCatch` that returns zeros on failure, so a zero row there is indistinguishable from a
+    measured zero; here a failure is reported as an absence instead.
+    """
+    import numpy as np
+
+    a = (np.asarray(net, dtype=float) + np.asarray(net, dtype=float).T) / 2.0
+    n = a.shape[0]
+    if n < 2 or not np.isfinite(a).all() or a.sum() <= 0:
+        return None
+    d = np.diag(a.sum(axis=1))
+    try:
+        c = np.linalg.inv(d - a + np.ones((n, n)))
+    except np.linalg.LinAlgError:
+        return None
+    diag = np.diag(c)
+    t = diag.sum()
+    r = c.sum(axis=1)
+    denom = diag + (t - 2.0 * r) / n
+    with np.errstate(divide="ignore", invalid="ignore"):
+        info = np.where(denom > 0, 1.0 / denom, 0.0)
+    tot = info.sum()
+    return info / tot if tot > 0 else None
+
+
+def _flow_betweenness(net):
+    """Max-flow betweenness - CellChat's "Mediator", via `sna::flowbet`.
+
+    The total maximum flow that passes THROUGH each node, summed over all other ordered pairs:
+    for every (s, t) the max-flow value is computed with the node present and with it deleted,
+    and the difference is credited to it. Returns None where it cannot be computed, so the row
+    can be named as absent rather than drawn as zero.
+    """
+    import numpy as np
+
+    a = np.asarray(net, dtype=float)
+    n = a.shape[0]
+    if n < 3 or a.sum() <= 0:
+        return None
+    try:
+        from scipy.sparse import csr_matrix
+        from scipy.sparse.csgraph import maximum_flow
+    except Exception:                                                     # noqa: BLE001
+        return None
+    # maximum_flow needs integer capacities; scale so the smallest positive edge is ~1.
+    pos = a[a > 0]
+    scale = 1e6 / pos.max() if pos.size else 1.0
+    cap = np.rint(a * scale).astype(np.int64)
+    np.fill_diagonal(cap, 0)
+
+    def _flow(mat, s, t):
+        try:
+            return int(maximum_flow(csr_matrix(mat), s, t).flow_value)
+        except Exception:                                                 # noqa: BLE001
+            return 0
+
+    out = np.zeros(n, dtype=float)
+    for v in range(n):
+        drop = cap.copy()
+        drop[v, :] = 0
+        drop[:, v] = 0
+        tot = 0
+        for s in range(n):
+            for t in range(n):
+                if s == t or s == v or t == v:
+                    continue
+                tot += max(0, _flow(cap, s, t) - _flow(drop, s, t))
+        out[v] = tot / scale
+    return out
+
+
+def _centrality(arr, pathways):
+    """{pathway: {measure: vector}} - `netAnalysis_computeCentrality`, recomputed.
+
+    Four measures, named as CellChat names them on its own panels:
+      Sender     outdeg  = weighted OUT-degree = row sum of the pathway matrix
+      Receiver   indeg   = weighted IN-degree  = column sum
+      Mediator   flowbet = max-flow betweenness
+      Influencer info    = Stephenson-Zelen information centrality, rescaled to sum 1
+    Self-signalling is on the diagonal and igraph's `strength` counts it in BOTH directions, so
+    it is counted here in both too.
+    """
+    import numpy as np
+
+    out = {}
+    for i, pw in enumerate(pathways):
+        net = arr[:, :, i]
+        if net.sum() <= 0:
+            continue
+        out[pw] = {"outdeg": net.sum(axis=1), "indeg": net.sum(axis=0),
+                   "flowbet": _flow_betweenness(net), "info": _information_centrality(net)}
+    return out
+
+
+def _nmf_lee(v, k, *, seed=0, iters=800):
+    """Lee-Seung multiplicative-update NMF with an NNDSVD start - CellChat's exact setup.
+
+    `NMF::nmf(data, rank = k, method = 'lee', seed = 'nndsvd')`. Written out in numpy rather
+    than taken from scikit-learn, because scikit-learn is NOT in this plugin's declared
+    `requires`: it is present in the built environments only as somebody else's transitive
+    dependency, and a plugin that works because of a package it never declared is a plugin that
+    breaks on the next machine. numpy arrives with pandas, scipy and anndata, all of which ARE
+    declared.
+
+    NNDSVD makes the fit deterministic, which is why CellChat needs no seed argument here.
+    """
+    import numpy as np
+
+    v = np.asarray(v, dtype=float)
+    v[v < 0] = 0.0
+    m, n = v.shape
+    # --- NNDSVD initialisation (Boutsidis & Gallopoulos 2008), as `seed='nndsvd'`
+    u, sig, vt = np.linalg.svd(v, full_matrices=False)
+    w = np.zeros((m, k))
+    h = np.zeros((k, n))
+    w[:, 0] = np.sqrt(sig[0]) * np.abs(u[:, 0])
+    h[0, :] = np.sqrt(sig[0]) * np.abs(vt[0, :])
+    for j in range(1, min(k, len(sig))):
+        x, y = u[:, j], vt[j, :]
+        xp, xn = np.maximum(x, 0), np.maximum(-x, 0)
+        yp, yn = np.maximum(y, 0), np.maximum(-y, 0)
+        xpn, xnn = np.linalg.norm(xp), np.linalg.norm(xn)
+        ypn, ynn = np.linalg.norm(yp), np.linalg.norm(yn)
+        if xpn * ypn >= xnn * ynn:
+            u_, v_, s_ = xp / (xpn or 1), yp / (ypn or 1), xpn * ypn
+        else:
+            u_, v_, s_ = xn / (xnn or 1), yn / (ynn or 1), xnn * ynn
+        w[:, j] = np.sqrt(sig[j] * s_) * u_
+        h[j, :] = np.sqrt(sig[j] * s_) * v_
+    eps = np.finfo(float).eps
+    w[w < eps] = eps
+    h[h < eps] = eps
+    if seed:
+        # RANDOM RESTARTS MUST ACTUALLY RESTART. NNDSVD is deterministic, so perturbing it
+        # slightly left every run in the same basin and the consensus was perfect at every rank:
+        # measured, cophenetic = 1.000 for k = 3..7, which makes the rank criterion decorative -
+        # it would have picked the first of six identical maxima and reported a chosen k.
+        # `NMF::nmfEstimateRank` reseeds randomly for exactly this reason, so the stability runs
+        # do too; the final fit keeps NNDSVD and stays reproducible.
+        rng = np.random.RandomState(seed)
+        scale = float(np.sqrt(v.mean() / k)) if v.mean() > 0 else 1.0
+        w = rng.rand(m, k) * scale
+        h = rng.rand(k, n) * scale
+    # --- Lee & Seung multiplicative updates, Frobenius objective
+    for _ in range(iters):
+        h *= (w.T @ v) / ((w.T @ w @ h) + eps)
+        w *= (v @ h.T) / ((w @ h @ h.T) + eps)
+    return w, h
+
+
+def _patterns(arr, pathways, pops, direction="outgoing", k=None, k_range=range(2, 8)):
+    """(W_rows, H_cols, k, cophenetic curve) - `identifyCommunicationPatterns`, recomputed.
+
+    The input is K x P, max-normalised PER PATHWAY exactly as CellChat does
+    (`sweep(data, 2L, apply(data, 2, max), '/')`), with all-zero cell groups dropped - which
+    silently shortens W, so the surviving rows are returned beside it.
+
+    `k` is chosen by the criterion CellChat's `selectK` plots rather than hard-coded: the
+    cophenetic correlation of the consensus over restarts. Returned WITH the curve, because a
+    decomposition whose rank was picked silently is a decomposition nobody can check.
+    """
+    import numpy as np
+
+    m = arr.sum(axis=1 if direction == "outgoing" else 0)     # K x P
+    keep = m.sum(axis=1) > 0
+    m = m[keep]
+    rows = [p for p, kp in zip(pops, keep) if kp]
+    col_max = m.max(axis=0)
+    m = np.divide(m, col_max, out=np.zeros_like(m), where=col_max > 0)
+    if m.shape[0] < 3 or m.shape[1] < 3:
+        return None, None, None, None
+
+    def _coph(kk, n_run=20):
+        from scipy.cluster.hierarchy import cophenet, linkage
+        from scipy.spatial.distance import squareform
+        con = np.zeros((m.shape[0], m.shape[0]))
+        for seed in range(n_run):
+            w, _h = _nmf_lee(m, kk, seed=seed, iters=200)
+            lab = w.argmax(axis=1)
+            con += (lab[:, None] == lab[None, :]).astype(float)
+        con /= n_run
+        d = 1.0 - con
+        np.fill_diagonal(d, 0.0)
+        try:
+            cond = squareform(d, checks=False)
+            z = linkage(cond, "average")
+            return float(np.corrcoef(cophenet(z), cond)[0, 1])
+        except Exception:                                                 # noqa: BLE001
+            return float("nan")
+
+    curve = {}
+    if k is None:
+        for kk in k_range:
+            if kk < m.shape[0]:
+                curve[kk] = _coph(kk)
+        good = [(kk, v) for kk, v in curve.items() if v == v]
+        k = max(good, key=lambda t: t[1])[0] if good else 2
+    w, h = _nmf_lee(m, k, seed=0)
+    w = np.divide(w, w.sum(axis=1, keepdims=True),
+                  out=np.zeros_like(w), where=w.sum(axis=1, keepdims=True) > 0)   # rows sum 1
+    h = np.divide(h, h.sum(axis=0, keepdims=True),
+                  out=np.zeros_like(h), where=h.sum(axis=0, keepdims=True) > 0)   # cols sum 1
+    return (w, rows), (h, list(pathways)), k, curve
+
+
+def _similarity(arr, pathways):
+    """(similarity, kept, dropped) - `computeNetSimilarity(type="functional")`, recomputed.
+
+    Jaccard over the BINARISED sender-receiver adjacency of each pathway, which is what CellChat
+    computes and is worth stating plainly: it discards magnitude entirely. Two pathways are
+    "functionally similar" when they use the same cell pairs, however strongly.
+
+    CellChat then multiplies by a shared-nearest-neighbour mask and DROPS every pathway whose
+    off-diagonal similarities are all zero, with no message. Those are the most distinctive
+    pathways in the object. They are returned here so the page can name them.
+    """
+    import numpy as np
+
+    g = (arr > 0).astype(float)
+    n = g.shape[2]
+    sim = np.eye(n)
+    for i in range(n):
+        for j in range(i + 1, n):
+            inter = float((g[:, :, i] * g[:, :, j]).sum())
+            union = float((g[:, :, i] + g[:, :, j] - g[:, :, i] * g[:, :, j]).sum())
+            sim[i, j] = sim[j, i] = inter / union if union > 0 else 0.0
+    isolated = [pathways[i] for i in range(n) if sim[i].sum() <= 1.0 + 1e-12]
+    keep = [i for i in range(n) if sim[i].sum() > 1.0 + 1e-12]
+    return sim[np.ix_(keep, keep)], [pathways[i] for i in keep], isolated
+
+
 def _fig_coverage(ctx, db, var_names, detected, edges, thresh):
     """The funnel from CellChat's database to the returned table. True when it was drawn.
 
