@@ -713,6 +713,25 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   would two panels in the same row get different values? Render a case where ONE panel has the
   optional content and the others do not - do the shared elements still line up?
 
+- **C23k (the key lists APPEARANCES, not meanings)** A key is written meaning by meaning, but it is
+  read appearance by appearance: the reader finds a mark on the panel and hunts for it in the key.
+  So an entry has to exist for every distinct way a mark is DRAWN, even when two of those ways
+  carry the same meaning and even when the difference between them is redundant with something
+  else on the page. Put both swatches under one label rather than picking whichever the author
+  thinks of as canonical. The reverse mistake is likelier than it sounds, because the author is
+  enumerating the vocabulary they designed while the reader is enumerating the ink they can see.
+  **ONE INSTANCE.** A presence grid drew three fills - solid dark for a scored entity in a RETAINED
+  row, mid-grey for a scored entity in an EXCLUDED row, and white hatch for one under the method's
+  floor - and keyed two of them: dark for "scored", hatch for "under the floor". Eight of the
+  thirteen rows never contained the dark swatch the key offered, so for most of the panel the key's
+  only positive entry matched nothing a reader could point at, and grey was undefined. The
+  retained/excluded distinction was already carried by a bracket, the row order and the label
+  weight, so the repair was one extra swatch beside the first under the same word, not a new line.
+  **CHECK:** list every distinct appearance a mark takes in the plotting area - fill, outline,
+  hatch, glyph, line style, opacity - by sampling the rendered pixels, not from the source. Does
+  each appear in the key? Is there any row or region of the panel that contains NONE of the keyed
+  appearances?
+
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?
