@@ -606,6 +606,40 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   drawing function with provenance omitted — does the rendered panel say so, or does it just look
   finished?
 
+- **C23e (a legibility guard set below the legibility floor is not a guard)** Panels that shrink a
+  label to fit a mark - a node number inside a disc, a count inside a bar, a value inside a cell -
+  usually carry a threshold below which the label is placed elsewhere instead. That threshold is
+  the whole mechanism, and it is easy to set it to whatever happened to look acceptable on the
+  developer's screen rather than to the size type is actually readable at in print. Set it to the
+  journal floor, around 5 pt, and let the label move out. A panel that draws the label anyway, one
+  tenth of a point above its own threshold, has told the reader it is labelled and then refused to
+  be read - which is the failure the threshold exists to prevent, passing its own check.
+  **ONE INSTANCE.** A network figure's threshold was 3.6 pt against a ~5 pt floor. Its 104 in-mark
+  numbers measured 3.611 to 4.000 pt at full double-column width - every one below the floor, the
+  smallest clearing the guard by 0.011 pt - and the reverse-contrast two-digit ones on dark fills
+  did not resolve as numbers at 1:1. Raising the threshold to 5.0 moved all 104 outside their
+  marks, where they set at 5.4 pt in black on white and every one became readable. The code
+  carried a comment saying "a number too small to read is worse than no number"; the constant
+  beneath it permitted exactly that.
+  **CHECK:** what is the smallest type size your panel actually writes, measured from the rendered
+  file rather than from the requested size? Is any label placed by a size threshold set below 5 pt?
+
+- **C23f (extracting text from a file is not looking at it)** A check that reads strings out of a
+  rendered artifact answers a question about the file format, not about the page. It will miss
+  anything the renderer drew as glyphs rather than text, anything composed at draw time, and -
+  most often - anything present in a form the extractor was not written to expect. When such a
+  check disagrees with what the panel shows, the panel wins.
+  **ONE INSTANCE.** A reviewer counted standalone digit strings in a PDF's text operators and
+  reported that two of thirteen marks were unlabelled, on a panel whose caption promised all
+  thirteen. Opening the figure and magnifying the region showed both labels present - the drawing
+  code moves a number that will not fit inside a mark INTO that mark's adjacent text, so the digits
+  were there, inside longer strings the extractor's word-boundary pattern never matched. A second
+  extractor written to settle it returned zero of thirteen for every file, having failed on font
+  subsetting - so the tooling was wrong twice in the same direction while the figure was right.
+  The claim was withdrawn and nothing was changed, which was the correct outcome.
+  **CHECK:** before acting on a defect found by parsing a rendered file, did you open the file and
+  see it? If the parse and the picture disagree, have you established which one is broken?
+
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?
