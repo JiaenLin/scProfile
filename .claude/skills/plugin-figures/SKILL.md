@@ -695,6 +695,24 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   any two differ by a digit swap or a factor a reader could mistake for a slip? Does the page say,
   at the point of use, which denominator each belongs to?
 
+- **C23j (a layout constant derived from OPTIONAL content belongs to the row, not the panel)** In a
+  multi-panel figure, some panels carry an optional line - a "not observed here" note, a warning, a
+  per-panel n - and some do not. Compute a padding, a height or an offset from whether THAT panel
+  has it and sibling panels drift apart: two titles of the same role, side by side, land a full
+  line out of register. Take the value over the whole ROW instead - the maximum any panel needs -
+  and give it to every panel, or reserve the optional line unconditionally and draw it empty.
+  The reason this survives review is that it is CONDITIONAL: whenever every panel happens to carry
+  the optional content, the figure is correct, so it looks fine on the example the author had open.
+  **ONE INSTANCE.** `pad=9 if absent else 3` on a panel title. Of four figures from one function,
+  two were perfectly aligned and two had their titles 17 px apart - a full line - with the shorter
+  panel's title sitting level with its neighbour's SUBTITLE. The two correct ones were correct by
+  luck: both their panels happened to have the note. Replacing it with a row-wide `title_pad`
+  computed once took all four to a measured 0 px offset. Any per-panel figure has this available
+  to it - a trajectory per lineage, a QC histogram per sample, a domain map per section.
+  **CHECK:** list every layout constant your panel loop computes from per-panel content. For each,
+  would two panels in the same row get different values? Render a case where ONE panel has the
+  optional content and the others do not - do the shared elements still line up?
+
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?
