@@ -219,6 +219,45 @@ def rasterize_points(ax):
         c.set_rasterized(True)
 
 
+def fit_column(fig, target=None):
+    """Shrink a figure back to the column width it declared. Returns the width in mm.
+
+    A PANEL THAT DECLARES `SINGLE` AND SAVES AT 98 mm IS NOT A SINGLE-COLUMN PANEL. Everything
+    drawn outside the axes - a key in the right margin, a long tick label, a colourbar - is
+    ADDED to the canvas by `bbox_inches="tight"` rather than fitted into it, and `figsize` only
+    ever described the axes. Measured across the shipped set: panels declaring the 85 mm column
+    saved at 98 to 118 mm.
+
+    Nothing errors, which is why it survived. A journal scales an over-wide figure down to the
+    column, and every font goes down with it: 7 pt type set at 85 mm prints at 6 pt from a
+    99 mm file and at 5 pt from a 118 mm one. The figure looks fine in the report and is
+    illegible in the manuscript.
+
+    Applied at SAVE time, so a plugin gets it by declaring a width and drawing normally, and no
+    plugin needs its own copy. The scale is uniform, so proportions and aspect are preserved.
+    """
+    import matplotlib.pyplot as plt                                       # noqa: F401
+    want = float(target or (DOUBLE if fig.get_size_inches()[0] > (SINGLE + DOUBLE) / 2
+                            else SINGLE))
+    # ITERATED, because TEXT DOES NOT SCALE WITH THE FIGURE. Shrinking the canvas shrinks the
+    # axes and leaves the key, the tick labels and the colourbar at their point size, so one
+    # pass over-corrects the axes and still overshoots the target - measured, 98.2 mm went to
+    # 89.7 against a target of 85. Three passes converge; the loop exits as soon as it is
+    # inside half a millimetre, and never grows a figure that is already narrow enough.
+    for _ in range(6):
+        fig.canvas.draw()
+        try:
+            got = fig.get_tightbbox(fig.canvas.get_renderer()).width
+        except Exception:                                                 # noqa: BLE001
+            return fig.get_size_inches()[0] * 25.4
+        if got <= want + 0.5 / 25.4:
+            break
+        w, h = fig.get_size_inches()
+        k = max(0.55, want / got)          # never collapse a panel to reach the target
+        fig.set_size_inches(w * k, h * k)
+    return got * 25.4
+
+
 def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"), log=print):
     """Write one figure in every requested format and return its manifest entry.
 
@@ -228,6 +267,11 @@ def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"),
     """
     d = Path(out_dir)
     d.mkdir(parents=True, exist_ok=True)
+    # THE DECLARED WIDTH IS ENFORCED HERE, once, for every plugin - see `fit_column`.
+    try:
+        fit_column(fig)
+    except Exception:                                                     # noqa: BLE001
+        pass                       # a figure that will not measure is still a figure to write
     written = {}
     for ext in formats:
         f = d / f"{name}.{ext}"
