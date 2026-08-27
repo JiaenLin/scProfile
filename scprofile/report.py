@@ -589,7 +589,7 @@ def _arm_rows_categorical(arms, categories, *, width=560, row=22):
             f'style="max-width:{width}px">' + "".join(out) + "</svg>")
 
 
-def _by_arm_block(by_arm, *, aware):
+def _by_arm_block(by_arm, *, aware, out_dir=None, name="", design=None):
     """THE DESIGN, ON A PAGE THAT DID NOT TEST IT. Description only.
 
     Of nine plugins on the cohort that motivated this, the two that test the design reported
@@ -647,6 +647,44 @@ def _by_arm_block(by_arm, *, aware):
                           + '</p>' + svg + "</div>")
     if not blocks:
         return ""
+    # THE HONEST n, WHERE THE RUN RECORDED IT. Everything above summarises over CELLS, so a
+    # panel reads `n = 54,093 vs 44,534` from a handful of replicates - the unit of
+    # replication is the
+    # sample, and this is the most-documented error in the field. `inputs.by_arm` now carries
+    # the per-sample value beside the cell-level summary, so the same figure the per-unit
+    # plugins get can be drawn here, from the samples. The cell-level strips stay below it:
+    # they describe the spread WITHIN an arm, which the sample view cannot.
+    per_sample = {}
+    for col, facs in (by_arm or {}).items():
+        for d in (facs or {}).values():
+            for smp, val in (d.get("per_sample") or {}).items():
+                per_sample.setdefault(str(smp), {})[col] = float(val)
+            break
+    if out_dir and design and per_sample:
+        try:
+            from . import design_panel
+            rel = f"kernels/{name}/figures/{name}_across_design.png"
+            dest = Path(out_dir) / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            n_cmp = design_panel.draw(per_sample, design, dest)
+            if n_cmp:
+                return ("<h2>Across the design</h2><figure>"
+                        f'<img src="../{rel}" alt="{_e(name)} across the design">'
+                        f"<figcaption>Each measure per arm, across the design: {n_cmp} "
+                        f"comparison(s), one point per sample."
+                        "<details><summary class='sub'>how to read it</summary>"
+                        "Each point is one sample's median of a per-cell column, because the "
+                        "sample is the unit of replication and the cell is not. The bar is the "
+                        "median of those; the last column puts every comparison on one "
+                        "standardised axis with a 95% interval, filled where that interval "
+                        "excludes zero. The strips below describe the spread WITHIN each arm, "
+                        "over cells, which this view cannot show. A DESCRIPTION, not a test."
+                        "</details></figcaption></figure>"
+                        + "".join(blocks)
+                        + (f"<p class='sub'>Not comparable here: {_e('; '.join(omitted))}.</p>"
+                           if omitted else ""))
+        except Exception:                                                 # noqa: BLE001
+            pass
     return ("<h2>Across the design</h2>"
             "<figure><figcaption>Every per-cell measure this plugin wrote, against every factor "
             f"of the design: {len(blocks)} comparison(s). A DESCRIPTION, not a test — the unit "
@@ -949,7 +987,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
         body.append(_units_by_arm(units, (payload_all or {}).get("design") or {},
                                   (spec or {}).get("unit_metrics"),
                                   out_dir=out_dir, name=name))
-    body.append(_by_arm_block(by_arm, aware=bool(aware)))
+    body.append(_by_arm_block(by_arm, aware=bool(aware), out_dir=out_dir,
+                              name=name, design=(payload_all or {}).get("design")))
     body.append(_concordance_block(name, concordance))
     # PER-SAMPLE PANELS GO TO AN APPENDIX, AND ARE LINKED. Three plugins here run once per
     # sample, so their pages carried the same five plots ten times over - 140 of 191 figures in

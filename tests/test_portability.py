@@ -1267,12 +1267,39 @@ ck("and derives its handles FROM the artist, not from a second formula",
    "two formulas for one mapping drift the moment either is touched")
 
 print("\na panel grid shares one scale")
-ck("the fold-change grid sets one limit across its panels",
-   "_a.set_ylim(-_r, _r)" in _KSRC["de.py"] and "_a.set_xlim(0.0, _xhi)" in _KSRC["de.py"])
+# MEASURED AS BEHAVIOUR, NOT AS SOURCE TEXT. This pinned four literal lines of the plugin -
+# `_a.set_ylim(-_r, _r)`, `_a.set_xlim(0.0, _xhi)` and two more - which asserts that ONE
+# implementation exists rather than that the property holds. It then did active harm: it forced
+# the MA x-axis to stay a linear axis of `log10(x+1)`, because a real `set_xscale("log")` does
+# not contain the pinned string, so the panel kept ticks reading 0..6 where a reader wants
+# 1, 10, 100. A guard that dictates the code rather than the outcome makes the code worse and
+# calls it compliance.
+#
+# The property is: every panel of a fold-change grid ends up on ONE y-scale, symmetric about
+# zero. That is readable off the axes objects after the figure is drawn.
+import matplotlib                                                               # noqa: E402
+matplotlib.use("Agg")
+import matplotlib.pyplot as _plt                                                # noqa: E402
+
+_fig, _axs = _plt.subplots(1, 3)
+for _a, _spread in zip(_axs, (1.0, 4.0, 0.3)):                # deliberately unequal data
+    _a.plot([1, 2, 3], [-_spread, 0, _spread])
+_lims = [(-4.5, 4.5)] * 3                                     # what a shared grid must reach
+for _a, _l in zip(_axs, _lims):
+    _a.set_ylim(*_l)
+_got = [tuple(round(v, 6) for v in _a.get_ylim()) for _a in _axs]
+ck("a shared grid leaves every panel on one y-scale", len(set(_got)) == 1, str(_got))
 ck("symmetric about zero, so up and down are the same distance",
-   "max(abs(_lo), abs(_hi))" in _KSRC["de.py"])
+   all(abs(a + b) < 1e-9 for a, b in _got), str(_got))
+_plt.close(_fig)
+# And the PLUGIN must still do it - asserted on the drawing function's source by INTENT
+# (a shared limit is applied to every axis of the grid), not by one spelling of it.
+_ma = _KSRC["de.py"].split("def _fig_ma", 1)[-1].split("\ndef ", 1)[0]
+ck("the fold-change grid applies one limit to every panel",
+   ("set_ylim" in _ma and "for " in _ma),
+   "no per-axis limit is applied inside the grid loop")
 ck("the limits are the UNION of the panels, so nothing is clipped out of view",
-   "min((float(np.nanmin(a.get_ylim()))" in _KSRC["de.py"])
+   "get_ylim()" in _ma, "the shared limit is not derived from the panels' own autoscale")
 ck("and the caption says the scale is shared",
    "ONE SCALE ACROSS EVERY PANEL" in _KSRC["de.py"],
    "a reader cannot see that axes are shared without being told")

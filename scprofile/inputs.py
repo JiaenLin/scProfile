@@ -518,6 +518,26 @@ def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP, ob
             levels_of_col = sorted({str(x) for x in v.dropna().unique()})
             if len(levels_of_col) > cap:
                 continue                       # an identifier, not a readout
+        # THE PER-SAMPLE VALUE, WHICH IS THE ONE A CLAIM RESTS ON. Everything below summarises
+        # over CELLS: a per-arm median with n in the tens of thousands. That is
+        # pseudoreplication - the unit of replication is the sample, and treating cells as
+        # independent replicates is the single most-documented error in this field (Squair et
+        # al., Nat Commun 2021; Zimmerman et al., Nat Commun 2021). A reader shown `n = 54,093
+        # vs 44,534` reads overwhelming evidence from a handful of biological replicates.
+        #
+        # Computed here because this is the only place holding the column, the sample key and
+        # the design at once, and it costs one groupby. The cell-level summary is KEPT beside
+        # it - it describes the spread within an arm, which the sample-level view cannot - so
+        # nothing is lost and the honest n is the one that gets drawn.
+        per_sample = {}
+        if numeric:
+            try:
+                _num = pd.to_numeric(v, errors="coerce")
+                for _sample, _val in _num.groupby(samp, observed=True).median().items():
+                    if _val == _val:                            # not NaN
+                        per_sample[str(_sample)] = float(_val)
+            except Exception:                                             # noqa: BLE001
+                per_sample = {}
         per_factor = {}
         for fac in sorted(factors or []):
             arm = samp.map({k: str(r.get(fac, "")) for k, r in design.items()})
@@ -549,7 +569,14 @@ def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP, ob
                 per_factor[fac] = {"kind": "numeric" if numeric else "categorical",
                                    "arms": rows,
                                    "aliased_with": sorted(alias.get(fac, [])),
-                                   "categories": levels_of_col}
+                                   "categories": levels_of_col,
+                                   # INSIDE THE FACTOR'S OWN ENTRY, not beside the columns. A
+                                   # reserved key at the top level would arrive at every
+                                   # consumer that iterates this mapping as though it were a
+                                   # column, and each of them would have to remember to skip
+                                   # it. The value repeats across factors and cannot drift:
+                                   # it is written once, in one loop, from one source.
+                                   "per_sample": per_sample or None}
         if per_factor:
             out[col] = per_factor
     return out
