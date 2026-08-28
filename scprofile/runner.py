@@ -16,6 +16,7 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 from . import manifest
@@ -578,22 +579,35 @@ def _conda_solve(cmd: list, mgr: str, n_conda: int, *, log=print) -> None:
     fast = None
     if Path(mgr).name.startswith("conda") and n_conda and _accepts_solver_flag(mgr):
         fast = cmd + ["--solver=libmamba"]
+    def _timed(c, what):
+        """Run it, and report how long it took. A DURATION IS A MEASUREMENT; an estimate is not.
+
+        This is the number the warning above refuses to guess at, and the one a reader deciding
+        whether a future run has hung actually needs - from this machine, this manager, this lock.
+        """
+        t0 = time.monotonic()
+        try:
+            subprocess.run(c, check=True)
+        finally:
+            log(f"  {what} took {time.monotonic() - t0:.0f}s")
+
     if fast is not None:
         log(f"  solver: libmamba (this conda accepts --solver; {n_conda} conda packages)")
         try:
-            subprocess.run(fast, check=True)
+            _timed(fast, "the libmamba solve and create")
             return
         except subprocess.CalledProcessError as exc:
             log(f"  --solver=libmamba was accepted as a flag but the solve failed "
                 f"(exit {exc.returncode}); retrying on this conda's default solver")
     elif Path(mgr).name.startswith("conda") and n_conda >= 20:
-        log(f"  solver: THIS CONDA HAS NO --solver FLAG, so the classic solver will resolve all "
-            f"{n_conda} conda packages. That can take a long time - tens of minutes to hours for "
-            f"an r-base/bioconductor lock - and conda shows a spinner rather than progress, so a "
-            f"long silence here is the solver working, NOT a hang. Do not kill it.")
-        log(f"  faster, if you can: put micromamba or mamba on PATH before `install`; both are "
-            f"preferred over conda automatically and neither has this behaviour.")
-    subprocess.run(cmd, check=True)
+        log(f"  solver: this conda has no --solver flag, so its classic solver will resolve all "
+            f"{n_conda} conda packages. It prints a spinner rather than progress, so SILENCE "
+            f"HERE IS THE SOLVER WORKING, not a hang. How long it takes is not predictable from "
+            f"here and this does not guess - the elapsed time is reported below when it finishes, "
+            f"so the next reader has a measurement instead of somebody's estimate.")
+        log(f"  micromamba or mamba on PATH avoids the classic solver entirely; both are already "
+            f"preferred over conda where they exist.")
+    _timed(cmd, f"the solve and create ({n_conda} conda packages)")
 
 
 def install(kernel, prefix, *, force=False, log=print, dry_run=False):

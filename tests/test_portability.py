@@ -1419,7 +1419,15 @@ _cmds, _log = _solve(51, accepts=False)
 ck("a conda with no --solver is NOT given one",
    len(_cmds) == 1 and not any("solver" in a for a in _cmds[0]), str(_cmds))
 ck("and the long silence is named as the solver working, not a hang",
-   any("NOT a hang" in l for l in _log), str(_log))
+   any("not a hang" in l for l in _log), str(_log))
+ck("the warning GUESSES NO DURATION - an estimate nobody measured is how a warning "
+   "earns being ignored",
+   not any(w in " ".join(_log) for w in ("hours", "tens of minutes", "minutes to")), str(_log))
+ck("it promises the elapsed time instead, and every branch reports one",
+   any("took" in l and l.rstrip().endswith("s") for l in _log), str(_log))
+
+_cmds, _log = _solve(51, accepts=True)
+ck("the fast path is timed too", any("took" in l for l in _log), str(_log))
 
 _cmds, _log = _solve(1, accepts=False)
 ck("a one-package lock gets no scary warning it does not deserve",
