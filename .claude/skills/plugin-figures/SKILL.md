@@ -754,6 +754,52 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   the others? Sample the plot rect of each panel: does any panel contain none of a colour the
   shared legend assigns a meaning to? Does any colour carry two meanings across the figure?
 
+- **C23m (a factorial design licenses more contrasts than it has factors, and a plugin that draws
+  only the main effects hides the rest)** Two crossed two-level factors support SIX two-arm
+  comparisons: two marginal main effects, and four simple effects - each factor within each level
+  of the other. A reader given only the two main effects will make the other four in their head,
+  from panels never drawn for them, using arm means that were never computed within a level.
+  Enumerate every contrast the design supports and draw them as one family on one scale, or state
+  which you omitted and why. The same holds for any design with more structure than one grouping:
+  a treatment crossed with a genotype, a timepoint crossed with a sex, a protocol crossed with a
+  site.
+  **CHECK:** list every two-arm contrast your design supports, including the simple effects. How
+  many does the figure set draw? For each one it does not, is the omission stated?
+
+- **C23n (each contrast has its own attainable floor, its own removals, and possibly its own unit)**
+  These three are properties of the CONTRAST, not of the study, and a plugin that computes them once
+  for the whole design gets all three wrong for the simple effects.
+  *The floor* is fixed by the arm sizes before any data is seen, and a simple effect splits an
+  already small cohort - so a design that is adequately powered marginally routinely licenses
+  simple effects that cannot reach the alpha the reader will apply, FOR ANY DATA. That panel is a
+  description and must say so.
+  *The removals* differ per contrast: an entity absent from one whole arm contributes a difference
+  of presence rather than of magnitude, so it comes out of THAT comparison - but it may be
+  perfectly comparable in another, so removal is never global and must be named on each panel.
+  *The unit* differs per entity: a rare entity is absent from individual samples for want of cells,
+  not for want of signal, so a sample-level test of it measures the detection floor as much as the
+  quantity, and the group is the level the design is replicated at anyway.
+  **ONE INSTANCE.** A 2x2 with 3/3/2/2 units per cell. Both main effects can reach p < 0.05
+  (floors 0.0079 at 5v5 and 0.0048 at 6v4); ALL FOUR simple effects cannot - floors 0.1000 at 3v3
+  and at 3v2, and 0.3333 at 2v2. Resolving the whole design rather than the two factors returned 20
+  contrasts of which 16 were unreachable, and surfaced a fourth factor nobody had asked about. The
+  removal sets differed across the six contrasts of interest: one entity was dropped from four of
+  them, another from all six, a third from two - and the set comparable everywhere was 9 of 13 at
+  GROUP level against 5 of 13 at sample level, so choosing the coarser unit recovered four entities
+  that per-sample screening discards.
+  **CHECK:** does each panel print the floor for ITS OWN arm sizes, not the study's? Does each name
+  what IT removed? Where an entity is compared at group level, does the panel say so?
+
+- **C23o (a contrast on an aliased factor must be drawn under both names)** Where two factors
+  partition the units identically, no measurement in the data separates them, and a panel titled
+  with one of them asserts a distinction the design cannot make. Do not silently drop such a
+  contrast - a reader wants it and will otherwise construct it - and do not title it with the
+  factor you find more interesting. Title it with both, and say on the face that no mark below can
+  be attributed to either. Detect the aliasing from the design table rather than trusting a caller
+  to declare it.
+  **CHECK:** for every factor, is there another that partitions the units identically? If so, does
+  every panel on it carry both names?
+
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?

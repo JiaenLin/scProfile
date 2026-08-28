@@ -361,6 +361,23 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   **CHECK:** after a multi-file text edit, how many producers did you re-run, against how many
   files you changed? Did you open the rendered result of each one whose text you altered?
 
+- **P28 (resolve the design BEFORE deciding what the figure set is)** The set of figures follows
+  from the set of contrasts the design supports, so resolving the design is the first step of a
+  rebuild and not a detail inside one figure. Do it once, in one module every figure imports, and
+  have it return for each contrast: the arm sizes, the attainable floor, the entities that must be
+  removed from that contrast, the entities that need a coarser unit, and any factor it is aliased
+  with. Then a family that draws four panels where the design licenses six is visible as a gap
+  rather than a preference, and no two figures can disagree about an arm size or a floor - they
+  read the same object.
+  **ONE INSTANCE.** A figure set had been rebuilt for weeks against two main effects. Resolving the
+  design returned 20 contrasts, 16 of which could not reach p < 0.05 for any data; four of the six
+  that mattered were simple effects nobody had drawn, and every one of those four was unreachable.
+  The resolver also detected an aliased factor pair from the design table alone and a fourth factor
+  that had not been discussed. None of this was new data - it was all implied by a ten-row design
+  table that no figure had ever been made to read.
+  **CHECK:** is there one module that resolves the design, and does every figure import it? Ask it
+  how many contrasts exist and count how many the set draws - are the missing ones deliberate?
+
 ## What to expect at the end
 
 In this rebuild, of 23 plates: **19 were about the method, not the biology.** Four presented a
