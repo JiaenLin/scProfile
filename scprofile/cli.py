@@ -321,6 +321,17 @@ def _run(a):
         # know is that the caveats keyed on it will not fire.
         print(f"      {assay[0]!r} is not an assay this tool reasons about (cell, nucleus), so "
               f"assay-specific caveats will NOT be applied. It is carried through as declared.")
+    if not assay[0]:
+        # NAME THEM. "it changes what each kernel is allowed to claim" is true, and it is also
+        # skippable - a cost with nothing named on it cannot be weighed, so a reader in a hurry
+        # moves past it. I moved past it, and the run that followed would have shipped a cellchat
+        # report with NO single-nucleus caveat on a single-nucleus study. Naming the plugins that
+        # will fall silent makes it a decision instead of a note: a report that is silent because
+        # nothing was known reads exactly like one that earned its silence.
+        _dep = inputs.assay_dependent([ks[n] for n in want if n in ks])
+        if _dep:
+            print(f"      {len(_dep)} of the {len(want)} plugin(s) here branch on it and will "
+                  f"emit NO assay caveat: {', '.join(_dep)}")
     print(f"  {'constraint':<14} {(csrc or 'ABSENT'):<26} "
           + ("read from the object" if csrc else
              "no upstream constraint on use - kernels that need one will say so"))
@@ -1256,6 +1267,17 @@ def _plan(a):
         # person reads BEFORE committing a job was the one that did not mention it.
         print(f"      {assay[0]!r} is not an assay this tool reasons about (cell, nucleus), so "
               f"assay-specific caveats will NOT be applied. It is carried through as declared.")
+    if not assay[0]:
+        # NAME THEM. "it changes what each kernel is allowed to claim" is true, and it is also
+        # skippable - a cost with nothing named on it cannot be weighed, so a reader in a hurry
+        # moves past it. I moved past it, and the run that followed would have shipped a cellchat
+        # report with NO single-nucleus caveat on a single-nucleus study. Naming the plugins that
+        # will fall silent makes it a decision instead of a note: a report that is silent because
+        # nothing was known reads exactly like one that earned its silence.
+        _dep = inputs.assay_dependent([ks[n] for n in want if n in ks])
+        if _dep:
+            print(f"      {len(_dep)} of the {len(want)} plugin(s) here branch on it and will "
+                  f"emit NO assay caveat: {', '.join(_dep)}")
     print(f"  {'constraint':<14} {(csrc or 'ABSENT'):<30} "
           + ("read from the object" if csrc else "no upstream constraint recorded"))
 

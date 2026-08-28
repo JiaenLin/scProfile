@@ -14,6 +14,8 @@ host that keys on `cell_type` works on exactly one cohort.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import re
 from . import manifest
 
@@ -233,6 +235,41 @@ def detect_organism(var_names, declared=None):
     if exact_title > exact_upper:
         return "mouse", f"{exact_title}/{len(probes)} probe genes are Title Case ({probes[:3]})"
     return None, f"casing is ambiguous over {probes[:3]}; pass --organism"
+
+
+def assay_dependent(kernels) -> list:
+    """Names of the given kernels whose OWN CODE branches on the assay. Read, not registered.
+
+    `detect_assay` already tells a caller that an undetermined assay "changes what each kernel is
+    allowed to claim". THAT SENTENCE IS TRUE AND IT IS ALSO SKIPPABLE, which is the problem with
+    it: it describes a cost without naming one, so the reader has no way to weigh it and moves on.
+    Naming the plugins that will fall silent turns it into a decision - `cellchat will emit no
+    assay caveat` is something a person acts on.
+
+    The list is derived from the kernels actually mounted, by reading their source for a branch on
+    `ctx.assay`, rather than from a hand-kept registry here. A second list of which plugins care
+    about the assay is a list that goes stale the first time somebody adds a branch and forgets
+    it, and it would go stale silently - the message would simply stop mentioning them.
+
+    Nothing is imported to do this. A plugin runs in its own interpreter and may not even be
+    importable from the host, so this reads bytes.
+    """
+    out = []
+    for k in kernels:
+        path = getattr(k, "path", None) or getattr(k, "entry", None)
+        if path is None:
+            continue
+        path = Path(path)
+        files = ([path] if path.is_file()
+                 else sorted(path.rglob("*.py")) if path.is_dir() else [])
+        for f in files:
+            try:
+                if "ctx.assay" in f.read_text(errors="ignore"):
+                    out.append(getattr(k, "name", str(path)))
+                    break
+            except OSError:
+                continue
+    return sorted(set(out))
 
 
 def detect_assay(adata, declared=None):

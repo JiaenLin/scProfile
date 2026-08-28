@@ -164,6 +164,22 @@ PLUGIN = {
         "python": ">=3.10,<3.13",
         "packages": {
             "pertpy": ">=0.9,<2", "pandas": ">=2.0,<3", "numpy": ">=1.24,<3",
+            # PINNED BECAUSE THE TOOL THIS WRAPS DOES NOT PIN IT. pertpy 1.0.5 declares a bare
+            # `Requires-Dist: mudata` with no constraint at all, and calls
+            # `mudata.set_options(pull_on_update=False)` at import. mudata 0.4 removed
+            # `set_options` in favour of `settings`, so `import pertpy` raises AttributeError
+            # against any 0.4 - measured, on mudata 0.4.1: `hasattr(mudata, "set_options")` is
+            # False and the public surface carries `settings` in its place.
+            #
+            # Nothing about that is visible until an environment is resolved fresh AFTER the new
+            # mudata is published, which is why this passed and then stopped passing with no
+            # change on our side. AN UNPINNED TRANSITIVE DEPENDENCY IS A DECISION TO LET SOMEONE
+            # ELSE'S RELEASE SCHEDULE DECIDE WHETHER THIS PLUGIN IMPORTS. Naming a ceiling the
+            # upstream forgot is one of the things a plugin declaration is FOR.
+            #
+            # Ceiling only, deliberately: 0.4 is measured to break it and no floor has been
+            # measured, so inventing one would be asserting something nobody checked.
+            "mudata": "<0.4",
             # THE CONTRACT'S, NOT THIS METHOD'S. `_entry.py` reads the object with
             # `anndata.read_h5ad` before run() is called. This plugin happens to work today
             # because it SHARES an environment with plugins that do name anndata - which is

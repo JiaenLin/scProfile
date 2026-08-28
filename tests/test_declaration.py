@@ -156,6 +156,43 @@ for _n, _k in sorted(_disc().items()):
     if (_k.spec.get("requires") or {}).get("packages"):
         ck(f"{_n} declares it", "anndata" in _k.spec["requires"]["packages"])
 
+print("\nevery declared version constraint is a constraint pip will accept")
+# A SPECIFIER THAT DOES NOT PARSE IS NOT A PIN, and it does not announce itself as one: the
+# builder passes it through, pip rejects the whole install, and the message names pip's parser
+# rather than the plugin that wrote it. Ceilings with no floor are legitimate and must stay so -
+# a ceiling is what you declare when you have MEASURED which version breaks and have measured no
+# floor, and turning that into "declare both or neither" would push people into inventing floors.
+try:
+    from packaging.specifiers import SpecifierSet as _Spec
+except ImportError:
+    _Spec = None
+ck("the specifier parser is available to check with", _Spec is not None,
+   "install `packaging` or this check proves nothing")
+if _Spec is not None:
+    _unparseable = []
+    _seen = 0
+    for _n, _k in sorted(_disc().items()):
+        for _pkg, _spec in ((_k.spec.get("requires") or {}).get("packages") or {}).items():
+            _seen += 1
+            try:
+                _Spec(str(_spec))
+            except Exception as _e:
+                _unparseable.append(f"{_n}:{_pkg}={_spec!r} ({_e})")
+    ck(f"all {_seen} package constraint(s) across every plugin parse", not _unparseable,
+       "; ".join(_unparseable))
+    ck("and the check actually read some", _seen >= 20, f"only {_seen}")
+    ck("a ceiling with no floor is accepted, because that is what a measured break looks like",
+       bool(_Spec("<0.4")))
+    def _rejects(text):
+        try:
+            _Spec(text)
+        except Exception:
+            return True
+        return False
+
+    ck("and genuine nonsense is still caught, so the check above can fail",
+       _rejects("=<0.4") and _rejects("not-a-version") and not _rejects(">=1,<2"))
+
 print("\nthe MAKER produces a plugin the tool accepts, on the first generation")
 # THE PLUGIN IS WRITTEN ONCE AND SHIPS PREBUILT, so what the maker emits decides what the builder
 # and planner get to read for the life of that plugin. A skeleton that starts with gaps is a
