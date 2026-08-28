@@ -180,6 +180,23 @@ PLUGIN = {
             # Ceiling only, deliberately: 0.4 is measured to break it and no floor has been
             # measured, so inventing one would be asserting something nobody checked.
             "mudata": "<0.4",
+            # THE SAME DEFECT ONE LAYER DOWN, AND THE SECOND INSTANCE MAKES IT A PATTERN.
+            # pertpy 1.0.5's `_dialogue` module does
+            #     from statsmodels.sandbox.stats.multicomp import multipletests
+            # at import, and statsmodels 0.15 removed that deprecated re-export - measured on
+            # 0.15.0, whose sandbox exports only `MultiComparison` and `multicontrast_pvalues`,
+            # while the real `statsmodels.stats.multitest.multipletests` is present and fine.
+            # pertpy declares NO statsmodels requirement at all, not even a bare one: it is
+            # reached transitively, so nothing anywhere constrained it.
+            #
+            # THIS TOOL UNDER-DECLARES SYSTEMATICALLY - two of its transitive dependencies have
+            # now broken this plugin's import in one week, each from a release that was correct
+            # for everyone except pertpy. Ceilings for it are this declaration's job, and a
+            # third will not be a surprise.
+            #
+            # Ceiling only, on the same rule as mudata above: 0.15 is measured to break it, no
+            # floor has been measured, and inventing one asserts something nobody checked.
+            "statsmodels": "<0.15",
             # THE CONTRACT'S, NOT THIS METHOD'S. `_entry.py` reads the object with
             # `anndata.read_h5ad` before run() is called. This plugin happens to work today
             # because it SHARES an environment with plugins that do name anndata - which is
