@@ -83,19 +83,71 @@ def use():
     return plt
 
 
-#: Paul Tol's qualitative schemes, appended to Okabe-Ito for the categories Okabe-Ito runs out
-#: on. Both sets are designed for colour-vision deficiency; together they give twelve hues that
-#: stay separable, which is about where hue stops working as an identifier at all.
-#: https://personal.sron.nl/~pault/ - "muted" and "light", minus the ones too near an Okabe-Ito.
+#: Paul Tol's qualitative schemes. https://personal.sron.nl/~pault/ - "muted" and "light".
+#: KEPT FOR PROVENANCE, no longer the source of `CATEGORY_COLOURS`; see the block below.
 TOL_EXTRA = ["#332288", "#88CCEE", "#44AA99", "#117733", "#999933", "#DDCC77",
              "#661100", "#AA4499", "#882255"]
 
 #: Every hue this tool will use for a category, in order.
-CATEGORY_COLOURS = OKABE_ITO[:7] + [c for c in TOL_EXTRA if c not in OKABE_ITO]
+#:
+#: CHOSEN AT THE OPACITY MARKS ARE DRAWN AT, and against BOTH published dichromacy models. That
+#: is the whole reason this list is no longer `OKABE_ITO[:7] + TOL_EXTRA`.
+#:
+#: Okabe-Ito and Paul Tol are both designed for colour-vision deficiency, and both are designed
+#: for a SOLID swatch. Almost nothing in this tool is drawn solid: a chord ribbon goes down at
+#: alpha 0.6, a circle-plot edge at 0.88, overplotted points lower still. Alpha compositing over
+#: the page contracts the whole gamut toward it - chroma and lightness shrink together - so a
+#: pair that clears the bar as a swatch need not clear it as a mark. Concatenating the two
+#: published lists also never checked the JOIN between them, and the worst pairs in the old
+#: palette were exactly that: one Okabe-Ito hue against one Tol hue.
+#:
+#: WHAT WAS MEASURED, on the thirteen populations these figures carry, worst pair by CIEDE2000:
+#:
+#:                            deuteranopia        protanopia        normal
+#:                          Machado  Vienot   Machado  Vienot
+#:     old, as a swatch       3.53     3.06      6.10    4.47        8.01
+#:     old, at ribbon 0.6     1.73     2.39      5.06    3.50        5.34   <- indistinguishable
+#:     this list, swatch      9.40    10.27      8.77    9.65       11.17
+#:     this list, at 0.6      8.01     7.87      8.15    7.95        8.66
+#:
+#: DEUTERANOPIA AND PROTANOPIA, in that order, because those are the ones that exist: ~1 in 12
+#: men and ~1 in 100, against ~1 in 10,000 for tritanopia. Every colour check on this palette
+#: before 2026-08-28 ran tritanopia, which is how a palette with a worst deuteranopic pair of
+#: dE00 1.7 at the drawn opacity passed all of them. Tritanopia is still in the objective at half
+#: weight so it is not traded away, and it improves rather than degrades: 7.48 / 8.43 as a swatch
+#: and 5.88 / 4.57 at 0.6 (Machado / Vienot), against the old palette's 4.78 / 1.91 and
+#: 3.30 / 1.43.
+#:
+#: TWO SIMULATION MODELS, not one. Machado, Oliveira & Fernandes (2009) at severity 1.0 and
+#: Vienot, Brettel & Mollon (1999) are both in current use and they disagree - on the palette
+#: this file carried for one afternoon they disagreed about one violet-against-indigo pair by a
+#: factor of 1.6, one model calling it safe and the other calling it collapsed. There is no way
+#: to decide from outside which is right for a given reader, so the palette clears the bar under
+#: BOTH rather than under whichever is being run today. `chord.py` measures with Vienot and warns
+#: below dE 15 on its own CIE76 scale: the old palette scored 6.9 there and this one scores 16.8.
+#:
+#: The hues are ordered so that every PREFIX is itself a good palette - `palette()` gives the
+#: i-th sorted label the i-th colour, so a five-category figure only ever sees the first five.
+CATEGORY_COLOURS = ["#FFA200", "#2E2EAE", "#5D3A2E", "#C5B9F3",
+                    "#DCAEA2", "#975100", "#745D80", "#7474FF",
+                    "#179751", "#B997AE", "#97D168", "#8B80C5",
+                    "#3A8068", "#AE0051", "#C57400", "#5D51A2"]
 
 #: Above this many categories, no palette separates them and a legend stops being readable.
 #: Not a style rule: at sixteen the eye cannot match a swatch to a dot.
 PALETTE_LIMIT = len(CATEGORY_COLOURS)
+
+#: The lowest opacity at which `CATEGORY_COLOURS` still holds `dE00 >= 7` between every pair -
+#: under normal vision, deuteranopia and protanopia, under both simulation models. MEASURED by
+#: bisection on the list above, not chosen: 0.566 at sixteen categories, 0.560 at thirteen,
+#: 0.387 at eight, 0.179 at four. Rounded up to one figure a drawing routine can hold to.
+#:
+#: A mark drawn below this carries a colour its reader cannot decode, which for a chord ribbon or
+#: a circle-plot edge is the only channel naming the sender. Fade below it deliberately or not at
+#: all - and where a figure needs a weaker-looking mark, weaken the WIDTH, which stays legible
+#: all the way down. `min_mark_alpha(n)` recomputes the floor for a given number of categories,
+#: so it cannot drift away from the palette the way a hand-copied constant would.
+MIN_MARK_ALPHA = 0.6
 
 
 def palette(labels):
@@ -132,6 +184,184 @@ def palette_collisions(labels):
     for l, c in p.items():
         by.setdefault(c, []).append(l)
     return sorted((c, sorted(ls)) for c, ls in by.items() if len(ls) > 1)
+
+
+# --------------------------------------------------------------------- colour-vision deficiency
+#
+# THE CHECK LIVES WITH THE PALETTE. Every claim in the `CATEGORY_COLOURS` comment above is
+# reproducible from this file alone, with no import beyond the standard library, so a reader who
+# doubts a number can compute it rather than trust it - and so a test can assert the property
+# instead of a person remembering to re-check it after an edit.
+#
+# TWO MODELS, because the two published ones disagree and neither is the arbiter of the other.
+# Machado, Oliveira & Fernandes (2009) at severity 1.0 - the matrices `colorspacious` uses at
+# severity 100 - and Vienot, Brettel & Mollon (1999), which is what several other tools and
+# `chord.py`'s own check use. A palette measured under one and drawn for readers of the other has
+# been checked against a model, not against a reader. Both are applied in LINEAR sRGB; doing it
+# on the gamma values is the common shortcut and it flatters whatever is being checked.
+#
+# Distance is CIEDE2000 in CIE Lab under D65, never a comparison of hex strings: two hexes can
+# differ in every digit and land on the same point once a deficiency is applied, which is exactly
+# the failure being looked for.
+
+CVD_MATRIX = {
+    "deuteranopia": ((0.367322, 0.860646, -0.227968),
+                     (0.280085, 0.672501, 0.047413),
+                     (-0.011820, 0.042940, 0.968881)),
+    "protanopia": ((0.152286, 1.052583, -0.204868),
+                   (0.114503, 0.786281, 0.099216),
+                   (-0.003882, -0.048116, 1.051998)),
+    "tritanopia": ((1.255528, -0.076749, -0.178779),
+                   (-0.078411, 0.930809, 0.147602),
+                   (0.004733, 0.691367, 0.303900)),
+}
+
+#: Vienot, Brettel & Mollon (1999). A projection onto the dichromatic plane, so it is harsher
+#: than Machado at severity 1.0 for some hues and gentler for others - the disagreement is the
+#: reason both are here.
+CVD_MATRIX_VIENOT = {
+    "protanopia": ((0.0, 1.05118294, -0.05116099), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)),
+    "deuteranopia": ((1.0, 0.0, 0.0), (0.9513092, 0.0, 0.04866992), (0.0, 0.0, 1.0)),
+    "tritanopia": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (-0.86744736, 1.86727089, 0.0)),
+}
+
+#: Both, by name. `separation` takes one; `min_mark_alpha` requires every one of them.
+CVD_MODELS = ("machado", "vienot")
+
+#: The order every colour report prints, commonest deficiency first. A check that reports
+#: tritanopia and not the other two has checked the rarest case and skipped the ones that exist.
+CVD_ORDER = ("deuteranopia", "protanopia", "tritanopia")
+
+
+def _to_rgb(colour):
+    h = str(colour).lstrip("#")
+    return tuple(int(h[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+
+def _lab(rgb):
+    """sRGB in [0,1] -> CIE Lab under D65."""
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
+    m = ((0.4124564, 0.3575761, 0.1804375),
+         (0.2126729, 0.7151522, 0.0721750),
+         (0.0193339, 0.1191920, 0.9503041))
+    xyz = [sum(r[i] * lin[i] for i in range(3)) for r in m]
+    white = (0.95047, 1.0, 1.08883)
+    d = 6 / 29
+    f = []
+    for v, w in zip(xyz, white):
+        t = v / w
+        f.append(t ** (1 / 3) if t > d ** 3 else t / (3 * d * d) + 4 / 29)
+    return (116 * f[1] - 16, 500 * (f[0] - f[1]), 200 * (f[1] - f[2]))
+
+
+def cvd_simulate(rgb, kind, model="machado"):
+    """An sRGB triple in [0,1] as `kind` sees it under `model`. Applied in LINEAR light."""
+    m = CVD_MATRIX if model == "machado" else CVD_MATRIX_VIENOT
+    lin = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in rgb]
+    out = [sum(r[i] * lin[i] for i in range(3)) for r in m[kind]]
+    out = [min(1.0, max(0.0, v)) for v in out]
+    return tuple(v * 12.92 if v <= 0.0031308 else 1.055 * v ** (1 / 2.4) - 0.055 for v in out)
+
+
+def delta_e00(lab1, lab2):
+    """CIEDE2000. Written out rather than approximated by Euclidean Lab distance, which
+    overstates separation in exactly the desaturated region a composited mark lands in."""
+    import math
+    L1, a1, b1 = lab1
+    L2, a2, b2 = lab2
+    C1, C2 = math.hypot(a1, b1), math.hypot(a2, b2)
+    Cb = (C1 + C2) / 2
+    G = 0.5 * (1 - math.sqrt(Cb ** 7 / (Cb ** 7 + 25.0 ** 7))) if Cb > 0 else 0.5
+    a1p, a2p = (1 + G) * a1, (1 + G) * a2
+    C1p, C2p = math.hypot(a1p, b1), math.hypot(a2p, b2)
+    h1p = math.degrees(math.atan2(b1, a1p)) % 360
+    h2p = math.degrees(math.atan2(b2, a2p)) % 360
+    dLp, dCp = L2 - L1, C2p - C1p
+    if C1p * C2p == 0:
+        dhp = 0.0
+    elif abs(h2p - h1p) <= 180:
+        dhp = h2p - h1p
+    else:
+        dhp = h2p - h1p - 360 * (1 if h2p > h1p else -1)
+    dHp = 2 * math.sqrt(C1p * C2p) * math.sin(math.radians(dhp) / 2)
+    Lbp, Cbp = (L1 + L2) / 2, (C1p + C2p) / 2
+    if C1p * C2p == 0:
+        hbp = h1p + h2p
+    elif abs(h1p - h2p) <= 180:
+        hbp = (h1p + h2p) / 2
+    elif h1p + h2p < 360:
+        hbp = (h1p + h2p + 360) / 2
+    else:
+        hbp = (h1p + h2p - 360) / 2
+    T = (1 - 0.17 * math.cos(math.radians(hbp - 30)) + 0.24 * math.cos(math.radians(2 * hbp))
+         + 0.32 * math.cos(math.radians(3 * hbp + 6))
+         - 0.20 * math.cos(math.radians(4 * hbp - 63)))
+    dTh = 30 * math.exp(-(((hbp - 275) / 25) ** 2))
+    Rc = 2 * math.sqrt(Cbp ** 7 / (Cbp ** 7 + 25.0 ** 7)) if Cbp > 0 else 0.0
+    Sl = 1 + 0.015 * (Lbp - 50) ** 2 / math.sqrt(20 + (Lbp - 50) ** 2)
+    Sc, Sh = 1 + 0.045 * Cbp, 1 + 0.015 * Cbp * T
+    Rt = -math.sin(math.radians(2 * dTh)) * Rc
+    return math.sqrt((dLp / Sl) ** 2 + (dCp / Sc) ** 2 + (dHp / Sh) ** 2
+                     + Rt * (dCp / Sc) * (dHp / Sh))
+
+
+def separation(colours, alpha=1.0, kinds=CVD_ORDER, over=(1.0, 1.0, 1.0),
+               model="machado"):
+    """`{condition: [(dE00, a, b), ...]}` worst pair first, for colours DRAWN AT `alpha`.
+
+    `alpha` is the point. A palette is validated as a solid swatch and then drawn at 0.6, and
+    compositing over the page contracts the whole gamut toward it: the pair that decides whether
+    a figure is readable is the worst pair AS DRAWN, which is not in general the worst pair as a
+    swatch. Pass the alpha the marks actually carry.
+
+    `colours` may be a list or a {name: colour} mapping; `over` is the background composited
+    against, white unless a figure has a tinted panel.
+    """
+    items = (list(colours.items()) if hasattr(colours, "items")
+             else [(c, c) for c in colours])
+    out = {}
+    for kind in ("normal",) + tuple(kinds):
+        labs = []
+        for name, col in items:
+            rgb = _to_rgb(col)
+            rgb = tuple(alpha * c + (1 - alpha) * b for c, b in zip(rgb, over))
+            labs.append((name, _lab(rgb if kind == "normal"
+                                    else cvd_simulate(rgb, kind, model))))
+        out[kind] = sorted((delta_e00(labs[i][1], labs[j][1]), labs[i][0], labs[j][0])
+                           for i in range(len(labs)) for j in range(i + 1, len(labs)))
+    return out
+
+
+def min_mark_alpha(n=PALETTE_LIMIT, threshold=7.0, kinds=("deuteranopia", "protanopia"),
+                   models=CVD_MODELS):
+    """The lowest alpha at which the first `n` category colours all stay `threshold` apart.
+
+    Every model in `models`, and normal vision too - the worst case over all of them, because a
+    reader is only served if the pair survives whichever model describes them. Bisected on the
+    palette itself, so it cannot drift away from `CATEGORY_COLOURS` the way a hand-copied
+    constant would. `MIN_MARK_ALPHA` is this at the full sixteen, rounded up.
+
+    `None` when even a solid mark does not clear `threshold` - the honest answer, and not
+    something to paper over with a floor of 1.0.
+    """
+    cols = CATEGORY_COLOURS[:n]
+
+    def ok(a):
+        worst = min(separation(cols, alpha=a, kinds=())["normal"][0][0],
+                    *(separation(cols, alpha=a, kinds=kinds, model=m)[k][0][0]
+                      for m in models for k in kinds))
+        return worst >= threshold
+
+    if not ok(1.0):
+        return None
+    lo, hi = 0.02, 1.0
+    for _ in range(30):
+        mid = (lo + hi) / 2
+        if ok(mid):
+            hi = mid
+        else:
+            lo = mid
+    return hi
 
 
 #: Layout algorithms whose output an axis can be named after. Anything else is printed whole: a

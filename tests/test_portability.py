@@ -1374,5 +1374,63 @@ ck("it takes a DIRECTORY, so it can only be pointed at a real report",
    'd if d.name == "report" else d / "report"' in _clisrc,
    "a standard that accepts a payload can be run against something never rendered")
 
+print("\nthe conda solve adapts to the manager it finds, and says so when it cannot")
+import subprocess as _sp
+from scprofile import runner as _R
+_seen = []
+
+
+def _record(c, **k):
+    _seen.append(list(c))
+
+
+def _solve(n_conda, accepts, *, fail_fast=False):
+    """One _conda_solve, with the probe and subprocess stubbed. Returns (commands, log lines)."""
+    _seen.clear()
+    lines = []
+    real_probe, real_run = _R._accepts_solver_flag, _sp.run
+
+    def _boom(c, **k):
+        _seen.append(list(c))
+        if fail_fast and "--solver=libmamba" in c:
+            raise _sp.CalledProcessError(2, c)
+
+    _R._accepts_solver_flag = lambda m: accepts
+    _sp.run = _boom if fail_fast else _record
+    try:
+        _R._conda_solve(["conda", "create", "-p", "X"], "/x/bin/conda", n_conda,
+                        log=lines.append)
+    finally:
+        _R._accepts_solver_flag, _sp.run = real_probe, real_run
+    return _seen[:], lines
+
+
+_cmds, _log = _solve(51, accepts=True)
+ck("a conda that takes --solver is given libmamba",
+   len(_cmds) == 1 and "--solver=libmamba" in _cmds[0], str(_cmds))
+
+_cmds, _log = _solve(51, accepts=True, fail_fast=True)
+ck("and a libmamba solve that FAILS still builds, on the default solver",
+   len(_cmds) == 2 and "--solver=libmamba" not in _cmds[1], str(_cmds))
+ck("the fallback is reported rather than silent",
+   any("retrying" in l for l in _log), str(_log))
+
+_cmds, _log = _solve(51, accepts=False)
+ck("a conda with no --solver is NOT given one",
+   len(_cmds) == 1 and not any("solver" in a for a in _cmds[0]), str(_cmds))
+ck("and the long silence is named as the solver working, not a hang",
+   any("NOT a hang" in l for l in _log), str(_log))
+
+_cmds, _log = _solve(1, accepts=False)
+ck("a one-package lock gets no scary warning it does not deserve",
+   len(_cmds) == 1 and not any("NOT a hang" in l for l in _log), str(_log))
+
+_cmds, _log = _solve(51, accepts=True)
+ck("micromamba and mamba are never probed for --solver at all",
+   _R._conda_solve.__doc__ is not None
+   and 'Path(mgr).name.startswith("conda")' in
+       pathlib.Path(_R.__file__).read_text(),
+   "the flag is conda-only; mamba does not take it")
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

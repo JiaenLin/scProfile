@@ -543,6 +543,59 @@ def machine(log=None):
     return out
 
 
+def _accepts_solver_flag(mgr: str) -> bool:
+    """Whether this manager's `create` accepts `--solver`. ASKED, not inferred from a version.
+
+    conda grew `--solver` in 22.11 and made libmamba its default in 23.10, but the mapping has
+    exceptions - a distribution can ship the flag without the plugin, or the plugin without
+    having it as the default - and a version string is not the question anyway. The question is
+    whether this binary takes the flag, so put it to the binary.
+    """
+    try:
+        h = subprocess.run([mgr, "create", "--help"], capture_output=True, text=True, timeout=60)
+    except Exception:
+        return False
+    return "--solver" in (h.stdout or "") + (h.stderr or "")
+
+
+def _conda_solve(cmd: list, mgr: str, n_conda: int, *, log=print) -> None:
+    """Run the create, on the fast solver where one is available, and SAY when it is not.
+
+    THE CLASSIC CONDA SOLVER IS THE SLOWEST THING IN THIS INSTALLER, by a margin nothing else
+    comes close to. A lock naming the bioconductor stack can sit in `Solving environment:` for
+    hours, and conda prints a spinner rather than progress - so from outside, and from a job log
+    afterwards, IT IS INDISTINGUISHABLE FROM A HANG. Someone watching it kills the job, and the
+    thing that was working gets recorded as the thing that broke. That is worth a sentence.
+
+    micromamba and mamba do not have the problem, which is why they are preferred over conda
+    where they exist. Where they do not, a modern conda can be pointed at the same solver.
+
+    THE FAST PATH IS ATTEMPTED, NEVER ASSUMED. `--solver=libmamba` fails in seconds when the
+    plugin is absent - an argument or plugin error, not a wasted solve - so falling back to the
+    plain command costs nothing and cannot lose a build. A retry that could cost hours would not
+    be worth it; this one is free, which is what makes it the right shape.
+    """
+    fast = None
+    if Path(mgr).name.startswith("conda") and n_conda and _accepts_solver_flag(mgr):
+        fast = cmd + ["--solver=libmamba"]
+    if fast is not None:
+        log(f"  solver: libmamba (this conda accepts --solver; {n_conda} conda packages)")
+        try:
+            subprocess.run(fast, check=True)
+            return
+        except subprocess.CalledProcessError as exc:
+            log(f"  --solver=libmamba was accepted as a flag but the solve failed "
+                f"(exit {exc.returncode}); retrying on this conda's default solver")
+    elif Path(mgr).name.startswith("conda") and n_conda >= 20:
+        log(f"  solver: THIS CONDA HAS NO --solver FLAG, so the classic solver will resolve all "
+            f"{n_conda} conda packages. That can take a long time - tens of minutes to hours for "
+            f"an r-base/bioconductor lock - and conda shows a spinner rather than progress, so a "
+            f"long silence here is the solver working, NOT a hang. Do not kill it.")
+        log(f"  faster, if you can: put micromamba or mamba on PATH before `install`; both are "
+            f"preferred over conda automatically and neither has this behaviour.")
+    subprocess.run(cmd, check=True)
+
+
 def install(kernel, prefix, *, force=False, log=print, dry_run=False):
     """Build the environment this plugin RESOLVES TO, then prove it with every member's selftest.
 
@@ -678,7 +731,7 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
             log(f"  interpreter: {mgr} -> "
                 + (f"python {spec['python']}" if spec["python"] else "no python pin (r lock)")
                 + (f" + {len(spec['conda'])} conda package(s)" if spec["conda"] else ""))
-            subprocess.run(cmd, check=True)
+            _conda_solve(cmd, mgr, len(spec["conda"]), log=log)
         elif venv_py:
             log(f"  interpreter: {venv_py} (venv; this lock needs no conda packages)")
             subprocess.run([venv_py, "-m", "venv", str(p)], check=True)
