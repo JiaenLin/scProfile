@@ -82,6 +82,125 @@ def effects(per_sample, design, factors=None):
     return out
 
 
+def contrasts(per_sample, design, factors=None, *, min_n=2):
+    """Every contrast a factorial design supports: the MARGINAL ones and the SIMPLE ones.
+
+    `effects()` answers "does this measure differ across diet?" and pools over everything else.
+    On a 2x2 that is two of the six questions the design was built to ask, and the four it drops
+    are the ones the second factor exists for:
+
+        diet                      marginal - pooled over age
+        age                       marginal - pooled over diet
+        diet | age = aged         simple - diet within the aged animals only
+        diet | age = young        simple
+        age  | diet = HFD         simple
+        age  | diet = chow        simple
+
+    A MARGINAL EFFECT CAN BE FLAT WHILE BOTH SIMPLE EFFECTS ARE LARGE AND OPPOSITE. That is not
+    an edge case, it is what an interaction IS, and a panel that shows only the marginal row
+    reports "no effect of diet" for exactly the design that was built to find one. Reporting
+    both is not extra detail; it is the difference between answering the question and answering
+    a different one.
+
+    Generalises past 2x2: a simple contrast is emitted for every factor, held at every level of
+    every OTHER factor. Aliased factors are not conditioned on twice - holding `age` and holding
+    a factor aliased with it are the same split, and emitting both would double every row and
+    imply two independent findings where the data has one.
+
+    Each row carries `estimable`: True when both arms have at least `min_n` samples and an
+    interval means something. When they do not, the contrast is still REPORTED - with the
+    difference standardised by the measure's marginal spread so it lands on the same axis, and
+    with no interval - because a comparison the design cannot support at sample level is a fact
+    about the design that belongs on the figure, not an absence to be silently dropped.
+    """
+    import math
+
+    factors = list(factors or sorted({f for r in design.values() for f in r}))
+    alias = aliased(design, factors)
+    measures = sorted({m for v in per_sample.values() for m in v})
+
+    def _cell(m, f, subset):
+        """(levels, groups) for factor f over `subset` of samples, or None."""
+        groups = {}
+        for sample in subset:
+            vals = per_sample.get(sample) or {}
+            lvl = (design.get(sample) or {}).get(f)
+            if lvl is None or m not in vals:
+                continue
+            groups.setdefault(str(lvl), []).append(float(vals[m]))
+        levels = sorted(groups)
+        return (levels, groups) if len(levels) == 2 else None
+
+    def _g(a, b, fallback_sd=None):
+        """(g, se) by Hedges, or (standardised difference, None) with no replication."""
+        ma, mb = sum(a) / len(a), sum(b) / len(b)
+        if len(a) < 2 or len(b) < 2:
+            # NO POOLED SD EXISTS with a single sample in an arm. Standardising by the measure's
+            # MARGINAL spread keeps the point on the same axis as the rest and is honest about
+            # what it is: a difference, placed for comparison, with nothing to put an interval on.
+            if not fallback_sd:
+                return None, None
+            return (mb - ma) / fallback_sd, None
+        va = sum((x - ma) ** 2 for x in a) / (len(a) - 1)
+        vb = sum((x - mb) ** 2 for x in b) / (len(b) - 1)
+        sp = math.sqrt(((len(a) - 1) * va + (len(b) - 1) * vb) / (len(a) + len(b) - 2))
+        if sp <= 0:
+            return None, None
+        d = (mb - ma) / sp
+        j = 1.0 - 3.0 / (4.0 * (len(a) + len(b)) - 9.0)
+        g = d * j
+        se = math.sqrt((len(a) + len(b)) / (len(a) * len(b))
+                       + g * g / (2.0 * (len(a) + len(b) - 2)))
+        return g, se
+
+    out = []
+    for m in measures:
+        allv = [float(v[m]) for v in per_sample.values() if m in v]
+        if len(allv) > 1:
+            mu = sum(allv) / len(allv)
+            sd = math.sqrt(sum((x - mu) ** 2 for x in allv) / (len(allv) - 1)) or None
+        else:
+            sd = None
+        for f in factors:
+            plans = [(None, None, list(per_sample))]
+            for h in factors:
+                if h == f or h in (alias.get(f) or []) or f in (alias.get(h) or []):
+                    continue
+                for lv in sorted({str((design.get(s) or {}).get(h)) for s in per_sample
+                                  if (design.get(s) or {}).get(h) is not None}):
+                    plans.append((h, lv, [s for s in per_sample
+                                          if str((design.get(s) or {}).get(h)) == lv]))
+            for given_f, given_lv, subset in plans:
+                cell = _cell(m, f, subset)
+                if cell is None:
+                    continue
+                levels, groups = cell
+                a, b = groups[levels[0]], groups[levels[1]]
+                g, se = _g(a, b, fallback_sd=sd)
+                if g is None:
+                    continue
+                est = se is not None and len(a) >= min_n and len(b) >= min_n
+                out.append({
+                    "measure": m, "factor": f,
+                    "given_factor": given_f, "given_level": given_lv,
+                    "label": f if given_f is None else f"{f} | {given_f} = {given_lv}",
+                    "kind": "marginal" if given_f is None else "simple",
+                    "g": g,
+                    "lo": (g - 1.96 * se) if est else None,
+                    "hi": (g + 1.96 * se) if est else None,
+                    "from_level": levels[0], "to_level": levels[1],
+                    "n_from": len(a), "n_to": len(b),
+                    "estimable": est,
+                })
+    # MARGINAL FIRST, THEN ITS OWN SIMPLE CONTRASTS BENEATH IT. Sorting by effect size would
+    # scatter a factor's four rows through the column and lose the one comparison that matters:
+    # the marginal against the simples it pools.
+    order = {f: i for i, f in enumerate(factors)}
+    out.sort(key=lambda r: (r["measure"], order.get(r["factor"], 99),
+                            r["kind"] != "marginal", str(r["given_level"])))
+    return out
+
+
 def aliased(design, factors=None):
     """{factor: [factors that split the samples identically]}.
 
@@ -150,10 +269,19 @@ def draw(per_sample, design, path, *, cells=None, width=None):
     measures = sorted({m for v in per_sample.values() for m in v})
     if not factors or not measures:
         return 0
+    # EVERY CONTRAST THE DESIGN SUPPORTS, not one per factor. `effects()` gives the marginal
+    # comparison only, which on a factorial design is the question pooled over the very factor
+    # the design exists to cross - and a marginal effect can be flat while both simple effects
+    # are large and opposite, which is what an interaction IS. Measured on a real 2x2: the
+    # marginal age effect was g = +0.14, and the two simple effects were +0.89 and -0.89.
+    # The panel reported "no effect of age" for the design built to find one.
+    con = contrasts(per_sample, design, factors)
     eff = effects(per_sample, design, factors)
-    ncol = len(factors) + (1 if eff else 0)
+    _rows_per = max([sum(1 for r in con if r["measure"] == m) for m in measures] or [1])
+    ncol = len(factors) + (1 if con else 0)
     fig, axes = plt.subplots(len(measures), ncol, squeeze=False,
-                             figsize=(width, 1.95 * len(measures) + 0.85))
+                             figsize=(width, max(1.95, 0.30 * _rows_per + 0.9) * len(measures)
+                                      + 0.85))
     for i, m in enumerate(measures):
         row_vals = [v[m] for v in per_sample.values() if m in v]
         lo, hi = (min(row_vals), max(row_vals)) if row_vals else (0, 1)
@@ -198,38 +326,76 @@ def draw(per_sample, design, path, *, cells=None, width=None):
                 ax.set_ylabel(m, fontsize=7.5)
             else:
                 ax.set_yticklabels([])
-        if eff:
+        if con:
             ax = axes[i][len(factors)]
-            # THE SAME ORDER AS THE COLUMNS. Sorting each row by its own effect size put the
-            # factors in a different order in every row, so a reader scanning down the column
-            # was re-reading the labels each time instead of comparing.
-            _by = {r[1]: r for r in eff if r[0] == m}
-            rows = [_by[f] for f in factors if f in _by]
+            # MARGINAL FIRST, ITS OWN SIMPLE CONTRASTS INDENTED BENEATH IT. `contrasts()`
+            # already returns them in that order; keeping it means a reader compares a pooled
+            # estimate against the strata it pools, which is the comparison that reveals an
+            # interaction and the only reason to draw them together.
+            rows = [r for r in con if r["measure"] == m]
             for y, r in enumerate(rows):
-                solid = (r[3] > 0) or (r[4] < 0)
+                marginal = r["kind"] == "marginal"
+                if not r["estimable"]:
+                    # NO INTERVAL, AND VISIBLY SO. An arm with one sample supports a difference
+                    # and not an inference. Drawn hollow, with no bar, so it cannot be read as
+                    # a tested estimate - and drawn at all, because a comparison the design
+                    # cannot support is a fact about the design, not an absence to hide.
+                    ax.plot([r["g"]], [y], "o", ms=5, mfc="white", mec="#9AA0A6",
+                            mew=1.0, zorder=3)
+                    continue
+                solid = (r["lo"] > 0) or (r["hi"] < 0)
                 col = "#B4442E" if solid else "#9AA0A6"
-                ax.plot([r[3], r[4]], [y, y], color=col, lw=1.5, zorder=2)
-                ax.plot([r[2]], [y], "o", ms=6, color=col, mec="white", mew=.7, zorder=3)
+                ax.plot([r["lo"], r["hi"]], [y, y], color=col,
+                        lw=1.7 if marginal else 1.1, zorder=2)
+                ax.plot([r["g"]], [y], "o", ms=6.5 if marginal else 4.5, color=col,
+                        mec="white", mew=.7, zorder=3)
             ax.axvline(0, color="#333", lw=.9, ls="--", zorder=1)
             ax.set_yticks(range(len(rows)))
-            ax.set_yticklabels([r[1] for r in rows], fontsize=6.5)
-            # TOP-TO-BOTTOM MATCHES LEFT-TO-RIGHT. matplotlib puts index 0 at the bottom, so
-            # the effect column listed the factors in the reverse of the column order and a
-            # reader crossing from the panels to the summary re-read the labels.
+            ax.set_yticklabels(
+                [(r["label"] if r["kind"] == "marginal" else "   " + r["label"])
+                 for r in rows],
+                fontsize=5.6)
+            for _t, _r in zip(ax.get_yticklabels(), rows):
+                _t.set_fontweight("bold" if _r["kind"] == "marginal" else "normal")
+                if not _r["estimable"]:
+                    _t.set_color("#8A8A8A")
             ax.set_ylim(max(len(rows) - .4, .6), -.6)
-            ax.tick_params(labelsize=6)
+            ax.tick_params(labelsize=5.6, length=0)
             for sp in ("top", "right", "left"):
                 ax.spines[sp].set_visible(False)
             if i == 0:
-                ax.set_title("effect", fontsize=8, weight="bold", pad=4)
+                ax.set_title("every contrast the design supports", fontsize=7.5,
+                             weight="bold", pad=4)
             if i == len(measures) - 1:
                 ax.set_xlabel("std. difference (95% CI)", fontsize=6.5)
             # ONE SCALE DOWN THE COLUMN. Rows that scale themselves cannot be compared, and
-            # comparison is the only reason the column exists.
-            _all = [v for r in eff for v in (r[3], r[4])]
-            if _all:
-                _m = max(abs(min(_all)), abs(max(_all))) * 1.08 or 1.0
-                ax.set_xlim(-_m, _m)
+            # comparison is the only reason the column exists. Points with no interval are
+            # included in the range so a hollow marker cannot sit off the axis.
+            # THE SCALE IS SET BY THE ESTIMATES, NOT BY THE WIDEST INTERVAL. One contrast
+            # from a small stratum can carry a 95% interval several times the range of every
+            # other row, and letting it set the axis squashes the twelve readable rows into
+            # the middle sixth of the panel to make room for one that says almost nothing.
+            # The limit is the widest interval among the rows whose interval is NOT an
+            # outlier - the median half-width times four - and anything past it is CLIPPED
+            # WITH AN ARROWHEAD so a truncated bar is visibly truncated rather than
+            # quietly shortened into a tighter-looking estimate.
+            _est = [r for r in con if r["estimable"]]
+            _half = sorted((r["hi"] - r["lo"]) / 2.0 for r in _est)
+            _pts = [abs(r["g"]) for r in con if r["g"] is not None]
+            if _half:
+                _med = _half[len(_half) // 2]
+                _cap = max([max(_pts or [1.0]) * 1.15, _med * 4.0])
+            else:
+                _cap = max(_pts or [1.0]) * 1.15
+            _m = _cap or 1.0
+            ax.set_xlim(-_m, _m)
+            for y, r in enumerate(rows):
+                if not r["estimable"]:
+                    continue
+                for _b, _dirn in ((r["lo"], -1), (r["hi"], 1)):
+                    if _dirn * _b > _m:
+                        ax.plot([_dirn * _m * 0.985], [y], marker=("<" if _dirn < 0 else ">"),
+                                ms=3.2, color="#9AA0A6", zorder=4, clip_on=False)
     # NO SUPTITLE. It wrapped and truncated at this width, and a figure that carries its own
     # explanation in raster text cannot be re-worded without redrawing it. The page states it
     # in the figcaption, where it is selectable, translatable and part of the prose budget.
@@ -241,4 +407,4 @@ def draw(per_sample, design, path, *, cells=None, width=None):
     _dpi = matplotlib.rcParams.get("savefig.dpi")
     fig.savefig(path, dpi=_dpi if isinstance(_dpi, (int, float)) else 400)
     plt.close(fig)
-    return len(eff)
+    return len(con)

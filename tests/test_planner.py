@@ -525,5 +525,77 @@ for _n in _orgless:
        len(_ks[_n].references("mouse")) == len(_ks[_n].references()),
        f"{len(_ks[_n].references('mouse'))} of {len(_ks[_n].references())} survive")
 
+
+print("\nevery contrast a factorial design supports, not one per factor")
+# THE CASE THAT MOTIVATED IT, BUILT SO IT CANNOT PASS BY ACCIDENT: a pure interaction. Diet
+# raises the measure in the aged animals and lowers it in the young by the same amount, so the
+# MARGINAL diet effect is exactly zero and both simple effects are large. A resolver that
+# reports only the marginal says "no effect of diet" for the one design built to find it.
+from scprofile import design_panel as _DPn                                     # noqa: E402
+
+_des, _per = {}, {}
+for _i, (_a, _d, _v) in enumerate([("aged", "HFD", 10.0), ("aged", "HFD", 11.0),
+                                   ("aged", "HFD", 12.0),
+                                   ("aged", "chow", 4.0), ("aged", "chow", 5.0),
+                                   ("aged", "chow", 6.0),
+                                   ("young", "HFD", 4.0), ("young", "HFD", 5.0),
+                                   ("young", "HFD", 6.0),
+                                   ("young", "chow", 10.0), ("young", "chow", 11.0),
+                                   ("young", "chow", 12.0)]):
+    _s = f"S{_i}"
+    _des[_s] = {"age": _a, "diet": _d}
+    _per[_s] = {"m": _v}
+
+_c = _DPn.contrasts(_per, _des, ["age", "diet"])
+_lab = {r["label"]: r for r in _c}
+ck("the marginal contrasts are still produced",
+   {"age", "diet"} <= set(_lab), sorted(_lab))
+ck("and all four SIMPLE contrasts are too",
+   {"diet | age = aged", "diet | age = young",
+    "age | diet = HFD", "age | diet = chow"} <= set(_lab), sorted(_lab))
+ck("six contrasts for a 2x2, which is what the design supports", len(_c) == 6, str(len(_c)))
+ck("THE MARGINAL DIET EFFECT IS ZERO on a pure interaction",
+   abs(_lab["diet"]["g"]) < 0.01, f"{_lab['diet']['g']:.3f}")
+ck("while both simple diet effects are large and OPPOSITE - the finding it would have hidden",
+   _lab["diet | age = aged"]["g"] * _lab["diet | age = young"]["g"] < 0
+   and min(abs(_lab["diet | age = aged"]["g"]),
+           abs(_lab["diet | age = young"]["g"])) > 1.0,
+   f"{_lab['diet | age = aged']['g']:.2f} vs {_lab['diet | age = young']['g']:.2f}")
+ck("marginal rows are ordered before the simple rows they pool",
+   [r["kind"] for r in _c if r["factor"] == "diet"][0] == "marginal",
+   str([r["label"] for r in _c]))
+ck("every row states the n behind each arm",
+   all(r["n_from"] and r["n_to"] for r in _c))
+
+# AN ARM WITH ONE SAMPLE: reported, never inferred from. A TWO-LEVEL factor split 11 vs 1 -
+# the first version of this check added a THIRD diet level instead, which makes diet a 3-level
+# factor whose contrasts vanish entirely rather than becoming non-estimable. It was testing a
+# different thing and failing honestly.
+for _s in list(_des):
+    _des[_s]["site"] = "main"
+_des["S12"] = {"age": "aged", "diet": "HFD", "site": "satellite"}
+_per["S12"] = {"m": 99.0}
+_c2 = _DPn.contrasts(_per, _des, ["age", "diet", "site"])
+_thin = [r for r in _c2 if not r["estimable"]]
+ck("a contrast with too few samples is REPORTED, not dropped", _thin, "silence is not a finding")
+ck("and carries no interval, so it cannot read as a tested estimate",
+   all(r["lo"] is None and r["hi"] is None for r in _thin))
+ck("while the estimable ones keep theirs",
+   all(r["lo"] is not None for r in _c2 if r["estimable"]))
+
+# ALIASED FACTORS ARE NOT CONDITIONED ON TWICE.
+for _s in list(_des):
+    _des[_s]["chem"] = "v3" if _des[_s]["age"] == "aged" else "v2"
+_c3 = _DPn.contrasts(_per, _des, ["age", "diet", "chem"])
+ck("holding an aliased factor is not emitted as a second, independent split",
+   not any(r["given_factor"] == "chem" and r["factor"] == "age" for r in _c3)
+   and not any(r["given_factor"] == "age" and r["factor"] == "chem" for r in _c3),
+   str([r["label"] for r in _c3]))
+
+from pathlib import Path as _PPath                                            # noqa: E402
+ck("the panel draws them all, not just the marginals",
+   "con = contrasts(per_sample, design, factors)" in
+   (_PPath(__file__).resolve().parents[1] / "scprofile" / "design_panel.py").read_text())
+
 print("\n" + ("the report holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
