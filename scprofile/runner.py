@@ -752,6 +752,33 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
         log(f"  proved for {len(proved)} of {len(members)} member(s): "
             + (", ".join(proved) or "none")
             + (f";  unproven: {', '.join(unproved)}" if unproved else ""))
+
+    # THE ONE QUESTION A SELFTEST CANNOT ASK. A selftest proves the plugin's own imports resolve
+    # in this environment. It says nothing about whether the HOST can hand it an object - and that
+    # is a different pair of anndatas, deliberately far apart wherever a plugin is pinned to an
+    # older island. `readable_input` handles a mismatch correctly at RUN time, but it asks on the
+    # user's object, after the environment is built and the expensive part has started; one
+    # recorded instance reported NOT RUN for all ten units of a run. The same question costs under
+    # a second on a four-cell object, so it is asked here instead.
+    #
+    # A WARNING, NOT A REFUSAL. The run-time path can still convert and re-probe, and an
+    # environment that cannot take the probe copy may still take the real one - so this reports
+    # what it found and lets `install` succeed. What it must not do is stay silent.
+    from . import compat
+    if kernel.needs_env:
+        _exe, _src = interpreter(kernel, prefix)
+        ok, why = ((True, f"no interpreter to probe ({_src})") if not _exe
+                   else compat.handoff_works(_exe, p / "_probe", log=log))
+        if ok:
+            log(f"  handoff: {why}")
+        else:
+            log(f"  handoff: THIS ENVIRONMENT CANNOT READ AN OBJECT THE HOST WRITES")
+            log(f"    {why}")
+            log(f"    Every plugin is handed an AnnData written by the host's anndata and read "
+                f"by this environment's. The run will try a compatibility copy and may still "
+                f"succeed, but if it does not, every unit of this plugin reports NOT RUN.")
+            log(f"    The environment's requirement is declared in the plugin's `requires`; "
+                f"widen its anndata range, or the host's, until they overlap.")
     if build_failure is not None:
         raise RuntimeError(
             f"{p} was NOT built: {build_failure}\n"

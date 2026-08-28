@@ -242,6 +242,59 @@ def write_compatible(adata, path, *, log=print, source=None):
     return p
 
 
+def handoff_works(python_exe, workdir, *, log=print, timeout=300):
+    """Can the host hand THIS interpreter an object at all? Proved on a tiny one, at install time.
+
+    THE CONTRACT NOBODY EXERCISED UNTIL IT MATTERED. Every plugin is handed an AnnData written by
+    the HOST's anndata, and read by its OWN - two versions that need not be close, and are
+    deliberately far apart for a plugin pinned to an older island. `readable_input` handles the
+    mismatch correctly at run time: it probes, converts, re-probes, and refuses with a sentence.
+    But it does all of that on the user's object, after the environment is built and the run has
+    started, and a refusal there costs the whole run - one recorded instance reported
+    `NOT RUN` for all ten units, whose cause was a missing package in one environment.
+
+    The same question can be asked of a four-cell object in under a second, and `install` already
+    runs each member's selftest for exactly this reason: finding out now is worth more than
+    finding out after the models have trained. This asks the ONE question a selftest cannot,
+    because it is not about the plugin's own imports - it is about whether the host and the
+    plugin can exchange a file.
+
+    Returns (ok, detail). Never raises: an install that cannot answer the question reports that,
+    rather than failing on the probe's own error.
+    """
+    import tempfile
+    try:
+        import anndata as ad
+        import numpy as np
+        import pandas as pd
+    except Exception as e:                                                    # noqa: BLE001
+        return True, f"host cannot build a probe object ({e}); not treated as a failure"
+    d = Path(workdir) / "_handoff_probe"
+    d.mkdir(parents=True, exist_ok=True)
+    try:
+        n, g = 4, 3
+        A = ad.AnnData(
+            X=np.arange(n * g, dtype="float32").reshape(n, g),
+            obs=pd.DataFrame({"label": ["a", "b", "a", "b"]},
+                             index=[f"c{i}" for i in range(n)]),
+            var=pd.DataFrame(index=[f"g{i}" for i in range(g)]),
+        )
+        A.layers["counts"] = A.X.copy()
+        A.layers["lognorm"] = A.X.copy()
+        #: THE SHAPES THAT BROKE IT BEFORE, deliberately included: a None inside a mapping, which
+        #: is written in an encoding older readers have none for, and a plain string beside it.
+        A.uns = {"plain": "x", "metrics": {"computed": 1.0, "undefined": None}}
+        src = d / "probe_source.h5ad"
+        A.write_h5ad(src)
+        copy = write_compatible(A, d / "probe_copy.h5ad", log=lambda *_a, **_k: None)
+    except Exception as e:                                                    # noqa: BLE001
+        return True, f"host could not write a probe copy ({e}); not treated as a failure"
+    ok, detail = can_read(python_exe, copy, timeout=timeout)
+    if ok:
+        return True, "the host's compatibility copy is readable there"
+    return False, detail
+
+
 def readable_input(adata, h5ad, python_exe, workdir, *, cache, log=print):
     """The path to hand a kernel running under `python_exe`, converting once if it must.
 
