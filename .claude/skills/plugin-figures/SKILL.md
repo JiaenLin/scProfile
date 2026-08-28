@@ -14,8 +14,8 @@ a scoring function, a fitted model, a table, or a value per observation and a la
 plotting code you would use. **The second shape is the common one here**, so read anything phrased
 as an upstream panel as conditional on the tool having one.
 
-The order below is the order the work happens: establish the encoding → choose which figures →
-declare → draw → look → disclose → budget → verify.
+The order below is the order the work happens: **resolve what can draw it** → establish the
+encoding → choose which figures → declare → draw → look → disclose → budget → verify.
 
 ## How to read the CHECKs
 
@@ -31,6 +31,52 @@ Every rule below ends in a question with a yes/no answer. Three standing rules a
   them — that is the text a 32-word cap truncates first.
 - **Record what you measured, not how many attempts it took.** A round count is bookkeeping
   nobody can falsify.
+
+## Step zero — RESOLVE WHAT CAN DRAW IT, BEFORE YOU DESIGN ANYTHING
+
+> **Design begins with what is REACHABLE, not with what you can already import. Those are
+> different sets, and the gap between them is where a month of hand-rolled plotting comes from.**
+
+The wrapped tool usually ships the figure you are about to build. Before a single design decision,
+answer three questions **in this order**, and write the answers down:
+
+1. **What would the TOOL draw for this?** Name the function. Most analysis tools ship their own
+   visualisation entry points, and a plugin's figure is very often one of them with the defaults
+   made explicit. If the tool ships none — the common case for a scorer or a fitted model — say so
+   here, because that is also an answer and it changes everything downstream.
+2. **Is it REACHABLE?** Which interpreter, which environment, which machine. **Answer by running
+   something, not by assuming.** `Rscript -e 'library(X); exists("f")'`, an import in the target
+   environment, a listing of the env prefix. An interpreter that is not on THIS machine may be one
+   command away on another; "I cannot import it here" is not the same as "it is not available".
+3. **Given 1 and 2, which route are you taking?** There are three, and the third is not a failure:
+   - **NATIVE** — call the tool's own function. Your design effort then goes into what the tool
+     does NOT say: the caveat, the unit, the absence, the contrast it will not draw.
+   - **DELIBERATE REIMPLEMENTATION** — you can reach it, and you are rebuilding it anyway because
+     its own encoding is defective and you intend to correct it. Legitimate, often the best work
+     available, and it must be DECLARED as a departure with the defect named.
+   - **TRANSCRIPTION UNDER CONSTRAINT** — it is genuinely not reachable. Then you are writing a
+     reimplementation, which is a different job with different risks, and the figure must say so
+     and name the function it reproduces so a reader can check it.
+
+**THE POINT IS NOT THAT NATIVE IS BEST. It is that this must be a CHOICE.** Skip step zero and the
+route is chosen for you by whatever happened to be importable, and it will be one of two bad
+shapes: a plot hand-rolled from primitives because nothing better seemed available, or an enormous
+transcription effort nobody decided to spend. Both look like diligence from inside.
+
+**ONE INSTANCE.** A rebuild produced roughly thirty figures reimplementing a wrapped tool's own
+visualisation layer in another language — its ring geometry, its chord layout, its differential
+network, its ranked-flow plot, its shared-nearest-neighbour mask, its similarity embedding. Real
+effort went into transcribing details as fine as a ring radius formula and a placeholder branch in
+a ranking function. The tool was installed the whole time on the cluster the project already used,
+at a current version, with **all eighteen** of the functions those figures correspond to
+resolving. Nobody had asked, because the first design decision was taken against what was
+importable on the workstation, where the tool's language was not even installed. The transcriptions
+were not worthless — several corrected genuine defects in the upstream encoding — but that was
+discovered afterwards and was never the reason they were written.
+
+**CHECK:** name the function the wrapped tool would use for this figure, or state that it ships
+none. What did you RUN to establish whether it is reachable, and on which machine? Which of the
+three routes are you on, and is that decision written down where the next person will find it?
 
 ## Rule zero — THE ENCODING COMES FROM THE SOURCE, NEVER FROM A PICTURE OF IT
 

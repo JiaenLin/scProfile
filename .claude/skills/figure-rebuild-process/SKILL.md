@@ -401,6 +401,29 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   remember, and diff against what was delivered. Does anything differ? Is any sentence on a
   delivered panel absent from every file that is an input?
 
+- **P30 (resolve the drawing route ONCE for the set, before the first figure is designed)** The
+  question "what can actually draw this?" is a property of the SET, not of each figure, and asking
+  it per figure means never really asking it: the first figure sets a precedent from whatever was
+  importable that afternoon, and every figure after it follows without a decision being made. Do
+  it once, at the top, as its own step with its own written answer - which tool ships the figures,
+  which interpreter reaches it, which machine that interpreter is on, and therefore which of the
+  three routes the whole set is taking. Then a figure that departs from the route is a visible
+  exception rather than the accumulated default.
+  This is also the cheapest step in a rebuild and the one most often skipped, because it looks
+  like preparation rather than work. It is one command per candidate.
+  **ONE INSTANCE.** A rebuild ran for a long time producing roughly thirty figures that
+  reimplemented a wrapped tool's own visualisation layer in another language, down to a ring radius
+  formula and a placeholder branch in a ranking function. The tool was installed the whole time, at
+  a current version, on the cluster the project already used, with every function those figures
+  corresponded to resolving. The reason nobody knew was structural, not careless: the first figure
+  was designed on a workstation where that tool's LANGUAGE is not installed, so "what can draw
+  this" was silently answered as "whatever imports here", and thirty figures inherited it. The
+  question was finally asked by the PI, not by the process.
+  **CHECK:** before the first figure of a rebuild, is there a written answer to which tool draws
+  this family, whether it is reachable, and on what? Name the command you ran to find out. If the
+  set is being reimplemented, is that recorded as a decision with a reason, rather than being what
+  happened?
+
 ## What to expect at the end
 
 In this rebuild, of 23 plates: **19 were about the method, not the biology.** Four presented a
