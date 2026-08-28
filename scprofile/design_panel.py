@@ -85,16 +85,16 @@ def effects(per_sample, design, factors=None):
 def contrasts(per_sample, design, factors=None, *, min_n=2):
     """Every contrast a factorial design supports: the MARGINAL ones and the SIMPLE ones.
 
-    `effects()` answers "does this measure differ across diet?" and pools over everything else.
-    On a 2x2 that is two of the six questions the design was built to ask, and the four it drops
-    are the ones the second factor exists for:
+    `effects()` answers "does this measure differ across factor F?" and pools over everything
+    else. On a two-factor design that is two of the six questions the design was built to ask,
+    and the four it drops are the ones the second factor exists for:
 
-        diet                      marginal - pooled over age
-        age                       marginal - pooled over diet
-        diet | age = aged         simple - diet within the aged animals only
-        diet | age = young        simple
-        age  | diet = HFD         simple
-        age  | diet = chow        simple
+        F                    marginal - pooled over G
+        G                    marginal - pooled over F
+        F | G = g1           simple - F within the g1 stratum only
+        F | G = g2           simple
+        G | F = f1           simple
+        G | F = f2           simple
 
     A MARGINAL EFFECT CAN BE FLAT WHILE BOTH SIMPLE EFFECTS ARE LARGE AND OPPOSITE. That is not
     an edge case, it is what an interaction IS, and a panel that shows only the marginal row
