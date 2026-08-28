@@ -18,9 +18,21 @@ keywords = ["single-cell", "RNA-velocity", "SCENIC", "cell-cell-communication", 
 dependencies = ["numpy>=1.24", "pandas>=1.5"]
 
 [project.optional-dependencies]
-# reading and writing the object, and the kernels that declare needs_env: false
-run = ["anndata>=0.10", "scanpy>=1.10", "h5py>=3.8"]
-test = ["anndata>=0.10", "scanpy>=1.10"]
+# reading and writing the object, and the kernels that declare needs_env: false.
+#
+# THE HOST IS THE ONE COMPONENT THAT MUST READ EVERYTHING. A plugin only ever sees the copy the
+# host hands it, and `compat.write_compatible` exists to make that copy readable by an older
+# anndata. The host has no such help: it opens the user's object directly, so its floor is set by
+# what OBJECTS EXIST, not by what plugins want. `>=0.10` was neither - it was the floor at the
+# time the extra was written, left unbounded, and connected to nothing.
+#
+# 0.12 is MEASURED, not chosen. anndata gained a reader for `encoding-type: "null"` - which is
+# what a None inside `uns` is written as, and an upstream step recording a metric it could not
+# compute is the usual source - somewhere between 0.11 and 0.12: 0.11.4 fails to open such an
+# object, 0.12.0 and 0.12.2 read it. A host below this floor cannot open a file that every one of
+# its plugins could have processed, and fails with a registry traceback rather than a sentence.
+run = ["anndata>=0.12", "scanpy>=1.10", "h5py>=3.8"]
+test = ["anndata>=0.12", "scanpy>=1.10"]
 
 [project.urls]
 Homepage = "https://github.com/JiaenLin/scProfile"

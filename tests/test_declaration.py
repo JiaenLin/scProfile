@@ -7,6 +7,7 @@ interpreter with no scientific stack at all - which is also how discovery works 
 Run: python tests/test_declaration.py
 """
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -292,6 +293,40 @@ import inspect as _i2                                                           
 _dsrc = _i2.getsource(declare)
 ck("the page cap is imported, not restated", f"= {_MAXF}" not in _dsrc.split("MAX_FIGURES")[0][-40:])
 ck("and so is the host's panel allowance", "BY_ARM_PANEL_CAP" in _dsrc)
+
+# THE HOST OPENS THE OBJECT; A PLUGIN ONLY EVER SEES THE COPY IT IS HANDED. `compat` exists so an
+# older plugin can still read that copy - nothing performs the same service for the host, so a host
+# floor BELOW a plugin floor is a tool that refuses, at the first step, an object its own plugins
+# were declared able to process. The two are declared in different files, so nothing but this
+# connects them. It drifted exactly that way and was found on a real run: every kernel said
+# `anndata >=0.10,<0.12` and the host extra said a bare `anndata>=0.10`, and the install that
+# satisfied both could not open the object at all.
+_root = Path(__file__).resolve().parents[1]
+
+
+def _floor(spec):
+    m = re.search(r">=\s*([0-9]+(?:\.[0-9]+)*)", spec or "")
+    return tuple(int(x) for x in m.group(1).split(".")) if m else None
+
+
+_host = None
+for _line in (_root / "pyproject.toml").read_text().splitlines():
+    if _line.startswith("run = "):
+        _m = re.search(r'"anndata([^"]*)"', _line)
+        if _m:
+            _host = _floor(_m.group(1))
+_worst, _who = None, None
+for _f in sorted((_root / "kernels").glob("*.py")):
+    _m = re.search(r'"anndata"\s*:\s*"([^"]+)"', _f.read_text())
+    if not _m:
+        continue
+    _fl = _floor(_m.group(1))
+    if _fl and (_worst is None or _fl > _worst):
+        _worst, _who = _fl, _f.name
+ck("the host declares an anndata floor at all", _host is not None)
+ck("the host's anndata floor is not below any plugin's",
+   bool(_host and _worst and _host >= _worst),
+   f"host >={_host}, {_who} >={_worst} - the host reads the object BEFORE any plugin does")
 
 print("\n" + ("the declaration holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
