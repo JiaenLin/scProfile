@@ -1,9 +1,35 @@
 ---
 name: plugin-figures
-description: Design, declare, draw and verify the figures of a scProfile plugin that wraps an external analysis tool - from what the tool actually computes to a page that passes `scprofile standard`. Use whenever you are adding, rebuilding or fixing a plugin's panels, writing `PLUGIN["report"]["figures"]`, calling `ctx.emit_figure`, or a page has failed count/captions/arms/identifiers/repeats. MANDATORY - WHICH figures the page carries is the USER'S choice, upstream panels and ones you invent alike: enumerate candidates from the tool's source and ask, never pick for them. NEVER read an encoding off a rendered image, a screenshot or the tool's own prose; read the function definition. Most wrapped tools ship no plots you would use, so the always-required catalogue is the RETURN CONTRACT - scale, range, whether the value is relative, and what the tool returns when it knows nothing. Also covers the figure budget, absence-is-not-zero, self-scaling that hides a finding, the unit of observation, and the seven caption fields.
+description: >-
+  Design, declare, draw and verify SCIENTIFIC FIGURES that a pipeline REGENERATES on every
+  run - from what the analysis tool actually computes to a page that passes its own standard.
+  Use whenever adding, rebuilding or fixing figures for any analysis tool or wrapper, for any
+  project: choosing panels, writing a figure declaration, drawing panels, or when a page fails
+  a figure/caption/arm/identifier check. Carries a PORTABLE CATALOGUE of thirteen network and
+  per-unit panel kinds - matrix, diff_matrix, circle, chord, role_scatter, role_shift,
+  flow_rank, flow_compare, role_heatmap, patterns, similarity, contribution, coverage - each
+  with what it establishes and what it does NOT, plus six rules paid for by real defects: one
+  scale across a grid, absence is not zero and not one thing, a cut must name what it removed,
+  declare a denominator that is not what it looks like, a per-object scale is not comparable
+  across objects, and no panel is gated on the sample axis. MANDATORY: a figure a run does not
+  regenerate is NOT DELIVERED - plates and scratchpad scripts are drafts. MANDATORY: use the
+  wrapped tool's OWN statistics, never invent an effect size, interval or p-value beside them.
+  WHICH figures a page carries is the USER'S choice - enumerate candidates from the tool's
+  source and ask. NEVER read an encoding off a rendered image; read the function definition.
+  scProfile specifics (PLUGIN["report"]["figures"], ctx.emit_figure, scprofile standard) are
+  worked examples of the general method, not its scope.
 ---
 
-# Plugin figures — upstream source to a page that passes
+# Plugin figures — upstream source to a page a run reproduces
+
+> **Where this lives.** Canonical copy: `scProfile/.claude/skills/plugin-figures/SKILL.md`,
+> version-controlled and pushed, so it survives a disk. Symlinked into `~/.claude/skills/` so it
+> loads in EVERY project rather than only inside that repository — which is how it came to be
+> unavailable at the moment it was most needed. One file, two reach points, no drift: edit the
+> canonical copy and commit it.
+>
+> **The scProfile examples are worked examples.** The rules, the panel-kind catalogue and the
+> reproducibility test are the transferable part and apply to any tool that draws figures.
 
 Written 2026-08-27. Every constant here was read from `scprofile/figure.py`, `standard.py`,
 `declare.py`, `report.py` and `plugin.py` in this repository, not remembered. Every incident
@@ -94,6 +120,94 @@ the plugin's to carry, not to improve on.**
 *This was written because a p-value floor with no counterpart in the wrapped method reached a
 figure, and because an effect size and interval computed here sat on a panel beside quantities
 the method had already tested by its own procedure.*
+
+## The panel-kind catalogue — CARRY THIS TO THE NEXT PROJECT
+
+**This section exists so the capability survives the project that produced it.** The plates that
+taught it are pictures of one dataset and will not travel; the rules and the kinds do. Nothing
+below names a tissue, a species, a method or a level.
+
+A **kind** is a way of drawing a network or a per-unit result. Each carries a pair — what it
+**establishes** and what it **does not** — because a panel described only by what it shows
+invites every reading its geometry allows, and the second half is what stops a reader taking a
+picture for a test.
+
+| kind | establishes | does NOT establish | rules |
+|---|---|---|---|
+| `matrix` | which ordered pairs carry signal, and how much | that an absent pair is absent for a biological reason | R2 R5 |
+| `diff_matrix` | which pairs differ between two arms, and the direction | that any single difference exceeds noise | R5 |
+| `circle` | the shape of the network — who signals to whom, at what relative strength | absolute strength; anything about edges the cut removed | R1 R3 R5 |
+| `chord` | how one population's outgoing strength splits over partners | anything about a population with no surviving link — it is NOT DRAWN | R1 R3 |
+| `role_scatter` | whether a population is a net sender or receiver within one arm | that the asymmetry is significant — it is two sums | R5 |
+| `role_shift` | direction and relative size of each population's change between arms | that any arrow is longer than chance | R5 |
+| `flow_rank` | which groups carry the most signal here | that a bar's HEIGHT compares to another unit's — only rank does | R5 |
+| `flow_compare` | which groups differ most between two arms | a tested difference, unless the method's own test is run | R1 R5 |
+| `role_heatmap` | where in the population set a group acts, sending and receiving | how STRONG a group is — rows are scaled to their own maximum | R1 |
+| `patterns` | which populations use which groups together, and at what rank | a cell state, a cluster, or any ordering of the patterns | R1 |
+| `similarity` | which groups act between the same populations | magnitude — the similarity discards it | R3 |
+| `contribution` | how a group's total splits over the members inside it | that a member absent from a panel was tested | R1 R2 R4 |
+| `coverage` | how far the object could see the reference, and what survived | that what survived is biology rather than what the prep retained | — |
+
+### The six rules, each paid for
+
+**R1 — ONE SCALE ACROSS A GRID, NEVER PER PANEL.** A grid whose panels each use their own
+maximum makes the widest edge in every panel look identical whatever it is worth. Measured: one
+panel's widest edge 0.0120 against another's 0.0384, a factor of **3.2**, both drawn at full
+width under per-panel maxima. Compute the maximum over the whole grid and **print it**, so a
+width converts back to a number. *The most repeated figure defect on record here.*
+
+**R2 — ABSENCE IS NOT ZERO, AND IT IS NOT ONE THING.** An element with no edge has two causes
+that look identical and mean opposite things:
+- **measured absence** — it was scored and returned nothing. That is a RESULT.
+- **never tested** — it fell below a minimum-count floor before scoring. That is a THRESHOLD.
+
+Mark them differently (a solid open rim against a dotted one) and say which is which. *Reading
+the second as silence is reading a threshold as biology.*
+
+**R3 — A CUT MUST NAME WHAT IT REMOVED.** Ring and chord panels draw a subset or they are
+unreadable. State the fraction of total strength kept and **name what is left with no link** —
+one real chord silently dropped five of thirteen populations. Keep every element's strongest
+link in and out whatever its rank, so nothing vanishes merely for being weak.
+
+**R4 — A DENOMINATOR THAT IS NOT WHAT IT LOOKS LIKE MUST BE DECLARED.** Averaging over N while a
+quantity was measurable in fewer than N divides by N anyway. Measured under-read: **a factor of
+2.5**. Say the denominator and mark the elements it affects.
+
+**R5 — A PER-OBJECT SCALE IS NOT COMPARABLE ACROSS OBJECTS.** Where each unit is normalised
+within itself, widths compare WITHIN a panel and rank-order across panels, nothing more.
+
+**R6 — NO PANEL IS GATED ON THE SAMPLE AXIS.** Draw at GROUP level first — units pooled into
+design arms — and per sample additionally where the design supports it. A thin sample axis
+withholds nothing.
+
+### Drawing notes for the kinds that are easy to get wrong
+
+- **circle** — node area (never radius) ∝ the count it encodes, with a **quantitative size
+  legend**; edge width ∝ strength with its own legend; edge colour = source, arrowhead =
+  target, self-loop = autocrine. **Number every node** so no reading depends on hue. Give the
+  radius a floor and say you did. Draw unconnected nodes anyway (R3).
+- **chord** — arc length = total in + out, with a tick worth a stated amount. Cut by cumulative
+  strength, not by count, and print both the kept fraction and the omitted names (R3).
+- **contribution** — a grid of small panels, ONE shared edge scale (R1), the same element ring
+  in every panel so position is stable, and the absence marks of R2 on every panel.
+- **role_scatter / role_shift** — equal aspect and a shared range so the identity diagonal means
+  what it looks like; never anchor at zero unless the data reach it.
+- **any labelled scatter** — radial offset from the centroid separates a round cloud and does
+  nothing for a tight cluster. Declutter in DISPLAY space, vertically only, so a label never
+  drifts onto a neighbour's point.
+
+### How not to lose this
+
+The durable artifacts are **this skill** and **the draw functions in the tool**. Everything else
+is a draft:
+
+- A published document of plates is a **draft that was published**. It has no run key, so
+  nothing in it can be traced to a file on disk, and it regenerates from nothing.
+- A scratchpad script is a draft even when its output is perfect.
+- **The catalogue above is the transferable part.** Port it to the next project's tool as a
+  declared registry, not as prose to be re-derived: kinds in a table, the expansion over
+  contrasts and levels in a function, so "every kind, every arm, both levels" is a property of
+  code rather than of whoever is paying attention that week.
 
 ## Step zero — RESOLVE WHAT CAN DRAW IT, BEFORE YOU DESIGN ANYTHING
 
