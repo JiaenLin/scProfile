@@ -135,7 +135,7 @@ PLUGIN = {
         "python": ">=3.10,<3.13",
         "packages": {
             "scanpy": ">=1.10,<1.11",
-            "anndata": ">=0.11,<0.12",
+            "anndata": ">=0.12,<0.13",
             "numpy": ">=1.24,<2",
             "pandas": ">=2.0,<3",
             "matplotlib": ">=3.7",

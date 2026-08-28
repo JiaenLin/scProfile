@@ -202,7 +202,7 @@ PLUGIN = {
 
     "requires": {
         "python": ">=3.10,<3.13",
-        "packages": {"anndata": ">=0.11,<0.12", "pandas": ">=2.0,<3", "scipy": ">=1.10",
+        "packages": {"anndata": ">=0.12,<0.13", "pandas": ">=2.0,<3", "scipy": ">=1.10",
                      "matplotlib": ">=3.7,<4"},
         "language": "r",
         "r": ["NMF==0.28",

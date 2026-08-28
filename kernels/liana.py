@@ -169,7 +169,7 @@ PLUGIN = {
     "requires": {
         "python": ">=3.10,<3.13",
         "packages": {"matplotlib": ">=3.6,<4", "liana": ">=1.3,<2", "scanpy": ">=1.10,<1.11",
-                     "anndata": ">=0.11,<0.12", "numpy": ">=1.24,<2", "pandas": ">=2.0,<3"},
+                     "anndata": ">=0.12,<0.13", "numpy": ">=1.24,<2", "pandas": ">=2.0,<3"},
     },
 
     "cost": "medium", "cores": 8,

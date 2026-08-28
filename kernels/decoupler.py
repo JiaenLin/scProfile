@@ -146,7 +146,7 @@ PLUGIN = {
         "packages": {
             "decoupler": ">=1.8,<1.9",   # the API this plugin calls is 1.8's, any patch of it
             "scanpy": ">=1.10,<1.11",
-            "anndata": ">=0.11,<0.12",
+            "anndata": ">=0.12,<0.13",
             "numpy": ">=1.24,<2",        # decoupler 1.8 predates the numpy 2 ABI
             "pandas": ">=2.0,<3",
             # DECOUPLER IMPORTS THIS AND DOES NOT REQUIRE IT. `get_collectri` calls

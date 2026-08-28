@@ -175,7 +175,7 @@ PLUGIN = {
                      # `anndata.read_h5ad` before run() is called; this plugin never touches it
                      # directly. It worked only because it shares an environment with plugins
                      # that name it.
-                     "anndata": ">=0.11,<0.12",
+                     "anndata": ">=0.12,<0.13",
                      # NEEDED SINCE THIS PLUGIN DREW ANYTHING. It was absent while the plugin
                      # emitted no figure, and an undeclared draw dependency is an environment
                      # that builds and a run that dies in the figure step, after the fit is paid.
