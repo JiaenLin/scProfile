@@ -116,7 +116,7 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
         p = Path(out_dir) / f"{prefix}_{fid}__{slug}.png"
         fig.savefig(p, dpi=200)
         plt.close(fig)
-        out.append((f"{fid}__{slug}", p, caption))
+        out.append((f"{fid}__{slug}", p, caption, label))
 
     arm_n = f"{lo_lv} (n={len(lo_m)}) vs {hi_lv} (n={len(hi_m)})"
 
@@ -221,3 +221,72 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                f"the difference of two point estimates and carries no interval - its length is "
                f"not evidence of size."))
     return out
+
+class _Shim:
+    """The tiny surface `network_panels` expects, for a caller that has no plugin context.
+
+    The single-network kinds are written against the plugin-side emit point so a plugin can call
+    them directly. The host draws the same kinds for pooled arms and has no such context, and
+    duplicating the drawing code host-side is how two renderings of one kind drift apart. One
+    shim, one implementation.
+    """
+
+    def __init__(self, out_dir, prefix, slug, collect, label=""):
+        from . import figure as _F
+        self.figure = _F
+        self._out, self._prefix, self._slug = out_dir, prefix, slug
+        self._collect, self._label = collect, label
+
+    def plot(self):
+        import matplotlib.pyplot as plt
+        return plt
+
+    def emit_figure(self, fid, fig, caption="", source=None):
+        from pathlib import Path
+        import matplotlib.pyplot as plt
+        d = Path(self._out)
+        d.mkdir(parents=True, exist_ok=True)
+        path = d / f"{self._prefix}_{fid}__{self._slug}.png"
+        fig.savefig(path, dpi=200)
+        plt.close(fig)
+        self._collect.append((f"{fid}__{self._slug}", path, caption, self._label))
+
+
+def arms_in(design, pairs):
+    """{label: filter} - every distinct arm any contrast compares, each appearing once.
+
+    A marginal contrast's two arms and a conditional contrast's two arms are all arms worth a
+    network of their own, and several contrasts share one - drawing an arm once per contrast
+    would render the same pooled network four times and invite a reader to compare two
+    renderings of identical data.
+    """
+    out = {}
+    for label, fac, lo, hi, lo_f, hi_f in pairs:
+        for filt in (lo_f, hi_f):
+            key = ", ".join(f"{k} = {v}" for k, v in sorted(filt.items()))
+            out.setdefault(key, filt)
+    return out
+
+
+def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edges=1):
+    """The single-network kinds for each arm, pooled. Returns [(fid, path, caption)].
+
+    GROUP LEVEL BY CONSTRUCTION: an arm's cells are pooled before anything is drawn, so no panel
+    here needs any single unit to support an inference by itself.
+    """
+    from . import network_panels as NP
+
+    made = []
+    for label, filt in sorted(arms.items()):
+        e = pool(per_unit_edges, _members(design, filt))
+        if e is None or len(e) < min_edges:
+            continue
+        pops = sorted(set(e["source"].astype(str)) | set(e["target"].astype(str)))
+        slug = "".join(ch if ch.isalnum() else "_" for ch in label).strip("_")
+        got = []
+        shim = _Shim(out_dir, prefix, slug, got, label=label)
+        NP.circle(shim, e, pops, title=label)
+        NP.chord(shim, e, pops, title=label)
+        made += got
+    return made
+

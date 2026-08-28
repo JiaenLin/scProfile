@@ -379,25 +379,26 @@ def _page_binds(constraint, declared_binds, units, design):
     return sorted(binds)
 
 
-def _between_arms(units, design, spec, *, out_dir=None, name=""):
-    """Comparison panels BETWEEN arms, for every contrast the design supports.
+def _arm_content(units, design, spec, *, out_dir=None, name=""):
+    """({"contrast": [...], "arm": [...]}) - every between-arm and per-arm figure, drawn.
 
     THE COHORT PAGE CARRIED ONE FIGURE while the per-sample appendix carried a hundred. On a
-    factorial design that is backwards: the comparison between arms is the question, and it had
-    no picture. This draws it - and draws it from cells POOLED WITHIN EACH ARM, so no panel is
-    gated on any single sample supporting an inference by itself.
+    factorial design that is backwards: the comparison between arms is the question and it had
+    no picture. Everything here is drawn from cells POOLED WITHIN EACH ARM, so no panel is gated
+    on any single sample supporting an inference by itself.
 
     Driven entirely by the plugin's `unit_network` declaration, so nothing here knows what
     method produced the numbers.
     """
+    empty = {"contrast": [], "arm": []}
     net = (spec or {}).get("unit_network")
     if not (net and design and out_dir and units):
-        return ""
+        return empty
     try:
         import pandas as pd
         from . import compare_panel as CPan
     except Exception:
-        return ""
+        return empty
     tbl = str(net.get("table") or "")
     per = {}
     for u in units:
@@ -415,39 +416,78 @@ def _between_arms(units, design, spec, *, out_dir=None, name=""):
                 net.get("weight", "prob")]
         if not set(need) <= set(df.columns):
             continue
-        df = df.rename(columns={need[0]: "source", need[1]: "target", need[2]: "prob"})
-        per[uid] = df
+        per[uid] = df.rename(columns={need[0]: "source", need[1]: "target", need[2]: "prob"})
     if len(per) < 2:
-        return ""
-    figs = []
-    for sp in CPan.arm_pairs(design):
-        figs += CPan.draw_contrast(per, design, sp,
-                                   Path(out_dir) / "kernels" / name / "figures",
-                                   name, group_col=net.get("group"))
-    if not figs:
-        return ""
-    # GROUPED BY CONTRAST, because a reader asks one question at a time. The heading names the
-    # contrast in the same notation the design panel uses, so the two are read together.
-    by_contrast = {}
-    for fid, path, cap in figs:
-        by_contrast.setdefault(fid.split("__", 1)[1], []).append((fid, path, cap))
-    out = ["<h2>Between the arms</h2>",
-           '<p class="sub">Every contrast this design supports, drawn from cells POOLED WITHIN '
-           'EACH ARM. A panel here needs both arms to have data; it does not need any single '
-           'sample to support an inference on its own, and none is withheld because the '
-           'per-sample axis is thin. Whether an arm-level difference is consistent ACROSS '
-           'samples is the separate question the design panel above answers.</p>']
-    for slug, items in by_contrast.items():
-        out.append(f'<h3><code>{_e(slug.replace("___", " | ").replace("_", " "))}</code></h3>')
-        for fid, path, cap in items:
-            rel = f"kernels/{name}/figures/{Path(path).name}"
-            lead, rest = cap if isinstance(cap, tuple) else (cap, "")
-            out.append(f'<figure><img src="../{rel}" alt="{_e(fid)}">'
-                       f'<figcaption>{_e(lead)}'
-                       + (f"<details><summary class='sub'>how to read it</summary>"
-                          f"{_e(rest)}</details>" if rest else "")
-                       + '</figcaption></figure>')
+        return empty
+    figdir = Path(out_dir) / "kernels" / name / "figures"
+    pairs = CPan.arm_pairs(design)
+    con = []
+    for sp in pairs:
+        con += CPan.draw_contrast(per, design, sp, figdir, name, group_col=net.get("group"))
+    arm = CPan.draw_arm_networks(per, design, CPan.arms_in(design, pairs), figdir, name)
+    return {"contrast": con, "arm": arm}
+
+
+#: How many between-arm panels the plugin page itself carries. The rest are one click away.
+#: Below the standard's figure cap with room for the design panel and anything else the page
+#: already holds - a page that is exactly at its cap fails the moment anything is added to it.
+_INLINE_ARM_FIGURES = 8
+
+
+def _arm_figs_html(name, items):
+    """<figure> blocks for a list of (fid, path, caption). One implementation, two callers."""
+    out = []
+    for fid, path, cap, *_ in items:
+        rel = f"kernels/{name}/figures/{Path(path).name}"
+        lead, rest = cap if isinstance(cap, tuple) else (cap, "")
+        out.append(f'<figure><img src="../{rel}" alt="{_e(fid)}">'
+                   f'<figcaption>{_e(lead)}'
+                   + (f"<details><summary class='sub'>how to read it</summary>"
+                      f"{_e(rest)}</details>" if rest else "")
+                   + '</figcaption></figure>')
     return "".join(out)
+
+
+def _arm_appendix(name, content):
+    """The arm pages' body: every contrast, then every arm's own network.
+
+    ITS OWN PAGE, FOR THE REASON THE PER-SAMPLE PANELS HAVE ONE. Six contrasts times four panels
+    plus a network for every arm is far past the count a single page can carry, and the exit
+    standard says so. Nothing is deleted and nothing is capped away: the main page keeps the
+    design summary and links here.
+    """
+    # GROUPED BY THE LABEL THE PANEL WAS DRAWN FOR, not by a label rebuilt from its filename.
+    # The slug replaces every non-alphanumeric character, so `F | G = g1` and `F | G - g1`
+    # produce the same slug and neither can be turned back into the other: reconstruction
+    # rendered `F | G | g1`, losing the one character that says which side is held fixed.
+    # A label is cheap to carry and impossible to recover.
+    by_contrast, by_arm = {}, {}
+    for fid, path, cap, label in content["contrast"]:
+        by_contrast.setdefault(label, []).append((fid, path, cap))
+    for fid, path, cap, label in content["arm"]:
+        by_arm.setdefault(label, []).append((fid, path, cap))
+
+    def _figs(items):
+        return _arm_figs_html(name, items)
+
+    b = [f"<h1>{_e(name)} — the arms</h1>",
+         '<p class="sub">Every contrast this design supports, and every arm\'s own network, '
+         'drawn from cells POOLED WITHIN EACH ARM. A panel here needs both arms to have data; '
+         'it does not need any single sample to support an inference on its own, and none is '
+         'withheld because the per-sample axis is thin. Whether an arm-level difference is '
+         'consistent ACROSS samples is the separate question the design panel answers. '
+         f"<a href='{_e(name)}.html'>&larr; back</a></p>"]
+    if by_contrast:
+        b.append("<h2>Between the arms</h2>")
+        for label, items in by_contrast.items():
+            b.append(f"<h3><code>{_e(label)}</code></h3>")
+            b.append(_figs(items))
+    if by_arm:
+        b.append("<h2>Each arm's own network</h2>")
+        for label, items in by_arm.items():
+            b.append(f"<h3><code>{_e(label)}</code></h3>")
+            b.append(_figs(items))
+    return "".join(b)
 
 
 def _units_by_arm(units, design, declared, *, out_dir=None, name=""):
@@ -1117,8 +1157,29 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
         body.append(_units_by_arm(units, (payload_all or {}).get("design") or {},
                                   (spec or {}).get("unit_metrics"),
                                   out_dir=out_dir, name=name))
-        body.append(_between_arms(units, (payload_all or {}).get("design") or {}, spec,
-                                  out_dir=out_dir, name=name))
+        _arms = _arm_content(units, (payload_all or {}).get("design") or {}, spec,
+                             out_dir=out_dir, name=name)
+        _n_arm = len(_arms["contrast"]) + len(_arms["arm"])
+        if _n_arm:
+            # THE MARGINAL COMPARISONS GO ON THE PAGE A READER READS; the conditional ones and
+            # the per-arm networks go one click away. Moving ALL of them off left the cohort
+            # page with a single strip again, which is the state this whole section exists to
+            # fix - and putting all forty on it fails the count criterion for the reason the
+            # criterion is right: above a dozen, a reader stops. The split is by what the panel
+            # answers, not by what fits: a marginal contrast is the question the design asks
+            # first, and its simple effects refine it.
+            _inline = [t for t in _arms["contrast"]
+                       if "|" not in t[3]][:_INLINE_ARM_FIGURES]
+            _rest = _n_arm - len(_inline)
+            body.append("<h2>Between the arms</h2>"
+                        '<p class="sub">Drawn from cells POOLED WITHIN EACH ARM, so no panel '
+                        'here is gated on a single sample supporting an inference by itself. '
+                        'The main effects are below; the contrasts that hold one factor fixed, '
+                        'and each arm\'s own network, are in the appendix.</p>')
+            body.append(_arm_figs_html(name, _inline))
+            body.append(f'<p class="sub"><a href="{_e(name)}_by_arm.html">'
+                        f'{_rest} further panel(s)</a> &mdash; every contrast this design '
+                        f'supports, and each arm\'s own network.</p>')
     body.append(_by_arm_block(by_arm, aware=bool(aware), out_dir=out_dir,
                               name=name, design=(payload_all or {}).get("design")))
     body.append(_concordance_block(name, concordance))
@@ -1182,6 +1243,10 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
         ap += [_panel(f_, i + 1) for i, f_ in enumerate(per_unit_figs)]
         (d / f"{name}_by_sample.html").write_text(
             _page(f"{name} per sample — scProfile", "".join(ap)), encoding="utf-8")
+    if locals().get("_arms") and (_arms["contrast"] or _arms["arm"]):
+        (d / f"{name}_by_arm.html").write_text(
+            _page(f"{name} — the arms — scProfile", _arm_appendix(name, _arms)),
+            encoding="utf-8")
     f = d / f"{name}.html"
     f.write_text(_page(f"{name} — scProfile", "".join(body)), encoding="utf-8")
     return f

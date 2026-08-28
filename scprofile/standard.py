@@ -51,6 +51,11 @@ import re
 from html import unescape as html_unescape
 from pathlib import Path
 
+#: Pages that are appendices to a plugin page rather than pages a reader reads. A page named
+#: with one of these is exempt from the criteria ONLY IF its parent exists and links to it -
+#: the link is what stops the exemption being used to move figures out of sight.
+APPENDIX_SUFFIXES = ("_by_sample", "_by_arm")
+
 #: A page may carry at most this many figures. Above it, a reader stops.
 MAX_FIGURES = 12
 #: Words in one caption, and in all the prose that is not a caption.
@@ -339,11 +344,18 @@ def check_report(report_dir, *, exempt=None):
     # It cannot be used to hide a page. An appendix counts as one only when the plugin page it
     # belongs to EXISTS and LINKS to it, so moving figures out of sight requires leaving a door
     # to them in plain view.
+    # THE SUFFIX IS NAMING; THE LINK IS THE GUARD. This tested one suffix, so a second kind of
+    # appendix - the per-ARM panels, which are the comparison figures a factorial design exists
+    # for - was measured as though it were a page a reader reads, and failed on being what it
+    # is: forty panels, no cohort overview, and a "compares the arms" check that scans for
+    # vocabulary the per-contrast captions carry in a different form. Adding the suffix changes
+    # nothing about what stops this hiding a page: the parent must EXIST and LINK to it.
     appendix = set()
     for f in pages:
-        if not f.stem.endswith("_by_sample"):
+        suffix = next((x for x in APPENDIX_SUFFIXES if f.stem.endswith(x)), None)
+        if suffix is None:
             continue
-        parent = d / f"{f.stem[:-len('_by_sample')]}.html"
+        parent = d / f"{f.stem[:-len(suffix)]}.html"
         if parent.exists() and f.name in parent.read_text(encoding="utf-8"):
             appendix.add(f.stem)
     for f in pages:
