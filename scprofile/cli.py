@@ -774,7 +774,8 @@ def _run(a):
             # declaration is right there. A plugin whose `produces` no longer matches what it
             # emits has drifted, and the next person to read the declaration will believe it.
             for dd in (FB.declaration_drift(ks[name], pl) + FB.figure_drift(ks[name], pl)
-                       + FB.metric_drift(ks[name], pl) + FB.memory_drift(ks[name], pl)):
+                       + FB.metric_drift(ks[name], pl)
+                       + FB.memory_drift(ks[name], pl, concurrent=len(staged))):
                 print(f"      [{dd.layer}] {dd.why}")
                 diagnoses.append(dd)
             # AND THE RULE THE HOST STATES BUT CANNOT APPLY. Only the plugin knows what it groups
@@ -883,6 +884,23 @@ def _run(a):
         if _peak:
             _by_plugin.setdefault(_pl["kernel"], []).append((_m["n_cells"], _peak))
             _basis.setdefault(_pl["kernel"], set()).add(_src)
+    # A JOB-WIDE COUNTER IS NOT A SET OF POINTS ON A PER-INSTANCE CURVE. Every instance that
+    # shared one job reports the SAME figure, so a fit over them is a horizontal line through
+    # one value repeated - which is exactly what "45.0 GB fixed + 0.0 GB/100k" was, from ten
+    # instances spanning 7,374 to 11,985 cells. The fit was not weak; it was measuring nothing,
+    # and it printed as a pair of numbers to copy into a declaration.
+    #
+    # DETECTED FROM THE DATA RATHER THAN PLUMBED THROUGH. Identical peaks at differing sizes is
+    # the signature itself - it is the tell that found this - and reading it here means the
+    # check cannot fall out of step with however the host happens to schedule waves.
+    _unattributable = {}
+    for _n in list(_by_plugin):
+        _pts = _by_plugin[_n]
+        if (len(_pts) > 1 and len({round(_gb, 6) for _sz, _gb in _pts}) == 1
+                and len({_sz for _sz, _gb in _pts}) > 1
+                and _basis.get(_n) == {"the scheduler's counter for the job"}):
+            _unattributable[_n] = len(_pts)
+            del _by_plugin[_n]
     for _n, _pts in sorted(_by_plugin.items()):
         _b, _r = fit_memory_model(_pts)
         # BOTH None means no usable measurement. A None BASELINE alone means the split was
@@ -901,6 +919,12 @@ def _run(a):
                             if _n in ks else None,
                             "declared_base_gb": ks[_n].executor.get("memory_gb_base")
                             if _n in ks else None}
+    for _n, _cnt in sorted(_unattributable.items()):
+        print(f"\n  memory for {_n} was NOT fitted: all {_cnt} instances reported the same "
+              f"figure at differing sizes, which is the scheduler's counter for the WHOLE JOB "
+              f"rather than each instance's own cost. A model fitted on it would be a "
+              f"horizontal line through one number. Run one instance in a job to measure this "
+              f"plugin's own demand.")
     if memory_model:
         _floor_only = all(_m.get("basis") == ["the process's own floor"]
                           for _m in memory_model.values())

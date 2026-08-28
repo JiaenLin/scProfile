@@ -449,7 +449,7 @@ def report(diagnoses, log=print):
 MEMORY_DRIFT_RATIO = 1.25
 
 
-def memory_drift(kernel, payload):
+def memory_drift(kernel, payload, concurrent=1):
     """What the instance COST, against what the plugin said it would. A `run -> declare` edge.
 
     THE FAILURE THIS EXISTS FOR IS SILENT AT EVERY POINT BEFORE THE END. A plugin declares a
@@ -479,6 +479,35 @@ def memory_drift(kernel, payload):
     peak, source = peak_measurement(m)
     if peak is None:
         return []
+    # A JOB-WIDE COUNTER IS NOT THIS INSTANCE'S COST, AND MUST NOT BE READ AS ONE.
+    # `peak_measurement` says so in its own docstring - the cgroup figure "over-attributes when
+    # several instances share one job" - and this function went on telling the maintainer to
+    # raise a declaration to it anyway. Measured: ten cellchat instances in one job each
+    # reported 45.0 GB, identical, over inputs of 7,374 to 11,985 cells, fitted as
+    # "45.0 GB fixed + 0.0 GB/100k". A figure that does not move with the input is not a
+    # measurement of the input, and ten identical readings are ONE reading taken ten times.
+    #
+    # So when the job held more than one instance, this reports the observation and NAMES the
+    # per-instance bound it implies, and does NOT raise a declaration defect. The declaration
+    # cannot be checked against a number that does not belong to it, and an instruction to
+    # raise it would be an instruction to over-request by the wave width - here tenfold.
+    job_wide = source == "the scheduler's counter for the job" and int(concurrent or 1) > 1
+    if job_wide:
+        n = int(concurrent)
+        return [Diagnosis(
+            # HOST, not DECLARATION. Nothing is wrong with the plugin's declaration here;
+            # what makes the number unusable is the HOST's decision to run several instances
+            # in one job, and filing it against the plugin would send its maintainer to fix a
+            # file that is not the problem.
+            HOST,
+            f"cost cannot be attributed to this instance: {peak:.1f} GB is {source}, and "
+            f"{n} instances shared that job. Their true individual peaks sum to at most this, "
+            f"so this instance used AT MOST {peak:.1f} GB and on an even split about "
+            f"{peak / n:.1f} GB. The declaration is not checked against it and must not be "
+            f"raised to it - that would over-request by the width of the wave.",
+            action=(f"to measure this plugin's own cost, run ONE instance in a job; the "
+                    f"counter is exact when nothing shares it"),
+            evidence=repr(m))]
     ex = getattr(kernel, "executor", None) or {}
     base = ex.get("memory_gb_base")
     rate = ex.get("memory_gb_per_100k")

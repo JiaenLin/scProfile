@@ -253,6 +253,44 @@ ck("a small overshoot is noise and is not reported",
    FB.memory_drift(_Kern, {"measured": _near}) == [], str(FB.memory_drift(_Kern, {"measured": _near})))
 
 
+print("\na job-wide counter is never charged to one instance")
+# THE SECOND HALF OF THE SAME DEFECT. Fixing the cgroup PATH made the number right - 45.0 GB
+# against PBS's own 42.7 GB for the job - and it was still attributed to each of ten concurrent
+# instances, so all ten reported 45.0 GB over inputs of 7,374 to 11,985 cells and the advice was
+# to raise a 3.8 GB declaration elevenfold. An even split puts the true figure near 4.5 GB, which
+# is 1.18x the declaration: it was right all along.
+class _K:
+    name = "p"
+    executor = {"memory_gb_base": 3.8, "memory_gb_per_100k": 0.0}
+
+
+_pl = {"measured": {"n_cells": 11985, "cgroup_peak_gb": 45.0, "peak_rss_gb": 4.1}}
+_shared = FB.memory_drift(_K(), _pl, concurrent=10)
+_alone = FB.memory_drift(_K(), _pl, concurrent=1)
+ck("with several instances in one job it is not a declaration defect",
+   len(_shared) == 1 and _shared[0].layer == FB.HOST, str([d.layer for d in _shared]))
+ck("and it says so in the words that stop the wrong fix",
+   "must not be raised to it" in _shared[0].why, _shared[0].why[:90])
+ck("it names the per-instance bound an even split implies",
+   "4.5 GB" in _shared[0].why, _shared[0].why[-120:])
+ck("with ONE instance the counter is exact and the declaration IS checked",
+   len(_alone) == 1 and _alone[0].layer == FB.DECLARATION,
+   str([d.layer for d in _alone]))
+ck("the floor measurement is never suppressed - only the job-wide one",
+   FB.memory_drift(_K(), {"measured": {"n_cells": 11985, "peak_rss_gb": 45.0}},
+                   concurrent=10)[0].layer == FB.DECLARATION,
+   "the process's own floor belongs to the process, however many share the job")
+
+from pathlib import Path as _Path                                            # noqa: E402
+_src_cli = (_Path(__file__).resolve().parents[1] / "scprofile" / "cli.py").read_text()
+ck("and the FITTED model refuses the same input",
+   "_unattributable" in _src_cli and "was NOT fitted" in _src_cli,
+   "identical peaks at differing sizes fit a horizontal line through one number")
+ck("detected from the data, not plumbed through the scheduler",
+   "round(_gb, 6) for _sz, _gb in _pts" in _src_cli,
+   "so the check cannot fall out of step with how waves are scheduled")
+
+
 print("\nthe memory counter is the JOB'S cgroup, never the machine's")
 # RECONSTRUCTED FROM THE RUN THAT BROKE IT. compute1020: a 1 TB node, a PBS job in an unnamespaced
 # cgroup v2, ten concurrent instances. The old code read /sys/fs/cgroup/memory.peak by absolute
