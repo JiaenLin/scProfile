@@ -253,5 +253,58 @@ ck("a small overshoot is noise and is not reported",
    FB.memory_drift(_Kern, {"measured": _near}) == [], str(FB.memory_drift(_Kern, {"measured": _near})))
 
 
+print("\nthe memory counter is the JOB'S cgroup, never the machine's")
+# RECONSTRUCTED FROM THE RUN THAT BROKE IT. compute1020: a 1 TB node, a PBS job in an unnamespaced
+# cgroup v2, ten concurrent instances. The old code read /sys/fs/cgroup/memory.peak by absolute
+# path - the ROOT - and reported 1000.7 GB ten times, identical, for instances of 7,374 to 11,985
+# cells. PBS billed the whole job 42.7 GB. The declaration it then told the maintainer to raise
+# was 3.5-3.8 GB and correct.
+import tempfile as _tf                                                          # noqa: E402
+from pathlib import Path as _P                                                  # noqa: E402
+from scprofile import _entry as _E                                              # noqa: E402
+
+
+def _tree(proc_text, files, total=1007.4):
+    """A fake /sys/fs/cgroup + /proc/self/cgroup. Returns what _cgroup_peak_gb makes of it."""
+    d = _P(_tf.mkdtemp())
+    (d / "proc").write_text(proc_text)
+    for rel, gb in files.items():
+        f = d / "cg" / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(str(int(gb * 1024 ** 3)))
+    (d / "cg").mkdir(exist_ok=True)
+    return _E._cgroup_peak_gb(root=d / "cg", procfile=d / "proc", total=total)
+
+
+_job = _tree("0::/pbspro.service/jobs/698875\n",
+             {"pbspro.service/jobs/698875/memory.peak": 42.7})
+ck("a job-scoped cgroup v2 peak is read", _job is not None and abs(_job - 42.7) < 0.01, str(_job))
+
+_root = _tree("0::/\n", {"memory.peak": 1000.7})
+ck("THE ROOT CGROUP IS NOT READ - this is the 1000.7 GB, and it must not come back",
+   _root is None, str(_root))
+
+_nodewide = _tree("0::/pbspro.service/jobs/698875\n",
+                  {"pbspro.service/jobs/698875/memory.peak": 1000.7})
+ck("and a job-scoped value indistinguishable from the whole machine is refused too",
+   _nodewide is None, f"{_nodewide} - a counter that might be the node is not evidence")
+
+_v1 = _tree("7:memory:/pbspro/698875\n",
+            {"memory/pbspro/698875/memory.max_usage_in_bytes": 12.5})
+ck("cgroup v1 still works, at its own controller path", _v1 is not None and abs(_v1 - 12.5) < 0.01,
+   str(_v1))
+
+_v1root = _tree("7:memory:/\n", {"memory/memory.max_usage_in_bytes": 1000.7})
+ck("and v1's root is refused by the same rule", _v1root is None, str(_v1root))
+
+ck("no /proc at all is None, not a crash and not a zero",
+   _E._cgroup_peak_gb(root="/nonexistent-cg", procfile="/nonexistent-proc") is None)
+
+_plausible = _tree("0::/pbspro.service/jobs/1\n",
+                   {"pbspro.service/jobs/1/memory.peak": 900.0}, total=1007.4)
+ck("a large but sub-machine reading is still believed - the guard is not a cap",
+   _plausible is not None and abs(_plausible - 900.0) < 0.01, str(_plausible))
+
+
 print("\n" + ("the loop holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

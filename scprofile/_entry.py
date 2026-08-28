@@ -68,6 +68,78 @@ def load(path):
     return mod
 
 
+def _mem_total_gb():
+    """This machine's total RAM, or None. Used ONLY to reject an impossible reading."""
+    try:
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemTotal:"):
+                return float(line.split()[1]) / (1024.0 ** 2)
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def _cgroup_peak_gb(root=None, procfile=None, total=None):
+    """The peak of THIS PROCESS'S OWN cgroup, or None. Never the root cgroup's.
+
+    The three arguments exist so this can be TESTED against a reconstructed cgroup tree - the
+    failure it guards was only ever visible on a particular machine, and a guard that can only
+    be exercised there is a guard nobody can check.
+
+    THE BUG THIS EXISTS TO NOT REPEAT. This read `/sys/fs/cgroup/memory.peak` by absolute path.
+    Under cgroup v2 with no namespace - which is what a PBS job on a shared node gets - that
+    path IS THE ROOT CGROUP, so it reports the whole machine rather than the job. On a 1 TB node
+    it returned 1000.7 GB for all ten instances of a run whose real cost was about 4 GB each,
+    and every one of them was identical, because it was the same node-wide number ten times.
+
+    That number then became advice. The declaration was 3.5-3.8 GB and correct - PBS billed the
+    entire job 42.7 GB - and the tool told its maintainer to raise it to 1000.7 GB, which is
+    larger than the biggest queue on that cluster accepts. FOLLOWING THE ADVICE WOULD HAVE MADE
+    EVERY FUTURE RUN UNSCHEDULABLE: the failure it warns about is a job that gets killed, and
+    the fix it proposed is a job that can never start. A wrong measurement is bad; a wrong
+    measurement wearing the scheduler's authority is worse, because nothing downstream doubts it.
+
+    So: resolve the cgroup this process is actually in, from /proc/self/cgroup, and read the
+    counter there. Then refuse a value that is indistinguishable from the whole machine, which
+    is the signature of having read the root by another route.
+    """
+    root = Path(root) if root is not None else Path("/sys/fs/cgroup")
+    procfile = Path(procfile) if procfile is not None else Path("/proc/self/cgroup")
+    paths = []
+    try:
+        for line in procfile.read_text().splitlines():
+            parts = line.split(":", 2)
+            if len(parts) != 3:
+                continue
+            hid, ctrl, rel = parts
+            rel = rel.strip().lstrip("/")
+            if ctrl == "" and hid == "0":          # cgroup v2: one unified hierarchy
+                paths.append(root / rel / "memory.peak")
+            elif "memory" in ctrl.split(","):      # cgroup v1: a memory controller mount
+                paths.append(root / "memory" / rel / "memory.max_usage_in_bytes")
+    except OSError:
+        return None
+    total = _mem_total_gb() if total is None else total
+    for f in paths:
+        # A RELATIVE PATH OF "" MEANS THE ROOT, and the root is the machine. Skip it rather than
+        # read it: this is the exact shape that produced the 1000.7 GB above.
+        try:
+            if f.parent.resolve() in (root.resolve(), (root / "memory").resolve()):
+                continue
+            gb = int(f.read_text().strip()) / (1024.0 ** 3)
+        except (OSError, ValueError):
+            continue
+        if gb <= 0:
+            continue
+        if total and gb >= total * 0.95:
+            # Indistinguishable from the whole machine. It may be true, but nothing here can
+            # tell that from having read the root, and a counter that might be the node is not
+            # evidence about a plugin.
+            continue
+        return gb
+    return None
+
+
 def selftest(plugin_path, log=print):
     """Run a plugin's own `selftest(ctx)`, in the plugin's own interpreter.
 
@@ -325,14 +397,7 @@ def main(argv):
         # the one-plugin-one-job shape these are verified in. Recorded ALONGSIDE, never instead:
         # the model keeps using the attributable floor, and the discrepancy becomes visible
         # instead of silent.
-        cg = None
-        for _c in ("/sys/fs/cgroup/memory.peak",
-                   "/sys/fs/cgroup/memory/memory.max_usage_in_bytes"):
-            try:
-                cg = int(Path(_c).read_text().strip()) / (1024.0 ** 3)
-                break
-            except (OSError, ValueError):
-                continue
+        cg = _cgroup_peak_gb()
         ctx.measured = {"peak_rss_gb": round(peak_gb, 3), "n_cells": n,
                         **({"cgroup_peak_gb": round(cg, 3)} if cg else {}),
                         # NAMED, because it is a floor and not a peak: RUSAGE_CHILDREN is the
