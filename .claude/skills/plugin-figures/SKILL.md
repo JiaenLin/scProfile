@@ -800,6 +800,32 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   **CHECK:** for every factor, is there another that partitions the units identically? If so, does
   every panel on it carry both names?
 
+- **C23p (the finest unit is not a precondition: fall back to the coarser one, never block)** In a
+  single-cell design the sample is ONE possible unit of observation, not a requirement. An entity
+  that clears the method's per-object floor in only some samples has a sample level that is not
+  SUPPORTED - and the answer is to compare the GROUPS, pooling the cells of each arm, rather than
+  to drop the entity or to run a sample-level test whose zeros are detection artefacts rather than
+  measurements. The fallback exists wherever both arms have cells at all, so a resolver should
+  never return "not comparable" for an entity that has cells on both sides. Resolve the unit PER
+  ENTITY PER CONTRAST, because a rare entity may support the sample level in one contrast and not
+  in another, and report which entities took the fallback.
+  The one genuine exclusion is different in kind: an entity with NO cells in one whole arm has
+  nothing to compare at any unit, and comparing it compares detection. That is the only removal.
+  **STATE WHAT THE FALLBACK COSTS, so nobody takes it for free.** Pooling the cells of a group
+  discards the between-sample variance, so a group-level comparison has no replication at the level
+  the design is randomised at and cannot yield a p-value across samples. It is a DESCRIPTION - and
+  an honest one, because a sample-level test on an entity the samples cannot support is not more
+  rigorous, it is a detection threshold wearing a p-value.
+  **ONE INSTANCE.** Requiring the sample unit left 5 of 13 entities comparable on the main contrast
+  and discarded 8. Resolving the unit per entity instead left 5 at sample level, sent 6 to the
+  group, and dropped only 2 - the two with no cells in one arm. Across all six contrasts of the
+  2x2 the set comparable everywhere went from 5 of 13 to 9 of 13. The fallback is not a loophole:
+  on a rare entity clearing the floor in 1 of 3 units per arm, both a strict criterion (present in
+  every unit) and a lax one (present in at least two) still routed it to the group.
+  **CHECK:** for each entity in each contrast, which unit did you resolve, and did anything get
+  dropped that had cells on both sides? Does every group-level result say on its face that it is
+  descriptive and carries no p across samples?
+
 - **C24** Is every continuous ramp monotonic in lightness, so the encoding survives being printed
   in grey and survives a colour-vision deficiency? Convert the rendered panel to greyscale and
   look: can you still order two marks?
