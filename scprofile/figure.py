@@ -631,3 +631,67 @@ def legend_outside(fig, ax, handles=None, labels=None, ncol=1, markerscale=2.5):
     if handles is not None:
         return fig.legend(handles, labels, **kw)
     return ax.legend(**kw)
+
+def spread_labels(ax, texts, *, iterations=80, pad=1.2, clip=True):
+    """Nudge annotation labels apart, in DISPLAY space, until they stop overlapping.
+
+    RADIAL OFFSET IS NOT ENOUGH WHERE IT MATTERS. Offsetting each label away from the centroid
+    separates a round cloud and does nothing for a tight cluster: every member is on the same
+    side, so every label is pushed the same way and they land on each other. Measured on a real
+    pathway-similarity panel, where the twelve highest-flow points sat in one clump and their
+    labels overprinted into an unreadable stack - which is the case a label is most needed for,
+    because that clump is the result.
+
+    Works on `Annotation`s created with `textcoords="offset points"`: their offset is `xyann`,
+    so this adjusts the offset and never the data. Purely vertical separation, deliberately -
+    moving a label sideways breaks the left/right alignment that ties it to its own point, and
+    a label that has drifted onto a neighbour is worse than one that overlaps slightly.
+
+    Returns the number of iterations used, so a caller can tell "settled" from "gave up".
+    """
+    if not texts:
+        return 0
+    fig = ax.figure
+    try:
+        fig.canvas.draw()
+        r = fig.canvas.get_renderer()
+    except Exception:
+        # NO RENDERER, NO DECLUTTER, AND NO CRASH. Some backends cannot measure text before the
+        # figure is saved. A slightly overlapping label is a blemish; an exception here loses
+        # the whole panel, and the panel is the point.
+        return 0
+    used = 0
+    for used in range(1, iterations + 1):
+        try:
+            boxes = [t.get_window_extent(r) for t in texts]
+        except Exception:
+            return used
+        moved = False
+        for i in range(len(texts)):
+            for j in range(i + 1, len(texts)):
+                bi, bj = boxes[i], boxes[j]
+                if not bi.overlaps(bj):
+                    continue
+                overlap = min(bi.y1, bj.y1) - max(bi.y0, bj.y0) + pad
+                if overlap <= 0:
+                    continue
+                step = overlap / 2.0
+                up, down = (i, j) if bi.y0 >= bj.y0 else (j, i)
+                for t, dy in ((texts[up], step), (texts[down], -step)):
+                    ox, oy = t.xyann
+                    t.set_position((ox, oy + dy * 72.0 / fig.dpi))
+                moved = True
+        if not moved:
+            break
+        try:
+            fig.canvas.draw()
+        except Exception:
+            return used
+    if clip:
+        # A LABEL PUSHED OUT OF THE AXES IS NOT SAVED, IT IS LOST. Growing the y-range is the
+        # one adjustment that keeps every label attached to its own point.
+        try:
+            ax.margins(y=max(ax.margins()[1], 0.12))
+        except Exception:
+            pass
+    return used

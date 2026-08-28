@@ -41,7 +41,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.3.0",
+    "version": "0.3.1",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -1686,19 +1686,24 @@ def _fig_signaling_roles(ctx, pre, names):
     # are. Offsetting along each point's own direction from the centroid separates a cluster
     # radially, which is the one direction that is always free.
     cx, cy = float(np.mean(out_s)), float(np.mean(in_s))
+    _texts = []
     for x, y, lab in zip(out_s, in_s, short):
         dx, dy = float(x) - cx, float(y) - cy
         norm = (dx * dx + dy * dy) ** 0.5 or 1.0
         ox, oy = 7.0 * dx / norm, 7.0 * dy / norm
-        ax.annotate(lab, (x, y), fontsize=5.5,
-                    xytext=(ox + (2.0 if ox >= 0 else -2.0), oy),
-                    textcoords="offset points", color=F.INK,
-                    ha="left" if ox >= 0 else "right",
-                    va="bottom" if oy >= 0 else "top")
+        _texts.append(ax.annotate(lab, (x, y), fontsize=5.5,
+                                  xytext=(ox + (2.0 if ox >= 0 else -2.0), oy),
+                                  textcoords="offset points", color=F.INK,
+                                  ha="left" if ox >= 0 else "right",
+                                  va="bottom" if oy >= 0 else "top"))
+    F.spread_labels(ax, _texts)
     # ROOM FOR THE LABELS THEMSELVES. Population names here are hierarchical and long, and an
     # outward-offset label on the rightmost point runs past the axes without this.
+    # PADDED ON BOTH SIDES. An outward-offset label on the LEFTMOST point runs off the axis
+    # just as one on the rightmost does, and the leftmost population is the quiet one - the
+    # case a reader is least able to reconstruct from memory.
     pad = 0.10 * (hi - lo)
-    ax.set_xlim(lo, hi + pad)
+    ax.set_xlim(lo - pad * 0.6, hi + pad)
     ax.set_ylim(lo, hi)
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("outgoing strength  (summed probability sent)")
@@ -1965,17 +1970,21 @@ def _fig_similarity(ctx, pre):
     _rank = {p: i for i, p in enumerate(paths)}
     _label = {k for k in sorted(kept, key=lambda q: _rank.get(q, 10 ** 6))[:_n_lab]}
     cx, cy = float(xy[:, 0].mean()), float(xy[:, 1].mean())
+    _texts = []
     for (x, y), lab in zip(xy, kept):
         if lab not in _label:
             continue
         dx, dy = float(x) - cx, float(y) - cy
         norm = (dx * dx + dy * dy) ** 0.5 or 1.0
         ox, oy = 7.5 * dx / norm, 7.5 * dy / norm
-        ax.annotate(lab, (x, y), fontsize=5.0,
-                    xytext=(ox + (1.5 if ox >= 0 else -1.5), oy),
-                    textcoords="offset points", color=F.INK,
-                    ha="left" if ox >= 0 else "right",
-                    va="bottom" if oy >= 0 else "top")
+        _texts.append(ax.annotate(lab, (x, y), fontsize=5.0,
+                                  xytext=(ox + (1.5 if ox >= 0 else -1.5), oy),
+                                  textcoords="offset points", color=F.INK,
+                                  ha="left" if ox >= 0 else "right",
+                                  va="bottom" if oy >= 0 else "top"))
+    # THE CLUSTER IS THE RESULT, so its labels are the ones that must be readable. Radial
+    # offset alone puts every member of a tight clump on the same side; this separates them.
+    F.spread_labels(ax, _texts)
     # EQUAL ASPECT, BECAUSE THE DISTANCES ARE THE POINT. An MDS panel drawn on unequal axes
     # shows distances that are not the distances it computed, which is the one thing this
     # plot must not do.

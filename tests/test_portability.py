@@ -1470,5 +1470,54 @@ ck("micromamba and mamba are never probed for --solver at all",
        pathlib.Path(_R.__file__).read_text(),
    "the flag is conda-only; mamba does not take it")
 
+print("\nlabels are separated in display space, not left to overlap")
+import matplotlib                                                              # noqa: E402
+matplotlib.use("Agg")
+import matplotlib.pyplot as _plt                                               # noqa: E402
+from scprofile import figure as _FIG                                           # noqa: E402
+
+
+def _overlaps(ax, texts):
+    ax.figure.canvas.draw()
+    r = ax.figure.canvas.get_renderer()
+    bs = [t.get_window_extent(r) for t in texts]
+    return sum(1 for i in range(len(bs)) for j in range(i + 1, len(bs))
+               if bs[i].overlaps(bs[j]))
+
+
+# A TIGHT CLUMP - the case radial offset cannot fix, and the case a label is most needed for,
+# because the clump is the result. Eight points within a hair of each other.
+_f, _ax = _plt.subplots(figsize=(3, 3))
+_pts = [(1.0 + 0.001 * i, 1.0 + 0.001 * i) for i in range(8)]
+_ax.scatter([p[0] for p in _pts], [p[1] for p in _pts])
+# LIMITS FIXED, or matplotlib autoscales a 0.007-wide range across the whole panel and the
+# points are not clumped in DISPLAY space, which is the only space overlap happens in. The
+# first version of this test did exactly that and reported zero overlaps to fix - a test that
+# passes because it built the wrong situation.
+_ax.set_xlim(0, 10)
+_ax.set_ylim(0, 10)
+_tx = [_ax.annotate(f"LABEL{i}", p, xytext=(6, 0), textcoords="offset points", fontsize=6)
+       for i, p in enumerate(_pts)]
+_before = _overlaps(_ax, _tx)
+_used = _FIG.spread_labels(_ax, _tx)
+_after = _overlaps(_ax, _tx)
+ck("a clump of labels overlaps before decluttering", _before > 0, f"{_before} pairs")
+ck("and far fewer after", _after < _before, f"{_before} -> {_after} overlapping pairs")
+ck("it iterated rather than settling at once", _used > 1, str(_used))
+ck("labels keep their own x - only y moves, so none drifts onto a neighbour's point",
+   all(t.xyann[0] == 6 for t in _tx), str([t.xyann for t in _tx]))
+_plt.close(_f)
+
+_f2, _ax2 = _plt.subplots(figsize=(3, 3))
+_t2 = [_ax2.annotate("A", (0.2, 0.2), xytext=(6, 0), textcoords="offset points"),
+       _ax2.annotate("B", (0.8, 0.8), xytext=(6, 0), textcoords="offset points")]
+_pos = [t.xyann for t in _t2]
+_FIG.spread_labels(_ax2, _t2)
+ck("labels that already fit are not moved at all", [t.xyann for t in _t2] == _pos,
+   "a declutter that fires on correct output gets switched off")
+ck("and an empty list is not an error", _FIG.spread_labels(_ax2, []) == 0)
+_plt.close(_f2)
+
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
