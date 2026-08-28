@@ -191,6 +191,23 @@ PLUGIN = {
             {"id": "interactions", "question": "how many interactions did this unit yield, and how far apart are the units?"},
             {"id": "populations", "question": "how many populations passed min_cells in this unit? A unit contributing fewer populations can only produce fewer interactions."},
         ],
+        # THE SAME DECLARATION cellchat CARRIES, AND THE POINT IS THAT NOTHING ELSE CHANGES.
+        # The host pools units into design arms and draws the ring, the chord, the sender-by-
+        # receiver matrix and their between-arm comparisons from any table that names a source,
+        # a target and a weight. This plugin adds five words of declaration and inherits all of
+        # it; no line of host code mentions this method, and none should.
+        #
+        # `lr_means` AND NOT `magnitude_rank`, DELIBERATELY. The ranking column this plugin
+        # sorts by is a RANK - lower is stronger - and handing it over as a weight would invert
+        # every panel while looking entirely plausible: the widest edge would be the weakest
+        # interaction. The weight must be a magnitude, and the declaration is where that choice
+        # is recorded rather than assumed.
+        #
+        # NO `group` KEY. This method returns no pathway-level grouping, so the kinds that need
+        # one - ranked flow, the role heatmap, patterns, similarity - are simply not drawn for
+        # it. That is a property of the method, reported as an absence, not a gap to paper over.
+        "unit_network": {"table": "tables/ccc_edges.csv", "source": "source",
+                         "target": "target", "weight": "lr_means"},
         "figures": [
             {"id": "F1_resource_coverage", "shows": "diagnostic", "required": True,
              "question": "how much of the ligand-receptor resource could this object ever have "

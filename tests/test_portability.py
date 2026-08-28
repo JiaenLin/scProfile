@@ -1519,5 +1519,61 @@ ck("and an empty list is not an error", _FIG.spread_labels(_ax2, []) == 0)
 _plt.close(_f2)
 
 
+print("\nthe network panels are the HOST's, and any plugin gets them from a declaration")
+# THE GENERALITY CLAIM, EXERCISED RATHER THAN ASSERTED. A capability is only general once a
+# SECOND caller has used it, so this builds a plugin that resembles neither shipped one - its
+# own table name, its own column names, no grouping column at all - and asserts the host draws
+# the same panels for it without a line of code naming any method.
+import tempfile as _t2                                                          # noqa: E402
+from pathlib import Path as _P2                                                 # noqa: E402
+import pandas as _pd                                                            # noqa: E402
+import matplotlib                                                               # noqa: E402
+matplotlib.use("Agg")
+from scprofile import compare_panel as _CP                                      # noqa: E402
+from scprofile import figure as _FG                                             # noqa: E402
+_FG.use()
+
+_rows = []
+for _u, _arm in (("u1", "a"), ("u2", "a"), ("u3", "b"), ("u4", "b")):
+    for _s in ("P1", "P2", "P3"):
+        for _t in ("P1", "P2", "P3"):
+            _rows.append({"unit": _u, "emitter": _s, "acceptor": _t,
+                          "score": 1.0 + (0.6 if _arm == "b" and _s == "P1" else 0.0)})
+_all = _pd.DataFrame(_rows)
+_per = {u: g.rename(columns={"emitter": "source", "acceptor": "target", "score": "prob"})
+        for u, g in _all.groupby("unit")}
+_des = {"u1": {"K": "a"}, "u2": {"K": "a"}, "u3": {"K": "b"}, "u4": {"K": "b"}}
+_out = _P2(_t2.mkdtemp())
+_pairs = _CP.arm_pairs(_des)
+ck("a two-level factor yields its contrast with no method named",
+   len(_pairs) == 1 and _pairs[0][1] == "K", str(_pairs))
+
+_made = _CP.draw_contrast(_per, _des, _pairs[0], _out, "anyplugin")
+_ids = sorted(f.split("__")[0] for f, *_r in _made)
+ck("the between-arm panels are drawn for a plugin the host has never heard of",
+   len(_made) >= 2, str(_ids))
+ck("and the group-needing panel is ABSENT, because this one declares no group column",
+   not any(i.startswith("C3_flow") for i in _ids), str(_ids))
+ck("every file it claims to have written exists",
+   all(_P2(pth).exists() for _f, pth, *_r in _made))
+
+_arms = _CP.arms_in(_des, _pairs)
+_nets = _CP.draw_arm_networks(_per, _des, _arms, _out, "anyplugin")
+_nids = sorted({f.split("__")[0] for f, *_r in _nets})
+ck("each arm gets its own ring and chord, from the same declaration",
+   _nids == ["N1_circle", "N2_chord"], str(_nids))
+ck("an arm appears once however many contrasts share it", len(_arms) == 2, str(sorted(_arms)))
+
+_src_all = "".join((_P2("scprofile") / f).read_text()
+                   for f in ("compare_panel.py", "network_panels.py", "panels.py"))
+ck("NO panel module names a shipped plugin or its method",
+   not any(w in _src_all.lower() for w in
+           ("cellchat", "liana", "pertpy", "scenic", "decoupler", "pydeseq")),
+   "a host module naming a method is the definition of overfitting to it")
+ck("both shipped communication plugins declare the SAME contract",
+   all("unit_network" in discover()[n].report_spec for n in ("cellchat", "liana")),
+   "one caller is a special case; two is an interface")
+
+
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
