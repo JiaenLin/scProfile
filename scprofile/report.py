@@ -324,6 +324,61 @@ def _svg_strip(values, labels, *, width=560, height=96):
             + "".join(ticks) + "".join(pts) + "</svg>")
 
 
+def _crossed_factors(units, design):
+    """The design factors a page's own across-design panel will actually COMPARE ACROSS.
+
+    THE BINDING WAS COMPUTED FROM WHAT A PLUGIN DECLARES, AND THE PAGE CROSSES THE DESIGN
+    WHETHER IT DECLARES ANYTHING OR NOT. `_units_by_arm` builds its panels from any per-unit
+    metric a plugin happens to emit, so the host crosses age and diet on the plugin's behalf -
+    and `constraint_binds` never heard about it, because it was asked only what the plugin's own
+    contrast tests. A plugin declaring neither `needs_design` nor `needs_representation` was
+    therefore exempt from a constraint while the host drew, on its page, a comparison across the
+    exact factors the constraint forbids, with an interval and a significance colour on it.
+
+    That is this codebase's own lesson arriving a second time: RE-AUDIT A CLASSIFICATION WHEN A
+    NEW CONSUMER STARTS USING IT. The declaration was an adequate account of what the plugin
+    tests, and it stopped being an adequate account of what the PAGE claims the moment the
+    reporter learned to draw arms.
+
+    So bind on what is drawn. The rule mirrors `_units_by_arm` exactly - two or more arms, two or
+    more samples in each - because a factor that panel will not draw is not a claim this page
+    makes.
+    """
+    vals = {}
+    for u in units:
+        for k, v in (u.get("metrics") or {}).items():
+            if isinstance(v, (int, float)):
+                vals.setdefault(k, set()).add(str(u.get("unit")))
+    named = {str(u.get("unit")) for u in units if u.get("unit") is not None}
+    out = set()
+    for measured in vals.values():
+        if len(measured) < 2:
+            continue
+        for fac in {f for u in named for f in (design.get(u) or {})}:
+            arms = {}
+            for unit in measured:
+                lvl = (design.get(unit) or {}).get(fac)
+                if lvl:
+                    arms.setdefault(str(lvl), []).append(unit)
+            if len(arms) >= 2 and all(len(v) >= 2 for v in arms.values()):
+                out.add(fac)
+    return sorted(out)
+
+
+def _page_binds(constraint, declared_binds, units, design):
+    """Everything binding THIS page: what the plugin declares it tests, plus what the page draws.
+
+    A union, never a replacement. The declared binding is still right about the plugin's own
+    contrast; it was only ever incomplete about the page.
+    """
+    binds = set(declared_binds or ())
+    drawn = _crossed_factors(units, design or {})
+    if constraint and drawn:
+        from . import inputs
+        binds |= set(inputs.constraint_binds(constraint, drawn))
+    return sorted(binds)
+
+
 def _units_by_arm(units, design, declared, *, out_dir=None, name=""):
     """THE PER-UNIT NUMBERS, GROUPED BY ARM. The comparison the study exists to make.
 
@@ -936,7 +991,11 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
             + _lede(_headline_without(p)) + '</p>',
             _contradiction_block(p.get("contradictions")),
             _overview_block(payload_all or {}, plugin=name, by_arm=by_arm),
-            _constraint_block(constraint, binds)]
+            # `p.get("units")`, NOT the local `units` - that name is not bound until further
+            # down this function, so reading it here is a NameError on every per-unit page.
+            _constraint_block(constraint,
+                              _page_binds(constraint, binds, p.get("units") or [],
+                                          (payload_all or {}).get("design") or {}))]
     if caveats:
         # THE CLAIM VISIBLE, THE ELABORATION COLLAPSED - the same split the captions get, and
         # for the same reason. These are written claim-first, so the leading sentence is the

@@ -743,6 +743,36 @@ ck("an unbound page does not",
 ck("the binding is decided by the host and carried in the payload",
    '"constraint_binds"' in _clisrc and "constraint_binds" in inspect.getsource(_RP.write_all),
    "the reporter must not re-derive it from a live declaration")
+
+print("\nand a page is bound by what IT DRAWS, not only by what the plugin declares")
+# THE GAP THIS CLOSES, measured on a real run. cellchat declares neither `needs_design` nor
+# `needs_representation`, so the host's per-plugin binding was empty for it - while the reporter
+# drew, ON ITS PAGE, `populations` and `significant_edges` across age and diet with an interval
+# and a significance colour. The constraint reached index.html and not the page making the claim.
+_units = [{"unit": u, "metrics": {"populations": float(i + 8)}}
+          for i, u in enumerate(["A1", "A2", "A3", "Y1", "Y2", "Y3"])]
+_design = {"A1": {"age": "aged", "diet": "HFD"}, "A2": {"age": "aged", "diet": "HFD"},
+           "A3": {"age": "aged", "diet": "chow"}, "Y1": {"age": "young", "diet": "chow"},
+           "Y2": {"age": "young", "diet": "chow"}, "Y3": {"age": "young", "diet": "HFD"}}
+_con = ("The embedding may carry clustering. It must NOT carry a composition or abundance "
+        "claim across age, diet.")
+ck("the factors the panel will cross are found",
+   _RP._crossed_factors(_units, _design) == ["age", "diet"],
+   str(_RP._crossed_factors(_units, _design)))
+ck("a plugin that declares NOTHING is still bound by what its page draws",
+   _RP._page_binds(_con, [], _units, _design) == ["age", "diet"],
+   str(_RP._page_binds(_con, [], _units, _design)))
+ck("so that page now renders the constraint",
+   bool(_RP._constraint_block(_con, _RP._page_binds(_con, [], _units, _design))))
+ck("the declared binding is kept, never replaced",
+   "batch" in _RP._page_binds(_con, ["batch"], _units, _design))
+ck("a factor the constraint does not name is not bound by being drawn",
+   "diet" not in _RP._page_binds("It must NOT carry a claim across age.", [], _units, _design))
+ck("an arm with one sample is not a comparison and does not bind",
+   _RP._crossed_factors(_units[:1] + _units[3:], _design) != ["age", "diet"],
+   str(_RP._crossed_factors(_units[:1] + _units[3:], _design)))
+ck("no constraint binds nothing, however much is drawn",
+   _RP._page_binds("", [], _units, _design) == [])
 ck("the constraint defect asks what a plugin TESTS, not what container it reads",
    "needs_obsm" not in inspect.getsource(cli).split("design defects")[1][:4000],
    "a claim is bounded by the factor it crosses")
