@@ -276,7 +276,14 @@ def _run(a):
     # is the function's own precondition, not a side effect of one of its branches.
     out.mkdir(parents=True, exist_ok=True)
     print(f"reading {a.h5ad}")
-    A = ad.read_h5ad(a.h5ad)
+    try:
+        A = ad.read_h5ad(a.h5ad)
+    except Exception as exc:                      # noqa: BLE001 - re-raised unless explained
+        said = compat.explain_read_failure(exc, a.h5ad)
+        if said is None:
+            raise
+        print("scprofile: " + said, file=sys.stderr)
+        return REFUSE
     print(f"  {A.n_obs:,} cells x {A.n_vars:,} genes")
 
     try:
@@ -1203,7 +1210,14 @@ def _plan(a):
         return REFUSE
 
     print(f"reading {a.h5ad}")
-    A = ad.read_h5ad(a.h5ad, backed="r")
+    try:
+        A = ad.read_h5ad(a.h5ad, backed="r")
+    except Exception as exc:                      # noqa: BLE001 - re-raised unless explained
+        said = compat.explain_read_failure(exc, a.h5ad)
+        if said is None:
+            raise
+        print("scprofile: " + said, file=sys.stderr)
+        return REFUSE
     print(f"  {A.n_obs:,} cells x {A.n_vars:,} genes\n")
 
     try:

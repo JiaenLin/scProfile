@@ -121,6 +121,47 @@ def _portable_uns(uns):
     return keep, sorted(dropped)
 
 
+#: THE ENCODINGS ONLY A NEWER READER HAS. anndata 0.11 introduced `encoding-type: "null"` for a
+#: None inside `uns`, and 0.10 has no reader for it - so an object written by any 0.11+ writer
+#: fails to OPEN under 0.10, with a forty-line traceback ending inside a registry lookup and no
+#: statement of what is wrong. A requirement of `>=0.10` admits exactly that pair.
+_NEWER_ENCODINGS = ("null",)
+
+
+def explain_read_failure(exc, h5ad):
+    """The refusal an unreadable-encoding error deserves, or None if this is a different error.
+
+    A traceback ending inside a registry is not a message. What a reader needs is which key could
+    not be decoded, which encoding it is in, which reader is installed, and the one thing that
+    fixes it - so the failure becomes a sentence before it reaches a person.
+    """
+    if type(exc).__name__ != "IORegistryError":
+        return None
+    text = str(exc)
+    enc = next((e for e in _NEWER_ENCODINGS if "encoding_type='%s'" % e in text), None)
+    if enc is None:
+        return None
+    key = ""
+    if "Error raised while reading key" in text:
+        key = text.split("Error raised while reading key", 1)[1].strip().splitlines()[0]
+    try:
+        import anndata as _ad
+        have = _ad.__version__
+    except Exception:
+        have = "unknown"
+    return (
+        "cannot read %s\n"
+        "  it holds an entry encoded as '%s', which anndata gained a reader for in 0.11.\n"
+        "  installed here: anndata %s\n"
+        "  the entry: %s\n"
+        "  This is NOT a corrupt file and nothing in the matrices is affected. It was written by a\n"
+        "  NEWER anndata than the one reading it, and a None inside `uns` is the usual cause - an\n"
+        "  upstream step recorded a metric it could not compute.\n"
+        "  FIX: install anndata >= 0.11 in the environment this run uses."
+        % (h5ad, enc, have, key or "(unnamed)")
+    )
+
+
 def receipt(h5ad):
     """What a compatibility copy was made FROM, as a string a later run can compare.
 

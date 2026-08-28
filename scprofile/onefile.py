@@ -65,7 +65,7 @@ PLUGIN = {
         # contract dependencies rather than yours, and both are ERRORs to omit - a plugin missing
         # either works only for as long as it happens to share an environment with one that
         # names it.
-        "packages": {"__TOOL__": ">=1.0,<2", "anndata": ">=0.10,<0.12",
+        "packages": {"__TOOL__": ">=1.0,<2", "anndata": ">=0.11,<0.12",
                      "matplotlib": ">=3.6,<4"},
     },
 

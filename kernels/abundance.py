@@ -168,7 +168,7 @@ PLUGIN = {
             # `anndata.read_h5ad` before run() is called. This plugin happens to work today
             # because it SHARES an environment with plugins that do name anndata - which is
             # accidental: isolate it for any reason and it stops being able to start.
-            "anndata": ">=0.10,<0.12",
+            "anndata": ">=0.11,<0.12",
             # THE SAME GAP, ONE SLOT OVER, AND IT OPENED THE DAY THIS PLUGIN LEARNED TO DRAW.
             # `ctx.plot()` imports matplotlib; a plugin that emits figures and does not name it
             # is relying on a neighbour in a shared environment to have asked for it. The figure

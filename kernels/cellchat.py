@@ -132,7 +132,12 @@ PLUGIN = {
         ],
     },
 
-    "inject": {"required": ["lognorm", "label", "organism"], "optional": ["sample"]},
+    # `layout` is OPTIONAL and is only ever DRAWN ON. A communication edge is a claim about
+    # two POPULATIONS; drawing the ligand and the receptor on the shared manifold is the only
+    # panel on the page that can narrow one, because a ligand confined to one lobe of a sender
+    # cluster does not support an arrow drawn from the whole cluster. Absent, the page says so.
+    "inject": {"required": ["lognorm", "label", "organism"],
+               "optional": ["sample", "layout"]},
     "provides": ["communication"],
     "produces": ["tables/ccc_edges.csv"],
     "per_unit": "sample",
@@ -197,7 +202,7 @@ PLUGIN = {
 
     "requires": {
         "python": ">=3.10,<3.13",
-        "packages": {"anndata": ">=0.10,<0.12", "pandas": ">=2.0,<3", "scipy": ">=1.10",
+        "packages": {"anndata": ">=0.11,<0.12", "pandas": ">=2.0,<3", "scipy": ">=1.10",
                      "matplotlib": ">=3.7,<4"},
         "language": "r",
         "r": ["NMF==0.28",

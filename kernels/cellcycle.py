@@ -63,7 +63,11 @@ PLUGIN = {
     # NOTHING IS REQUIRED. The panel match is what decides whether this can run, and that is a
     # property of the gene names rather than of a capability the host can resolve - so it is
     # checked in `run` and answered with a refusal that says which names were looked for.
-    "inject": {"required": [], "optional": ["lognorm", "label"]},
+    # `layout` is OPTIONAL and is only ever DRAWN ON, never fitted to. A per-cell phase call
+    # read against the manifold the rest of the report uses is the first panel a reader asks
+    # for, and a bar chart of phase proportions cannot answer where in the tissue a phase sits.
+    # An object with no layout still gets every other panel and the page NAMES the absence.
+    "inject": {"required": [], "optional": ["lognorm", "label", "layout"]},
     # Same omission as velocity's: it writes obs[phase], and `phase` is a declared capability
     # another plugin may ask for. A producer that does not say so is not a producer.
     "provides": ["phase"],
@@ -131,7 +135,7 @@ PLUGIN = {
         "python": ">=3.10,<3.13",
         "packages": {
             "scanpy": ">=1.10,<1.11",
-            "anndata": ">=0.10,<0.12",
+            "anndata": ">=0.11,<0.12",
             "numpy": ">=1.24,<2",
             "pandas": ">=2.0,<3",
             "matplotlib": ">=3.7",
