@@ -41,7 +41,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.3.1",
+    "version": "0.4.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -255,6 +255,16 @@ PLUGIN = {
     #
     # `shows` is the whole of the reporter's knowledge. It knows no id here and never will.
     "report": {
+        # WHICH OF THIS PLUGIN'S PER-UNIT TABLES CARRIES A NETWORK, so the host can compare
+        # ARMS without knowing anything about CellChat. The host pools the units belonging to
+        # each arm and draws every contrast the design supports; declaring these columns is the
+        # whole interface, and a plugin that emits no network omits this and gets no panels.
+        # IT LIVES IN `report` BECAUSE THE REPORTER IS ITS CONSUMER - `report_spec` is what
+        # reaches report.json, and a key outside that block is invisible to the reporter no
+        # matter how correct it looks in the declaration. Put at the top level first, where it
+        # read fine and did nothing.
+        "unit_network": {"table": "tables/ccc_edges.csv", "source": "source",
+                         "target": "target", "weight": "prob", "group": "pathway_name"},
         # WHAT MAKES THE UNITS COMPARABLE. Every figure on this page describes ONE unit; these
         # are the numbers the host puts on a shared axis, so a reader sees whether the units
         # agree before reading any single unit's panel as a finding.

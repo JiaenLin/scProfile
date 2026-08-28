@@ -367,7 +367,13 @@ def draw(per_sample, design, path, *, cells=None, width=None):
                 ax.set_title("every contrast the design supports", fontsize=7.5,
                              weight="bold", pad=4)
             if i == len(measures) - 1:
-                ax.set_xlabel("std. difference (95% CI)", fontsize=6.5)
+                # WHOSE STATISTIC THIS IS, ON THE AXIS. These metrics are plain per-unit
+                # numbers with no test attached by the method that produced them, so the
+                # standardised difference and its interval are computed HERE. A panel that does
+                # not say so sits beside panels carrying a wrapped tool's own tested output and
+                # invites a reader to take both for the same kind of number.
+                ax.set_xlabel("std. difference, 95% CI — computed by the host,\n"
+                              "not by the method that produced these metrics", fontsize=5.8)
             # ONE SCALE DOWN THE COLUMN. Rows that scale themselves cannot be compared, and
             # comparison is the only reason the column exists. Points with no interval are
             # included in the range so a hollow marker cannot sit off the axis.

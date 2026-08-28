@@ -379,6 +379,77 @@ def _page_binds(constraint, declared_binds, units, design):
     return sorted(binds)
 
 
+def _between_arms(units, design, spec, *, out_dir=None, name=""):
+    """Comparison panels BETWEEN arms, for every contrast the design supports.
+
+    THE COHORT PAGE CARRIED ONE FIGURE while the per-sample appendix carried a hundred. On a
+    factorial design that is backwards: the comparison between arms is the question, and it had
+    no picture. This draws it - and draws it from cells POOLED WITHIN EACH ARM, so no panel is
+    gated on any single sample supporting an inference by itself.
+
+    Driven entirely by the plugin's `unit_network` declaration, so nothing here knows what
+    method produced the numbers.
+    """
+    net = (spec or {}).get("unit_network")
+    if not (net and design and out_dir and units):
+        return ""
+    try:
+        import pandas as pd
+        from . import compare_panel as CPan
+    except Exception:
+        return ""
+    tbl = str(net.get("table") or "")
+    per = {}
+    for u in units:
+        d, uid = u.get("dir"), str(u.get("unit") or "")
+        if not (d and uid and tbl):
+            continue
+        f = Path(d) / tbl
+        if not f.exists():
+            continue
+        try:
+            df = pd.read_csv(f)
+        except Exception:
+            continue
+        need = [net.get("source", "source"), net.get("target", "target"),
+                net.get("weight", "prob")]
+        if not set(need) <= set(df.columns):
+            continue
+        df = df.rename(columns={need[0]: "source", need[1]: "target", need[2]: "prob"})
+        per[uid] = df
+    if len(per) < 2:
+        return ""
+    figs = []
+    for sp in CPan.arm_pairs(design):
+        figs += CPan.draw_contrast(per, design, sp,
+                                   Path(out_dir) / "kernels" / name / "figures",
+                                   name, group_col=net.get("group"))
+    if not figs:
+        return ""
+    # GROUPED BY CONTRAST, because a reader asks one question at a time. The heading names the
+    # contrast in the same notation the design panel uses, so the two are read together.
+    by_contrast = {}
+    for fid, path, cap in figs:
+        by_contrast.setdefault(fid.split("__", 1)[1], []).append((fid, path, cap))
+    out = ["<h2>Between the arms</h2>",
+           '<p class="sub">Every contrast this design supports, drawn from cells POOLED WITHIN '
+           'EACH ARM. A panel here needs both arms to have data; it does not need any single '
+           'sample to support an inference on its own, and none is withheld because the '
+           'per-sample axis is thin. Whether an arm-level difference is consistent ACROSS '
+           'samples is the separate question the design panel above answers.</p>']
+    for slug, items in by_contrast.items():
+        out.append(f'<h3><code>{_e(slug.replace("___", " | ").replace("_", " "))}</code></h3>')
+        for fid, path, cap in items:
+            rel = f"kernels/{name}/figures/{Path(path).name}"
+            lead, rest = cap if isinstance(cap, tuple) else (cap, "")
+            out.append(f'<figure><img src="../{rel}" alt="{_e(fid)}">'
+                       f'<figcaption>{_e(lead)}'
+                       + (f"<details><summary class='sub'>how to read it</summary>"
+                          f"{_e(rest)}</details>" if rest else "")
+                       + '</figcaption></figure>')
+    return "".join(out)
+
+
 def _units_by_arm(units, design, declared, *, out_dir=None, name=""):
     """THE PER-UNIT NUMBERS, GROUPED BY ARM. The comparison the study exists to make.
 
@@ -1045,6 +1116,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
         body.append(_across_units(units, (spec or {}).get("unit_metrics")))
         body.append(_units_by_arm(units, (payload_all or {}).get("design") or {},
                                   (spec or {}).get("unit_metrics"),
+                                  out_dir=out_dir, name=name))
+        body.append(_between_arms(units, (payload_all or {}).get("design") or {}, spec,
                                   out_dir=out_dir, name=name))
     body.append(_by_arm_block(by_arm, aware=bool(aware), out_dir=out_dir,
                               name=name, design=(payload_all or {}).get("design")))

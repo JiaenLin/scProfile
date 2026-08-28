@@ -32,6 +32,69 @@ Every rule below ends in a question with a yes/no answer. Three standing rules a
 - **Record what you measured, not how many attempts it took.** A round count is bookkeeping
   nobody can falsify.
 
+## Rule minus-one — A FIGURE A RUN DOES NOT REGENERATE IS NOT DELIVERED
+
+**This precedes every step below, and it is the rule this skill was missing.**
+
+The deliverable of figure work is a **draw function inside the plugin or the host, reached by
+`run`**. It is not a PNG. It is not a plate in a published document. It is not a script in a
+scratchpad that made a beautiful picture once.
+
+**THE ACCEPTANCE TEST IS ONE SENTENCE: delete the image, re-run the tool, and see whether it
+comes back.** If it does not, nothing was delivered, however good the picture was.
+
+### What this cost, measured
+
+- **63 plates across three published documents** hold the best figure thinking in this project —
+  the shared edge scale, absence split into its two causes, the cut that names what it dropped.
+  **Zero of them are produced by any run.** They were drawn by hand, published, and admired.
+- The plugin they were designed for shipped **five figures**, while **293 lines** of helper code
+  computing the quantities for five more sat in the file **called from nowhere**, under a commit
+  whose own message ended "No figure drawn yet".
+- Its cohort page carried **one** figure while its appendix carried a hundred, for months.
+
+Every one of those is the same failure: design that never crossed into the tool. A skill that
+teaches design and not delivery produces exactly this, which is why the rule is first now.
+
+### The working shape
+
+1. **Draft anywhere.** Scratchpads are for deciding WHAT to draw. Iterate there, on real data
+   pulled from a finished run, and look at every render.
+2. **Land it in the tool the moment it is right.** A draw function, declared in `figures`, with
+   `when_absent`. Not later, not "once the design settles" — the settling happens in the tool.
+3. **Prove it by re-running.** The figure must appear in a run directory with a run key, from a
+   command anyone can repeat. Until then it is a draft.
+4. **Bump the plugin version.** The rendered output changed, so a completed unit drawn by the
+   old code is stale. `resume` compares that version; not bumping it ships stale panels.
+
+A figure that exists only in a document is a **draft that was published**. Say so when you show
+it, and do not let it be quoted as a result — a plate has no run key, so nothing in it can be
+traced to a file on disk.
+
+## Rule minus-two — USE THE WRAPPED TOOL'S OWN STATISTICS. NEVER INVENT ONE.
+
+A plugin wraps a method that has already decided how its results are tested. **That decision is
+the plugin's to carry, not to improve on.**
+
+- If the tool ships a comparison test, **that is the statistic**. Use its function, report its
+  number, and name it. For a method with a permutation test, the p-values are the ones it
+  returned; for one with a rank test between conditions, run its own ranking function in
+  comparison mode and take its output.
+- **Do not compute a second statistic beside it.** An effect size, a confidence interval or a
+  p-value you derived yourself is a different quantity from the one the method reports, on the
+  same picture, and a reader cannot tell which they are looking at. Two statistics on one panel
+  is worse than none.
+- **A descriptive panel is legitimate and must SAY it is descriptive.** A difference of two
+  point estimates with no interval is honest; the caption states that nothing was tested, and
+  no interval is drawn. What is forbidden is inventing the test, not declining to run one.
+- **Never re-derive a threshold the tool applied.** Its floor, its `min.cells`, its multiple-
+  testing rule are part of the result. Recomputing them produces a number that agrees with
+  nothing, including itself between versions.
+
+*This was written because a p-value floor with no counterpart in the wrapped method reached a
+figure, and because an effect size and interval computed here sat on a panel beside quantities
+the method had already tested by its own procedure.*
+
 ## Step zero — RESOLVE WHAT CAN DRAW IT, BEFORE YOU DESIGN ANYTHING
 
 > **Design begins with what is REACHABLE, not with what you can already import. Those are
