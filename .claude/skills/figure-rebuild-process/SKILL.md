@@ -378,6 +378,29 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   **CHECK:** is there one module that resolves the design, and does every figure import it? Ask it
   how many contrasts exist and count how many the set draws - are the missing ones deliberate?
 
+- **P29 (an argument that carries a scientific claim is an INPUT, not a shell invocation)** The
+  most reproducible-looking failure in a rebuild is a producer that runs cleanly, exits 0, and
+  writes a figure missing something that was never in any file. It happens whenever load-bearing
+  text reaches a figure through a command-line argument: the delivered artifact carries it, the
+  code and data do not, and the only surviving copy is inside the very thing you are trying to
+  rebuild. Freshness checks pass. The producer-runs check from P25 passes. Nothing warns.
+  Put such text in a file beside the producer, have the producer FIND it without being asked, and
+  accept `@FILE` so an explicit path is also possible. Then make its ABSENCE loud on the page - the
+  same treatment as an undeclared provenance - because a caveat block that silently does not render
+  leaves a panel that looks finished and reads as a finding.
+  **ONE INSTANCE, and it was the coordinator's.** A pooled two-arm difference panel carried four
+  load-bearing statements passed as `--standing "..."` at a prompt: a no-effect headline, an
+  attainable p-floor, a structural-zero warning, and a one-unit-dominance figure. Rebuilding from
+  code and data alone exited 0 in under four seconds, warned nothing, and produced a panel 97 px
+  shorter with all four gone; five of the six figures in that run were bit-identical to the
+  delivered set, so the rebuild looked like a success. The text was recoverable only by extracting
+  it from the delivered PDF. After moving it to `standing_<factor>.txt` the rebuild reproduces all
+  six files byte for byte, and a factor with no such file now prints "NO ESTABLISHED RESULT
+  SUPPLIED" on the panel instead of quietly omitting the block.
+  **CHECK:** rebuild each figure from code and data ONLY, with no arguments you would have to
+  remember, and diff against what was delivered. Does anything differ? Is any sentence on a
+  delivered panel absent from every file that is an input?
+
 ## What to expect at the end
 
 In this rebuild, of 23 plates: **19 were about the method, not the biology.** Four presented a
