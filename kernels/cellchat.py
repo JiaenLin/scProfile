@@ -290,6 +290,36 @@ PLUGIN = {
             {"id": "F4_network", "shows": "result", "required": True,
              "question": "which populations are inferred to signal to which?",
              "source": "figures/F4_network.csv"},
+            {"id": "F6_signaling_roles", "shows": "result", "required": False,
+             "question": "which populations are net senders and which are net receivers?",
+             "source": "figures/F6_signaling_roles.csv",
+             "when_absent": "no population carried any outgoing or incoming probability, so "
+                            "there is no plane to place them on. That is the same negative "
+                            "result F4_network reports, not a drawing failure."},
+            {"id": "F7_pathway_roles", "shows": "result", "required": False,
+             "question": "for each pathway, which populations send it and which receive it?",
+             "source": "figures/F7_pathway_roles.csv",
+             "when_absent": "fewer than two pathways carried a non-zero network, so a "
+                            "pathway-by-population panel would be a single row. The edge list "
+                            "still carries whatever was returned."},
+            {"id": "F8_pathway_rank", "shows": "result", "required": False,
+             "question": "which pathways carry the most inferred signal in this unit?",
+             "source": "figures/F8_pathway_rank.csv",
+             "when_absent": "the returned table carries no `pathway_name` column, or every "
+                            "pathway summed to zero probability, so there is nothing to rank."},
+            {"id": "F9_patterns", "shows": "result", "required": False,
+             "question": "do groups of populations use groups of pathways together?",
+             "source": "figures/F9_patterns.csv",
+             "when_absent": "the population-by-pathway matrix was smaller than 3x3 after "
+                            "dropping silent populations, which is below the size a rank-2 "
+                            "factorisation can be checked at. Nothing was fitted rather than "
+                            "fitting something unverifiable."},
+            {"id": "F10_pathway_similarity", "shows": "result", "required": False,
+             "question": "which pathways act between the same populations as each other?",
+             "source": "figures/F10_pathway_similarity.csv",
+             "when_absent": "fewer than four pathways, or fewer than three surviving the "
+                            "shared-nearest-neighbour mask - too few points for a placement to "
+                            "mean anything."},
             {"id": "F5_dotplot", "shows": "result", "required": False,
              "question": "which ligand-receptor pairs carry the inferred signal, and between "
                          "which populations?",
@@ -1563,6 +1593,415 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
 
 # ---------------------------------------------------------------------------------------- run
 
+# ---------------------------------------------------------------------------------------------
+# THE PANELS THE CENTRALITY / PATTERN / SIMILARITY HELPERS WERE WRITTEN FOR.
+#
+# Those helpers were added, verified against CellChat's own definitions, and then called by
+# NOTHING - `_pops_and_matrices`, `_pathway_array`, `_centrality`, `_patterns` and `_similarity`
+# each appeared exactly once in this file, at their own `def`. The commit that added them says
+# "No figure drawn yet" and no commit since drew one. So the plugin computed five figures'
+# worth of quantities in principle and shipped five figures that use none of them.
+#
+# DEAD CODE IS NOT A HALF-FINISHED FEATURE, it is a claim in the repository that something is
+# supported. Everything below is the other half, and it adds no dependency: every quantity comes
+# from the edge list this plugin already writes.
+# ---------------------------------------------------------------------------------------------
+
+
+def _edges_to_arrays(edges, names):
+    """(pops, count, weight, pathways, K x K x P) or None - the shared front half of F6-F10.
+
+    Computed ONCE and handed to each panel. Five panels each rebuilding the pathway array is
+    five chances for them to disagree about which pathways exist and in what order, and the
+    order is not cosmetic: `_pathway_array` ranks by descending total probability and every
+    "top N" below indexes into that ranking.
+    """
+    import pandas as pd
+
+    if edges is None or not len(edges):
+        return None
+    need = {"source", "target", "prob"}
+    if not need <= set(edges.columns):
+        return None
+    df = edges.copy()
+    df["source"] = df["source"].astype(str)
+    df["target"] = df["target"].astype(str)
+    df["prob"] = pd.to_numeric(df["prob"], errors="coerce").fillna(0.0)
+    pops, count, weight = _pops_and_matrices(df, names)
+    if "pathway_name" not in df.columns:
+        return pops, count, weight, [], None
+    paths, arr = _pathway_array(df, pops)
+    return pops, count, weight, paths, arr
+
+
+def _fig_signaling_roles(ctx, pre, names):
+    """F6 - `netAnalysis_signalingRole_scatter`: who sends, who receives, on one plane."""
+    import numpy as np
+    import pandas as pd
+    F, plt = ctx.figure, ctx.plot()
+
+    if pre is None:
+        return False
+    pops, count, weight, _paths, _arr = pre
+    out_s, in_s = weight.sum(axis=1), weight.sum(axis=0)
+    if float(out_s.sum() + in_s.sum()) <= 0:
+        return False
+    n_edge = count.sum(axis=1) + count.sum(axis=0)
+
+    short = F.short_labels(pops)
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.85), layout="constrained")
+    # AREA PROPORTIONAL TO COUNT, NOT RADIUS. A radius-encoded marker overstates a large value
+    # by squaring it, and this is the one panel where marker size carries a number.
+    smax = float(n_edge.max()) or 1.0
+    size = 18.0 + 150.0 * (n_edge / smax)
+    # `palette` returns a DICT keyed by label, not a list. Indexing it back in `pops` order is
+    # what keeps a point's colour tied to its own population rather than to its position.
+    _cmap = F.palette(list(pops))
+    ax.scatter(out_s, in_s, s=size, c=[_cmap[p] for p in pops], alpha=0.85,
+               edgecolor=F.INK, linewidth=0.4, zorder=3)
+    # THE DIAGONAL IS THE CLAIM. A population above it receives more than it sends; below,
+    # the reverse. Without it a reader compares two axes by eye and gets it wrong.
+    #
+    # THE RANGE IS TAKEN FROM THE DATA, NOT FROM ZERO. The diagonal only needs the two axes to
+    # share a scale; it does not need the origin. Anchoring at zero put every population into
+    # the top-right eighth of the first version of this panel - drawn, checked, and wrong - and
+    # the differences the panel exists to show were smaller than the marker. A shared padded
+    # range keeps the 45 degrees meaningful and spends the panel on the data. Zero is included
+    # only when the data already comes near it, so a genuinely near-zero population is not
+    # magnified into looking distant from the rest.
+    lo_d = float(min(out_s.min(), in_s.min()))
+    hi_d = float(max(out_s.max(), in_s.max()))
+    span = (hi_d - lo_d) or (hi_d or 1.0)
+    lo = 0.0 if lo_d <= 0.25 * span else lo_d - 0.12 * span
+    hi = hi_d + 0.12 * span
+    ax.plot([lo, hi], [lo, hi], color=F.GREY, lw=0.8, ls="--", zorder=1)
+    ax.text(0.985, 0.985, "sends = receives", transform=ax.transAxes, fontsize=5.5,
+            color="#8A8A8A", ha="right", va="top")
+    # LABELS PUSHED OUTWARD FROM THE CENTRE. Every label offset by the same (2.5, 2.5) collided
+    # wherever points cluster, which on this panel is exactly where the populations of interest
+    # are. Offsetting along each point's own direction from the centroid separates a cluster
+    # radially, which is the one direction that is always free.
+    cx, cy = float(np.mean(out_s)), float(np.mean(in_s))
+    for x, y, lab in zip(out_s, in_s, short):
+        dx, dy = float(x) - cx, float(y) - cy
+        norm = (dx * dx + dy * dy) ** 0.5 or 1.0
+        ox, oy = 7.0 * dx / norm, 7.0 * dy / norm
+        ax.annotate(lab, (x, y), fontsize=5.5,
+                    xytext=(ox + (2.0 if ox >= 0 else -2.0), oy),
+                    textcoords="offset points", color=F.INK,
+                    ha="left" if ox >= 0 else "right",
+                    va="bottom" if oy >= 0 else "top")
+    ax.set_xlim(lo, hi)
+    ax.set_ylim(lo, hi)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel("outgoing strength  (summed probability sent)")
+    ax.set_ylabel("incoming strength  (summed probability received)")
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
+
+    src = pd.DataFrame({"population": list(pops),
+                        "outgoing_strength": out_s, "incoming_strength": in_s,
+                        "significant_edges_sent": count.sum(axis=1).astype(int),
+                        "significant_edges_received": count.sum(axis=0).astype(int)}
+                       ).set_index("population")
+    ctx.emit_figure(
+        "F6_signaling_roles", fig,
+        caption=("Each population placed by how much inferred signal it SENDS (x) against how "
+                 "much it RECEIVES (y), both as summed communication probability over every "
+                 "pathway; marker area is its total number of significant interactions. The "
+                 "dashed line is equality, so distance from it is the asymmetry of a "
+                 "population's role rather than its activity. Both axes are CellChat's own "
+                 "probability scale and are comparable only within this unit. Self-signalling "
+                 "sits on the diagonal of the underlying matrix and is counted in BOTH sums, as "
+                 "CellChat counts it. This is a description of the inferred network, not a "
+                 "test: no interval is drawn because nothing here has been tested."),
+        source=src)
+    return True
+
+
+def _fig_pathway_rank(ctx, pre, top_n=20):
+    """F8 - `rankNet`: total information flow per pathway, ranked, within one unit."""
+    import numpy as np
+    import pandas as pd
+    F, plt = ctx.figure, ctx.plot()
+
+    if pre is None:
+        return False
+    _pops, _c, _w, paths, arr = pre
+    if arr is None or not len(paths):
+        return False
+    flow = arr.sum(axis=(0, 1))
+    if float(flow.sum()) <= 0:
+        return False
+    keep = min(int(top_n), len(paths))
+    lab = list(paths[:keep])[::-1]
+    val = list(flow[:keep])[::-1]
+
+    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.6, 0.135 * keep + 0.55)),
+                           layout="constrained")
+    ax.barh(range(len(lab)), val, color=F.OKABE_ITO[0], height=0.72)
+    ax.set_yticks(range(len(lab)))
+    ax.set_yticklabels(lab, fontsize=6)
+    ax.set_xlabel("information flow  (summed communication probability)")
+    ax.margins(y=0.01)
+    for sp in ("top", "right", "left"):
+        ax.spines[sp].set_visible(False)
+    ax.tick_params(axis="y", length=0)
+
+    src = pd.DataFrame({"pathway": list(paths), "information_flow": flow,
+                        "rank": np.arange(1, len(paths) + 1)}).set_index("pathway")
+    ctx.emit_figure(
+        "F8_pathway_rank", fig,
+        caption=(f"Signalling pathways ranked by total information flow - the communication "
+                 f"probability summed over every ordered population pair - within this unit. "
+                 f"{'All ' + str(len(paths)) if keep == len(paths) else 'The top ' + str(keep) + ' of ' + str(len(paths))} "
+                 f"pathways are drawn; every pathway and its rank is in the source table. "
+                 f"THIS IS A RANKING WITHIN ONE UNIT AND NOT A COMPARISON BETWEEN UNITS: the "
+                 f"probability scale depends on the populations present and on depth, so a "
+                 f"pathway's bar here cannot be read against the same pathway's bar elsewhere. "
+                 f"Rank can be compared; height cannot."),
+        source=src)
+    return True
+
+
+def _fig_pathway_roles(ctx, pre, top_n=18):
+    """F7 - `netAnalysis_signalingRole_heatmap`: pathway x population, sending and receiving."""
+    import numpy as np
+    import pandas as pd
+    F, plt = ctx.figure, ctx.plot()
+
+    if pre is None:
+        return False
+    pops, _c, _w, paths, arr = pre
+    if arr is None or len(paths) < 2:
+        return False
+    cen = _centrality(arr, paths)
+    if not cen:
+        return False
+    shown = [p for p in paths if p in cen][:int(top_n)]
+    if len(shown) < 2:
+        return False
+    short = F.short_labels(pops)
+
+    panels = (("outdeg", "Sender  (outgoing)"), ("indeg", "Receiver  (incoming)"))
+    fig, axes = plt.subplots(1, 2, figsize=(F.DOUBLE, max(1.9, 0.17 * len(shown) + 1.0)),
+                             layout="constrained", sharey=True)
+    rows = []
+    for ax, (key, title) in zip(np.atleast_1d(axes), panels):
+        M = np.array([cen[p][key] for p in shown], dtype=float)
+        # ROW-NORMALISED, AND SAID SO ON THE AXIS. CellChat scales each pathway to its own max
+        # so that a weak pathway's pattern is visible beside a strong one. It means colour is
+        # NOT comparable between rows, which is exactly the misreading the label prevents.
+        rmax = M.max(axis=1, keepdims=True)
+        Mn = np.divide(M, rmax, out=np.zeros_like(M), where=rmax > 0)
+        im = ax.imshow(Mn, aspect="auto", cmap="magma_r", vmin=0, vmax=1)
+        ax.set_xticks(range(len(pops)))
+        ax.set_xticklabels(short, rotation=45, ha="right", fontsize=5.5)
+        ax.set_yticks(range(len(shown)))
+        ax.set_yticklabels(shown, fontsize=5.5)
+        ax.set_title(title, fontsize=7)
+        ax.tick_params(length=0)
+        for sp in ax.spines.values():
+            sp.set_visible(False)
+        for i, p in enumerate(shown):
+            for j, pop in enumerate(pops):
+                rows.append({"pathway": p, "population": pop, "measure": key,
+                             "centrality": float(M[i, j]),
+                             "row_normalised": float(Mn[i, j])})
+    cb = fig.colorbar(im, ax=list(np.atleast_1d(axes)), fraction=0.03, pad=0.015)
+    cb.outline.set_visible(False)
+    cb.set_label("centrality, scaled to each pathway's own maximum", fontsize=6)
+
+    ctx.emit_figure(
+        "F7_pathway_roles", fig,
+        caption=(f"Which populations send and which receive, PER PATHWAY. Left is weighted "
+                 f"out-degree and right weighted in-degree, the two measures CellChat labels "
+                 f"Sender and Receiver. EACH ROW IS SCALED TO ITS OWN MAXIMUM, so colour shows "
+                 f"where a pathway acts and never how strong it is - a faint row and a bright "
+                 f"row can carry the same total, and the ranking in F8_pathway_rank is where "
+                 f"magnitude is read. The {len(shown)} highest-flow of {len(paths)} pathways "
+                 f"are drawn; unscaled values for every pathway and population are in the "
+                 f"source table."),
+        source=pd.DataFrame(rows).set_index(["pathway", "population", "measure"]))
+    return True
+
+
+def _fig_patterns(ctx, pre, direction="outgoing"):
+    """F9 - `identifyCommunicationPatterns`: the latent patterns, with the rank shown."""
+    import numpy as np
+    import pandas as pd
+    F, plt = ctx.figure, ctx.plot()
+
+    if pre is None:
+        return False
+    pops, _c, _w, paths, arr = pre
+    if arr is None or len(paths) < 3:
+        return False
+    (w, rows), (h, cols), k, curve = _patterns(arr, paths, pops, direction=direction)
+    if w is None:
+        return False
+
+    fig = plt.figure(figsize=(F.DOUBLE, 2.6), layout="constrained")
+    gs = fig.add_gridspec(1, 3, width_ratios=[1.0, 2.2, 0.9])
+    ax0, ax1, ax2 = (fig.add_subplot(gs[0, i]) for i in range(3))
+
+    ax0.imshow(w, aspect="auto", cmap="magma_r", vmin=0)
+    ax0.set_xticks(range(k))
+    ax0.set_xticklabels([f"P{i + 1}" for i in range(k)], fontsize=6)
+    ax0.set_yticks(range(len(rows)))
+    ax0.set_yticklabels(F.short_labels(rows), fontsize=5.5)
+    ax0.set_title("populations x pattern", fontsize=7)
+
+    ncol = h.shape[1]
+    im = ax1.imshow(h, aspect="auto", cmap="magma_r", vmin=0)
+    ax1.set_yticks(range(k))
+    ax1.set_yticklabels([f"P{i + 1}" for i in range(k)], fontsize=6)
+    step = max(1, ncol // 40)
+    ax1.set_xticks(range(0, ncol, step))
+    ax1.set_xticklabels([cols[i] for i in range(0, ncol, step)], rotation=90, fontsize=4.5)
+    ax1.set_title("pattern x pathway", fontsize=7)
+
+    # THE RANK, SHOWN. `k` is chosen by cophenetic correlation over restarts, and a decomposition
+    # whose rank was picked silently is a decomposition nobody can check. The chosen k is marked
+    # on the curve it was chosen from.
+    if curve:
+        ks = sorted(curve)
+        ax2.plot(ks, [curve[i] for i in ks], marker="o", ms=3, lw=1,
+                 color=F.OKABE_ITO[0])
+        ax2.axvline(k, color=F.OKABE_ITO[3], lw=1, ls="--")
+        ax2.set_xlabel("k")
+        ax2.set_ylabel("cophenetic correlation", fontsize=6)
+        ax2.set_title(f"rank chosen: k = {k}", fontsize=7)
+    else:
+        ax2.set_axis_off()
+        ax2.text(0.5, 0.5, f"k = {k}\n(no curve)", ha="center", va="center", fontsize=6)
+    for ax in (ax0, ax1):
+        ax.tick_params(length=0)
+        for sp in ax.spines.values():
+            sp.set_visible(False)
+    for sp in ("top", "right"):
+        ax2.spines[sp].set_visible(False)
+    cb = fig.colorbar(im, ax=[ax1], fraction=0.02, pad=0.01)
+    cb.outline.set_visible(False)
+    cb.set_label("loading", fontsize=6)
+
+    src = pd.concat([
+        pd.DataFrame(w, index=pd.Index(rows, name="row"),
+                     columns=[f"P{i + 1}" for i in range(k)]).stack()
+          .rename("loading").reset_index().assign(side="population"),
+        pd.DataFrame(h.T, index=pd.Index(cols, name="row"),
+                     columns=[f"P{i + 1}" for i in range(k)]).stack()
+          .rename("loading").reset_index().assign(side="pathway"),
+    ]).rename(columns={"level_1": "pattern"}).set_index(["side", "row", "pattern"])
+    ctx.emit_figure(
+        "F9_patterns", fig,
+        caption=(f"Latent {direction} communication patterns: a non-negative factorisation of "
+                 f"the population-by-pathway matrix into {k} patterns, each a set of populations "
+                 f"(left) that use a set of pathways (right) together. The input is scaled to "
+                 f"each pathway's own maximum before factorising, as CellChat does, so a pattern "
+                 f"groups pathways by WHERE they act and not by how strong they are. The rank "
+                 f"was not chosen by hand: the right panel is the cophenetic correlation of the "
+                 f"consensus over restarts and the dashed line is the k taken from it. A pattern "
+                 f"is a summary of this unit's own matrix - it is not a cell state, and the "
+                 f"numbering carries no order."),
+        source=src)
+    return True
+
+
+def _fig_similarity(ctx, pre):
+    """F10 - `computeNetSimilarity` + an embedding: which pathways use the same cell pairs."""
+    import numpy as np
+    import pandas as pd
+    F, plt = ctx.figure, ctx.plot()
+
+    if pre is None:
+        return False
+    _pops, _c, _w, paths, arr = pre
+    if arr is None or len(paths) < 4:
+        return False
+    sim, kept, dropped = _similarity(arr, paths)
+    if sim is None or len(kept) < 3:
+        return False
+
+    # CLASSICAL MDS, AND NAMED AS SUCH ON THE PAGE. CellChat embeds with UMAP; umap-learn is not
+    # in this plugin's declared packages and adding a dependency to place a few dozen points
+    # would be the wrong trade. Classical scaling is deterministic, needs nothing beyond numpy,
+    # and - unlike UMAP - its axes carry a meaning that can be stated. What must NOT happen is
+    # calling it UMAP, so the caption says which it is and the axis labels say MDS.
+    d = 1.0 - np.asarray(sim, dtype=float)
+    np.fill_diagonal(d, 0.0)
+    n = d.shape[0]
+    j = np.eye(n) - np.ones((n, n)) / n
+    b = -0.5 * j @ (d ** 2) @ j
+    vals, vecs = np.linalg.eigh(b)
+    order = np.argsort(vals)[::-1][:2]
+    xy = vecs[:, order] * np.sqrt(np.clip(vals[order], 0, None))
+    flow = arr.sum(axis=(0, 1))
+    fmap = {p: float(f) for p, f in zip(paths, flow)}
+    size = np.array([fmap.get(p, 0.0) for p in kept], dtype=float)
+    size = 16.0 + 130.0 * (size / (size.max() or 1.0))
+
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.9), layout="constrained")
+    ax.scatter(xy[:, 0], xy[:, 1], s=size, color=F.OKABE_ITO[2], alpha=0.8,
+               edgecolor=F.INK, linewidth=0.35, zorder=3)
+    # LABELS PUSHED OUTWARD FROM THE CENTRE, for the reason F6 does it: this panel's whole
+    # message is that pathways CLUSTER, so the labels collide exactly where the reader is
+    # looking. Radial offset is the one direction that stays free inside a cluster.
+    # ONLY THE HIGHEST-FLOW PATHWAYS ARE LABELLED, and the caption says how many. Radial offset
+    # alone was tried and looked at: it separates a round cluster and does nothing for the
+    # near-collinear chains this similarity produces, so twenty-four labels overprinted each
+    # other and ran off the axes. A panel that labels everything illegibly names nothing. Every
+    # pathway keeps its coordinates in the source table, so nothing is lost but the clutter.
+    _n_lab = 12
+    _rank = {p: i for i, p in enumerate(paths)}
+    _label = {k for k in sorted(kept, key=lambda q: _rank.get(q, 10 ** 6))[:_n_lab]}
+    cx, cy = float(xy[:, 0].mean()), float(xy[:, 1].mean())
+    for (x, y), lab in zip(xy, kept):
+        if lab not in _label:
+            continue
+        dx, dy = float(x) - cx, float(y) - cy
+        norm = (dx * dx + dy * dy) ** 0.5 or 1.0
+        ox, oy = 7.5 * dx / norm, 7.5 * dy / norm
+        ax.annotate(lab, (x, y), fontsize=5.0,
+                    xytext=(ox + (1.5 if ox >= 0 else -1.5), oy),
+                    textcoords="offset points", color=F.INK,
+                    ha="left" if ox >= 0 else "right",
+                    va="bottom" if oy >= 0 else "top")
+    # EQUAL ASPECT, BECAUSE THE DISTANCES ARE THE POINT. An MDS panel drawn on unequal axes
+    # shows distances that are not the distances it computed, which is the one thing this
+    # plot must not do.
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.margins(0.18)
+    ax.set_xlabel("MDS 1")
+    ax.set_ylabel("MDS 2")
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
+
+    src = pd.DataFrame({"pathway": list(kept), "mds1": xy[:, 0], "mds2": xy[:, 1],
+                        "information_flow": [fmap.get(p, 0.0) for p in kept]}
+                       ).set_index("pathway")
+    ctx.emit_figure(
+        "F10_pathway_similarity", fig,
+        caption=("Pathways placed by functional similarity - the Jaccard overlap of the ordered "
+                 "population pairs each one uses, so two pathways are close when they act "
+                 "BETWEEN THE SAME POPULATIONS, however strongly. Magnitude is discarded by that "
+                 "definition and is shown only as marker area. The placement is CLASSICAL "
+                 "MULTIDIMENSIONAL SCALING, not the UMAP CellChat uses: it is deterministic and "
+                 "needs no extra dependency, and distances are approximated rather than "
+                 "preserved, so read neighbourhoods and not gaps. The "
+                 f"{min(_n_lab, len(kept))} highest-flow of {len(kept)} placed pathways are "
+                 "LABELLED and the rest are drawn unlabelled - every one keeps its coordinates "
+                 "in the source table."
+                 + (f" {len(dropped)} pathway(s) could not be placed and are NAMED rather than "
+                    f"dropped silently - {', '.join(dropped[:8])}"
+                    + (" ..." if len(dropped) > 8 else "")
+                    + ". Those share no nearest neighbour after the shared-nearest-neighbour "
+                      "mask, which makes them the most distinctive pathways here, not the least "
+                      "important." if dropped else "")),
+        source=src)
+    return True
+
+
 def run(ctx):
     import subprocess
     import numpy as np
@@ -1736,6 +2175,15 @@ def run(ctx):
     drew_perm = _fig_permutation(ctx, df, int(C["nboot"]), float(C["thresh"]))
     _fig_network(ctx, df, names)
     drew_dot = _fig_dotplot(ctx, df, int(C["dotplot_n"]), int(C["nboot"]), float(C["thresh"]))
+    # THE PATHWAY-LEVEL PANELS. `_edges_to_arrays` is computed once and shared: five panels each
+    # rebuilding the pathway array is five chances to disagree about which pathways exist and in
+    # what order, and that order is a ranking every "top N" below indexes into.
+    _pre = _edges_to_arrays(df, names)
+    drew_roles = _fig_signaling_roles(ctx, _pre, names)
+    drew_rank = _fig_pathway_rank(ctx, _pre)
+    drew_proles = _fig_pathway_roles(ctx, _pre)
+    drew_pat = _fig_patterns(ctx, _pre)
+    drew_sim = _fig_similarity(ctx, _pre)
 
     # ---------------------------------------------------------- caveats, from this run's numbers
     # EDGES AND INTERACTIONS ARE TWO NUMBERS AND THE HEADLINE HAD ONE WORD FOR BOTH. A row of this
