@@ -180,23 +180,26 @@ PLUGIN = {
             # Ceiling only, deliberately: 0.4 is measured to break it and no floor has been
             # measured, so inventing one would be asserting something nobody checked.
             "mudata": "<0.4",
-            # THE SAME DEFECT ONE LAYER DOWN, AND THE SECOND INSTANCE MAKES IT A PATTERN.
-            # pertpy 1.0.5's `_dialogue` module does
-            #     from statsmodels.sandbox.stats.multicomp import multipletests
-            # at import, and statsmodels 0.15 removed that deprecated re-export - measured on
-            # 0.15.0, whose sandbox exports only `MultiComparison` and `multicontrast_pvalues`,
-            # while the real `statsmodels.stats.multitest.multipletests` is present and fine.
-            # pertpy declares NO statsmodels requirement at all, not even a bare one: it is
-            # reached transitively, so nothing anywhere constrained it.
+            # NOT PINNED, AND THE ATTEMPT IS RECORDED BECAUSE IT MADE THINGS WORSE.
+            # pertpy 1.0.5 imports `multipletests` from `statsmodels.sandbox.stats.multicomp`,
+            # which statsmodels 0.15 removed, so `import pertpy` fails. The obvious fix -
+            # `"statsmodels": "<0.15"`, by the same rule as the mudata ceiling above - was
+            # tried on a real build and is WRONG HERE: the ceiling sent pip backtracking
+            # through cellrank, pydeseq2, scipy and arviz-base and then into a SOURCE BUILD of
+            # statsmodels, which died on `ModuleNotFoundError: No module named 'pkg_resources'`.
+            # The pip stage aborted, so pandas and CellChat were never installed either and ALL
+            # SEVEN members of the shared environment failed their selftest.
             #
-            # THIS TOOL UNDER-DECLARES SYSTEMATICALLY - two of its transitive dependencies have
-            # now broken this plugin's import in one week, each from a release that was correct
-            # for everyone except pertpy. Ceilings for it are this declaration's job, and a
-            # third will not be a surprise.
+            # A CEILING THAT BREAKS THE RESOLVE IS WORSE THAN THE BUG IT FIXES: it converted one
+            # unusable plugin into seven. The same shape of fix is not automatically the right
+            # fix twice - mudata's ceiling was cheap because nothing else in the lock constrained
+            # mudata, and statsmodels sits under half the scientific stack.
             #
-            # Ceiling only, on the same rule as mudata above: 0.15 is measured to break it, no
-            # floor has been measured, and inventing one asserts something nobody checked.
-            "statsmodels": "<0.15",
+            # So `abundance` remains blocked on this upstream incompatibility, deliberately and
+            # visibly: its selftest fails, the environment reports 6 of 7 proved, and the other
+            # six run. That is the correct trade until either pertpy stops importing a removed
+            # shim or a statsmodels pin is found that resolves - which needs measuring against a
+            # real solve, not choosing here.
             # THE CONTRACT'S, NOT THIS METHOD'S. `_entry.py` reads the object with
             # `anndata.read_h5ad` before run() is called. This plugin happens to work today
             # because it SHARES an environment with plugins that do name anndata - which is
