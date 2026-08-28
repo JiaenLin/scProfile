@@ -361,6 +361,11 @@ def _run(a):
     have_layers = set(manifest.layer_names(A))
     allowed = set(_split(a.allow or ""))
     ran, payloads, skipped = [], [], []
+    # REUSE IS RECORDED, NOT SILENT. A run that reused nine of ten instances and one that
+    # computed all ten produce the same directory; only this list distinguishes them, and the
+    # report prints it.
+    reused = []
+    from . import resume as _resume
     #: {kernel: out_dir} for kernels that have already finished, handed to each later kernel so it
     #: can read a predecessor's result directly. This is what makes `needs_kernels` mean something
     #: beyond ordering.
@@ -544,6 +549,22 @@ def _run(a):
         for inst in wave:
             name = inst["plugin"]
             k = ks[name]
+            # ALREADY DONE, AND STILL VALID. Checked per wave, with the version the plugin
+            # would run now, so a unit produced by older code is NOT reused - a resume that
+            # cannot see a version change is a resume that keeps exactly the units a code
+            # change invalidated. `--force-all` additionally discards `empty`, which is a
+            # RESULT and is kept by default.
+            if getattr(a, "resume", False):
+                st, why, _n = _resume.state(
+                    _resume.unit_dir(out, name, inst.get("unit")),
+                    want_version=(k.spec or {}).get("version"))
+                reuse = st in ((_resume.DONE,) if getattr(a, "force_all", False)
+                               else _resume.FINISHED)
+                if reuse:
+                    lbl = name + (f"[{inst['unit']}]" if inst.get("unit") else "")
+                    print(f"  REUSED  {lbl}  ({st}: {why})")
+                    reused.append({"kernel": name, "unit": inst.get("unit"), "state": st})
+                    continue
             if k.status != "built":
                 if name not in {s["kernel"] for s in skipped}:
                     skipped.append({"kernel": name, "why": [
@@ -2015,6 +2036,58 @@ def _write_readme(out, payload):
     return out / "README.md"
 
 
+def _status(a):
+    """What is already on disk, and what a `--resume` would still run.
+
+    POINTED AT A DIRECTORY ALONE, never needing the plan that made it. The case where this
+    matters most is the one where the plan cannot be rebuilt - the object moved, the tool
+    changed underneath, a job was killed halfway - and the question is precisely what survived.
+    """
+    from . import resume
+
+    out = Path(a.out)
+    if not out.is_dir():
+        print(f"scprofile: no such run directory: {out}", file=sys.stderr)
+        return REFUSE
+    # THE VERSIONS THAT WOULD RUN NOW, so a unit produced by older code is reported STALE
+    # rather than counted as finished. A status that cannot see a version change is a status
+    # that recommends keeping exactly the units a code change invalidated.
+    try:
+        from .kernels import discover as _disc
+        versions = {n: (k.spec or {}).get("version") for n, k in _disc().items()}
+    except Exception:
+        versions = {}
+    rows = resume.survey(out, resume.discover(out), versions=versions)
+    if a.json:
+        print(json.dumps([{"plugin": p, "unit": u, "state": st, "why": w, "artifacts": n}
+                          for p, u, st, w, n in rows], indent=1))
+        return 0
+    if not rows:
+        print(f"{out}\n  nothing has been staged here - no kernels/ directory, or it is empty.")
+        return 0
+    counts = resume.summarise(rows)
+    print(f"{out}")
+    print(f"  {len(rows)} instance(s): "
+          + ", ".join(f"{n} {k}" for k, n in sorted(counts.items())))
+    print()
+    for p, u, st, why, n in rows:
+        lbl = f"{p}[{u}]" if u else p
+        mark = "  " if st in resume.FINISHED else "->"
+        print(f"  {mark} {st:7s} {lbl:<28s} {why}")
+    todo = resume.outstanding(rows)
+    print()
+    if todo:
+        print(f"  {len(todo)} instance(s) would be re-run by `run --resume`: "
+              + ", ".join(f"{p}[{u}]" if u else str(p) for p, u in todo))
+    else:
+        print("  nothing outstanding. `run --resume` would recompute nothing.")
+    # SAID EVERY TIME, because it is the one classification a reader will second-guess.
+    if counts.get(resume.EMPTY):
+        print(f"  {counts[resume.EMPTY]} instance(s) are `empty` and are NOT outstanding: they "
+              f"ran and returned nothing, which is a result. Re-running costs the same and "
+              f"answers the same. Use --force-all if you mean to discard that.")
+    return 0
+
 def _standard(a):
     """Measure the RENDERED report against the exit standard. Non-zero when it is not met.
 
@@ -2118,6 +2191,11 @@ def main(argv=None):
     f.set_defaults(fn=_fetch)
 
     r = sub.add_parser("run", help="[you] run kernels, merge results, write the report")
+    r.add_argument("--resume", action="store_true",
+                   help="reuse instances this --out already holds and run only what is "
+                        "outstanding. `status --out` says in advance what that would be.")
+    r.add_argument("--force-all", action="store_true",
+                   help="with --resume, redo even instances that ran and returned nothing")
     r.add_argument("--h5ad", required=True, type=Path)
     r.add_argument("--out", required=True, type=Path)
     r.add_argument("--kernel", default=None, help="comma separated")
@@ -2259,6 +2337,12 @@ def main(argv=None):
     p = sub.add_parser("report", help="[you] rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)
     p.set_defaults(fn=_report)
+
+    sv = sub.add_parser("status",
+                        help="[you] what does this run directory already hold, and what is left?")
+    sv.add_argument("--out", required=True, type=Path, help="a run directory")
+    sv.add_argument("--json", action="store_true", help="machine-readable, for a job script")
+    sv.set_defaults(fn=_status)
 
     st_ = sub.add_parser("standard",
                          help="[you] does the rendered report meet the exit standard?")

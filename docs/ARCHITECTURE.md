@@ -274,3 +274,10 @@ Each of these was learned by breaking it. The builder inferring produced a plugi
 a layer nothing declared. The planner refusing for a build reason produced a plan telling a
 healthy cohort that seven of nine analyses were impossible. And a wrapper written by hand is how a
 forbidden keyword reached a live run.
+
+## Resuming a run
+
+A run directory is readable after the fact: `scprofile status --out <RUNDIR>` classifies every
+instance it holds and `run --resume` computes only what is outstanding. The states, why `empty`
+counts as finished, and why a plugin version change invalidates a complete unit are in
+[RESUME.md](RESUME.md).

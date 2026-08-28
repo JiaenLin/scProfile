@@ -41,7 +41,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.2.0",
+    "version": "0.3.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -1648,7 +1648,11 @@ def _fig_signaling_roles(ctx, pre, names):
         return False
     n_edge = count.sum(axis=1) + count.sum(axis=0)
 
-    short = F.short_labels(pops)
+    # A MAP KEYED BY LABEL, exactly like `palette` - iterating it yields the ORIGINAL labels,
+    # which is how the first version of this panel printed full hierarchical paths over its own
+    # y-axis. Indexed in `pops` order, never iterated.
+    _sm = F.short_labels(pops)
+    short = [_sm[p] for p in pops]
     fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.85), layout="constrained")
     # AREA PROPORTIONAL TO COUNT, NOT RADIUS. A radius-encoded marker overstates a large value
     # by squaring it, and this is the one panel where marker size carries a number.
@@ -1675,8 +1679,8 @@ def _fig_signaling_roles(ctx, pre, names):
     lo = 0.0 if lo_d <= 0.25 * span else lo_d - 0.12 * span
     hi = hi_d + 0.12 * span
     ax.plot([lo, hi], [lo, hi], color=F.GREY, lw=0.8, ls="--", zorder=1)
-    ax.text(0.985, 0.985, "sends = receives", transform=ax.transAxes, fontsize=5.5,
-            color="#8A8A8A", ha="right", va="top")
+    ax.text(0.02, 0.97, "above the line: receives more than it sends", transform=ax.transAxes,
+            fontsize=5.0, color="#8A8A8A", ha="left", va="top")
     # LABELS PUSHED OUTWARD FROM THE CENTRE. Every label offset by the same (2.5, 2.5) collided
     # wherever points cluster, which on this panel is exactly where the populations of interest
     # are. Offsetting along each point's own direction from the centroid separates a cluster
@@ -1691,7 +1695,10 @@ def _fig_signaling_roles(ctx, pre, names):
                     textcoords="offset points", color=F.INK,
                     ha="left" if ox >= 0 else "right",
                     va="bottom" if oy >= 0 else "top")
-    ax.set_xlim(lo, hi)
+    # ROOM FOR THE LABELS THEMSELVES. Population names here are hierarchical and long, and an
+    # outward-offset label on the rightmost point runs past the axes without this.
+    pad = 0.10 * (hi - lo)
+    ax.set_xlim(lo, hi + pad)
     ax.set_ylim(lo, hi)
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("outgoing strength  (summed probability sent)")
@@ -1781,7 +1788,8 @@ def _fig_pathway_roles(ctx, pre, top_n=18):
     shown = [p for p in paths if p in cen][:int(top_n)]
     if len(shown) < 2:
         return False
-    short = F.short_labels(pops)
+    _sm = F.short_labels(pops)
+    short = [_sm[p] for p in pops]
 
     panels = (("outdeg", "Sender  (outgoing)"), ("indeg", "Receiver  (incoming)"))
     fig, axes = plt.subplots(1, 2, figsize=(F.DOUBLE, max(1.9, 0.17 * len(shown) + 1.0)),
@@ -1849,7 +1857,8 @@ def _fig_patterns(ctx, pre, direction="outgoing"):
     ax0.set_xticks(range(k))
     ax0.set_xticklabels([f"P{i + 1}" for i in range(k)], fontsize=6)
     ax0.set_yticks(range(len(rows)))
-    ax0.set_yticklabels(F.short_labels(rows), fontsize=5.5)
+    _rm = F.short_labels(rows)
+    ax0.set_yticklabels([_rm[r] for r in rows], fontsize=5.5)
     ax0.set_title("populations x pattern", fontsize=7)
 
     ncol = h.shape[1]

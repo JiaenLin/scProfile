@@ -216,5 +216,92 @@ ck("it counts environments and plugins", "environment(s) will satisfy" in txt)
 ck("it names who shares each", "shared by:" in txt)
 ck("and why a lone plugin is alone", "ALONE because" in txt, txt)
 
+
+print("\nthe status resolver reads a run directory and says what is left")
+# EVERY STATE BUILT ON DISK, because this module's whole job is to classify directories and a
+# test that classifies dicts would not have caught the one bug that matters: reading the root
+# of a tree that is not there, or calling a truncated file finished.
+import json as _json                                                            # noqa: E402
+import tempfile as _tmp                                                         # noqa: E402
+from pathlib import Path as _Pt                                                  # noqa: E402
+from scprofile import resume as _RS                                             # noqa: E402
+
+_d = _Pt(_tmp.mkdtemp())
+
+
+def _mk(plugin, unit, *, out=None, staged=False, raw=None):
+    u = _RS.unit_dir(_d, plugin, unit)
+    u.mkdir(parents=True, exist_ok=True)
+    if staged:
+        (u / "in.json").write_text("{}")
+    if raw is not None:
+        (u / "out.json").write_text(raw)
+    elif out is not None:
+        (u / "out.json").write_text(_json.dumps(out))
+    return u
+
+
+_mk("k", "done", out={"version": "1.0", "figures": ["a", "b"], "tables": ["t"]}, staged=True)
+_mk("k", "empty", out={"version": "1.0", "figures": [], "tables": []}, staged=True)
+_mk("k", "died", staged=True)
+_mk("k", "truncated", raw='{"version": "1.0", "figu', staged=True)
+
+ck("a unit with artifacts is done", _RS.state(_RS.unit_dir(_d, "k", "done"))[0] == _RS.DONE)
+ck("a unit that ran and produced nothing is EMPTY, and empty is FINISHED",
+   _RS.state(_RS.unit_dir(_d, "k", "empty"))[0] == _RS.EMPTY
+   and _RS.EMPTY in _RS.FINISHED,
+   "re-running a negative result costs the same and answers the same")
+ck("staged inputs with no out.json is a kernel that died",
+   _RS.state(_RS.unit_dir(_d, "k", "died"))[0] == _RS.DIED)
+ck("a TRUNCATED out.json is unfinished, not finished",
+   _RS.state(_RS.unit_dir(_d, "k", "truncated"))[0] == _RS.DIED,
+   "a kill during the write must not skip the unit forever")
+ck("a directory that was never staged is absent",
+   _RS.state(_RS.unit_dir(_d, "k", "never"))[0] == _RS.ABSENT)
+
+ck("a version change makes a COMPLETE unit stale",
+   _RS.state(_RS.unit_dir(_d, "k", "done"), want_version="2.0")[0] == _RS.STALE,
+   "otherwise a resume mixes two versions of the code in one run directory")
+ck("and the matching version does not",
+   _RS.state(_RS.unit_dir(_d, "k", "done"), want_version="1.0")[0] == _RS.DONE)
+ck("stale is NOT finished, so a resume redoes it",
+   _RS.STALE not in _RS.FINISHED)
+
+_found = _RS.discover(_d)
+ck("discover finds every staged instance with no plan in hand",
+   sorted(u for _p, u in _found) == ["died", "done", "empty", "truncated"], str(_found))
+ck("and an empty tree discovers nothing rather than raising",
+   _RS.discover(_Pt(_tmp.mkdtemp())) == [])
+
+_rows = _RS.survey(_d, _found, versions={"k": "1.0"})
+ck("survey carries the version through",
+   _RS.summarise(_rows) == {"done": 1, "empty": 1, "died": 2}, str(_RS.summarise(_rows)))
+ck("outstanding is what a resume would run - never the empty one",
+   sorted(u for _p, u in _RS.outstanding(_rows)) == ["died", "truncated"],
+   str(_RS.outstanding(_rows)))
+
+_rows2 = _RS.survey(_d, _found, versions={"k": "9.9"})
+# THE EMPTY ONE IS OUTSTANDING HERE, AND THAT IS THE POINT. `empty` is finished only while the
+# code that produced it is the code that would run: a negative result from an OLD plugin version
+# is not evidence about the new one, and "it found nothing last time" is the least safe thing to
+# carry across a change. The version check therefore precedes the empty check in `state`. This
+# expectation was written the other way round first and the code was right.
+ck("when the plugin moved on, EVERY unit becomes outstanding - the empty one included",
+   sorted(u for _p, u in _RS.outstanding(_rows2))
+   == ["died", "done", "empty", "truncated"],
+   str(_RS.outstanding(_rows2)))
+ck("and each says the version is why",
+   all("version" in w for _p, _u, st, w, _n in _rows2 if st == _RS.STALE))
+
+_src = (_Pt(__file__).resolve().parents[1] / "scprofile" / "cli.py").read_text()
+ck("run offers --resume and the reuse is per instance, not per plugin",
+   "--resume" in _src and "_resume.unit_dir(out, name, inst.get(\"unit\"))" in _src)
+ck("and it checks the version the plugin would run NOW",
+   'want_version=(k.spec or {}).get("version")' in _src,
+   "a resume that cannot see a version change keeps the units a change invalidated")
+ck("status is a command, so it can be asked BEFORE committing a job",
+   'add_parser("status"' in _src and "def _status(" in _src)
+
+
 print("\n" + ("resolution holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
