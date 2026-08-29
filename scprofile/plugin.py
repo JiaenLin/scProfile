@@ -716,6 +716,22 @@ class Context:
             _F.fit_column(fig)
         except Exception:                                                 # noqa: BLE001
             pass                    # a figure that will not measure is still a figure to write
+        # RE-SOLVE THE LABELS IN THE LAYOUT THEY WILL BE SAVED IN. `fit_column` above resizes
+        # the canvas after the plugin has finished drawing, so every declutter the plugin solved
+        # was solved against a geometry that no longer exists - the points move with the resize
+        # and the labels do not. The host was measuring collisions it had created itself and
+        # reporting them as plugin defects, and no fix inside a plugin could have reached them.
+        #
+        # MEASURED ON BOTH SIDES, because a fix nobody measured is a hypothesis. What the audit
+        # saw before the re-solve is recorded next to what it saw after, so the next run says
+        # whether re-solving helps rather than leaving it to be argued about.
+        _before = []
+        try:
+            from . import figure as _FR
+            _before = [c for c, _ in _FR.audit(fig)]
+            _FR.resolve_overlaps(fig)
+        except Exception:                                                 # noqa: BLE001
+            pass                    # a label set that will not re-solve keeps its placement
         # WHAT A MACHINE CAN SEE, MEASURED HERE, WHERE THE ARTISTS ARE STILL LIVE. Three of the
         # eleven defects found by opening panels one at a time were mechanical - text over text,
         # a label clipped by the canvas, a size channel with no key - and every one shipped
@@ -729,8 +745,12 @@ class Context:
             _audit = _FA.audit(fig)
         except Exception:                                                 # noqa: BLE001
             _audit = []
+        if _before and len(_audit) < len(_before):
+            self.log(f"  {name}: re-solving cleared {len(_before) - len(_audit)} drawing "
+                     f"issue(s) the canvas change had created")
         if _audit:
-            self.log(f"  {name}: {len(_audit)} drawing issue(s) a machine can see")
+            self.log(f"  {name}: {len(_audit)} drawing issue(s) a machine can see"
+                     f" ({len(_before)} before the host re-solved)")
             for _code, _detail in _audit[:4]:
                 self.log(f"      {_code}: {_detail}")
         want_in = float(fig.get_size_inches()[0])

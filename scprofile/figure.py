@@ -632,6 +632,36 @@ def legend_outside(fig, ax, handles=None, labels=None, ncol=1, markerscale=2.5):
         return fig.legend(handles, labels, **kw)
     return ax.legend(**kw)
 
+def resolve_overlaps(fig):
+    """Re-solve every declutter registered on `fig`, in the layout the figure will be SAVED in.
+
+    A declutter is solved in display space, so it is only true for the geometry it was solved
+    against. Anything that changes that geometry afterwards silently undoes it: new axis limits,
+    an aspect change, a legend placed outside the axes, and - because it runs on every panel of
+    every plugin - `fit_column`, which resizes the whole figure to its declared column width
+    AFTER the plugin has finished drawing. The labels do not move with it; the points do.
+
+    That is why the host measured overlaps it had already separated. `spread_labels` was correct
+    and ran too early, which no amount of care inside the plugin can fix - the plugin does not
+    know what the host will do to the canvas next.
+
+    So the host re-runs it here, once, immediately before the audit and the save, when the
+    layout is final and nothing further will move. Plugins keep calling `spread_labels` where
+    they draw; this makes that call survive the rest of the pipeline.
+
+    Returns the number of label sets re-solved.
+    """
+    jobs = getattr(fig, "_scprofile_declutter", None) or []
+    n = 0
+    for ax, texts, opts in jobs:
+        try:
+            _separate(ax, texts, **opts)
+            n += 1
+        except Exception:                                                 # noqa: BLE001
+            continue                # a set that will not re-solve keeps the placement it has
+    return n
+
+
 def spread_labels(ax, texts, *, iterations=80, pad=1.2, clip=True, max_shift=14.0):
     """Nudge annotation labels apart, in DISPLAY space, until they stop overlapping.
 
@@ -648,7 +678,25 @@ def spread_labels(ax, texts, *, iterations=80, pad=1.2, clip=True, max_shift=14.
     a label that has drifted onto a neighbour is worse than one that overlaps slightly.
 
     Returns the number of iterations used, so a caller can tell "settled" from "gave up".
+
+    REGISTERS ITSELF so the host can re-solve after it has finished changing the canvas; see
+    `resolve_overlaps`.
     """
+    if not texts:
+        return 0
+    opts = dict(iterations=iterations, pad=pad, clip=clip, max_shift=max_shift)
+    try:
+        fig = ax.figure
+        if not hasattr(fig, "_scprofile_declutter"):
+            fig._scprofile_declutter = []
+        fig._scprofile_declutter.append((ax, list(texts), opts))
+    except Exception:                                                     # noqa: BLE001
+        pass                        # registration is an optimisation, never a precondition
+    return _separate(ax, texts, **opts)
+
+
+def _separate(ax, texts, *, iterations=80, pad=1.2, clip=True, max_shift=14.0):
+    """The separation itself. Shared by `spread_labels` and `resolve_overlaps`."""
     if not texts:
         return 0
     fig = ax.figure
