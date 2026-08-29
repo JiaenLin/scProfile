@@ -37,6 +37,7 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | `scprofile landscape` | Across many run directories: what earlier runs hold, and what a new run would still have to compute. |
 | `scprofile licence` | Evaluates a run's results against the licence criteria and, with `--grant`, records licences for reuse. |
 | `scprofile review` | Records that a figure has been looked at, and reports which have not. |
+| `scprofile paper` | The paper test: records a claim written from the figures and what each review round did to it. A claim is bound to the figures it cites, so a redraw makes it stale. `docs/PAPER_TEST.md`. |
 | `scprofile check` | One green/red line per element of scProfile. Exits non-zero if any is red. With `--out`, also checks what a run produced. |
 | `scprofile validate` | Checks a plugin declaration and its references without running anything. |
 | `scprofile scaffold` | With `--new`, writes a new one-file plugin from the template. Without it, writes an already-declared plugin's build skeleton. |
@@ -57,7 +58,8 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 ├── README.md                    what ran, what did not, and what the directory holds
 ├── RUN_CARD.json                this run's verdict on its own output
 ├── LICENCES/                    one licence per instance, once granted
-└── FIGURE_REVIEW.jsonl          the record of which figures have been looked at
+├── FIGURE_REVIEW.jsonl          the record of which figures have been looked at
+└── PAPER_CLAIMS.jsonl           claims written from the figures, and what review did to them
 ```
 
 **Figures are NOT collected into a top-level directory, and tables are.** This listing said
@@ -78,6 +80,7 @@ whatever submitted the run, not to the host, and nothing here reads them.
 | `RUN_CARD.json` | The run's own verdict per instance: `ok`, `empty`, `suspect`, `failed`. Written at the end of every run. |
 | `LICENCES/*.json` | Evidence that an instance may be adopted by a later run, with the sha256 of every product it covers. |
 | `FIGURE_REVIEW.jsonl` | Append-only record of figures looked at, bound to each image's sha256. |
+| `PAPER_CLAIMS.jsonl` | Append-only record of claims written from the figures and the verdict of each review round, each claim bound to the sha256 of every figure it cites. |
 | `ADOPTED.json` | Written into an instance that was adopted from another run: the source run, the grade, and how it was materialised. |
 
 ---
@@ -212,6 +215,19 @@ asserts it stays empty, and a second asserts that a kind moved to `plugin` carri
 the debt cannot be cleared by reclassifying it. Until 2026-08-29 the two were counted together
 and the catalogue read as five of thirteen drawn, which understated what a plugin inherits and
 overstated what was outstanding.
+
+### The chain a figure set goes through
+
+```
+run  ->  report  ->  standard  ->  review  ->  paper  ->  licence / promote
+         draw it     is the page   did anyone  do these    build on it
+                     readable?     look?       figures
+                                               support the
+                                               claim?
+```
+
+The first three can all pass on a figure set that supports nothing. `paper` is the one a reader
+will put to you. Run it before promoting a run or reusing its results.
 
 ### The standard the figure set is held to
 

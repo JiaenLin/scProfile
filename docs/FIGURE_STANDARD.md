@@ -12,6 +12,11 @@ about a shape, not a subject.
 
 ## The test: write the paper
 
+**It is a command, not a habit:** `scprofile paper`. How to run it, and — importantly — the eight
+things it does not yet cover, are in [`PAPER_TEST.md`](PAPER_TEST.md). The rest of this section is
+why it works.
+
+
 Take the figure set. Write the Results section a scientist would submit — the claims, the
 numbers, the figure callouts, the limitations. Then have it reviewed against how papers are
 actually judged, and revise. Repeat until the section stops changing.

@@ -2369,7 +2369,7 @@ def _check(a):
     row("run publishes its own verdict", "_RC.write(out, payload)" in src)
     row("resume is honoured by run", "_resume.state(" in src)
     row("the exit standard is run by the writer of the report", "standard" in rep)
-    for c in ("status", "landscape", "licence", "review", "check", "scaffold"):
+    for c in ("status", "landscape", "licence", "review", "paper", "check", "scaffold"):
         row(f"command `{c}` is registered", f'add_parser("{c}"' in src)
     row("panel registry agrees with what is drawn",
         set(_P.IMPLEMENTED) <= set(_P.BY_ID)
@@ -2407,14 +2407,27 @@ def _check(a):
     if a.out:
         from . import resume as _RS, review as _RV, runcard as _RC2
         out = Path(a.out)
-        rows_ = _RS.status(out)
+        # `resume.survey`, NOT `resume.status`, WHICH DOES NOT EXIST. This whole branch raised
+        # AttributeError on every invocation of `check --out` and nothing noticed, because the
+        # branch is optional and no suite ever passed the flag. A check that cannot run is worse
+        # than a missing one: `check` was reported green all this time by never reaching here.
+        rows_ = _RS.survey(out, _RS.discover(out))
         row("run: every instance finished",
-            bool(rows_) and all(st in _RS.FINISHED for _r, st, _w in rows_),
-            f"{sum(1 for _r, st, _w in rows_ if st not in _RS.FINISHED)} outstanding")
+            bool(rows_) and all(st in _RS.FINISHED for _p, _u, st, _w, _n in rows_),
+            f"{len(_RS.outstanding(rows_))} outstanding"
+            if rows_ else "no instances in this directory")
         row("run: a card was published", _RC2.read(out) is not None, "no RUN_CARD.json")
         todo = _RV.outstanding(out)
         row("run: every figure has been looked at", not todo,
             f"{len(todo)} not looked at")
+        from . import paper as _PA
+        _pc = _PA.status(out)
+        _pt = _PA.outstanding(out)
+        row("run: the figure set has been tested by writing the result from it",
+            bool(_pc) and not _pt,
+            "no claims recorded — nobody has written down what these figures are supposed to "
+            "show, so nothing has been able to fail" if not _pc
+            else f"{len(_pt)} claim(s) undefended or stale")
         # A HOST BLOCK THAT PRODUCES NOTHING LOOKS EXACTLY LIKE ONE THAT WAS NOT NEEDED. The
         # population census reached the payload as an empty dict for a whole run - `keys[role]`
         # is (name, why) and was read whole - so the panel depending on it was never drawn, on a
@@ -2575,6 +2588,61 @@ def _landscape(a):
               "rebuilt at the same path with the same size and mtime would not be detected. "
               "Reuse on that basis, or re-run.")
     return 0
+
+def _paper(a):
+    """The paper test: write the result from the figures, then defend it.
+
+    THE STEP AFTER LOOKING AND BEFORE PROMOTING. `standard` asks whether the page is readable;
+    `review` asks whether anybody opened the images; neither asks the question a reader will,
+    which is whether the figure set supports the thing you want to SAY. A claim is bound to the
+    figures it was read off, so redrawing one of them makes the claim stale and it has to be
+    defended again.
+    """
+    from . import paper as PA
+
+    out = Path(a.out)
+    if not out.is_dir():
+        print(f"scprofile: no such run directory: {out}", file=sys.stderr)
+        return REFUSE
+
+    if a.claim:
+        try:
+            rec = PA.claim(out, a.claim, _split(a.cites or ""), author=a.author)
+        except PA.Refused as e:
+            print(f"scprofile: REFUSED - {e}", file=sys.stderr)
+            return REFUSE
+        print(f"claim {rec['id']} recorded, citing {len(rec['cites'])} figure(s).")
+        print("  Now put it to a reviewer and record what happened:")
+        print(f"    scprofile paper --out {out} --round {rec['id']} "
+              f"--verdict standing|narrowed|withdrawn --why '...'")
+        return 0
+
+    if a.round:
+        if not (a.verdict and a.why):
+            print("scprofile: --round needs --verdict and --why", file=sys.stderr)
+            return REFUSE
+        try:
+            rec = PA.review(out, a.round, a.verdict, a.why, reviewer=a.reviewer)
+        except PA.Refused as e:
+            print(f"scprofile: REFUSED - {e}", file=sys.stderr)
+            return REFUSE
+        print(f"round recorded: {rec['id']} -> {rec['verdict']}")
+        return 0
+
+    print(f"{out}")
+    print(PA.summarise(out))
+    todo = PA.outstanding(out)
+    if todo:
+        print(f"\n  {len(todo)} claim(s) not defended:")
+        for cid, st in todo:
+            print(f"    {cid}  {st}")
+    print("\n  WHAT THIS TEST DOES NOT COVER (docs/PAPER_TEST.md):")
+    for line in PA.NARROW:
+        print(f"    - {line}")
+    if a.strict and todo:
+        return REFUSE
+    return 0
+
 
 def _review(a):
     """The figure-review ledger: record a look, or report what has not been looked at.
@@ -2984,6 +3052,23 @@ def main(argv=None):
                     help="exit non-zero while any figure is unreviewed or has been redrawn "
                          "since it was reviewed. For a gate, a CI step, or a job script.")
     rv.set_defaults(fn=_review)
+
+    pa = sub.add_parser("paper",
+                        help="[you] write the result from these figures, then defend it")
+    pa.add_argument("--out", required=True, type=Path, help="a run directory")
+    pa.add_argument("--claim", help="one sentence you would put in a paper, read off the "
+                                    "figures. Refused if it is too short to be checkable")
+    pa.add_argument("--cites", help="the figures it was read off, comma-separated, relative to "
+                                    "--out. A claim citing nothing is refused")
+    pa.add_argument("--round", help="record a review round against this claim id")
+    pa.add_argument("--verdict", choices=("standing", "narrowed", "withdrawn"),
+                    help="what the round did to the claim. `withdrawn` is the one that teaches")
+    pa.add_argument("--why", help="what the reviewer put to it, and what happened")
+    pa.add_argument("--author", default="", help="who wrote the claim")
+    pa.add_argument("--reviewer", default="", help="who reviewed it")
+    pa.add_argument("--strict", action="store_true",
+                    help="exit non-zero while any claim is undefended or has gone stale")
+    pa.set_defaults(fn=_paper)
 
     sv = sub.add_parser("status",
                         help="[you] what does this run directory already hold, and what is left?")

@@ -7,7 +7,9 @@ description: >-
   project: choosing panels, writing a figure declaration, drawing panels, or when a page fails
   a figure/caption/arm/identifier check. THE TEST A FIGURE SET MUST PASS is to write the Results
   section from it and have that section survive review, in rounds - every round removes a claim,
-  and what it removes is a missing figure or a wrong one. Carries a PORTABLE CATALOGUE of fifteen
+  and what it removes is a missing figure or a wrong one. In scProfile that test is the `paper`
+  command and a ledger, run after `review` and before promoting; its eight named limits are in
+  docs/PAPER_TEST.md and are printed every time it runs. Carries a PORTABLE CATALOGUE of fifteen
   network and per-unit panel kinds - matrix, diff_matrix, circle, chord, role_scatter,
   role_shift, flow_rank, flow_compare, role_heatmap, patterns, similarity, contribution,
   interaction, unit_presence, coverage - each with what it establishes and what it does NOT,
@@ -89,6 +91,21 @@ Four things make it work, and the third is the one people skip:
 **Do not tune the loop to one dramatic failure.** The job is to find every claim the set cannot
 support, including the boring ones. A round returning "fine" for most panels and one real
 problem is a normal round.
+
+**It is a mechanism, not a habit.** In scProfile: `scprofile paper --out RUNDIR --claim "..."
+--cites F1,F2` records the claim and the figures it was read off; `--round <id> --verdict
+standing|narrowed|withdrawn --why "..."` records what a review did to it. **A claim is bound to
+the sha256 of every figure it cites, so redrawing one makes the claim stale and it must be
+defended again** - the same property that makes the figure-review ledger a gate. `--strict`
+exits non-zero while anything is undefended. Port the shape, not the command: a claim, the
+figures behind it, a verdict with three outcomes, and invalidation on redraw.
+
+**AND ITS LIMITS ARE PART OF IT.** The version that exists covers only the Results section, only
+claims that cite a figure, leaves the reviewer unspecified, and finds MISSING figures only
+indirectly - a gap surfaces when somebody tries to write the claim that needs it, so the test
+sees exactly as far as the writer's imagination. Eight such gaps are named in
+`scprofile.paper.NARROW` and printed on every run, because a test whose limits are unwritten
+gets used as though it had none.
 
 One full pass on a real set, four rounds: a claim about totals died (it was the groups' totals);
 half a claim about a switch died (one side was a self-interacting pair acting as an abundance
