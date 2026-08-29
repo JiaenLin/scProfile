@@ -86,10 +86,11 @@ class Criterion:
 CRITERIA = (
     Criterion(
         "integrity",
-        "every file the instance produced exists and hashes cleanly",
-        "sha256 of each file, recorded INTO the licence",
+        "every file the instance's own manifest says it PRODUCED exists and hashes cleanly",
+        "sha256 of each product, recorded INTO the licence. Staged inputs are excluded: they "
+        "are not adopted, they are regenerable, and they are where the bytes are",
         "that the bytes adopted later are the bytes licensed now",
-        "that the bytes are correct - only that they have not changed",
+        "that the bytes are correct, nor anything about the inputs staged beside them",
         required_for_any_licence=True),
     Criterion(
         "completeness",
@@ -134,16 +135,50 @@ GRADE_RULES = (
 
 
 
+def products(unit_dir):
+    """The paths this instance PRODUCED, from its own manifest, plus the two records that
+    identify it. NOT the staged inputs.
+
+    THIS IS BOTH THE CORRECT SET AND THE CHEAP ONE, and it is worth saying why they coincide.
+    A unit directory holds two very different things: what the host STAGED for the kernel - the
+    expression matrix, the metadata, the database copy - and what the kernel RETURNED. Only the
+    second is adopted by a later run; the first is regenerable from the source object and is
+    where nearly all the bytes are. Measured on one real instance: the products are 5.7 MB
+    inside a 158 MB directory.
+
+    Hashing the staged bulk would have made licensing eight runs an operation people avoid, and
+    the whole point of reuse is to be cheaper than recomputing. It would also have made the
+    licence assert something it has no business asserting - that the INPUT staged for a finished
+    run is unchanged - which is not what a later run adopts.
+
+    The manifest is the authority for what was produced. Not a glob, not a naming convention:
+    the list the kernel itself wrote.
+    """
+    d = Path(unit_dir)
+    rels = ["in.json", "out.json"]
+    try:
+        man = json.loads((d / "out.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return [r for r in rels if (d / r).exists()]
+    for key in ("figures", "tables", "objects"):
+        for item in (man.get(key) or []):
+            rel = item.get("path") if isinstance(item, dict) else item
+            if isinstance(rel, str):
+                rels.append(rel)
+    seen, out = set(), []
+    for r in rels:
+        if r not in seen and (d / r).exists():
+            seen.add(r)
+            out.append(r)
+    return out
+
+
 def _artifacts(unit_dir):
-    """Every file an instance produced, relative to its directory, with a digest."""
+    """{relpath: sha256} over the products only."""
     from . import review
 
     d = Path(unit_dir)
-    out = {}
-    for p in sorted(d.rglob("*")):
-        if p.is_file():
-            out[str(p.relative_to(d))] = review.digest(p)
-    return out
+    return {r: review.digest(d / r) for r in products(d)}
 
 
 def evaluate(rundir, plugin, unit=None, *, declared=None):
