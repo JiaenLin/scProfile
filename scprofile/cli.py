@@ -669,6 +669,26 @@ def _run(a):
                 lbl = name + (f"[{inst['unit']}]" if inst.get("unit") else "")
                 if _st == _LS.REUSABLE:
                     _lic = _LCN.read(_src["run_dir"], name, inst.get("unit"))
+                    # A CANDIDATE THE LANDSCAPE ACCEPTS BUT NOBODY HAS LICENSED IS LICENSED NOW.
+                    # `match` can approve on the run card alone; `adopt` requires a licence,
+                    # because the licence is what carries the product hashes that make a
+                    # hardlink safe. Without this the two disagreed and every adoption was
+                    # refused with "grade None" after the landscape had said REUSE - fourteen
+                    # instances recomputed at 9m21s against 1m56s.
+                    #
+                    # Granting here invents no evidence: integrity, completeness and provenance
+                    # are computed from what is on disk, and the card the landscape just
+                    # accepted IS the self-report. A grant that fails still refuses.
+                    if _lic is None:
+                        _k2 = ks.get(name)
+                        _figs2 = ((_k2.spec or {}).get("report") or {}).get("figures") or []
+                        _lic = _LCN.grant(
+                            _src["run_dir"], name, inst.get("unit"),
+                            declared=list((_k2.spec or {}).get("produces") or []),
+                            required_figures=[f.get("id") for f in _figs2
+                                              if isinstance(f, dict) and f.get("required")],
+                            declared_version=(_k2.spec or {}).get("version"),
+                            granter="adopted-on-demand")
                     n_f, how, bad = _LCN.adopt(_lic, out,
                                                min_grade=getattr(a, "reuse_min_grade",
                                                                  _LCN.PROVISIONAL))
@@ -2273,6 +2293,9 @@ def _check(a):
         "_UN.resolve(" in src, "run still resolves units as samples")
     row("group-level inference: a unit carries its members",
         '"unit_members"' in man and "unit_members=" in src, "in.json has no unit_members")
+    row("the landscape and the adopter cannot disagree",
+        'granter="adopted-on-demand"' in src,
+        "match can approve on the card while adopt requires a licence")
     row("a reused instance records WHERE IT LIVES, so its figures are found",
         'pl_["dir"] = str(d.relative_to(out))' in src,
         "fold_payloads falls back to the plugin dir and the per-unit table is not found")
