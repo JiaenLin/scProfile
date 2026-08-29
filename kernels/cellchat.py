@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.6.0",
+    "version": "0.7.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -1772,6 +1772,26 @@ def _fig_signaling_roles(ctx, pre, names):
     _cmap = F.palette(list(pops))
     ax.scatter(out_s, in_s, s=size, c=[_cmap[p] for p in pops], alpha=0.85,
                edgecolor=F.INK, linewidth=0.4, zorder=3)
+    # AND THE SIZE IS KEYED. The comment above says area carries a number; nothing on the panel
+    # said WHICH number, so the reader met a tenfold spread of marker areas with no way to read
+    # one. Found by opening it, in the same pass that found the identical defect on the
+    # similarity panel - two panels, one omission, and the note about area being proportional
+    # sat directly above the line that failed to key it.
+    #
+    # DRAWN AT THE SMALLEST VALUE ACTUALLY PLOTTED AS WELL AS THE LARGEST, because the map is
+    # affine - `18 + 150 * n/nmax` - so area is not proportional at the small end and a key
+    # showing only large values would confirm a mapping that does not hold there.
+    if float(n_edge.max()) > 0:
+        import matplotlib.lines as _ml
+        _lo_e, _hi_e = float(n_edge.min()), float(n_edge.max())
+        ax.legend(handles=[_ml.Line2D([], [], marker="o", ls="", color="#B0B0B0",
+                                      markeredgecolor=F.INK, markeredgewidth=0.4,
+                                      markersize=((18.0 + 150.0 * (v / smax)) ** 0.5) * 0.72,
+                                      label=f"{v:.0f}")
+                           for v in ({_lo_e, _hi_e} if _hi_e > _lo_e else {_hi_e})],
+                  title="significant edges", fontsize=5, title_fontsize=5.5, frameon=False,
+                  loc="upper left", bbox_to_anchor=(1.0, 1.0), labelspacing=1.1,
+                  handletextpad=0.9, borderpad=0.2)
     # THE DIAGONAL IS THE CLAIM. A population above it receives more than it sends; below,
     # the reverse. Without it a reader compares two axes by eye and gets it wrong.
     #
@@ -1788,7 +1808,11 @@ def _fig_signaling_roles(ctx, pre, names):
     lo = 0.0 if lo_d <= 0.25 * span else lo_d - 0.12 * span
     hi = hi_d + 0.12 * span
     ax.plot([lo, hi], [lo, hi], color=F.GREY, lw=0.8, ls="--", zorder=1)
-    ax.text(0.02, 0.97, "above the line: receives more than it sends", transform=ax.transAxes,
+    # UNDER THE AXES, NOT INSIDE THEM. At the top-left of the plotting area this note sat in the
+    # region a high-receiving population occupies, and on a real unit it was overprinted by that
+    # population's own label - two true statements rendered as one unreadable one. Outside the
+    # axes it cannot collide with any mark, and the tight bbox grows the canvas to hold it.
+    ax.text(0.0, -0.16, "above the line: receives more than it sends", transform=ax.transAxes,
             fontsize=5.0, color="#8A8A8A", ha="left", va="top")
     # LABELS PUSHED OUTWARD FROM THE CENTRE. Every label offset by the same (2.5, 2.5) collided
     # wherever points cluster, which on this panel is exactly where the populations of interest
