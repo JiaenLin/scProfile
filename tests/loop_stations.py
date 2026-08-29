@@ -195,17 +195,27 @@ def station_eye(runs):
             want.add(fs[-1])
         done = {row["figure"] for row in _lines(r / RV.LEDGER)}
         todo = sorted(want - done)
-        worst = (r, todo, len(want), len(figs))
+        # KINDS AND INSTANCES ARE DIFFERENT NUMBERS AND BOTH BELONG ON THE LINE. The first
+        # version reported only the named instances, so three real looks at a kind's MIDDLE
+        # instance scored 0/45 - the coverage rule is about KINDS, and a look at any instance of
+        # one is evidence about the drawing code even when it is not the instance asked for.
+        # Reporting zero progress for work that was done is how a gate gets ignored.
+        seen_kinds = {_kind(f) for f in done}
+        worst = (r, todo, len(want), len(figs), len(kinds), len(seen_kinds & set(kinds)))
         break
     else:
         return BLOCKED, "no figures in any run", "run something that draws"
-    r, todo, want, allf = worst
+    r, todo, want, allf, nk, seenk = worst
+    head = (f"{r.name}: {seenk}/{nk} kind(s) have a recorded look, "
+            f"{want - len(todo)}/{want} of the named scan set ({allf} figures in the run)")
     if todo:
-        return BLOCKED, (f"{r.name}: {want - len(todo)}/{want} of the scan set looked at "
-                         f"({allf} figures in the run)"), \
+        return BLOCKED, head, \
             f"OPEN THESE AND RECORD WHAT YOU SEE:\n      " + "\n      ".join(todo[:8]) \
-            + (f"\n      ... and {len(todo) - 8} more" if len(todo) > 8 else "")
-    return PASS, f"every kind in the scan set has a recorded look ({want} of {allf} figures)", ""
+            + (f"\n      ... and {len(todo) - 8} more" if len(todo) > 8 else "") \
+            + ("\n      (a look at another instance of a kind counts toward the KIND, not "
+               "toward the named largest and smallest, which are the two that break layouts)"
+               if seenk else "")
+    return PASS, head, ""
 
 
 def station_paper(runs):
