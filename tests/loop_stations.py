@@ -161,11 +161,25 @@ def _kind(fig):
 
 
 def station_eye(runs):
-    """7. Are the pictures right? A ledger entry per figure in the scan set."""
+    """7. Are the pictures right? A ledger entry per figure in the scan set.
+
+    TWO THINGS THIS GOT WRONG ON ITS FIRST RUN, both of which made the worklist wrong rather
+    than merely long:
+
+      IT SCANNED THE PDF AND THE PNG OF THE SAME PANEL. `review` counts every image suffix, and
+      "the largest and smallest instance of a kind" then selected the two FORMATS of one panel
+      instead of two units of it - so the rule that exists to cover the units that break layouts
+      covered one unit twice. Raster only: the vector is the same picture.
+
+      IT PICKED THE RUN WITH THE MOST GAPS. That is whichever run has the most figures, and it
+      is usually an old one. The loop tests the TOOL, and the newest run is the one the current
+      code produced; scanning an old run's figures reports on code that has already changed.
+    """
     from scprofile import review as RV
-    worst = None
-    for r in runs:
-        figs = RV.figures(r)
+    RASTER = (".png", ".jpg", ".jpeg")
+    # Newest by run key, which begins with a UTC stamp - so sorting the names sorts by time.
+    for r in sorted(runs, key=lambda p: p.name, reverse=True):
+        figs = [f for f in RV.figures(r) if f.lower().endswith(RASTER)]
         if not figs:
             continue
         kinds = {}
@@ -181,9 +195,9 @@ def station_eye(runs):
             want.add(fs[-1])
         done = {row["figure"] for row in _lines(r / RV.LEDGER)}
         todo = sorted(want - done)
-        if worst is None or len(todo) > len(worst[1]):
-            worst = (r, todo, len(want), len(figs))
-    if worst is None:
+        worst = (r, todo, len(want), len(figs))
+        break
+    else:
         return BLOCKED, "no figures in any run", "run something that draws"
     r, todo, want, allf = worst
     if todo:
