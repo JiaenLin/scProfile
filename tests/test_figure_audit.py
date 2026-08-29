@@ -58,6 +58,13 @@ ck("a label starting outside the figure is caught",
 ck("and one inside it is not",
    "off_canvas" not in codes(lambda ax, f: ax.text(.5, .5, "inside", fontsize=8, clip_on=True)))
 
+# THE FALSE POSITIVE IT SHIPPED WITH. A provenance stamp is placed below the figure so the tight
+# bbox grows to hold it, and `Text.clip_on` is True by default at figure level - so the first
+# version reported every correctly-stamped panel as clipped, on all 223 of a real run.
+ck("a figure-level stamp below the canvas is NOT called clipped",
+   "off_canvas" not in codes(lambda ax, f: f.text(0.0, -0.006, "unit · one sample · n = 1,000",
+                                                  fontsize=5.2)))
+
 print("\na size channel with no key — shipped on two panels at once")
 ck("a scatter varying marker size with no legend is caught",
    "size_unkeyed" in codes(lambda ax, f: ax.scatter([1, 2, 3], [1, 2, 3], s=[10, 200, 900])))

@@ -758,7 +758,7 @@ def audit(fig):
             return None
 
     # ---- text on text -------------------------------------------------------------------
-    texts = []
+    texts, fig_level = [], set()
     for ax in fig.get_axes():
         for t in ax.texts:
             if t.get_visible() and str(t.get_text()).strip() \
@@ -768,6 +768,7 @@ def audit(fig):
         if t.get_visible() and str(t.get_text()).strip() \
                 and float(t.get_fontsize() or 0) >= _AUDIT_MIN_PT:
             texts.append((t, _bb(t)))
+            fig_level.add(id(t))
     texts = [(t, b) for t, b in texts if b is not None]
     for i in range(len(texts)):
         for j in range(i + 1, len(texts)):
@@ -785,9 +786,18 @@ def audit(fig):
     # ---- outside the canvas -------------------------------------------------------------
     # `bbox_inches="tight"` GROWS the canvas for anything outside it, so this catches only what
     # is clipped by an artist's own clip box - which is what truncated a title and a label.
+    # FIGURE-LEVEL TEXT IS OUTSIDE THE CANVAS ON PURPOSE. A provenance stamp is placed just
+    # below the figure precisely so `bbox_inches="tight"` GROWS the canvas to hold it - the
+    # mechanism this tool uses on every panel - and `Text.clip_on` is True by default there,
+    # so the first version of this check reported every correctly-stamped figure as clipped.
+    # It fired on the first real run, on all 223 panels, for the one thing that was right.
+    #
+    # A gate that fires on correct behaviour is a gate somebody removes, and this project has
+    # paid for that lesson four times today. Only AXES-level text can be clipped by the canvas
+    # in a way tight bbox will not rescue.
     fw, fh = fig.canvas.get_width_height()
     for t, b in texts:
-        if not t.get_clip_on():
+        if id(t) in fig_level or not t.get_clip_on():
             continue
         if b.x0 < -1 or b.y0 < -1 or b.x1 > fw + 1 or b.y1 > fh + 1:
             out.append(("off_canvas", f"{str(t.get_text())[:32]!r} is clipped by the canvas"))
