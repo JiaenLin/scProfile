@@ -80,6 +80,23 @@ scan that covers three quarters of the kinds is a scan that says so.
 **A round that finds nothing is a result**, and it is the only evidence that a previous round's
 fix worked. Record it as a round.
 
+### Scan the whole set BEFORE fixing anything — the loop converges only if you do
+
+Every fix that changes a rendering makes a new run, and the eye ledger is bound to each image's
+digest, so **a new run resets the whole scan set to unreviewed.** Fix as you go and the station
+never fills: the counter went 0 → 3 → 5 → 8 → 0 across five rounds while eight real defects were
+being found and fixed, because each fix rebuilt the figures the previous looks were recorded
+against.
+
+That is the ledger behaving correctly — a look at a picture that no longer exists is not evidence
+about the picture that does. But it means the loop has a shape:
+
+> **Scan the complete set on ONE build, collecting every finding and fixing nothing. Then fix
+> them all in one commit, rebuild, and re-scan to verify.**
+
+Two builds per round instead of one per defect. The station passes when a complete scan produces
+no fix, which is also the only definition of "the figures are right" this loop has.
+
 ---
 
 ## What this loop does not do
