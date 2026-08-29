@@ -67,6 +67,15 @@ class ContractError(Exception):
 DEFAULT_SENTINELS = ("EXCLUDED", "UNRESOLVED")
 
 
+def _host_version():
+    """Deferred import: `landscape` imports nothing from here, and this keeps it that way."""
+    try:
+        from .landscape import host_version
+        return host_version()
+    except Exception:                                                     # noqa: BLE001
+        return None
+
+
 def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=None,
                 references=None, reference_specs=None, params=None, upstream=None,
                 upstream_units=None, sentinels=DEFAULT_SENTINELS,
@@ -100,6 +109,10 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
     """
     payload = {
         "contract": contract,
+        # THE HOST CODE THAT DECIDES WHAT THIS INSTANCE WILL CONTAIN. Part of the reuse
+        # key: without it a run made after a host change adopts instances from before it,
+        # and the change never reaches them. See `landscape.HOST_MODULES`.
+        "host_version": _host_version(),
         "h5ad": str(Path(h5ad).resolve()),
         "out_dir": str(Path(out_dir).resolve()),
         "keys": dict(keys or {}),

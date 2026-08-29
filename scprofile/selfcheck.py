@@ -32,7 +32,13 @@ def _make_run(base, obj, name, *, unit="U1", figures=("FA", "FB"), version="1.0"
     (d / "tables" / "t.csv").write_text("a,b\n1,2\n")
     for f in figures:
         (d / "figures" / f"{f}.png").write_text(f)
-    (d / "in.json").write_text(json.dumps({"h5ad": str(obj), "params": {}, "keys": {}}))
+    # THE HOST VERSION, because the reuse key includes it. A fixture that writes an `in.json`
+    # by hand is a second statement of what a manifest contains, and it went out of step the
+    # moment the key gained a field: every ablation case then reported `changed` for the right
+    # reason and the wrong one. Taken from the same function the host uses.
+    from .landscape import host_version as _hv
+    (d / "in.json").write_text(json.dumps({"h5ad": str(obj), "params": {}, "keys": {},
+                                           "host_version": _hv()}))
     if write_out:
         (d / "out.json").write_text(json.dumps({
             "version": version, "kernel": "k", "status": "ok",

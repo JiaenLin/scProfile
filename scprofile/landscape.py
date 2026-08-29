@@ -34,7 +34,32 @@ from pathlib import Path
 
 #: The fields that determine a result. Everything not here is deliberately excluded.
 DETERMINING = ("plugin", "version", "unit", "input", "input_size", "input_mtime",
-               "params", "keys")
+               "params", "keys", "host")
+
+#: THE HOST'S OWN VERSION IS PART OF WHAT DETERMINES A RESULT, and leaving it out cost a whole
+#: mechanism. The key covered the PLUGIN's version and nothing about the code that writes an
+#: instance - so when the host gained a drawing audit that every panel was supposed to carry, the
+#: next run adopted 14 of 15 instances from before it existed, the audit never ran, and the
+#: station reading it reported "no panel carries an audit" on a tool that had just grown one.
+#: Nothing was wrong except that reuse was too permissive, and nothing said so.
+#:
+#: SCOPED TO THE MODULES THAT WRITE AN INSTANCE, not to the whole tool. `_entry` invokes the
+#: plugin, `plugin` is the emit surface it writes through, and `manifest` serialises what it
+#: wrote. A change to the reporter or the CLI does not change an instance's contents - the
+#: reporter redraws from the payload on every render - so folding the whole tree in would
+#: invalidate every cached result on every commit and the reuse layer would be worth nothing.
+HOST_MODULES = ("_entry.py", "plugin.py", "manifest.py")
+
+
+def host_version():
+    """A digest of the host code that decides what an instance CONTAINS."""
+    here = Path(__file__).resolve().parent
+    h = hashlib.sha256()
+    for name in HOST_MODULES:
+        f = here / name
+        h.update(name.encode())
+        h.update(f.read_bytes() if f.is_file() else b"")
+    return h.hexdigest()[:12]
 
 REUSABLE, CHANGED, ABSENT = "reusable", "changed", "absent"
 
@@ -86,6 +111,10 @@ def unit_record(rundir, plugin, unit=None):
         "version": out.get("version"), "contract": inp.get("contract"),
         "input": h5, "input_size": size, "input_mtime": mtime,
         "params": inp.get("params") or {}, "keys": inp.get("keys") or {},
+        # WHAT THE INSTANCE ITSELF RECORDS, so a run made before a host change cannot be adopted
+        # into one made after it. Absent on an instance written before this existed, which is
+        # itself the right answer: its key differs from a current one and it is not reused.
+        "host": inp.get("host_version"),
         "state": st, "why": why, "artifacts": n, "figures": figs,
     }
 
@@ -122,6 +151,7 @@ def wanted(plugin, unit, *, version, h5ad, params=None, keys=None):
     """The identity a NEW run would have for one instance. Same shape, same key function."""
     size, mtime = identity(h5ad)
     rec = {"plugin": plugin, "unit": unit, "version": version, "input": str(h5ad),
+           "host": host_version(),
            "input_size": size, "input_mtime": mtime,
            "params": params or {}, "keys": keys or {}}
     rec["key"] = reuse_key(rec)
