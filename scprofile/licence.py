@@ -51,6 +51,88 @@ LICENCE_DIR = "LICENCES"
 FULL, PROVISIONAL, RETROSPECTIVE, REFUSED = ("full", "provisional", "retrospective", "refused")
 ADOPTABLE = (FULL, PROVISIONAL, RETROSPECTIVE)
 
+#: Ordered weakest to strongest, so a policy can say "at least this".
+GRADE_ORDER = (REFUSED, RETROSPECTIVE, PROVISIONAL, FULL)
+
+# ---------------------------------------------------------------------------------------------
+# THE CRITERIA. Stated here, in one place, as data - not spread through the logic that reads
+# them. A licence records the version it was granted under, so a licence written before a
+# criterion existed is distinguishable from one that passed it, and adding a criterion does not
+# silently re-bless everything already on disk.
+#
+# A GRADE IS DERIVED FROM EVIDENCE ALONE. Nothing a person passes on the command line changes
+# what evidence says. What a person decides is which grades they are willing to ADOPT, which is
+# a policy applied at adoption time and recorded there - see `adopt(min_grade=...)`.
+# ---------------------------------------------------------------------------------------------
+
+#: Bump when a criterion is added, removed, or its measurement changes. Licences carry it.
+CRITERIA_VERSION = 1
+
+
+class Criterion:
+    """One thing that is measured, what passing it establishes, and what it does NOT."""
+
+    def __init__(self, cid, requires, measured_by, establishes, does_not_establish, *,
+                 required_for_any_licence=False):
+        self.id = cid
+        self.requires = requires
+        self.measured_by = measured_by
+        self.establishes = establishes
+        self.does_not_establish = does_not_establish
+        #: A criterion no licence of any grade may fail. The others differentiate grades.
+        self.required = required_for_any_licence
+
+
+CRITERIA = (
+    Criterion(
+        "integrity",
+        "every file the instance produced exists and hashes cleanly",
+        "sha256 of each file, recorded INTO the licence",
+        "that the bytes adopted later are the bytes licensed now",
+        "that the bytes are correct - only that they have not changed",
+        required_for_any_licence=True),
+    Criterion(
+        "completeness",
+        "the instance finished, and everything its plugin DECLARES it produces is present",
+        "resume.state() against the unit directory, plus the plugin's `produces` list",
+        "that nothing the plugin promised is missing",
+        "that what is present is right, nor that the plugin promised everything it should",
+        required_for_any_licence=True),
+    Criterion(
+        "provenance",
+        "the reuse key is computable: plugin, version, unit, input identity, params, keys",
+        "landscape.unit_record() reading in.json and out.json",
+        "that a later run can tell whether it is asking for the same thing",
+        "that the INPUT is unchanged - runs record a path and no content digest",
+        required_for_any_licence=True),
+    Criterion(
+        "self_report",
+        "the producing run published a card and its verdict for this instance is trusted",
+        "runcard.verdict_for()",
+        "that the run that computed this did not object to it",
+        "that the run would have noticed a problem; it reports what it checked, not what it "
+        "did not"),
+    Criterion(
+        "inspection",
+        "every figure the instance produced has a recorded look",
+        "review.read_ledger() against the figures on disk",
+        "that a person opened each panel and wrote down what they saw",
+        "that what they saw was right"),
+)
+
+BY_ID = {c.id: c for c in CRITERIA}
+
+#: GRADE FROM EVIDENCE, and nothing else. Read top to bottom; the first matching row wins.
+GRADE_RULES = (
+    (REFUSED, "any REQUIRED criterion fails"),
+    (REFUSED, "self_report is present and NOT trusted - the run that made it objected"),
+    (RETROSPECTIVE, "self_report is ABSENT: the run published no card and it cannot be "
+                    "reconstructed afterwards"),
+    (FULL, "every criterion passes, inspection included"),
+    (PROVISIONAL, "required criteria and self_report pass; nobody looked at the figures"),
+)
+
+
 
 def _artifacts(unit_dir):
     """Every file an instance produced, relative to its directory, with a digest."""
@@ -113,7 +195,7 @@ def evaluate(rundir, plugin, unit=None, *, declared=None):
     return ev, missing
 
 
-def decide(rundir, plugin, unit=None, *, declared=None, retrospective=False, granter=""):
+def decide(rundir, plugin, unit=None, *, declared=None, granter="", **_ignored):
     """The licence this WOULD be, written nowhere.
 
     SPLIT FROM `grant` BECAUSE A PREVIEW THAT DISAGREES WITH THE ACTION IS WORSE THAN NEITHER.
@@ -142,20 +224,18 @@ def decide(rundir, plugin, unit=None, *, declared=None, retrospective=False, gra
                                     f"{ev['self_report']['verdict']!r}"]
                                    + ev["self_report"]["reasons"],
                 "evidence": ev}
-    if unknown and not retrospective:
-        return {"licence": 1, "grade": REFUSED, "run": Path(rundir).name,
-                "plugin": plugin, "unit": unit,
-                "refused_because": [
-                    "no run card, so the producing run's verdict is unknown. Grant a "
-                    "RETROSPECTIVE licence deliberately if the missing self-report is "
-                    "acceptable to you - it is not something this can decide."],
-                "evidence": ev}
+    # A MISSING SELF-REPORT IS EVIDENCE, NOT A REFUSAL. It grades RETROSPECTIVE - the bytes are
+    # intact, complete and keyed, and the run said nothing about itself because it could not.
+    # Whether that is good enough to adopt is a POLICY decision and is taken at adoption.
 
     grade = RETROSPECTIVE if unknown else (FULL if ev["inspection"]["ok"] else PROVISIONAL)
+    rule = next(r for g, r in GRADE_RULES if g == grade)
     d = resume.unit_dir(rundir, plugin, unit)
     lic = {
         "licence": 1, "grade": grade, "run": Path(rundir).name, "run_dir": str(rundir),
         "plugin": plugin, "unit": unit, "dir": str(d),
+        "criteria_version": CRITERIA_VERSION,
+        "graded_by_rule": rule,
         "granted": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "granter": str(granter or ""),
         "key": ev["provenance"]["key"],
@@ -220,7 +300,7 @@ def verify(lic, rundir=None):
     return (not bad), bad
 
 
-def adopt(lic, dest_run, *, link=True):
+def adopt(lic, dest_run, *, link=True, min_grade=PROVISIONAL):
     """Materialise a licensed instance inside a new run. Returns (n_files, how, reasons).
 
     HARDLINK BY DEFAULT, and the reason is not disk space. A hardlink is the SAME INODE: the
@@ -231,6 +311,13 @@ def adopt(lic, dest_run, *, link=True):
     """
     import shutil
 
+    # POLICY, APPLIED HERE AND RECORDED HERE. The grade came from evidence; what a project is
+    # willing to build on is its own decision, and it belongs at the moment of adoption rather
+    # than smuggled into how the evidence was read.
+    g = (lic or {}).get("grade")
+    if GRADE_ORDER.index(g) < GRADE_ORDER.index(min_grade) if g in GRADE_ORDER else True:
+        return 0, "refused", [f"grade {g!r} is below the minimum this adoption accepts "
+                              f"({min_grade!r})"]
     ok, why = verify(lic)
     if not ok:
         return 0, "refused", why
@@ -254,6 +341,8 @@ def adopt(lic, dest_run, *, link=True):
         n += 1
     (dst / "ADOPTED.json").write_text(json.dumps(
         {"from_run": lic.get("run"), "grade": lic.get("grade"), "how": how,
+         "accepted_minimum_grade": min_grade,
+         "criteria_version": lic.get("criteria_version"),
          "key": lic.get("key"), "adopted": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
          "not_evidenced": lic.get("not_evidenced", [])}, indent=1), encoding="utf-8")
     return n, how, []

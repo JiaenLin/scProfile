@@ -192,6 +192,80 @@ so a batch node with no outbound route is a problem you find in the plan rather 
 [docs/REFERENCES.md](docs/REFERENCES.md) lists every reference, its publisher, its terms, and
 which of them scProfile can verify.
 
+## Reusing an earlier run
+
+A run is expensive. scProfile can tell you what an earlier run already computed, whether it is
+still valid, and whether it is fit to build on — and can then adopt it into a new run by
+**hardlink**, so the bytes are shared rather than copied.
+
+```
+scprofile status    --out RUNDIR                  # what is left in THIS run
+scprofile landscape --root RUNS --h5ad OBJ        # what EARLIER runs hold, and what to compute
+scprofile licence   --out RUNDIR --grant          # evaluate results and licence them for reuse
+```
+
+### The licence criteria
+
+**A grade is derived from evidence alone.** Nothing passed on the command line changes what the
+evidence says. What a person decides is which grades they are willing to *adopt* — a policy,
+applied at adoption and recorded there.
+
+Criteria are versioned (`licence.CRITERIA_VERSION`, currently **1**) and every licence records
+the version it was granted under, so adding a criterion does not silently re-bless everything
+already on disk.
+
+| criterion | requires | measured by | required? |
+|---|---|---|---|
+| `integrity` | every produced file exists and hashes cleanly | sha256 of each file, recorded **into** the licence | **yes** |
+| `completeness` | the instance finished and everything the plugin **declares** it produces is present | `resume.state()` + the plugin's `produces` | **yes** |
+| `provenance` | the reuse key is computable — plugin, version, unit, input identity, params, keys | `landscape.unit_record()` | **yes** |
+| `self_report` | the producing run published a card and its verdict is trusted | `runcard.verdict_for()` | no — grades |
+| `inspection` | every figure has a recorded look | `review` ledger vs figures on disk | no — grades |
+
+Each criterion also states **what it does not establish**, in the code beside it. `integrity`
+does not say the bytes are correct, only that they have not changed. `provenance` does not say
+the input is unchanged — runs record a path and no content digest. `self_report` does not say the
+run would have noticed a problem; it reports what it checked, not what it did not.
+
+### The grades
+
+Read top to bottom; the first matching row wins.
+
+| grade | when | adoptable |
+|---|---|---|
+| `refused` | any **required** criterion fails | no |
+| `refused` | `self_report` is present and **not trusted** — the run that made it objected | no |
+| `retrospective` | `self_report` is **absent** — the run published no card, and that cannot be reconstructed afterwards | by explicit policy |
+| `full` | every criterion passes, inspection included | yes |
+| `provisional` | required criteria and `self_report` pass; nobody looked at the figures | yes |
+
+**A retrospective licence is not a full one with an asterisk.** It is a different claim — *the
+bytes are intact, complete, and I know where they came from* — not *the run that made them
+reported nothing wrong*. Keeping those apart is the whole reason there are grades and not a
+boolean: with earlier runs sitting there and re-running costing hours, blurring them is exactly
+the temptation.
+
+### Adoption
+
+```python
+licence.adopt(lic, dest_run, min_grade=licence.PROVISIONAL)
+```
+
+`min_grade` is the policy. Adoption **re-verifies every hash first** — the licence is a claim
+about a moment; the bytes are the authority — and then **hardlinks**. The reason is not disk
+space: a hardlink is the same inode, so an adopted file *cannot* silently differ from the
+licensed one. Where a link is impossible (a different filesystem) it copies and records that it
+did, because a copy is a weaker claim. Every adopted instance carries `ADOPTED.json` naming the
+source run, the grade, the criteria version, the minimum grade accepted, and everything the
+licence did **not** evidence.
+
+### Updating the criteria
+
+Add a `Criterion` to `licence.CRITERIA`, state its `establishes` and `does_not_establish`, mark
+it `required_for_any_licence` only if no licence of any grade may fail it, add a row to
+`GRADE_RULES` if it changes grading, and **bump `CRITERIA_VERSION`**. Licences granted under an
+earlier version remain readable and are distinguishable by that field.
+
 ## Reading the results
 
 Every method states what its result cannot tell you, and that statement appears in the report
