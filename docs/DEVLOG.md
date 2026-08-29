@@ -842,3 +842,51 @@ clean:  PBS 699319 at `621d439` — fourteen instances, all `ok`, 181 figures, 1
 `results/04_profile/` does not exist and no number in them may be quoted. And 5 of 181 figures
 carry a recorded look, so no licence in this stage can reach `full`; every adoption above ran at
 `provisional` or was refused.
+
+
+---
+
+## 2026-08-29 — the checkers that were wrong, the panels that were owed (PBS 699374)
+
+tested: one job, on the same real ten-sample cohort, at `67499d2`. It is the first run of this
+        stage to reuse EVERYTHING, so it measures reuse rather than compute.
+
+        [declaration] `validate` demanded a url and a sha256 from a reference that ships inside a
+              package. Twelve errors, three of the nine shipped plugins, six of six references,
+              every one correctly declared → d64cb00
+
+        [declaration] `unit_network` read by the reporter, absent from the checker's key list.
+              The guard written for the identical `unit_metrics` defect compared the list against
+              the checker - two statements in one module - and could not see a consumer in
+              another → d64cb00
+
+        [host] nothing validated the shipped plugins. Not `check`, not `check --deep`, not a
+              suite; every check ran against a fixture → d64cb00
+
+        [host] five panel kinds the registry specified and no run drew, so a plugin declaring a
+              network inherited five of thirteen. Three more were never the host's to draw and
+              counting them as a backlog was the misleading half → 67499d2
+
+        [host] found by opening the images, three defects a green suite could not see: a zero
+              cell drawn at the bottom of the colour ramp beside the weakest real edge, on the
+              panel whose point is that a zero has two causes; a decomposition that picked the
+              strongest group unconditionally and drew ONE BAR AT 1.00 for a group whose only
+              member is itself; and two arms of one contrast given DIFFERENT population axes,
+              because each arm's populations came from its own edges → 67499d2
+
+        [method] the union of populations across arms immediately paid for itself on real data -
+              one population has no link in one arm and a different one none in the other, and
+              the chord names them instead of the axis quietly omitting them. Not a defect: a
+              measurement the previous layout could not express.
+
+clean:  **221 figures with ZERO instances recomputed.** All fourteen adopted by hardlink,
+        inode verified shared (`links=2`), 9 m 32 s of compute replaced by 3 m 28 s, PBS mem
+        35.3 GB against 42.7. Exit standard MET, card `ok` on 14 of 14, eight suites green,
+        `check --deep` 33 green.
+
+**The property this run was submitted to test.** If every instance is adopted from a run made by
+older code, does the report freeze at that code's figure set? **No** - 181 figures became 221
+with nothing recomputed, because a plugin's output is adopted and the HOST'S PANELS ARE REDRAWN
+EVERY TIME. Had it gone the other way, a reuse-heavy project would have quietly stopped receiving
+tool improvements while its report went on looking complete, which is this log's recurring shape:
+an answer indistinguishable from a real one.
