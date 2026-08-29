@@ -405,7 +405,14 @@ def _arm_content(units, design, spec, *, out_dir=None, name=""):
         d, uid = u.get("dir"), str(u.get("unit") or "")
         if not (d and uid and tbl):
             continue
-        f = Path(d) / tbl
+        # A UNIT'S `dir` IS RECORDED RELATIVE TO THE RUN DIRECTORY. Resolving it against the
+        # process's working directory found nothing on a real run, so every arm panel was
+        # silently skipped and the page fell back to one figure - while a local re-render, whose
+        # fixture had been given absolute paths, produced all forty. THE FIXTURE WAS MORE
+        # CONVENIENT THAN REALITY, which is the only reason the bug survived a check written to
+        # catch it. Absolute paths are honoured as-is so an out-of-tree unit still resolves.
+        base = Path(d)
+        f = (base if base.is_absolute() else Path(out_dir) / base) / tbl
         if not f.exists():
             continue
         try:

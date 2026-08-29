@@ -1063,6 +1063,13 @@ def _run(a):
                                          if readable.get("converted") else None),
                "object": str(op) if op else None}
     (out / "report.json").write_text(json.dumps(payload, indent=1, default=str), encoding="utf-8")
+    # THE RUN SAYS WHAT IT THINKS OF ITS OWN OUTPUT, for whatever run comes next. Provenance
+    # alone cannot tell a good result from a bad one - a unit that completed and produced
+    # nonsense has the same inputs and the same code as one that did not - so reuse keyed on
+    # provenance alone launders every error forward with a trail that makes it look verified.
+    from . import runcard as _RC
+    _card = _RC.write(out, payload)
+    print(f"      {out / _RC.CARD}  (this run's own verdict: {_card['verdict']})")
     print(f"      {out}/report.json")
     # THE README IS WRITTEN LAST, and it has to be. It describes the directory BY INSPECTING IT,
     # which is the whole reason it can be trusted - and it was called two lines above
@@ -2060,6 +2067,85 @@ def _write_readme(out, payload):
     return out / "README.md"
 
 
+def _landscape(a):
+    """The checklist: for every instance a new run would need, is it already computed?
+
+    Answers three questions a person actually has - what exists, what changed, and what has
+    never been run - and names the run each reusable result came from.
+    """
+    from . import landscape as LS
+    from .kernels import discover
+
+    root = Path(a.root)
+    if not root.is_dir():
+        print(f"scprofile: no such directory: {root}", file=sys.stderr)
+        return REFUSE
+    plugins = _split(a.kernel or "") or None
+    have = LS.scan(root, plugins=plugins)
+    if a.json:
+        print(json.dumps(have, indent=1, default=str))
+        return 0
+    if not have:
+        print(f"{root}\n  no earlier run holds anything here.")
+        return 0
+
+    runs = sorted({h["run"] for h in have}, reverse=True)
+    print(f"{root}")
+    print(f"  {len(have)} instance(s) across {len(runs)} run(s), newest first")
+    print()
+    for r in runs:
+        rows = [h for h in have if h["run"] == r]
+        vers = sorted({str(h.get("version")) for h in rows})
+        figs = sum(len(h["figures"]) for h in rows)
+        done = sum(1 for h in rows if h["state"] == "done")
+        print(f"  {r}")
+        print(f"      {len(rows)} instance(s), {done} done, {figs} figure(s), "
+              f"plugin version(s) {', '.join(vers)}")
+
+    # WHAT A NEW RUN WOULD ACTUALLY HAVE TO DO. Without --h5ad this is an inventory; with it,
+    # it is a plan, because the input is half of what decides whether anything can be reused.
+    if not a.h5ad:
+        print("\n  Pass --h5ad to turn this inventory into a plan: reuse is decided by the "
+              "INPUT as much as by the code, and without it nothing here can be called "
+              "reusable.")
+        return 0
+    ks = discover()
+    want_names = plugins or sorted({h["plugin"] for h in have})
+    units = sorted({h.get("unit") for h in have if h.get("unit")})
+    print(f"\n  against {a.h5ad}")
+    n_reuse = n_change = n_absent = 0
+    for name in want_names:
+        k = ks.get(name)
+        ver = (k.spec or {}).get("version") if k else None
+        for u in (units or [None]):
+            src = next((h for h in have
+                        if h["plugin"] == name and h.get("unit") == u), None)
+            w = LS.wanted(name, u, version=ver, h5ad=a.h5ad,
+                          params=(src or {}).get("params"), keys=(src or {}).get("keys"))
+            st, got, why = LS.match(w, have)
+            lbl = f"{name}[{u}]" if u else name
+            if st == LS.REUSABLE:
+                n_reuse += 1
+                print(f"    REUSE   {lbl:<28s} from {got['run']}  "
+                      f"({got['artifacts']} artifact(s), {len(got['figures'])} figure(s))")
+            elif st == LS.CHANGED:
+                n_change += 1
+                print(f"    RUN     {lbl:<28s} newest copy in {got['run']} cannot be used")
+                for d in why[:3]:
+                    print(f"                {d}")
+            else:
+                n_absent += 1
+                print(f"    RUN     {lbl:<28s} never run here")
+    print(f"\n  {n_reuse} reusable, {n_change + n_absent} to compute")
+    if have:
+        chk, unchk = LS.verified_fields(have[0])
+        print(f"\n  VERIFIED against the filesystem just now: {', '.join(chk) or 'nothing'}.")
+        print(f"  Taken on trust from what the run wrote: {', '.join(unchk)}.")
+        print("  A run records the input's PATH and no digest of its contents, so an object "
+              "rebuilt at the same path with the same size and mtime would not be detected. "
+              "Reuse on that basis, or re-run.")
+    return 0
+
 def _review(a):
     """The figure-review ledger: record a look, or report what has not been looked at.
 
@@ -2409,6 +2495,16 @@ def main(argv=None):
     p = sub.add_parser("report", help="[you] rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)
     p.set_defaults(fn=_report)
+
+    ls_ = sub.add_parser("landscape",
+                         help="[you] what EARLIER runs already hold, and what a new run must "
+                              "actually compute")
+    ls_.add_argument("--root", required=True, type=Path,
+                     help="a directory of run directories")
+    ls_.add_argument("--h5ad", type=Path, help="the input a new run would use")
+    ls_.add_argument("--kernel", help="plugins to consider, comma separated")
+    ls_.add_argument("--json", action="store_true", help="machine-readable")
+    ls_.set_defaults(fn=_landscape)
 
     rv = sub.add_parser("review",
                         help="[you] which figures have been LOOKED AT, and which have not")
