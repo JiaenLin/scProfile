@@ -432,7 +432,8 @@ def _arm_content(units, design, spec, *, out_dir=None, name=""):
     con = []
     for sp in pairs:
         con += CPan.draw_contrast(per, design, sp, figdir, name, group_col=net.get("group"))
-    arm = CPan.draw_arm_networks(per, design, CPan.arms_in(design, pairs), figdir, name)
+    arm = CPan.draw_arm_networks(per, design, CPan.arms_in(design, pairs), figdir, name,
+                                 group_col=net.get("group"), member_col=net.get("member"))
     return {"contrast": con, "arm": arm}
 
 

@@ -1,9 +1,22 @@
-"""Single-network panels: the ring and the chord, drawn for ONE arm or ONE unit.
+"""Single-network panels, drawn for ONE arm or ONE unit.
 
-These are the two shapes every network method publishes and the two that go wrong the same way
-every time: both must draw a SUBSET of edges to be readable at all, and a subset is a removal.
-`panels.R3` is therefore not advice here, it is the contract - state the fraction of strength
-kept, and NAME what is left with no link.
+Seven kinds: the ring and the chord, which draw the network itself; the sender-by-receiver
+matrix and the role scatter, which are the same numbers without a cut; and - where the
+declaration names a grouping column - the flow ranking, the group-by-population role heatmap and
+the decomposition of one group into its members.
+
+The first two go wrong the same way every time: both must draw a SUBSET of edges to be readable
+at all, and a subset is a removal. `panels.R3` is therefore not advice here, it is the contract -
+state the fraction of strength kept, and NAME what is left with no link. The matrix and the
+scatter exist partly to answer that: they show every pair and every population, uncut.
+
+EVERYTHING HERE IS AN AGGREGATION OF THE DECLARED EDGE LIST, AND THAT IS THE BOUNDARY. Summing,
+ranking and cross-tabulating rearrange what a plugin computed; they do not compute anything. The
+kinds that would - a latent decomposition of the group-by-population matrix, a similarity
+embedding over groups - are NOT here and must not be, because the reporter may not produce a
+number that first exists at render time. They belong to the plugin, which has the method's own
+machinery, and `panels.OWNER` records that rather than listing them as things the host has not
+got round to.
 
 Nothing in this module knows what produced the numbers. It takes an edge list with source,
 target and weight, and a population order, which is all a network is.
@@ -334,5 +347,271 @@ def chord(ctx, edges, pops, *, fid="N2_chord", keep=0.75, title=None, note=""):
               "Every population survives the cut and appears. ")
            + f"Each population's strongest link in and out is kept whatever its rank. Widths are "
              f"on the method's own scale and compare within this panel only.{note}")
+    ctx.emit_figure(fid, fig, caption=cap)
+    return True
+
+
+# --------------------------------------------------------------------------------------------
+# THE UNCUT VIEWS. The ring and the chord above are readable because they remove edges; these
+# two remove none, which is what makes them the panels a reader checks a cut against.
+# --------------------------------------------------------------------------------------------
+
+def matrix(ctx, edges, pops, *, fid="N3_matrix", title=None, note=""):
+    """Sender by receiver, every ordered pair, nothing cut. Returns True if drawn."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    c, w = aggregate(edges, pops)
+    if w.sum() <= 0:
+        return False
+    short = F.short_labels(list(pops))
+    lab = [short[p] for p in pops]
+
+    # R2: A ZERO CELL HAS TWO CAUSES AND THIS PANEL CANNOT TELL THEM APART. An edge list holds
+    # what was returned, not what was attempted, so a pair that was scored and came back empty
+    # is written into the same cell as a pair that never cleared a minimum-cells floor. The
+    # panel marks every zero as one thing and the caption says which two things that is.
+    #
+    # AND A ZERO MUST NOT LOOK LIKE A WEAK EDGE, which the first version of this panel got
+    # wrong: zeros took the bottom of the colour ramp, a faint grey x on pale cream, and were
+    # indistinguishable from the weakest real pairs at a glance. Found by opening the image on a
+    # real arm. Zeros are now OUT of the ramp entirely - white, crossed - and the ramp starts at
+    # the smallest strength that was actually inferred, so every coloured cell is an edge.
+    zero = (w <= 0)
+    shown = np.where(zero, np.nan, w)
+    lo = float(w[~zero].min()) if (~zero).any() else 0.0
+    cmap = plt.get_cmap("magma_r").copy()
+    cmap.set_bad("white")
+
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.94), layout="constrained")
+    im = ax.imshow(shown, cmap=cmap, vmin=lo, vmax=float(w.max()))
+    ax.set_xticks(range(len(pops)), lab, rotation=90, fontsize=6)
+    ax.set_yticks(range(len(pops)), lab, fontsize=6)
+    ax.set_xlabel("receiver", fontsize=7)
+    ax.set_ylabel("sender", fontsize=7)
+    ys, xs = np.nonzero(zero)
+    ax.scatter(xs, ys, marker="x", s=14, linewidths=0.7, color="#9A9A9A", zorder=3)
+    cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
+    cb.ax.tick_params(labelsize=6)
+    cb.set_label("summed strength", fontsize=6)
+    if title:
+        ax.set_title(title, fontsize=8)
+
+    n_zero, n_all = int(zero.sum()), int(w.size)
+    cap = (f"Every ordered population pair, uncut: row signals to column, colour is that pair's "
+           f"summed strength on the method's own scale. White and crossed is NO edge, and the "
+           f"colour scale starts at the weakest edge there is.",
+           f"{n_all - n_zero} of {n_all} ordered pairs carry inferred signal. The {n_zero} "
+           f"crossed cells are pairs with NO edge in this unit, and this panel CANNOT SAY WHICH "
+           f"KIND of absence each is: a pair that was scored and returned nothing is a result, a "
+           f"pair whose populations never cleared the method's minimum-cells floor is a "
+           f"threshold, and an edge list records only what came back. A population absent from "
+           f"the method's output entirely has no row and no column here at all. Strength is "
+           f"per-object and comparable within this panel only.{note}")
+    ctx.emit_figure(fid, fig, caption=cap)
+    return True
+
+
+def role_scatter(ctx, edges, pops, *, fid="N4_role", title=None, note=""):
+    """Outgoing against incoming strength, one point per population. Returns True if drawn."""
+    import matplotlib.pyplot as plt
+
+    _c, w = aggregate(edges, pops)
+    if w.sum() <= 0:
+        return False
+    out_s, in_s = w.sum(1), w.sum(0)
+    cmap = F.palette(list(pops))
+    short = F.short_labels(list(pops))
+
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.92), layout="constrained")
+    hi = float(max(out_s.max(), in_s.max())) or 1.0
+    # THE DIAGONAL IS THE ONLY REFERENCE LINE THAT MEANS ANYTHING HERE. Net sender and net
+    # receiver is a statement about which side of y = x a population falls, and without the line
+    # drawn a reader compares two axes by eye and gets it wrong for anything near the middle.
+    ax.plot([0, hi], [0, hi], color=F.GREY, lw=0.6, zorder=0)
+    texts = []
+    for i, p in enumerate(pops):
+        ax.scatter(out_s[i], in_s[i], s=26, color=cmap[p], edgecolor="white", lw=0.4, zorder=2)
+        texts.append(ax.annotate(short[p], (out_s[i], in_s[i]), fontsize=5.5,
+                                 xytext=(3, 3), textcoords="offset points"))
+    F.spread_labels(ax, texts)
+    ax.set_xlabel("outgoing strength", fontsize=7)
+    ax.set_ylabel("incoming strength", fontsize=7)
+    ax.tick_params(labelsize=6)
+    if title:
+        ax.set_title(title, fontsize=8)
+
+    n_send = int((out_s > in_s).sum())
+    cap = (f"Each population's total outgoing strength against its total incoming strength. "
+           f"The line is parity; above it a population receives more than it sends.",
+           f"{n_send} of {len(pops)} populations sit below the line and are net senders here. "
+           f"These are TWO SUMS OVER THE SAME EDGE LIST AND NOT A TEST: no interval is drawn "
+           f"because none was computed, and a population close to the line is not thereby "
+           f"balanced - it is unresolved. Both axes are on the method's own per-object scale, so "
+           f"positions compare within this panel and rank-order across panels, nothing more."
+           f"{note}")
+    ctx.emit_figure(fid, fig, caption=cap)
+    return True
+
+
+# --------------------------------------------------------------------------------------------
+# THE GROUPED VIEWS. Drawn only when the declaration names a grouping column, and NOT drawn
+# silently when it does not - `panels.R2` applies to a panel's own absence as much as to a cell.
+# --------------------------------------------------------------------------------------------
+
+def flow_rank(ctx, edges, pops, group_col, *, fid="N5_flow", top=18, title=None, note=""):
+    """Groups ranked by total strength within this unit. Returns True if drawn."""
+    import matplotlib.pyplot as plt
+
+    if not group_col or group_col not in getattr(edges, "columns", ()):
+        return False
+    tot = edges.groupby(group_col)["prob"].sum().sort_values(ascending=False)
+    tot = tot[tot > 0]
+    if not len(tot):
+        return False
+    shown, hidden = tot.head(top), tot.iloc[top:]
+
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 1.05), layout="constrained")
+    ys = range(len(shown))
+    ax.barh(list(ys), list(shown.values), color=F.OKABE_ITO[0], height=0.72)
+    ax.set_yticks(list(ys), [str(i) for i in shown.index], fontsize=6)
+    ax.invert_yaxis()
+    ax.set_xlabel("summed strength", fontsize=7)
+    ax.tick_params(axis="x", labelsize=6)
+    if title:
+        ax.set_title(title, fontsize=8)
+
+    kept = float(shown.sum() / tot.sum())
+    cap = (f"{group_col.replace('_', ' ')}s in this unit, ranked by the strength summed over "
+           f"every edge they carry.",
+           f"{len(shown)} of {len(tot)} drawn, holding {kept * 100:.0f}% of total strength"
+           + (f"; the {len(hidden)} not drawn are the weakest and are named in the source table. "
+              if len(hidden) else ". ")
+           + f"A BAR'S LENGTH IS NOT COMPARABLE TO THE SAME BAR IN ANOTHER UNIT - the scale is "
+             f"per-object, so only the RANKING carries across panels. Nothing here is tested: "
+             f"these are sums, with no interval and no significance marking.{note}")
+    ctx.emit_figure(fid, fig, caption=cap)
+    return True
+
+
+def role_heatmap(ctx, edges, pops, group_col, *, fid="N6_role_heatmap", top=18, title=None,
+                 note=""):
+    """Group by population, as sender and as receiver, side by side. Returns True if drawn."""
+    import numpy as np
+    import matplotlib.pyplot as plt
+
+    if not group_col or group_col not in getattr(edges, "columns", ()):
+        return False
+    tot = edges.groupby(group_col)["prob"].sum().sort_values(ascending=False)
+    groups = [g for g in tot.index if tot[g] > 0][:top]
+    if not groups or not pops:
+        return False
+    gi = {g: i for i, g in enumerate(groups)}
+    pi = {p: i for i, p in enumerate(pops)}
+    send = np.zeros((len(groups), len(pops)))
+    recv = np.zeros((len(groups), len(pops)))
+    for g, s, t, v in zip(edges[group_col].astype(str), edges["source"].astype(str),
+                          edges["target"].astype(str), edges["prob"]):
+        if g in gi:
+            if s in pi:
+                send[gi[g], pi[s]] += float(v)
+            if t in pi:
+                recv[gi[g], pi[t]] += float(v)
+
+    # R1: ONE SCALE ACROSS THE GRID. Each row is divided by its own maximum ACROSS BOTH panels,
+    # not per panel - scaling sender and receiver separately would make every group look equally
+    # balanced, which is the one thing this figure is for.
+    both = np.concatenate([send, recv], axis=1)
+    rmax = both.max(axis=1, keepdims=True)
+    rmax[rmax == 0] = 1.0
+    short = F.short_labels(list(pops))
+    lab = [short[p] for p in pops]
+
+    fig, axes = plt.subplots(1, 2, figsize=(F.DOUBLE, F.SINGLE * 1.02), layout="constrained",
+                             sharey=True)
+    for ax, M, what in ((axes[0], send / rmax, "as sender"), (axes[1], recv / rmax, "as receiver")):
+        im = ax.imshow(M, cmap="magma_r", vmin=0.0, vmax=1.0, aspect="auto")
+        ax.set_xticks(range(len(pops)), lab, rotation=90, fontsize=6)
+        ax.set_title(what, fontsize=7)
+    axes[0].set_yticks(range(len(groups)), [str(g) for g in groups], fontsize=6)
+    cb = fig.colorbar(im, ax=axes, fraction=0.03, pad=0.02)
+    cb.ax.tick_params(labelsize=6)
+    cb.set_label("share of the row's own maximum", fontsize=6)
+    if title:
+        fig.suptitle(title, fontsize=8)
+
+    cap = (f"Where each {group_col.replace('_', ' ')} acts: its strength across populations as a "
+           f"sender, and as a receiver. {len(groups)} of {len(tot)} drawn, the strongest by "
+           f"total.",
+           f"EVERY ROW IS SCALED TO ITS OWN MAXIMUM ACROSS BOTH PANELS, so a row says where a "
+           f"group acts and NOT how strong it is - a group carrying a hundredth of another's "
+           f"strength fills its row identically. Read strength off the flow ranking instead. "
+           f"Scaling the two panels separately would have made every group look balanced between "
+           f"sending and receiving, which is what this figure exists to distinguish.{note}")
+    ctx.emit_figure(fid, fig, caption=cap)
+    return True
+
+
+def contribution(ctx, edges, pops, group_col, member_col, *, fid="N7_contribution", top=14,
+                 title=None, note=""):
+    """The strongest group, decomposed into the members inside it. Returns True if drawn."""
+    import matplotlib.pyplot as plt
+
+    cols = getattr(edges, "columns", ())
+    if not group_col or not member_col or group_col not in cols or member_col not in cols:
+        return False
+    tot = edges.groupby(group_col)["prob"].sum().sort_values(ascending=False)
+    tot = tot[tot > 0]
+    if not len(tot):
+        return False
+    # ONE GROUP, AND WHICH ONE IS A CHOICE THAT MUST BE STATED. The strongest by total flow is
+    # the defensible default and it is still a choice: a reader who does not know which group
+    # this is, or that it was picked rather than given, will read it as the group that matters.
+    #
+    # AND IT MUST BE A GROUP THAT CAN BE DECOMPOSED. Taking the strongest unconditionally drew,
+    # on a real arm, a single bar at 1.00 labelled `PECAM1_PECAM1` - a group whose one member is
+    # itself. That is not a decomposition; it is a tautology that reads as a finding, and no
+    # check could see it because a figure was written and the suite was green. The strongest
+    # group with MORE THAN ONE member is chosen instead, its rank among all groups is stated,
+    # and where no group has two members nothing is drawn - an absence the reporter names.
+    g, rank, mem = None, 0, None
+    for i, cand in enumerate(tot.index, start=1):
+        sub = edges[edges[group_col].astype(str) == str(cand)]
+        m = sub.groupby(member_col)["prob"].sum().sort_values(ascending=False)
+        m = m[m > 0]
+        if len(m) > 1:
+            g, rank, mem = cand, i, m
+            break
+    if g is None:
+        return False
+    shown, hidden = mem.head(top), mem.iloc[top:]
+
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.95), layout="constrained")
+    ys = range(len(shown))
+    ax.barh(list(ys), list(shown.values / mem.sum()), color=F.OKABE_ITO[2], height=0.72)
+    ax.set_yticks(list(ys), [str(i) for i in shown.index], fontsize=6)
+    ax.invert_yaxis()
+    ax.set_xlabel(f"share of {g}'s total strength", fontsize=7)
+    ax.tick_params(axis="x", labelsize=6)
+    # THE GROUP'S NAME BELONGS IN THE TITLE. With an arm label passed in, the first version put
+    # only the arm there and the group survived solely in an axis label - so a panel lifted out
+    # of the page said which arm it described and not what it decomposed.
+    ax.set_title(f"{title} — {g}" if title else str(g), fontsize=8)
+
+    # R4: THE DENOMINATOR IS THIS GROUP'S TOTAL IN THIS UNIT, not the group's total anywhere
+    # else, and a share therefore cannot be compared between units without saying so.
+    cap = (f"The strongest {group_col.replace('_', ' ')} in this unit - {g} - split into the "
+           f"{member_col.replace('_', ' ')}s that make it up.",
+           f"{len(shown)} of {len(mem)} drawn"
+           + (f", holding {shown.sum() / mem.sum() * 100:.0f}% of the group's strength; the "
+              f"{len(hidden)} not drawn are the weakest. " if len(hidden) else ". ")
+           + f"THE GROUP WAS CHOSEN, not given: {g} is rank {rank} of {len(tot)} by flow in THIS "
+             f"unit and the highest-flow group that HAS more than one member"
+           + (f" — the {rank - 1} above it decompose into themselves and say nothing. "
+              if rank > 1 else ". ")
+           + f"A panel in another unit may decompose a different group, and the two are then "
+             f"not a comparison. The denominator is {g}'s own total here, so a share is within-unit "
+             f"and within-group. A member absent from this panel was not necessarily tested and "
+             f"found empty - an edge list holds what was returned.{note}")
     ctx.emit_figure(fid, fig, caption=cap)
     return True

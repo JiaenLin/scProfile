@@ -2330,8 +2330,13 @@ def _check(a):
         row(f"command `{c}` is registered", f'add_parser("{c}"' in src)
     row("panel registry agrees with what is drawn",
         set(_P.IMPLEMENTED) <= set(_P.BY_ID)
-        and set(_P.IMPLEMENTED) | set(_P.gaps()) == set(_P.BY_ID),
+        and set(_P.IMPLEMENTED) | set(_P.gaps()) | set(_P.plugin_kinds()) == set(_P.BY_ID),
         "registry and IMPLEMENTED disagree")
+    # THE DEBT, AS ITS OWN LINE. A kind the host OWNS and does not draw is a panel every plugin
+    # declaring a network should be getting and is not; a kind the plugin owns is a decision.
+    # Counting them together published five-of-thirteen as though eight were unfinished.
+    row(f"the host draws every panel kind it owns ({len(_P.host_kinds())})",
+        not _P.gaps(), f"owed and not drawn: {', '.join(_P.gaps())}")
 
     # --- the plugins this installation actually ships -----------------------------------------
     # NOT A SOURCE GREP AND NOT A FIXTURE. Every row above asks whether the host's code is

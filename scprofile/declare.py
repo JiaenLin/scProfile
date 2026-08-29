@@ -161,6 +161,13 @@ def report_figures(spec) -> list:
 #: key that nothing consumes is reported as dead.
 REPORT_KEYS = ("figures", "reads_with", "unit_metrics", "unit_network")
 
+#: THE COLUMNS A `unit_network` NAMES. `table`, `source`, `target` and `weight` are required and
+#: are the network itself; `group` and `member` are optional and each earns further panels -
+#: `group` the flow ranking and the role heatmap, `group` with `member` the decomposition. What a
+#: plugin declares is what it gets, which is why an unrecognised key here is an ERROR and not a
+#: warning: a misspelt column name removes panels in silence.
+UNIT_NETWORK_KEYS = ("table", "source", "target", "weight", "group", "member")
+
 
 def report_get(spec, key, default=None):
     """One value out of a plugin's `report` block, by a key this module has declared.
@@ -271,6 +278,27 @@ def _check_report(spec, out) -> None:
             out.append(("ERROR", "`report.reads_with` must be a list of plugin names"))
         elif spec.get("name") and spec["name"] in rw:
             out.append(("ERROR", "`report.reads_with` names this plugin itself"))
+
+    # `unit_network` IS WHAT EARNS THE HOST-DRAWN PANELS, so a typo in it costs a plugin every
+    # one of them - silently, because a panel that cannot find its column simply is not drawn.
+    # `member` was added after `contribution` was implemented and `members` is the obvious
+    # slip; without this it would read as a plugin that chose not to declare one.
+    net = block.get("unit_network")
+    if net is not None:
+        if not isinstance(net, dict):
+            out.append(("ERROR", "`report.unit_network` must be a mapping"))
+        else:
+            missing = [k for k in ("table", "source", "target", "weight") if not net.get(k)]
+            if missing:
+                out.append(("ERROR", f"`report.unit_network` is missing {', '.join(missing)} — "
+                                     f"without all four the host cannot read the network and "
+                                     f"draws none of the panels a declaration earns"))
+            odd = sorted(set(net) - set(UNIT_NETWORK_KEYS))
+            if odd:
+                out.append(("ERROR", f"`report.unit_network` carries unknown key(s) "
+                                     f"{', '.join(odd)} — a misspelt column name here removes "
+                                     f"panels without any error, so it is refused rather than "
+                                     f"warned about"))
 
     extra = sorted(set(block) - set(REPORT_KEYS))
     if extra:

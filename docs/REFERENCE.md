@@ -167,14 +167,24 @@ Declared in a plugin's `report` block. It names the per-unit table that holds a 
 
 ```python
 "unit_network": {"table": "tables/ccc_edges.csv", "source": "source",
-                 "target": "target", "weight": "prob", "group": "pathway_name"}
+                 "target": "target", "weight": "prob", "group": "pathway_name",
+                 "member": "interaction_name"}
 ```
 
-`weight` must be a **magnitude**, not a rank. `group` is optional; without it the panels that
-need a grouping column are not drawn.
+`weight` must be a **magnitude**, not a rank. Four keys are required — `table`, `source`,
+`target`, `weight` — and each optional one earns further panels:
 
-Any plugin that declares this gets the between-arm and per-arm panels. No host code names a
-method.
+| declared | what it earns |
+|---|---|
+| the four required | `matrix`, `circle`, `chord`, `role_scatter` per arm; `diff_matrix` and `role_shift` per contrast |
+| `+ group` | `flow_rank` and `role_heatmap` per arm; `flow_compare` per contrast |
+| `+ group` and `member` | `contribution` per arm |
+
+An unrecognised key here is an **error**, not a warning: a misspelt column name removes panels
+in silence, and a plugin that has lost three of them looks exactly like a plugin that declared
+less.
+
+Any plugin that declares this gets those panels. No host code names a method.
 
 ### Panel kinds
 
@@ -183,9 +193,25 @@ does not: `matrix`, `diff_matrix`, `circle`, `chord`, `role_scatter`, `role_shif
 `flow_compare`, `role_heatmap`, `patterns`, `similarity`, `contribution`, `coverage`.
 
 The registry is a **specification**, not a dispatcher. It records what each kind must establish
-and which rules bind it; the drawing code implements them. `IMPLEMENTED` names the kinds a run
-currently draws, and a test asserts the two agree, so a kind listed here and not drawn is a
-recorded gap rather than an assumption.
+and which rules bind it; the drawing code implements them.
+
+**Each kind declares an OWNER, which is a different question from whether it is drawn yet.**
+
+| owner | meaning | kinds |
+|---|---|---|
+| `host` | derivable from `unit_network` by aggregation alone, and therefore owed to every plugin that declares one | the other ten |
+| `plugin` | needs an analysis the host may not perform, or information no declaration carries | `patterns`, `similarity`, `coverage` |
+
+The three plugin-owned kinds are **not a backlog**. A latent decomposition and a similarity
+embedding produce numbers that first exist at render time, which the reporter is forbidden to do
+(`docs/ARCHITECTURE.md` §0); database coverage needs the reference funnel, which an edge list
+does not carry. A plugin drawing one of these is complete, not a stopgap.
+
+`gaps()` therefore means *host-owned and not drawn* — a debt, and it is currently empty. A test
+asserts it stays empty, and a second asserts that a kind moved to `plugin` carries a reason, so
+the debt cannot be cleared by reclassifying it. Until 2026-08-29 the two were counted together
+and the catalogue read as five of thirteen drawn, which understated what a plugin inherits and
+overstated what was outstanding.
 
 ### Rules every panel obeys
 

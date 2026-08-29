@@ -1560,9 +1560,41 @@ ck("every file it claims to have written exists",
 _arms = _CP.arms_in(_des, _pairs)
 _nets = _CP.draw_arm_networks(_per, _des, _arms, _out, "anyplugin")
 _nids = sorted({f.split("__")[0] for f, *_r in _nets})
-ck("each arm gets its own ring and chord, from the same declaration",
-   _nids == ["N1_circle", "N2_chord"], str(_nids))
+# DERIVED FROM THE REGISTRY, NOT WRITTEN OUT. This read `_nids == ["N1_circle", "N2_chord"]`
+# and went red the moment four more host-owned kinds were drawn - a test that has to be edited
+# every time the thing it guards improves is a test that gets edited without being thought about.
+# What is actually owed is: every HOST-OWNED kind whose `needs` this declaration satisfies.
+from scprofile import panels as _PK                                             # noqa: E402
+
+_owed = sorted(k.id for k in _PK.KINDS
+               if _PK.owner(k.id)[0] == _PK.HOST and not k.per_contrast and not k.needs)
+ck("each arm gets every host-owned panel its declaration earns",
+   len(_nids) == len(_owed), f"{_nids} against {len(_owed)} owed: {_owed}")
+ck("and the ones needing a column this declaration does not name are ABSENT",
+   not any(i.startswith(("N5_", "N6_", "N7_")) for i in _nids), str(_nids))
 ck("an arm appears once however many contrasts share it", len(_arms) == 2, str(sorted(_arms)))
+
+# AND THE OTHER HALF OF THE SAME CLAIM: declare the optional columns and the further panels
+# arrive, for the same plugin the host has never heard of. This is the acceptance test for the
+# whole design - a second plugin getting the panels from a DECLARATION ALONE - and until the
+# grouped kinds existed there was nothing to declare, so it could not be written.
+_rows2 = []
+for _u, _arm in (("u1", "a"), ("u2", "a"), ("u3", "b"), ("u4", "b")):
+    for _s in ("P1", "P2", "P3"):
+        for _t in ("P1", "P2", "P3"):
+            for _g, _m in (("G1", "m1"), ("G1", "m2"), ("G2", "m3")):
+                _rows2.append({"unit": _u, "source": _s, "target": _t, "prob": 1.0,
+                               "band": _g, "part": _m})
+_per2 = {u: g for u, g in _pd.DataFrame(_rows2).groupby("unit")}
+_nets2 = _CP.draw_arm_networks(_per2, _des, _arms, _P2(_t2.mkdtemp()), "anyplugin",
+                               group_col="band", member_col="part")
+_nids2 = sorted({f.split("__")[0] for f, *_r in _nets2})
+ck("a declaration naming a grouping column earns the grouped panels, method unnamed",
+   {"N5_flow", "N6_role_heatmap"} <= set(_nids2), str(_nids2))
+ck("and naming its members earns the decomposition too",
+   "N7_contribution" in _nids2, str(_nids2))
+ck("no host-owned kind is left undrawn once every column is declared",
+   not _PK.gaps(), f"owed and not drawn: {_PK.gaps()}")
 
 _src_all = "".join((_P2("scprofile") / f).read_text()
                    for f in ("compare_panel.py", "network_panels.py", "panels.py"))

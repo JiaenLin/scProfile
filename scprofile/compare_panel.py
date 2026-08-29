@@ -280,25 +280,55 @@ def arms_in(design, pairs):
     return out
 
 
-def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edges=1):
+def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edges=1,
+                     group_col=None, member_col=None):
     """The single-network kinds for each arm, pooled. Returns [(fid, path, caption)].
 
     GROUP LEVEL BY CONSTRUCTION: an arm's cells are pooled before anything is drawn, so no panel
     here needs any single unit to support an inference by itself.
+
+    THE LIST IS `panels.host_kinds()`, NOT A LIST WRITTEN HERE. A registry that nothing consults
+    is a specification of intent, and this function was the place a kind could be registered and
+    then not drawn - which is how five of thirteen kinds came to be all a plugin inherited from
+    its declaration. The registry now names an owner per kind and a test asserts the host draws
+    every kind it owns, so the two cannot part company again.
     """
     from . import network_panels as NP
 
-    made = []
+    # ONE POPULATION SET ACROSS EVERY ARM, computed before anything is drawn. Taking each arm's
+    # own populations gave the two arms of one contrast DIFFERENT AXES - measured on a real
+    # cohort, one arm carried a population the other did not - so two matrices laid out
+    # identically, side by side, were indexed differently and a reader comparing cell to cell
+    # was comparing different pairs. The union makes an arm's missing population VISIBLE as an
+    # empty row rather than as a silently shorter axis, and `network_panels.unconnected` already
+    # names a population with no link, which is exactly what one of these now is.
+    #
+    # THE COLOUR SCALE IS STILL PER ARM, deliberately (panels.R5). A shared axis is a statement
+    # about WHICH populations exist; a shared scale would be a statement that two arms' strengths
+    # are on one ruler, which for a per-object normalisation they are not.
+    pooled = {}
     for label, filt in sorted(arms.items()):
         e = pool(per_unit_edges, _members(design, filt))
-        if e is None or len(e) < min_edges:
-            continue
-        pops = sorted(set(e["source"].astype(str)) | set(e["target"].astype(str)))
+        if e is not None and len(e) >= min_edges:
+            pooled[label] = e
+    pops = sorted({str(x) for e in pooled.values()
+                   for x in set(e["source"].astype(str)) | set(e["target"].astype(str))})
+
+    made = []
+    for label, e in sorted(pooled.items()):
         slug = "".join(ch if ch.isalnum() else "_" for ch in label).strip("_")
         got = []
         shim = _Shim(out_dir, prefix, slug, got, label=label)
         NP.circle(shim, e, pops, title=label)
         NP.chord(shim, e, pops, title=label)
+        NP.matrix(shim, e, pops, title=label)
+        NP.role_scatter(shim, e, pops, title=label)
+        # DECLARED OR NOT DRAWN. Each of these returns False rather than raising when the
+        # declaration names no grouping column, so a plugin that declares less gets fewer
+        # panels and never a broken one.
+        NP.flow_rank(shim, e, pops, group_col, title=label)
+        NP.role_heatmap(shim, e, pops, group_col, title=label)
+        NP.contribution(shim, e, pops, group_col, member_col, title=label)
         made += got
     return made
 

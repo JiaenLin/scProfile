@@ -163,10 +163,48 @@ def expand(kinds, contrasts, levels=(GROUP, SAMPLE)):
     return out
 
 
+#: WHO OWNS EACH KIND, WHICH IS A DIFFERENT QUESTION FROM WHETHER IT IS DRAWN YET.
+#:
+#: This distinction did not exist and its absence was misleading in the direction that flatters
+#: nobody: thirteen kinds were registered, five were drawn, and the eight remaining read as work
+#: not yet done. Three of them are not work at all. A latent decomposition of the group-by-
+#: population matrix and a similarity embedding over groups are ANALYSES - they produce numbers
+#: that first exist at render time, which `docs/ARCHITECTURE.md` forbids the reporter outright -
+#: and database coverage needs the reference funnel, which an edge list does not carry and no
+#: declaration can supply. Those three belong to the plugin, which has the method's machinery and
+#: its statistics; a plugin drawing one is complete, not a stopgap.
+#:
+#: So a kind declares an owner. `host` means: derivable from `report.unit_network` by
+#: aggregation alone, and therefore owed to every plugin that declares one. `plugin` means: needs
+#: an analysis the host may not perform, or information the declaration does not carry - with the
+#: reason recorded, because "the host does not draw this" and "the host must not draw this" look
+#: identical in a table and mean opposite things.
+HOST, PLUGIN = "host", "plugin"
+
+OWNER = {
+    "matrix": (HOST, ""),
+    "diff_matrix": (HOST, ""),
+    "circle": (HOST, ""),
+    "chord": (HOST, ""),
+    "role_scatter": (HOST, ""),
+    "role_shift": (HOST, ""),
+    "flow_rank": (HOST, ""),
+    "flow_compare": (HOST, ""),
+    "role_heatmap": (HOST, ""),
+    "contribution": (HOST, ""),
+    "patterns": (PLUGIN, "a latent decomposition is an analysis, and the reporter may not "
+                         "produce a number that first exists at render time"),
+    "similarity": (PLUGIN, "a similarity embedding over groups is an analysis, and the choice "
+                           "of metric belongs to the method rather than to the page"),
+    "coverage": (PLUGIN, "the reference funnel is not in an edge list and no declaration "
+                         "carries it; only the plugin knows what its database offered"),
+}
+
 #: WHICH KINDS A RUN ACTUALLY DRAWS TODAY, and where. A registry nothing consults is a
 #: specification of intent; pairing it with the implemented set turns the difference into a
 #: recorded gap instead of an assumption. `tests/test_contract.py` asserts every id here is a
-#: registered kind, so the two cannot drift apart silently.
+#: registered kind, so the two cannot drift apart silently — and that every HOST-owned kind is
+#: in here, which is the assertion that would have caught the five-of-thirteen gap.
 IMPLEMENTED = {
     # host-drawn, from a plugin's `report.unit_network` declaration
     # The id is built as C1_diff_<count|strength>; the checkable literal is the stem.
@@ -175,6 +213,12 @@ IMPLEMENTED = {
     "role_shift": "compare_panel.draw_contrast — C4_role_shift",
     "circle": "network_panels.circle — N1_circle, per arm",
     "chord": "network_panels.chord — N2_chord, per arm",
+    "matrix": "network_panels.matrix — N3_matrix, per arm",
+    "role_scatter": "network_panels.role_scatter — N4_role, per arm",
+    "flow_rank": "network_panels.flow_rank — N5_flow, per arm, needs `group`",
+    "role_heatmap": "network_panels.role_heatmap — N6_role_heatmap, per arm, needs `group`",
+    "contribution": "network_panels.contribution — N7_contribution, per arm, needs "
+                    "`group` and `member`",
 }
 
 #: Registered, specified, and NOT drawn by any run. Named so the gap is auditable.
@@ -186,11 +230,26 @@ def implemented():
     return dict(IMPLEMENTED)
 
 
-def gaps():
-    """Kinds this tool has specified and does not yet draw at the host level.
+def owner(kid):
+    """(owner, reason) for one kind. The reason is empty for a host-owned kind."""
+    return OWNER.get(kid, (HOST, ""))
 
-    Several are drawn INSIDE plugins rather than by the host - a plugin's own F-numbered panels
-    - which is why a gap here is not the same as a kind nobody has ever rendered. It is a kind
-    the host does not draw from a declaration, and so does not give every plugin for free.
+
+def host_kinds():
+    """The kinds the host owes every plugin that declares a `unit_network`."""
+    return tuple(k.id for k in KINDS if owner(k.id)[0] == HOST)
+
+
+def plugin_kinds():
+    """{kind id: why the host does not draw it} - kinds that belong to the method."""
+    return {k.id: owner(k.id)[1] for k in KINDS if owner(k.id)[0] == PLUGIN}
+
+
+def gaps():
+    """HOST-OWNED kinds this tool has specified and does not yet draw.
+
+    A kind the host must NOT draw is not a gap and is no longer counted as one: it is in
+    `plugin_kinds()` with the reason. Conflating the two published a catalogue that read as
+    eight-thirteenths unfinished when three of the eight were finished decisions.
     """
-    return tuple(NOT_IMPLEMENTED)
+    return tuple(k for k in NOT_IMPLEMENTED if owner(k)[0] == HOST)

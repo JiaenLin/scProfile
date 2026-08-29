@@ -2279,22 +2279,43 @@ def test_the_panel_registry_matches_what_is_drawn():
     check("every implemented id is a registered kind",
           set(P.IMPLEMENTED) <= set(P.BY_ID),
           str(sorted(set(P.IMPLEMENTED) - set(P.BY_ID))))
-    check("implemented and gaps together cover the registry",
-          set(P.IMPLEMENTED) | set(P.gaps()) == set(P.BY_ID))
-    check("the gap list is not empty and is therefore honest about it",
-          len(P.gaps()) > 0, "a registry claiming everything is drawn would be the wish again")
+    check("implemented, host gaps and plugin-owned kinds cover the registry",
+          set(P.IMPLEMENTED) | set(P.gaps()) | set(P.plugin_kinds()) == set(P.BY_ID),
+          str(sorted(set(P.BY_ID) - set(P.IMPLEMENTED) - set(P.gaps())
+                     - set(P.plugin_kinds()))))
+
+    # THE ASSERTION THAT WOULD HAVE CAUGHT THE GAP, and the one that was missing. The old check
+    # here required the gap list to be NON-EMPTY, as a proxy for honesty - which passes forever
+    # while five of thirteen kinds are drawn and says nothing about whether the five are the
+    # right five. What is owed is precise: every kind the host OWNS is a kind a plugin gets from
+    # its declaration alone, so a host-owned kind that nothing draws is a debt, not a decision.
+    check("the host draws every kind it owns",
+          not P.gaps(), f"host-owned and undrawn: {sorted(P.gaps())}")
+    # AND THE OTHER DIRECTION, which is what stops the debt being cleared by reclassifying it.
+    # Moving a kind to `plugin` silences the check above; a kind may only be moved there WITH A
+    # REASON, and the reason is read.
+    _noreason = sorted(k for k, why in P.plugin_kinds().items() if len(str(why)) < 20)
+    check("a kind the host does not draw says WHY it is the plugin's",
+          not _noreason, str(_noreason))
+    check("and the two owners are the only ones",
+          {v[0] for v in P.OWNER.values()} <= {P.HOST, P.PLUGIN})
 
     # WHERE IT SAYS IT IS DRAWN MUST BE TRUE. A pointer to a function that does not exist is
     # exactly the drift this pairing exists to stop.
     src = "".join((root / "scprofile" / f).read_text()
                   for f in ("compare_panel.py", "network_panels.py"))
+    import re as _re
+    _re_fid = _re.compile(r"^[CN]\d+_")
     missing = []
     for kid, where in P.IMPLEMENTED.items():
         for tok in where.replace("—", " ").replace(",", " ").split():
             # A STEM IS ENOUGH WHERE THE ID IS BUILT. `C1_diff_count` is assembled from
             # `C1_diff_` and a variable, so the full id is nowhere in the source; the stem is
             # what can be checked, and checking nothing would defeat the pairing.
-            if tok.startswith(("C1_", "C3_", "C4_", "N1_", "N2_")) and tok not in src:
+            # A PREFIX LIST GOES STALE THE FIRST TIME A KIND IS ADDED. It was
+            # ("C1_","C3_","C4_","N1_","N2_") and five new kinds numbered N3 to N7 would each
+            # have been silently unchecked - the pairing passing because it looked at nothing.
+            if _re_fid.match(tok) and tok not in src:
                 missing.append(f"{kid}: {tok}")
     check("every figure id the registry names is present in the drawing code",
           not missing, str(missing))

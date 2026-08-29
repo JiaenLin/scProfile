@@ -264,7 +264,10 @@ PLUGIN = {
         # matter how correct it looks in the declaration. Put at the top level first, where it
         # read fine and did nothing.
         "unit_network": {"table": "tables/ccc_edges.csv", "source": "source",
-                         "target": "target", "weight": "prob", "group": "pathway_name"},
+                         "target": "target", "weight": "prob", "group": "pathway_name",
+                         # `member` is what a group DECOMPOSES INTO, and declaring it is what
+                         # earns the contribution panel. The column is already in this table.
+                         "member": "interaction_name"},
         # WHAT MAKES THE UNITS COMPARABLE. Every figure on this page describes ONE unit; these
         # are the numbers the host puts on a shared axis, so a reader sees whether the units
         # agree before reading any single unit's panel as a finding.
