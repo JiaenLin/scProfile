@@ -380,6 +380,36 @@ def _page_binds(constraint, declared_binds, units, design):
     return sorted(binds)
 
 
+def _presence_block(payload_all, *, out_dir=None, name=""):
+    """The population census per unit, drawn once, on the cohort page.
+
+    HOST-DRAWN AND PLUGIN-INDEPENDENT. It is made from the label column and the design alone -
+    no method output is involved - so every per-unit plugin gets it, and it is the panel the
+    per-unit ones must be read against.
+    """
+    lbu = (payload_all or {}).get("label_by_unit") or {}
+    tot = (payload_all or {}).get("label_total") or {}
+    if len(lbu) < 2 or not tot or not out_dir:
+        return ""
+    try:
+        from . import network_panels as NP, compare_panel as CPan
+    except Exception:                                                     # noqa: BLE001
+        return ""
+    figdir = Path(out_dir) / "kernels" / name / "figures"
+    got = []
+    shim = CPan._Shim(figdir, name, "cohort", got)
+    try:
+        NP.unit_presence(shim, lbu, tot,
+                         design=(payload_all or {}).get("design") or {},
+                         unit_axis=(payload_all or {}).get("unit_axis") or {})
+    except Exception:                                                     # noqa: BLE001
+        return ""
+    if not got:
+        return ""
+    return ("<h2>What the method was given</h2>"
+            + _arm_figs_html(name, got))
+
+
 def _arm_content(units, design, spec, *, out_dir=None, name=""):
     """({"contrast": [...], "arm": [...]}) - every between-arm and per-arm figure, drawn.
 
@@ -457,7 +487,7 @@ def _arm_figs_html(name, items):
     return "".join(out)
 
 
-def _arm_appendix(name, content):
+def _arm_appendix(name, content, plugin_arm_figs=()):
     """The arm pages' body: every contrast, then every arm's own network.
 
     ITS OWN PAGE, FOR THE REASON THE PER-SAMPLE PANELS HAVE ONE. Six contrasts times four panels
@@ -496,6 +526,26 @@ def _arm_appendix(name, content):
         for label, items in by_arm.items():
             b.append(f"<h3><code>{_e(label)}</code></h3>")
             b.append(_figs(items))
+    # THE PLUGIN'S OWN PER-ARM PANELS, which used to be filed with the per-SAMPLE ones. They are
+    # the method's full figure set computed on an arm's pooled cells - the group-level result -
+    # and they belong beside the between-arm comparisons rather than among the animals.
+    if plugin_arm_figs:
+        by_unit = {}
+        for f in plugin_arm_figs:
+            by_unit.setdefault(str(f.get("unit")), []).append(f)
+        b.append(f"<h2>The method's own panels, per arm</h2>"
+                 f"<p class='sub'>Every panel this plugin draws, computed on each arm's POOLED "
+                 f"cells &mdash; {len(plugin_arm_figs)} panels over {len(by_unit)} arm(s). These "
+                 f"are group-level results: no arm needs any single sample to support an "
+                 f"inference on its own. The same panels per sample are in the per-sample "
+                 f"appendix and answer the different question of whether an arm's members "
+                 f"agree.</p>")
+        n = 0
+        for u, items in sorted(by_unit.items()):
+            b.append(f"<h3><code>{_e(u)}</code></h3>")
+            for f in items:
+                n += 1
+                b.append(_panel(f, n))
     return "".join(b)
 
 
@@ -1162,6 +1212,10 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     # meets the first unit's panel before meeting the spread has already formed the finding.
     units = p.get("units") or []
     if p.get("per_unit") and units:
+        # BEFORE ANY RESULT: WHAT THE METHOD WAS GIVEN. Every per-unit panel draws the axis its
+        # own unit happens to have, so a reader meeting a matrix before meeting this one has
+        # already taken a missing population for a silent one.
+        body.append(_presence_block(payload_all, out_dir=out_dir, name=name))
         body.append(_across_units(units, _D.report_get(spec, "unit_metrics")))
         body.append(_units_by_arm(units, (payload_all or {}).get("design") or {},
                                   _D.report_get(spec, "unit_metrics"),
@@ -1199,20 +1253,65 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     # panel is still rendered, on its own page, one click away.
     per_unit_extra = ""
     figs_all = p.get("figures") or []
-    per_unit_figs = [f for f in figs_all if f.get("unit")]
+    # AN ARM IS NOT AN ANIMAL, AND THEY WERE ROUTED TO THE SAME PAGE. Both carry a `unit`, so a
+    # single truthiness test sent a plugin's four pooled-arm panels into an appendix titled "per
+    # sample", interleaved with ten single-animal panels and nothing distinguishing them. The
+    # arm panels are the GROUP-LEVEL RESULT - the thing the design exists to produce - and they
+    # were filed as the consistency check, while the cohort page said in a red box that the
+    # plugin "has none over the cohort", which by then was false.
+    #
+    # Three destinations, from the axis the resolver already recorded:
+    #   no unit      -> the cohort page
+    #   group unit   -> the arms page, beside the between-arm comparisons it belongs with
+    #   sample unit  -> the per-sample appendix, which is what that page was always for
+    _axis = (payload_all or {}).get("unit_axis") or {}
+    _design = (payload_all or {}).get("design") or {}
+    if _axis:
+        def _is_group(f):
+            return _axis.get(str(f.get("unit"))) == "group"
+    elif _design:
+        # A run written before the axis was recorded. The design table is the only other place
+        # the answer exists: a unit that is not one of its samples is an arm.
+        def _is_group(f):
+            return str(f.get("unit")) not in _design
+    else:
+        # NEITHER, SO EVERY UNIT IS A SAMPLE. The first version of this fell through to the
+        # design test with an empty design, which makes `not in {}` true of everything and
+        # silently reclassified every per-sample panel as an arm - so the per-sample appendix
+        # stopped being written at all. A fallback must fail towards the behaviour that was
+        # already correct, and per-sample is what a unit meant before arms existed.
+        def _is_group(_f):
+            return False
+    arm_figs = [f for f in figs_all if f.get("unit") and _is_group(f)]
+    per_unit_figs = [f for f in figs_all if f.get("unit") and not _is_group(f)]
     cohort_figs = [f for f in figs_all if not f.get("unit")]
-    if per_unit_figs and cohort_figs:
+    if cohort_figs:
         body.append(_figure_section(cohort_figs, spec))
-    elif per_unit_figs:
-        body.append("<h2>Figures</h2><div class='bad'>Every panel this plugin drew describes "
-                    "ONE sample; it has none over the cohort. They are in the "
-                    f"<a href=\"{_e(name)}_by_sample.html\">per-sample appendix</a>.</div>")
+    elif arm_figs or per_unit_figs:
+        _where = []
+        if arm_figs:
+            _where.append(f"<a href=\"{_e(name)}_by_arm.html\">{len(arm_figs)} per arm</a>")
+        if per_unit_figs:
+            _where.append(f"<a href=\"{_e(name)}_by_sample.html\">"
+                          f"{len(per_unit_figs)} per sample</a>")
+        body.append("<h2>Figures</h2><div class='warn'>This plugin is fitted once per unit, so "
+                    "it draws no panel pooled over the whole cohort &mdash; a cohort-wide fit "
+                    "would describe the average of the arms and possibly none of them. Its "
+                    "panels are " + " and ".join(_where) + ". The comparisons between arms are "
+                    "on this page, above.</div>")
     else:
         body.append(_figure_section(figs_all, spec))
+    _links = []
+    if arm_figs:
+        _links.append(f"<a href=\"{_e(name)}_by_arm.html\">{len(arm_figs)} per-arm panels</a> "
+                      f"&mdash; the same plots, once per arm of the design, each drawn from that "
+                      f"arm's pooled cells")
     if per_unit_figs:
-        body.append(f"<p class='sub'><a href=\"{_e(name)}_by_sample.html\">"
-                    f"{len(per_unit_figs)} per-sample panels</a> &mdash; the same plots, one set "
-                    f"per sample.</p>")
+        _links.append(f"<a href=\"{_e(name)}_by_sample.html\">{len(per_unit_figs)} per-sample "
+                      f"panels</a> &mdash; the same plots, one set per sample, which answer "
+                      f"whether an arm's result is carried by all its members or by one")
+    if _links:
+        body.append("<p class='sub'>" + ". ".join(_links) + ".</p>")
     if p.get("per_unit") and units:
         # Nine of ten unit payloads used to be discarded by a dict comprehension keyed on the
         # plugin name, and the survivor was rendered under that name as though it described the
@@ -1246,15 +1345,20 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
               "<p class='sub'>The same panels, once per sample. They are here rather than on "
               "the plugin's page because a page carrying one plot ten times hides its own "
               "result &mdash; and where the method is fitted per sample, these are not "
-              "comparable with each other. "
+              "comparable with each other. <b>Every panel below describes ONE SAMPLE.</b> The "
+              "group-level version of the same panels &mdash; each arm's pooled cells &mdash; "
+              f"is <a href='{_e(name)}_by_arm.html'>on the arms page</a>, not here; the two "
+              "were filed together until 2026-08-29 and an arm read as an animal. "
               f"<a href='{_e(name)}.html'>&larr; back</a></p>"]
         ap += [per_unit_extra] if per_unit_extra else []
         ap += [_panel(f_, i + 1) for i, f_ in enumerate(per_unit_figs)]
         (d / f"{name}_by_sample.html").write_text(
             _page(f"{name} per sample — scProfile", "".join(ap)), encoding="utf-8")
-    if locals().get("_arms") and (_arms["contrast"] or _arms["arm"]):
+    _armc = locals().get("_arms") or {"contrast": [], "arm": []}
+    if _armc["contrast"] or _armc["arm"] or arm_figs:
         (d / f"{name}_by_arm.html").write_text(
-            _page(f"{name} — the arms — scProfile", _arm_appendix(name, _arms)),
+            _page(f"{name} — the arms — scProfile",
+                  _arm_appendix(name, _armc, plugin_arm_figs=arm_figs)),
             encoding="utf-8")
     f = d / f"{name}.html"
     f.write_text(_page(f"{name} — scProfile", "".join(body)), encoding="utf-8")

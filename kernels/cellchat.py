@@ -30,9 +30,38 @@ well-formed edge table:
                                   100 the whole table lies in five values and `0` means "not
                                   beaten in 100 draws", not "vanishingly unlikely".
 
-So three of the five panels here are diagnostics and they come first. The two results — who
-signals to whom, and through which ligand–receptor pairs — are worth reading only underneath
-them.
+So the diagnostics come first and the results are worth reading only underneath them: of the
+ten panels, three are diagnostics (F1-F3) and seven are results (F4-F10). *This paragraph said
+"three of the five panels" until 2026-08-29, having been written when there were five.*
+
+THE RETURN CONTRACT — what one row of `ccc_edges.csv` is, and what each column can carry
+
+Every panel is drawn from this table, so this is the material all of them are made of. Read off
+the delivered file, not from the vignette.
+
+| field | what one element is | units and scale | theoretical range | relative or absolute | depends on | degenerate value |
+|---|---|---|---|---|---|---|
+| `source`, `target` | an ordered population pair | label, categorical | the labels PRESENT IN THIS UNIT | relative — a population with no cells here is not a row and not an axis entry | the annotation upstream | absent entirely; never a zero row |
+| `prob` | that pair, for that L-R pair | communication probability | (0, 1], not calibrated | **RELATIVE** — law of mass action over the cells present, with `population.size` | `type`, `trim`, `population.size` | none; an unscored pair is an absent ROW |
+| `pval` | the same | permutation p | multiples of 1/`nboot`, filtered at `thresh` | absolute given nboot | `nboot`, `seed.use` | `0` means "not beaten in nboot draws", NOT "vanishingly small" |
+| `ligand`, `receptor` | one gene or complex | symbol | the database's own vocabulary | absolute | the database version | a complex is `A_B`, not two rows |
+| `interaction_name` | one L-R pair | identifier | database | absolute | database version | — |
+| `pathway_name` | the group an L-R pair belongs to | identifier | database | absolute | database version | — |
+| `annotation` | the pair's transport class | one of four categories | `Secreted Signaling`, `ECM-Receptor`, `Cell-Cell Contact`, `Non-protein Signaling` | absolute | database version | — |
+| `evidence` | literature support | free text carrying accessions (`KEGG: …`, `PMID:…`) | — | absolute | database version | empty string |
+
+**`prob` IS RELATIVE AND THAT IS THE SINGLE MOST CONSEQUENTIAL ROW.** It is computed over the
+cells present in the object being scored, so two units' `prob` columns are on two scales. Every
+panel drawn from it compares WITHIN a unit and rank-orders across units, and no panel may put
+two units' probabilities on one axis. Measured on one unit: 0.000308 to 0.2316, median 0.0115.
+
+**`pval` HAS FIVE VALUES.** At `nboot = 100` and `thresh = 0.05` the delivered column is exactly
+{0, 0.01, 0.02, 0.03, 0.04}. It cannot rank and it cannot be corrected as though continuous.
+
+**THE ASSAY COST IS VISIBLE IN `annotation` AND NO PANEL DRAWS IT.** CellChatDB is roughly 60%
+secreted signalling; on one nucleus unit the RETURNED edges were 59% ECM-Receptor, 21% cell-cell
+contact and **17% secreted**. The caveat this plugin states in prose is measurable in its own
+output table, and a class-composition panel would show it rather than assert it.
 
 IT RUNS PER UNIT. An inference pooled over a cohort describes the average of its conditions and
 may describe none of them; the host fans it out and this file sees one unit. Every panel is

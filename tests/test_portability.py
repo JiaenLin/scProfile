@@ -1567,7 +1567,8 @@ _nids = sorted({f.split("__")[0] for f, *_r in _nets})
 from scprofile import panels as _PK                                             # noqa: E402
 
 _owed = sorted(k.id for k in _PK.KINDS
-               if _PK.owner(k.id)[0] == _PK.HOST and not k.per_contrast and not k.needs)
+               if _PK.owner(k.id)[0] == _PK.HOST and not k.per_contrast and not k.needs
+               and not k.cohort_only)
 ck("each arm gets every host-owned panel its declaration earns",
    len(_nids) == len(_owed), f"{_nids} against {len(_owed)} owed: {_owed}")
 ck("and the ones needing a column this declaration does not name are ABSENT",

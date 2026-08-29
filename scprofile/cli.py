@@ -462,9 +462,16 @@ def _run(a):
                                         samples=samples,
                                         prefer=getattr(a, "unit_by", "both") or "both")
     unit_members = {}
+    # WHICH AXIS EACH UNIT CAME FROM, CARRIED RATHER THAN INFERRED LATER. The reporter has to
+    # tell an arm from an animal - a group unit's panels are the design result and an animal's
+    # are the consistency check - and it was inferring it from whether the label happened to be
+    # a key of the design table. That works until a project names an arm after a sample, and it
+    # is a guess about something the resolver already knows for certain.
+    unit_axis = {}
     for _ax in _plan_axes:
         for _u, _mem in _ax["units"].items():
             unit_members.setdefault(str(_u), list(_mem))
+            unit_axis.setdefault(str(_u), _ax["kind"])
     units = sorted(unit_members) or (samples or None)
     for _w in _why_axes:
         print(f"  units: {_w}")
@@ -475,6 +482,33 @@ def _run(a):
     _per_sample = (A.obs[sample_key].astype(str).value_counts().to_dict() if sample_key else {})
     unit_cells = {u: sum(_per_sample.get(m, 0) for m in mem)
                   for u, mem in unit_members.items()} or _per_sample
+
+    # WHICH POPULATIONS EACH UNIT EVEN CONTAINS, recorded once, here, where the object is open.
+    # A per-unit method sees only the labels present in its own slice, so a population with no
+    # cells in one arm is simply not in that arm's result - and every panel then draws the axis
+    # it happens to have, with nothing anywhere saying the study has more. Measured on a real
+    # cohort: a plugin reported 8 to 12 populations across 14 units against 15 labels in the
+    # object, and no page named a single one of the missing.
+    #
+    # The host is the only layer that can say this. A plugin sees one unit by construction and
+    # cannot know what it is missing; the reporter cannot open the object. So it is taken here
+    # and carried, per label and per unit, as counts rather than as a presence flag - "absent"
+    # and "two cells" are different facts and a boolean throws the second away.
+    label_key = keys.get("label")
+    label_by_unit, label_total = {}, {}
+    if label_key and label_key in A.obs and sample_key and sample_key in A.obs:
+        _lab = A.obs[label_key].astype(str)
+        _smp = A.obs[sample_key].astype(str)
+        label_total = _lab.value_counts().to_dict()
+        _by_sample = {}
+        for (sm, lb), n in _lab.groupby(_smp).value_counts().items():
+            _by_sample.setdefault(str(sm), {})[str(lb)] = int(n)
+        for _u, _mem in (unit_members or {s: [s] for s in (samples or [])}).items():
+            acc = {}
+            for m in _mem:
+                for lb, n in (_by_sample.get(str(m)) or {}).items():
+                    acc[lb] = acc.get(lb, 0) + int(n)
+            label_by_unit[str(_u)] = acc
     # WHAT THE CODE LOOKED LIKE WHEN THIS RUN STARTED. Re-checked before every instance.
     _tool_root = Path(__file__).resolve().parent.parent
     _tool_at_start = tool_fingerprint(_tool_root)
@@ -1176,6 +1210,10 @@ def _run(a):
                "status": {n: ks[n].status for n in sorted(ks)},
                "schedule": [[{kk: vv for kk, vv in i.items()} for i in w] for w in waves],
                "seconds": timings, "cores": budget, "units": units,
+               # {unit: "group"|"sample"} - see the note where it is built.
+               "unit_axis": unit_axis, "unit_members": unit_members,
+               "label_key": label_key, "label_total": label_total,
+               "label_by_unit": label_by_unit,
                "timeout": a.timeout,
                "kernels": folded,
                "merged": merged_slots,

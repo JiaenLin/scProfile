@@ -60,7 +60,7 @@ class Kind:
     """One panel kind: what it shows, what it cannot show, and the rules it must obey."""
 
     def __init__(self, kid, title, establishes, does_not_establish, *, rules=(),
-                 levels=(GROUP, SAMPLE), per_contrast=True, needs=()):
+                 levels=(GROUP, SAMPLE), per_contrast=True, needs=(), cohort_only=False):
         self.id = kid
         self.title = title
         #: WHAT IT ESTABLISHES AND WHAT IT DOES NOT, as a pair. A panel described only by what
@@ -74,6 +74,10 @@ class Kind:
         self.per_contrast = per_contrast
         #: Columns the kind needs from a unit network, beyond source/target/weight.
         self.needs = tuple(needs)
+        #: True when the kind describes the WHOLE COHORT and is drawn once, not once per arm.
+        #: Without this a test asserting "every arm gets every host-owned kind" counts a
+        #: cohort-level panel as an arm panel and goes red on correct behaviour.
+        self.cohort_only = bool(cohort_only)
 
     def __repr__(self):
         return f"<Kind {self.id} {'contrast' if self.per_contrast else 'single'}>"
@@ -135,6 +139,13 @@ KINDS = (
          "that a member absent from a panel was tested and returned nothing - see R2",
          rules=("R1_one_scale", "R2_absence_split", "R4_denominator_declared"),
          per_contrast=False, needs=("group", "member")),
+    Kind("unit_presence", "Which populations each unit contains",
+         "which populations were available to the method in each unit, and how that varies "
+         "across the design",
+         "WHY a population is absent - too few cells to annotate and genuinely not present are "
+         "the same thing in a label column - nor that a present population was well sampled",
+         rules=("R2_absence_split", "R4_denominator_declared", "R6_never_gated_on_sample"),
+         per_contrast=False, levels=(GROUP,), cohort_only=True),
     Kind("coverage", "What the reference database offered and what survived",
          "how far the object could see the reference, and how much survived testing",
          "that what survived is biology rather than what the preparation retained",
@@ -182,6 +193,7 @@ def expand(kinds, contrasts, levels=(GROUP, SAMPLE)):
 HOST, PLUGIN = "host", "plugin"
 
 OWNER = {
+    "unit_presence": (HOST, ""),
     "matrix": (HOST, ""),
     "diff_matrix": (HOST, ""),
     "circle": (HOST, ""),
@@ -219,6 +231,7 @@ IMPLEMENTED = {
     "role_heatmap": "network_panels.role_heatmap — N6_role_heatmap, per arm, needs `group`",
     "contribution": "network_panels.contribution — N7_contribution, per arm, needs "
                     "`group` and `member`",
+    "unit_presence": "network_panels.unit_presence — P1_population_presence, on the cohort page",
 }
 
 #: Registered, specified, and NOT drawn by any run. Named so the gap is auditable.

@@ -243,11 +243,16 @@ class _Shim:
     shim, one implementation.
     """
 
-    def __init__(self, out_dir, prefix, slug, collect, label=""):
+    def __init__(self, out_dir, prefix, slug, collect, label="", members=()):
         from . import figure as _F
         self.figure = _F
         self._out, self._prefix, self._slug = out_dir, prefix, slug
         self._collect, self._label = collect, label
+        #: THE SAME STAMP THE PLUGIN-SIDE EMIT POINT APPLIES. A host-drawn arm panel is exactly
+        #: the kind of picture that gets lifted into a slide, and it has no unit written on it
+        #: anywhere unless it is put there. Cell counts are not reachable from an edge list, so
+        #: the stamp says what it knows: the arm, and how many samples were pooled into it.
+        self._members = tuple(str(m) for m in (members or ()))
 
     def plot(self):
         import matplotlib.pyplot as plt
@@ -259,7 +264,16 @@ class _Shim:
         d = Path(self._out)
         d.mkdir(parents=True, exist_ok=True)
         path = d / f"{self._prefix}_{fid}__{self._slug}.png"
-        fig.savefig(path, dpi=200)
+        if self._label:
+            n = len(self._members)
+            what = (f"design arm — {n} samples pooled" if n > 1
+                    else "design arm — 1 sample" if n == 1 else "design arm")
+            try:
+                fig.text(0.0, -0.006, f"{self._label}   ·   {what}", ha="left", va="top",
+                         fontsize=5.2, color="#5A5A5A", transform=fig.transFigure)
+            except Exception:                                             # noqa: BLE001
+                pass
+        fig.savefig(path, dpi=200, bbox_inches="tight")
         plt.close(fig)
         self._collect.append((f"{fid}__{self._slug}", path, caption, self._label))
 
@@ -318,7 +332,8 @@ def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edge
     for label, e in sorted(pooled.items()):
         slug = "".join(ch if ch.isalnum() else "_" for ch in label).strip("_")
         got = []
-        shim = _Shim(out_dir, prefix, slug, got, label=label)
+        shim = _Shim(out_dir, prefix, slug, got, label=label,
+                     members=_members(design, arms[label]))
         NP.circle(shim, e, pops, title=label)
         NP.chord(shim, e, pops, title=label)
         NP.matrix(shim, e, pops, title=label)

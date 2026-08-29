@@ -314,6 +314,7 @@ def main(argv):
         return 0
 
     ctx = Context(A, keys=keys, out=out, cores=cores, memory_gb=memory_gb, unit=unit,
+                  unit_members=members,
                   organism=inp.get("organism"), assay=inp.get("assay"),
                   references=inp.get("references"),
                   # BY ROLE, NOT BY NAME. `Context` accepted these from the beginning and nothing

@@ -429,10 +429,22 @@ def role_scatter(ctx, edges, pops, *, fid="N4_role", title=None, note=""):
     # receiver is a statement about which side of y = x a population falls, and without the line
     # drawn a reader compares two axes by eye and gets it wrong for anything near the middle.
     ax.plot([0, hi], [0, hi], color=F.GREY, lw=0.6, zorder=0)
+    # R2: A POPULATION WITH NO EDGE IS NOT A POPULATION AT THE ORIGIN. Once the population axis
+    # became the union across arms, an arm in which a population is never seen drew it as a
+    # filled dot at (0, 0) - which reads as MEASURED AND SILENT, the strongest possible claim,
+    # rather than as never seen here. Found by opening the panel, on the first render after the
+    # union landed. Absent populations are hollow, ringed in grey, and NAMED in the caption.
+    silent = [p for i, p in enumerate(pops) if out_s[i] <= 0 and in_s[i] <= 0]
     texts = []
     for i, p in enumerate(pops):
-        ax.scatter(out_s[i], in_s[i], s=26, color=cmap[p], edgecolor="white", lw=0.4, zorder=2)
+        if p in silent:
+            ax.scatter(out_s[i], in_s[i], s=26, facecolor="none", edgecolor="#9A9A9A",
+                       lw=0.7, zorder=2)
+        else:
+            ax.scatter(out_s[i], in_s[i], s=26, color=cmap[p], edgecolor="white", lw=0.4,
+                       zorder=2)
         texts.append(ax.annotate(short[p], (out_s[i], in_s[i]), fontsize=5.5,
+                                 color="#7A7A7A" if p in silent else F.INK,
                                  xytext=(3, 3), textcoords="offset points"))
     F.spread_labels(ax, texts)
     ax.set_xlabel("outgoing strength", fontsize=7)
@@ -441,10 +453,20 @@ def role_scatter(ctx, edges, pops, *, fid="N4_role", title=None, note=""):
     if title:
         ax.set_title(title, fontsize=8)
 
-    n_send = int((out_s > in_s).sum())
+    n_send = int(((out_s > in_s) & ((out_s + in_s) > 0)).sum())
+    n_live = len(pops) - len(silent)
     cap = (f"Each population's total outgoing strength against its total incoming strength. "
-           f"The line is parity; above it a population receives more than it sends.",
-           f"{n_send} of {len(pops)} populations sit below the line and are net senders here. "
+           f"The line is parity; above it a population receives more than it sends."
+           + (f" Hollow rings at the origin are populations with NO edge in this arm."
+              if silent else ""),
+           (f"NOT SEEN AT ALL in this arm, and drawn hollow at the origin rather than as a "
+            f"measured zero: {', '.join(short[p] for p in silent)}. The axis is the same across "
+            f"arms so a population missing here can be compared with the arm where it is "
+            f"present; whether it is absent because nothing was inferred or because it never "
+            f"cleared the method's own floor is NOT distinguishable from an edge list. "
+            if silent else "")
+           + f"{n_send} of {n_live} populations with any edge sit below the line and are net "
+             f"senders here. "
            f"These are TWO SUMS OVER THE SAME EDGE LIST AND NOT A TEST: no interval is drawn "
            f"because none was computed, and a population close to the line is not thereby "
            f"balanced - it is unresolved. Both axes are on the method's own per-object scale, so "
@@ -613,5 +635,101 @@ def contribution(ctx, edges, pops, group_col, member_col, *, fid="N7_contributio
              f"not a comparison. The denominator is {g}'s own total here, so a share is within-unit "
              f"and within-group. A member absent from this panel was not necessarily tested and "
              f"found empty - an edge list holds what was returned.{note}")
+    ctx.emit_figure(fid, fig, caption=cap)
+    return True
+
+
+# --------------------------------------------------------------------------------------------
+# WHAT THE METHOD WAS EVEN GIVEN. Not a network panel - a panel about the units themselves, and
+# the only one here the host can draw without any plugin output at all.
+# --------------------------------------------------------------------------------------------
+
+def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=None,
+                  fid="P1_population_presence", floor=None, title=None, note=""):
+    """Which populations each unit contains, against the study's whole label set.
+
+    THE PANEL THAT WAS MISSING WHILE EVERY OTHER PANEL DEPENDED ON IT. A method fitted per unit
+    sees only the labels present in its own slice, so each unit's figures carry the axis that
+    unit happens to have. Measured on a real cohort: 8 to 12 populations across 14 units, 15
+    labels in the object, and no page naming one of the missing. Every downstream panel - a
+    matrix, a ring, a role plot - then draws a different axis per unit and nothing says so.
+
+    Counts, not a presence flag: `absent` and `two cells` are different facts, and the second is
+    the one a per-unit floor is about to remove.
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import LogNorm
+
+    units = [u for u in sorted(label_by_unit or {})]
+    labels = [l for l, _n in sorted((label_total or {}).items(), key=lambda kv: -kv[1])]
+    if len(units) < 2 or not labels:
+        return False
+
+    M = np.array([[float((label_by_unit.get(u) or {}).get(l, 0)) for u in units]
+                  for l in labels])
+    absent = M <= 0
+    thin = (M > 0) & (M < float(floor)) if floor else np.zeros_like(M, dtype=bool)
+
+    short = F.short_labels(list(labels))
+    fig, ax = plt.subplots(figsize=(F.DOUBLE, max(2.2, 0.22 * len(labels) + 1.3)),
+                           layout="constrained")
+    shown = np.where(absent, np.nan, M)
+    cmap = plt.get_cmap("viridis").copy()
+    cmap.set_bad("white")
+    lo = float(M[M > 0].min()) if (M > 0).any() else 1.0
+    im = ax.imshow(shown, cmap=cmap, aspect="auto",
+                   norm=LogNorm(vmin=max(lo, 1.0), vmax=float(M.max()) or 1.0))
+    ys, xs = np.nonzero(absent)
+    ax.scatter(xs, ys, marker="x", s=16, linewidths=0.7, color="#9A9A9A", zorder=3)
+    if thin.any():
+        ys2, xs2 = np.nonzero(thin)
+        ax.scatter(xs2, ys2, marker="o", s=22, facecolor="none", edgecolor="#D55E00",
+                   lw=0.9, zorder=4)
+    ax.set_xticks(range(len(units)),
+                  [f"{u}*" if (unit_axis or {}).get(u) == "group" else u for u in units],
+                  rotation=90, fontsize=6)
+    ax.set_yticks(range(len(labels)), [short[l] for l in labels], fontsize=6)
+    cb = fig.colorbar(im, ax=ax, fraction=0.02, pad=0.01)
+    cb.ax.tick_params(labelsize=6)
+    cb.set_label("cells (log)", fontsize=6)
+    if title:
+        ax.set_title(title, fontsize=8)
+
+    # THE INCIDENCE PER DESIGN LEVEL, WHICH IS THE WHOLE POINT (`panels.R2`, and the reason a
+    # per-unit floor is not a per-unit fact). Folding N per-unit reports into a range destroys
+    # exactly the alignment that matters: a floor removing a population from every unit of one
+    # level and none of the other has converted an abundance difference into a presence
+    # difference, and no downstream panel can undo it.
+    lines = []
+    if design:
+        facs = {}
+        for u in units:
+            for f, v in (design.get(u) or {}).items():
+                facs.setdefault(str(f), {}).setdefault(str(v), []).append(u)
+        for f, lv in sorted(facs.items()):
+            if len(lv) < 2:
+                continue
+            parts = []
+            for v, us in sorted(lv.items()):
+                cols = [units.index(u) for u in us]
+                rate = float(absent[:, cols].mean()) if cols else 0.0
+                parts.append(f"{v} {rate * 100:.0f}%")
+            lines.append(f"{f}: " + ", ".join(parts))
+
+    n_abs = int(absent.sum())
+    cap = (f"Which populations each unit contains, before any method runs: {len(labels)} labels "
+           f"across {len(units)} units, colour is cells on a log scale. White crosses are "
+           f"populations with NO cells in that unit.",
+           f"{n_abs} of {absent.size} unit-population cells are empty"
+           + (f"; the rate per design level is — " + "; ".join(lines) + ". "
+              if lines else ". ")
+           + (f"Rings mark a population present but below {floor:g} cells, which is where a "
+              f"per-unit floor removes one. " if thin.any() else "")
+           + "A UNIT MARKED * IS A DESIGN ARM, its members pooled; the others are single "
+             "samples. A population absent here is absent from every panel that unit produces, "
+             "and that is why those panels do not share an axis. This panel does NOT say why a "
+             "population is absent: too few cells to annotate, and genuinely not present, look "
+             f"the same in a label column.{note}")
     ctx.emit_figure(fid, fig, caption=cap)
     return True

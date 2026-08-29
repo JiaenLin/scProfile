@@ -180,7 +180,7 @@ class Context:
     """
 
     def __init__(self, adata, *, keys, out, cores=1, memory_gb=None, unit=None,
-                 organism=None, assay=None,
+                 unit_members=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
                  sentinels=(), provenance=None, constraint="",
                  config=None, log=print):
@@ -204,6 +204,12 @@ class Context:
         #: instances run at once and each is admitted on this number.
         self.memory_gb = float(memory_gb) if memory_gb else None
         self.unit = unit
+        #: The samples this unit covers. A SAMPLE unit has one; a GROUP unit - a design arm -
+        #: has its members. Carried so a panel can say ON ITS FACE what it was drawn from: a
+        #: pooled three-animal arm and a single animal render identically otherwise, and a
+        #: qualification that lives only in a caption does not travel with the image into a
+        #: slide, a grant or a referee's PDF.
+        self.unit_members = tuple(str(m) for m in (unit_members or ()))
         #: The upstream tool's constraint on use, verbatim, or "" when the object carries none.
         #: `Guard` has had this since it existed and `Context` did not, so a plugin that wanted to
         #: REPRODUCE the constraint in its own caveats - rather than merely be refused by it - had
@@ -629,6 +635,51 @@ class Context:
         """
         return self.figure.use()
 
+    #: What one unit is, in words, for the stamp. A number alone does not say whether five
+    #: means five animals pooled or the fifth animal.
+    def provenance_line(self):
+        """One line naming what this panel was drawn from, or "" for a cohort-wide panel."""
+        if not self.unit:
+            return ""
+        n_mem = len(self.unit_members)
+        n_cells = int(getattr(self.adata, "n_obs", 0) or 0)
+        if n_mem > 1:
+            what = f"design arm — {n_mem} samples pooled"
+        elif n_mem == 1:
+            what = "one sample"
+        else:
+            what = "one unit"
+        return f"{self.unit}   ·   {what}   ·   n = {n_cells:,} cells"
+
+    def _stamp_provenance(self, fig):
+        """Write the unit onto the FIGURE, not only into the caption.
+
+        A CAPTION DOES NOT TRAVEL WITH THE IMAGE. Lift a PNG into a slide, a grant or a
+        referee's PDF and every qualification that lived beside it is gone - so a panel drawn on
+        one sample and a panel drawn on a whole arm's pooled cells arrive looking identical and
+        equally cohort-shaped. Measured on a real report: ten single-animal panels and four
+        pooled-arm panels of the SAME family, in one appendix, and not one of the fourteen said
+        which it was anywhere on the image.
+
+        It is added before `bbox_inches="tight"` saves, so the canvas GROWS to include it rather
+        than the text landing on a panel - the failure mode of any block anchored to the bottom
+        of a figure and laid out upward.
+
+        A cohort-wide panel gets nothing: it has no unit, and stamping "cohort" on it would be
+        an assertion the host cannot make about what the plugin pooled.
+        """
+        line = self.provenance_line()
+        if not line:
+            return
+        try:
+            if any(getattr(t, "_scprofile_provenance", False) for t in fig.texts):
+                return                      # already stamped; a redraw must not double it
+            t = fig.text(0.0, -0.006, line, ha="left", va="top", fontsize=5.2,
+                         color="#5A5A5A", transform=fig.transFigure)
+            t._scprofile_provenance = True
+        except Exception:                                                 # noqa: BLE001
+            pass                # a stamp that will not draw must never lose the figure
+
     def emit_figure(self, name, fig, *, caption="", source=None, close=True):
         """A panel, written as raster AND vector with its source data, at journal width.
 
@@ -643,6 +694,7 @@ class Context:
         """
         png = self.out / "figures" / f"{name}.png"
         pdf = self.out / "figures" / f"{name}.pdf"
+        self._stamp_provenance(fig)
         # THE CONVENTION WINS WHERE THERE IS ONE. `figure.use()` sets savefig.dpi to 400 for
         # publication; a hard `dpi=200` here silently overrode it, so a plugin that had asked for
         # the journal settings got half the resolution it asked for. Where nothing has been set,
