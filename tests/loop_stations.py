@@ -221,21 +221,27 @@ def station_eye(runs):
 def station_paper(runs):
     """8. Does any of it support a claim?"""
     from scprofile import paper as PA
+    # THE NEWEST RUN, LIKE THE EYE STATION - and for the same reason it took a fix there. This
+    # scanned every run and stopped at the first COMPLETE one, so a finished loop on an old run
+    # made the station green while the run the current code produced had no claim written from
+    # it at all. A loop that reports on a run two commits back is testing code that has changed.
     best = None
-    for r in runs:
+    for r in sorted(runs, key=lambda p: p.name, reverse=True):
         rows = PA.status(r)
-        if not rows:
+        if not rows and best is not None:
             continue
         withdrawn = sum(1 for _c, st, _n, _t in rows if st == PA.WITHDRAWN)
         out = PA.outstanding(r)
         rendered = (r / "report" / "paper.html").is_file()
         best = (r, rows, withdrawn, out, rendered)
-        if not out and rendered:
-            break
-    if best is None:
+        break
+    if best is None or not best[1]:
         return BLOCKED, "no claim has been written from any run's figures", \
             "scprofile paper --out <RUN> --brief"
     r, rows, withdrawn, out, rendered = best
+    if not rows:
+        return BLOCKED, f"{r.name}: no claim written from the newest run", \
+            f"scprofile paper --out {r} --brief"
     if out:
         return BLOCKED, f"{r.name}: {len(out)} claim(s) undefended or stale", \
             f"scprofile paper --out {r} --round <id> --verdict ... --why '...'"
