@@ -2087,14 +2087,12 @@ def _licence(a):
     for plugin, unit in found:
         k = ks.get(plugin)
         declared = list((k.spec or {}).get("produces") or []) if k else []
-        if a.grant:
-            lic = LC.grant(out, plugin, unit, declared=declared,
-                           retrospective=a.retrospective, granter=a.granter)
-        else:
-            ev, missing = LC.evaluate(out, plugin, unit, declared=declared)
-            hard = [x for x in ("integrity", "completeness", "provenance") if not ev[x]["ok"]]
-            lic = {"grade": LC.REFUSED if hard else "(would grant)", "evidence": ev,
-                   "refused_because": [f"{x}: {ev[x]['why']}" for x in hard]}
+        # ONE DECISION FUNCTION FOR BOTH PATHS. `--grant` differs from the dry run only in
+        # whether the result is written down; a preview computed by a shortened check is a
+        # preview that can disagree with the action, and this one did.
+        fn = LC.grant if a.grant else LC.decide
+        lic = fn(out, plugin, unit, declared=declared,
+                 retrospective=a.retrospective, granter=a.granter)
         g = lic["grade"]
         tally[g] = tally.get(g, 0) + 1
         lbl = f"{plugin}[{unit}]" if unit else plugin

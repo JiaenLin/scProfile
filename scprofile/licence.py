@@ -113,43 +113,43 @@ def evaluate(rundir, plugin, unit=None, *, declared=None):
     return ev, missing
 
 
-def grant(rundir, plugin, unit=None, *, declared=None, retrospective=False, granter=""):
-    """Evaluate and write a licence, or refuse and say why. Returns the licence dict."""
+def decide(rundir, plugin, unit=None, *, declared=None, retrospective=False, granter=""):
+    """The licence this WOULD be, written nowhere.
+
+    SPLIT FROM `grant` BECAUSE A PREVIEW THAT DISAGREES WITH THE ACTION IS WORSE THAN NEITHER.
+    The first version of the CLI ran its own shortened check for the dry run - hard classes only
+    - and reported "would grant" for ten instances that `--grant` then refused, because the
+    shortened check never looked at the self-report. One decision function, two callers.
+    """
     from . import resume, runcard
 
     ev, missing = evaluate(rundir, plugin, unit, declared=declared)
     hard = [k for k in ("integrity", "completeness", "provenance") if not ev[k]["ok"]]
     if hard:
-        lic = {"licence": 1, "grade": REFUSED, "run": Path(rundir).name,
-               "plugin": plugin, "unit": unit,
-               "refused_because": [f"{k}: {ev[k]['why']}" for k in hard],
-               "evidence": ev}
-        _write(rundir, plugin, unit, lic)
-        return lic
+        return {"licence": 1, "grade": REFUSED, "run": Path(rundir).name,
+                "plugin": plugin, "unit": unit,
+                "refused_because": [f"{k}: {ev[k]['why']}" for k in hard],
+                "evidence": ev}
 
     self_ok = ev["self_report"]["ok"]
     unknown = ev["self_report"]["verdict"] == runcard.UNKNOWN
     if not self_ok and not unknown:
         # The run said something was wrong with this result. That is not a gap to be waived by
         # a flag; it is the one signal here that came from the thing that computed it.
-        lic = {"licence": 1, "grade": REFUSED, "run": Path(rundir).name,
-               "plugin": plugin, "unit": unit,
-               "refused_because": [f"the producing run calls this "
-                                   f"{ev['self_report']['verdict']!r}"]
-                                  + ev["self_report"]["reasons"],
-               "evidence": ev}
-        _write(rundir, plugin, unit, lic)
-        return lic
+        return {"licence": 1, "grade": REFUSED, "run": Path(rundir).name,
+                "plugin": plugin, "unit": unit,
+                "refused_because": [f"the producing run calls this "
+                                    f"{ev['self_report']['verdict']!r}"]
+                                   + ev["self_report"]["reasons"],
+                "evidence": ev}
     if unknown and not retrospective:
-        lic = {"licence": 1, "grade": REFUSED, "run": Path(rundir).name,
-               "plugin": plugin, "unit": unit,
-               "refused_because": [
-                   "no run card, so the producing run's verdict is unknown. Grant a "
-                   "RETROSPECTIVE licence deliberately if the missing self-report is "
-                   "acceptable to you - it is not something this can decide."],
-               "evidence": ev}
-        _write(rundir, plugin, unit, lic)
-        return lic
+        return {"licence": 1, "grade": REFUSED, "run": Path(rundir).name,
+                "plugin": plugin, "unit": unit,
+                "refused_because": [
+                    "no run card, so the producing run's verdict is unknown. Grant a "
+                    "RETROSPECTIVE licence deliberately if the missing self-report is "
+                    "acceptable to you - it is not something this can decide."],
+                "evidence": ev}
 
     grade = RETROSPECTIVE if unknown else (FULL if ev["inspection"]["ok"] else PROVISIONAL)
     d = resume.unit_dir(rundir, plugin, unit)
@@ -169,6 +169,12 @@ def grant(rundir, plugin, unit=None, *, declared=None, retrospective=False, gran
              ["that any figure was looked at"]),
         "void_if": "any artifact's sha256 changes, or the reuse key changes",
     }
+    return lic
+
+
+def grant(rundir, plugin, unit=None, **kw):
+    """`decide`, then written to disk. The only difference between them is the write."""
+    lic = decide(rundir, plugin, unit, **kw)
     _write(rundir, plugin, unit, lic)
     return lic
 
