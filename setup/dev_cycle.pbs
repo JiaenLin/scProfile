@@ -196,6 +196,57 @@ echo "started  : $(date)"
 # result, not a crash, and under `set -e` it would end the job on a working feature.
 say() { echo; echo "########## $* ##########"; }
 
+# WHETHER THIS RUN FINISHED, WRITTEN INTO THE RUN ITSELF. A directory of outputs looks the
+# same whether the job walked to the end or was killed at hour eleven of a twelve-hour walltime,
+# and the difference is not recoverable afterwards: the scheduler's record ages out, and a
+# half-written run has figures, tables and a report in it exactly like a whole one. Anything
+# reading these directories later - a reuse layer deciding what to adopt, a station deciding
+# whether a defect is real - is then reading partial runs as though they were complete.
+#
+# The trap covers every exit, not just the last line, because the ways a job ends without
+# reaching the last line are the ones that matter. `SEALED.txt` on a clean exit, `FAILED.txt`
+# carrying the status on any other, and both name the phase so a build that dies is not
+# mistaken for a run that dies.
+#
+# It is a RECORD, never a gate: nothing here refuses, and a run that fails still keeps every
+# artifact it managed to write, for exactly the reason the review block above is not gated.
+# A SEAL IS WRITTEN ON TWO CONDITIONS, NOT ONE: the exit status must be zero AND the script must
+# have reached its last line and said so. `$?` alone is not enough, and testing it alone produced
+# a SEAL on a job that had FAILED - `set -e` does not apply to a command inside an `&&` list, so
+# a failure there let execution continue and the trap read the status of whatever ran next. A
+# false FAILED costs a re-run; a false SEALED tells everything downstream that a partial run is
+# complete, which is the thing this trap exists to prevent. So the two disagree only in the safe
+# direction: anything that did not reach the end is FAILED, whatever its status says.
+_DONE=""
+_seal() {
+  _rc=$?
+  [ -n "$_DONE" ] || _rc=$(( _rc == 0 ? 99 : _rc ))
+  if [ -n "${OUT:-}" ] && [ -d "${OUT:-}" ]; then
+    if [ "$_rc" -eq 0 ]; then
+      { echo "phase    : ${PHASE}"
+        echo "job      : ${PBS_JOBID:-none}"
+        echo "tool     : $(cut -c1-40 "$TOOL/HEAD.txt" 2>/dev/null || echo unknown)"
+        echo "finished : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      } > "$OUT/SEALED.txt"
+    else
+      { echo "phase    : ${PHASE}"
+        echo "job      : ${PBS_JOBID:-none}"
+        echo "exit     : $_rc$([ "$_rc" -eq 99 ] && echo "  (the script did not reach its last line; 99 is this trap's own code for that)")"
+        echo "stopped  : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        echo "note     : this run did NOT reach the end of its job script. Its outputs are"
+        echo "           whatever had been written by then and may be partial."
+      } > "$OUT/FAILED.txt"
+    fi
+  fi
+  exit $_rc
+}
+trap _seal EXIT
+trap 'exit 143' TERM     # a walltime kill runs the EXIT trap through this, so it is recorded
+# REGISTERED HERE, BEFORE ANY WORK, AND NOT AT THE END OF THE FILE. A trap installed after the
+# work covers only the exit it was already going to reach - which is the one case that needed no
+# trap. The function reads `$OUT` when it FIRES, so a job that dies before `OUT` is set writes
+# nothing, which is correct: there is no run directory to seal yet.
+
 case "${PHASE}" in
 
 build)
@@ -368,4 +419,5 @@ if [ -d "${OUT:-}/report" ]; then
   "$PY" -m scprofile.cli review --out "$OUT" || echo "  review exit $?"
 fi
 
+_DONE=1
 echo "finished : $(date)"
