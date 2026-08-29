@@ -2067,6 +2067,52 @@ def _write_readme(out, payload):
     return out / "README.md"
 
 
+def _licence(a):
+    """Evaluate what a run produced and, with --grant, licence it for adoption by a later run."""
+    from . import licence as LC, resume
+    from .kernels import discover
+
+    out = Path(a.out)
+    if not out.is_dir():
+        print(f"scprofile: no such run directory: {out}", file=sys.stderr)
+        return REFUSE
+    ks = discover()
+    want = _split(a.kernel or "") or None
+    found = [(p, u) for p, u in resume.discover(out) if not want or p in want]
+    if not found:
+        print(f"{out}\n  nothing here to licence.")
+        return 0
+    print(f"{out}")
+    tally = {}
+    for plugin, unit in found:
+        k = ks.get(plugin)
+        declared = list((k.spec or {}).get("produces") or []) if k else []
+        if a.grant:
+            lic = LC.grant(out, plugin, unit, declared=declared,
+                           retrospective=a.retrospective, granter=a.granter)
+        else:
+            ev, missing = LC.evaluate(out, plugin, unit, declared=declared)
+            hard = [x for x in ("integrity", "completeness", "provenance") if not ev[x]["ok"]]
+            lic = {"grade": LC.REFUSED if hard else "(would grant)", "evidence": ev,
+                   "refused_because": [f"{x}: {ev[x]['why']}" for x in hard]}
+        g = lic["grade"]
+        tally[g] = tally.get(g, 0) + 1
+        lbl = f"{plugin}[{unit}]" if unit else plugin
+        print(f"  {g:<14s} {lbl}")
+        for r in (lic.get("refused_because") or [])[:3]:
+            print(f"                 {r}")
+        for r in (lic.get("not_evidenced") or [])[:3]:
+            print(f"                 not evidenced: {r}")
+    print("\n  " + ", ".join(f"{n} {g}" for g, n in sorted(tally.items())))
+    if not a.grant:
+        print("  (nothing written - pass --grant)")
+    if tally.get(LC.REFUSED) and not a.retrospective:
+        print("\n  A run made before the run card exists has NO self-report, and that cannot be\n"
+              "  reconstructed by reading its output afterwards. `--retrospective` grants a\n"
+              "  licence that says so explicitly, rather than one that implies evidence nobody\n"
+              "  has. It is a deliberate act and it is recorded as one.")
+    return 0
+
 def _landscape(a):
     """The checklist: for every instance a new run would need, is it already computed?
 
@@ -2495,6 +2541,17 @@ def main(argv=None):
     p = sub.add_parser("report", help="[you] rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)
     p.set_defaults(fn=_report)
+
+    lc = sub.add_parser("licence",
+                        help="[you] evaluate a run's results and licence them for reuse")
+    lc.add_argument("--out", required=True, type=Path, help="the run to licence")
+    lc.add_argument("--kernel", help="plugins, comma separated. Default: all it holds")
+    lc.add_argument("--grant", action="store_true", help="write licences, not just report")
+    lc.add_argument("--retrospective", action="store_true",
+                    help="licence a run that predates the run card. Its own verdict CANNOT be "
+                         "recovered; the licence records that gap rather than hiding it.")
+    lc.add_argument("--granter", default="", help="who granted it")
+    lc.set_defaults(fn=_licence)
 
     ls_ = sub.add_parser("landscape",
                          help="[you] what EARLIER runs already hold, and what a new run must "
