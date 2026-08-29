@@ -1227,6 +1227,25 @@ def _validate(a):
 def _scaffold(a):
     """Write a declared plugin's build skeleton. The judgement is still yours."""
     from . import scaffold as SC
+
+    # --new WRITES A PLUGIN THAT DOES NOT EXIST YET. `scaffold` otherwise takes an ALREADY
+    # DECLARED plugin and writes its build skeleton, so a maintainer starting from nothing had a
+    # documented one-file template and no command that emitted it.
+    if getattr(a, "new", False):
+        from .onefile import render
+
+        out_dir = Path(getattr(a, "dir", None) or "kernels")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        for n in _split(a.name):
+            f = out_dir / f"{n}.py"
+            if f.exists() and not a.force:
+                print(f"scprofile: {f} exists; pass --force to overwrite", file=sys.stderr)
+                return REFUSE
+            f.write_text(render(n), encoding="utf-8")
+            print(f"wrote {f}")
+        print("Next: fill in run(), then `scprofile validate <name>`.")
+        return 0
+
     from .kernels import discover
     ks = discover()
     names = _split(a.name or "")
@@ -2538,6 +2557,11 @@ def main(argv=None):
     sc_ = sub.add_parser("scaffold", help="[maintainer] write a declared plugin's build skeleton")
     sc_.add_argument("name", help="plugin name(s), comma-separated")
     sc_.add_argument("--force", action="store_true", help="overwrite existing skeleton files")
+    sc_.add_argument("--new", action="store_true",
+                     help="write a NEW one-file plugin from the template, instead of a declared "
+                          "plugin's build skeleton")
+    sc_.add_argument("--dir", type=Path, default=Path("kernels"),
+                     help="where --new writes the file")
     sc_.set_defaults(fn=_scaffold)
 
     p = sub.add_parser("report", help="[you] rebuild the documents from report.json")

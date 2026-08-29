@@ -38,7 +38,7 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | `scprofile licence` | Evaluates a run's results against the licence criteria and, with `--grant`, records licences for reuse. |
 | `scprofile review` | Records that a figure has been looked at, and reports which have not. |
 | `scprofile validate` | Checks a plugin declaration and its references without running anything. |
-| `scprofile scaffold` | Writes a new plugin skeleton from a declaration. |
+| `scprofile scaffold` | With `--new`, writes a new one-file plugin from the template. Without it, writes an already-declared plugin's build skeleton. |
 | `scprofile fetch` | Downloads a plugin's declared reference data. |
 | `scprofile selftest` | Runs one plugin's selftest in its environment. |
 

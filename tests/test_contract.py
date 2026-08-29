@@ -2304,6 +2304,39 @@ def test_the_panel_registry_matches_what_is_drawn():
     bad = [k.id for k in P.KINDS if not (k.establishes and k.does_not_establish)]
     check("every kind says what it establishes AND what it does not", not bad, str(bad))
 
+    # EVERY MODULE IS REACHED, OR IS NAMED AS NOT REACHED. A module nothing can invoke is
+    # documentation of an intention. `_entry`, `plugin` and `sources` are reached by SUBPROCESS
+    # rather than by import - the host launches `_entry` in the plugin's own environment - so an
+    # import graph alone reports them dead and is wrong.
+    import ast as _a
+    mods = {f.stem: f for f in (root / "scprofile").glob("*.py")
+            if not f.stem.startswith("__")}
+    g = {}
+    for m, f in mods.items():
+        deps = set()
+        for n in _a.walk(_a.parse(f.read_text())):
+            if isinstance(n, _a.ImportFrom) and n.module:
+                b = n.module.split(".")[-1]
+                if b in mods:
+                    deps.add(b)
+            if isinstance(n, _a.ImportFrom) and n.level and not n.module:
+                deps |= {x.name for x in n.names if x.name in mods}
+            if isinstance(n, _a.Import):
+                deps |= {x.name.split(".")[-1] for x in n.names
+                         if x.name.split(".")[-1] in mods}
+        g[m] = deps
+    g["kernels"] = g.get("kernels", set()) | {"_entry"}     # the subprocess launch
+    seen, stack = {"cli"}, ["cli"]
+    while stack:
+        for nxt in g.get(stack.pop(), ()):
+            if nxt not in seen:
+                seen.add(nxt)
+                stack.append(nxt)
+    unreached = sorted(set(mods) - seen)
+    check("every module is reachable from the CLI, except the declared specification",
+          unreached == ["panels"],
+          f"unreachable: {unreached} - wire it, delete it, or name it here")
+
 
 def test_a_figure_review_is_bound_to_the_image_it_describes():
     """Looking cannot be verified; a review outliving its picture can be made impossible."""

@@ -286,7 +286,14 @@ meaning anything.
 ## Adding a method
 
 A plugin is **one file**: `kernels/<name>.py` with a `PLUGIN` dict and a `run(ctx)`. Dropping it
-in is the whole installation. The host reads the declaration without importing it, resolves the
+in is the whole installation.
+
+```
+scprofile scaffold <name> --new        # write a new plugin from the one-file template
+scprofile validate  <name>             # check the declaration without running anything
+scprofile scaffold  <name>             # a declared plugin's build skeleton
+```
+ The host reads the declaration without importing it, resolves the
 environment, and runs it through a shared entrypoint that applies the contract.
 
 ```python
