@@ -62,6 +62,11 @@ def read_or_fail(path, what=""):
 
 print("\nno project, person, machine or cohort appears anywhere")
 BAD = re.compile(r"\bsambo\b|wangyb|duke-nus|hn-10-03|aging[_ ]?hfd|young[_ ]?hfd"
+                 # ANY node of any cluster, not one hostname. `hn-10-03` was listed and
+                 # `compute1020` was not, so a machine name sat in a test comment while the
+                 # guard reported the tree clean - the same shape as listing some of a cohort's
+                 # sample names. A site's machines are not ours to publish.
+                 r"|\bcompute[a-z]?\d{3,}\b|\blogin-[\d-]+\b"
                  r"|/data/wangyb|scratch/2026"
                  # BARE SAMPLE NAMES. The list above caught `aging_hfd` and missed `Aging1`,
                  # which is the same cohort's other arm - so a dozen of them reached docs, host
@@ -1599,6 +1604,75 @@ ck("no host-owned kind is left undrawn once every column is declared",
 
 _src_all = "".join((_P2("scprofile") / f).read_text()
                    for f in ("compare_panel.py", "network_panels.py", "panels.py"))
+# THE HOST MAY EXPLAIN ITSELF WITH A CONCRETE CASE; IT MAY NOT BRANCH ON ONE. Prose naming the
+# plugin whose defect produced a mechanism is how this whole tree is documented and it is not
+# overfitting - the mechanism still works for a plugin nobody has written. What WOULD overfit is
+# a live string: `if name == "<plugin>"` in the host is a special case, and a host with special
+# cases is a directory of examples. So the check is on CODE, with docstrings and comments
+# removed, rather than on the text of a file.
+import ast as _ast_ov                                                           # noqa: E402
+
+# THE SHAPE OF DISPATCH, NOT EVERY OCCURRENCE OF THE WORD. The first version flagged any string
+# equal to a kernel's filename, and kernels are named after the QUANTITY they produce - so it
+# fired on a capability slot called "velocity" ("a fitted velocity field") and on a filename
+# check, both correct, which is how a guard gets switched off. What identifies overfitting is
+# the host comparing a plugin's IDENTITY against a literal: `name == "x"`, `k.name in (...)`.
+_names = {f.stem for f in (root / "kernels").glob("*.py")}
+#: A BARE `.name` IS NOT A PLUGIN'S NAME. The second version required only the attribute to be
+#: called `name`, and fired on `"velocity" not in e.name` where `e` is a directory entry and the
+#: string is part of a filename. What says "this is a plugin" is the RECEIVER, so both halves
+#: are required: a plugin-ish variable, and the identity attribute on it.
+_HOLDERS = {"k", "kern", "kernel", "kernels", "ks", "plugin", "plug", "spec", "decl"}
+_IDENT_ATTR = {"name", "kernel", "plugin"}
+_IDENT_VAR = {"name", "kernel", "plugin", "kernel_name", "plugin_name", "kname"}
+
+
+def _is_identity(node):
+    """True when this operand holds a PLUGIN's identity, not merely something called `name`."""
+    if isinstance(node, _ast_ov.Attribute):
+        recv = node.value
+        return (node.attr.lower() in _IDENT_ATTR
+                and isinstance(recv, _ast_ov.Name) and recv.id.lower() in _HOLDERS)
+    if isinstance(node, _ast_ov.Name):
+        return node.id.lower() in _IDENT_VAR
+    if isinstance(node, _ast_ov.Subscript):
+        return _is_identity(node.value)
+    return False
+
+
+def _literals(node):
+    out = []
+    if isinstance(node, _ast_ov.Constant) and isinstance(node.value, str):
+        out.append(node.value)
+    elif isinstance(node, (_ast_ov.Tuple, _ast_ov.List, _ast_ov.Set)):
+        for e in node.elts:
+            out += _literals(e)
+    return out
+
+
+_branch = []
+for _f in sorted((root / "scprofile").glob("*.py")):
+    for _n in _ast_ov.walk(_ast_ov.parse(_f.read_text(encoding="utf-8"))):
+        if not isinstance(_n, _ast_ov.Compare):
+            continue
+        sides = [_n.left] + list(_n.comparators)
+        if not any(_is_identity(x) for x in sides):
+            continue
+        for x in sides:
+            for lit in _literals(x):
+                if lit in _names:
+                    _branch.append(f"{_f.name}:{_n.lineno} dispatches on {lit!r}")
+ck("no host module DISPATCHES on a shipped plugin's name",
+   not _branch, "; ".join(_branch[:5]))
+# AND THE CHECK IS PROVED ABLE TO FIRE, on the exact shape it exists to catch.
+_probe = _ast_ov.parse('if k.name == "cellchat":\n    pass\n')
+_fired = any(isinstance(n, _ast_ov.Compare) and any(_is_identity(x) for x in
+             [n.left] + list(n.comparators)) and
+             any(l in _names for x in [n.left] + list(n.comparators) for l in _literals(x))
+             for n in _ast_ov.walk(_probe))
+ck("and it fires on a real dispatch", _fired,
+   "a guard that has never been seen to fail is not known to work")
+
 ck("NO panel module names a shipped plugin or its method",
    not any(w in _src_all.lower() for w in
            ("cellchat", "liana", "pertpy", "scenic", "decoupler", "pydeseq")),

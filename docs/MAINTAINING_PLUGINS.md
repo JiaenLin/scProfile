@@ -172,3 +172,30 @@ python tests/test_contract.py                      # the rules above
 is one that fails inside somebody's run.** It runs *every* member's, not only yours — an
 environment shared by four and proved by one is an environment three of them meet for the first
 time in a stranger's cohort.
+
+## `report.unit_network` — the one declaration that buys figures
+
+A plugin that writes a per-unit table of relationships between populations declares where it is
+and what its columns mean, and the HOST then draws the panels. **No host code names a method**;
+what a plugin declares is exactly what it gets.
+
+```python
+"unit_network": {"table": "tables/edges.csv", "source": "source", "target": "target",
+                 "weight": "score", "weight_scale": "per_object",
+                 "group": "pathway", "member": "interaction"}
+```
+
+| declared | what it earns |
+|---|---|
+| `table`, `source`, `target`, `weight` (required) | the sender-by-receiver matrix, the ring, the chord and the role scatter per arm; the difference matrix and the role shift per contrast; the interaction where the design supports one |
+| `+ group` | the flow ranking and the group-by-population role heatmap per arm; the paired flow comparison per contrast |
+| `+ group` and `member` | the decomposition of one group into its members |
+
+`weight_scale` is `per_object` (the default) or `absolute`, and it decides what a comparison
+between two units is allowed to claim. Where a method computes its weight over the elements
+present — the usual case — two units' values are on two scales, and every between-arm panel is
+drawn on each arm's own SHARE with both totals printed. **The host cannot tell which it is from
+the numbers.** Declaring it wrongly does not fail; it produces a comparison that looks right.
+
+An unrecognised key here is an **ERROR**, not a warning: a misspelt column name removes panels
+in silence, and a plugin that has lost three looks exactly like one that declared less.

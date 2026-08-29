@@ -7,16 +7,26 @@ every serious defect in its history has been one domain doing another's job — 
 of the fifth, no domain doing it at all.
 
 ```
-      DECLARE  ──►  BUILD  ──►  PLAN  ──►  RUN  ──►  REPORT
-         ▲            ▲           ▲          │          │
-         │            │           └──────────┘          │   plan triggers the builder
-         │            └──────────────────────┘          │   a run that fails on the ENVIRONMENT
-         │                                              │    rebuilds it and retries, once
-         └──────────────────────────────────────────────┘   output that contradicts the
-                                                             DECLARATION is a maintainer's
-                                                             defect — and so is a page the
-                                                             standard refuses
+      DECLARE  ──►  BUILD  ──►  PLAN  ──►  RUN  ──►  REPORT  ──►  PAPER
+         ▲            ▲           ▲          │          │            │
+         │            │           └──────────┘          │            │  plan triggers the builder
+         │            └──────────────────────┘          │            │  a run that fails on the
+         │                                              │            │  ENVIRONMENT rebuilds and
+         └──────────────────────────────────────────────┘            │  retries, once
+         └───────────────────────────────────────────────────────────┘
+                                                    output that contradicts the DECLARATION is a
+                                                    maintainer's defect — and so is a page the
+                                                    standard refuses, and so is a claim written
+                                                    from these figures that does not survive
 ```
+
+**The last arrow back is the longest and it is the newest.** A figure set can pass the exit
+standard, have every image looked at, and still support nothing: those checks ask whether the
+page is readable and whether anyone opened it, not whether it supports what you want to say.
+`PAPER` asks the question a reader will. A claim written from the figures and then withdrawn
+under review is a defect in the DECLARATION or in the drawing, routed back exactly like a
+contradicted output — see `docs/PAPER_TEST.md`, and `docs/FIGURE_STANDARD.md` for the eleven
+rules that loop has produced so far.
 
 **The arrows back are the point.** A pipeline that only flows one way makes every downstream
 failure look like the user's problem. These edges route a failure to the layer that owns it,

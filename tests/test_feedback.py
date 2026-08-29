@@ -292,7 +292,7 @@ ck("detected from the data, not plumbed through the scheduler",
 
 
 print("\nthe memory counter is the JOB'S cgroup, never the machine's")
-# RECONSTRUCTED FROM THE RUN THAT BROKE IT. compute1020: a 1 TB node, a PBS job in an unnamespaced
+# RECONSTRUCTED FROM THE RUN THAT BROKE IT: a 1 TB node, a batch job in an unnamespaced
 # cgroup v2, ten concurrent instances. The old code read /sys/fs/cgroup/memory.peak by absolute
 # path - the ROOT - and reported 1000.7 GB ten times, identical, for instances of 7,374 to 11,985
 # cells. PBS billed the whole job 42.7 GB. The declaration it then told the maintainer to raise

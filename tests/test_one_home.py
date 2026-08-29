@@ -84,6 +84,23 @@ ck("the written result is a run output, not a scratch file",
    "PAPER.md" in REF or "PAPER_CLAIMS" in REF)
 ck("and the command can render it", "--render" in CLI and hasattr(PA, "render"))
 
+print("\nthe documents a maintainer reads describe the code that is here")
+# AGE IS NOT WRONGNESS - a document 180 commits old can be perfectly correct - so this checks
+# for CONCRETE ABSENCES, each one found by asking what changed and which document should have
+# said so. Four were missing at once: the domain chain ended at REPORT with no paper step; the
+# reporting boundary described a two-way routing that had become three-way; and neither document
+# a plugin author reads mentioned `unit_network`, the single declaration that earns a plugin
+# twelve host-drawn panels.
+_ARCH = (ROOT / "docs" / "ARCHITECTURE.md").read_text(encoding="utf-8")
+_REP = (ROOT / "docs" / "REPORTING.md").read_text(encoding="utf-8")
+ck("the domain chain includes the paper step", "PAPER" in _ARCH)
+ck("the reporting boundary knows panels route three ways",
+   "by_arm" in _REP or "arms page" in _REP)
+for _f in ("docs/PLUGIN_DESIGN.md", "docs/MAINTAINING_PLUGINS.md"):
+    _t = (ROOT / _f).read_text(encoding="utf-8")
+    ck(f"{Path(_f).name} documents unit_network", "unit_network" in _t)
+    ck(f"{Path(_f).name} documents what weight_scale decides", "weight_scale" in _t)
+
 print("\nnothing in the package writes outside a run directory")
 # A MODULE THAT WRITES TO /tmp HAS INVENTED A THIRD PLACE. Every path this tool writes is
 # derived from the run directory it was given.

@@ -52,7 +52,9 @@ plugins already produce, and arrives for a plugin written next year that does no
 | what the constraint binds | the constraint + what each page shows | only the host holds both |
 | folding repeated caveats | the caveats | a per-unit plugin emits the same sentence once per unit, with its own numbers in it |
 | folding repeated refutations | the contradictions | the same problem, and it CANNOT be folded at render time because the exit standard matches the claim verbatim - so the FOLD dedupes on the sentence with its numbers blinded and keeps the first one intact |
+| routing a panel to a page | each unit's AXIS, from the resolver | an arm and an animal both carry a `unit`, and one truthiness test sent a plugin's pooled-arm panels into an appendix titled "per sample". Three destinations: no unit to the cohort page, GROUP unit to the arms page beside the comparisons it belongs with, SAMPLE unit to the per-sample appendix |
 | the per-sample appendix | the figures' units | a page carrying one plot per unit hides its own result |
+| the census of what the method was given | the label column and the design | a per-unit method sees only the labels present in its own slice, so every unit's panels carry the axis that unit happens to have — and only the host can say what the study had. A plugin cannot know what it is missing and the reporter cannot open the object, so the census is taken at run time and carried |
 | the verdict on the page | the rendered directory | only the host knows what a whole report looks like, and the page that fails is the one nobody opens |
 | what a design can estimate | the design table | `ctx.estimable` - a term the data cannot carry raises from inside a fitting library after the fit is paid for, and every plugin fitting a model needs the same answer |
 | what one instance COST | `ctx.measured` + the declaration | a plugin cannot see the scheduler's counter; the host takes the LARGER of the measurements and names which |
