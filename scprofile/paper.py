@@ -190,6 +190,305 @@ def summarise(out):
     return "\n".join(lines)
 
 
+#: The authored result section, in the run directory. SOURCE, not a rendering.
+DRAFT = "PAPER.md"
+
+
+def brief(out):
+    """Everything needed to WRITE the section, read out of the run. Returns text.
+
+    THE STEP THAT MAKES THIS AN AGENTIC PROCESS RATHER THAN A FILING CONVENTION. An agent asked
+    to "write the result" has to go and find the figures, guess which are the main ones, and
+    open the object for the design - three chances to write about something the run does not
+    contain. The brief hands over exactly what the run holds: the panels on the page a reader
+    meets first, each with the caption the panel itself carries, the design, and the constraint
+    the upstream object placed on the whole run.
+
+    THE CAPTION REST IS INCLUDED AND IT IS THE POINT. That is where a panel states what it does
+    NOT establish - the confound audit, the shared-scale warning, the elements taken off the
+    magnitude scale - and it is precisely the material a first draft omits and a reviewer then
+    finds.
+    """
+    import json as _json
+
+    root = Path(out)
+    try:
+        pay = _json.loads((root / "report.json").read_text(encoding="utf-8"))
+    except Exception:                                                     # noqa: BLE001
+        return ("No report.json in this run, so there is nothing to write from. "
+                "Run `scprofile report --out <RUNDIR>` first.")
+
+    L = [f"# Writing brief — {root.name}", ""]
+    d = pay.get("describe") or {}
+    L += [f"Object: {d.get('n_obs', '?'):,} observations x {d.get('n_vars', '?'):,} features."
+          if isinstance(d.get("n_obs"), int) else "Object: size not recorded.",
+          f"Assay: {d.get('assay') or '(not declared)'}   Organism: "
+          f"{d.get('organism') or '(not declared)'}", ""]
+
+    des = pay.get("design") or {}
+    ax = pay.get("unit_axis") or {}
+    if des:
+        facs = sorted({f for r in des.values() for f in (r or {})})
+        L += [f"Design: {len(des)} sample(s) over {', '.join(facs)}."]
+        arms = sorted(u for u, k in ax.items() if k == "group")
+        if arms:
+            mem = pay.get("unit_members") or {}
+            L += ["Arms (the unit of inference): "
+                  + "; ".join(f"{a} n={len(mem.get(a) or [])}" for a in arms)]
+        L += [""]
+
+    con = pay.get("constraint_on_use")
+    if con:
+        L += ["CONSTRAINT CARRIED BY THE UPSTREAM OBJECT - it binds anything written here:",
+              "  " + " ".join(str(con).split())[:600], ""]
+
+    lab = pay.get("label_by_unit") or {}
+    tot = pay.get("label_total") or {}
+    if lab and tot:
+        thin = [l for l in tot if any(l not in (lab.get(u) or {}) for u in lab)]
+        L += [f"Populations: {len(tot)} in the object; {len(thin)} are absent from at least one "
+              f"unit and cannot carry a between-unit comparison"
+              + (f" ({', '.join(sorted(thin)[:8])}{'...' if len(thin) > 8 else ''})"
+                 if thin else ""), ""]
+
+    for k in sorted(pay.get("kernels") or {}):
+        pl = (pay["kernels"] or {}).get(k) or {}
+        figs = pl.get("figures") or []
+        cohort = [f for f in figs if not f.get("unit")]
+        L += [f"## {k}", ""]
+        if pl.get("cannot_show"):
+            L += ["What this method cannot show, from its own declaration:"]
+            L += [f"  - {' '.join(str(c).split())}" for c in pl["cannot_show"]]
+            L += [""]
+        L += [f"Panels on the page a reader meets first ({len(cohort)}):" if cohort
+              else "This plugin drew no cohort-level panel; its panels are per unit.", ""]
+        for f in cohort:
+            cap = f.get("caption")
+            lead, rest = (cap if isinstance(cap, (list, tuple)) and len(cap) == 2
+                          else (cap or "", ""))
+            L += [f"  {f.get('path')}",
+                  f"     SHOWS : {' '.join(str(lead).split())}"]
+            if rest:
+                L += [f"     LIMITS: {' '.join(str(rest).split())}"]
+            L += [""]
+    L += ["---", "Write the Results section you would submit. Then record each claim against the",
+          "figures you read it off, put it to a reviewer, and record what happened:", "",
+          "  scprofile paper --out <RUNDIR> --claim '...' --cites <fig>,<fig>",
+          "  scprofile paper --out <RUNDIR> --round <id> --verdict standing|narrowed|withdrawn"
+          " --why '...'",
+          "  scprofile paper --out <RUNDIR> --write section.md",
+          "  scprofile paper --out <RUNDIR> --render", ""]
+    return "\n".join(L)
+
+
+def next_step(out):
+    """(headline, command) - what to do next, always with something runnable.
+
+    A STATUS THAT DOES NOT SAY WHAT TO DO NEXT IS A REPORT SOMEBODY HAS TO INTERPRET. Every
+    other gate in this tool names its own remedy; this one drives a loop, so it names the step.
+    """
+    rows = status(out)
+    have_draft = bool(read_draft(out))
+    if not rows:
+        return ("Nothing has been written from these figures yet. Start by reading the brief.",
+                "scprofile paper --out {out} --brief")
+    todo = [c for c, st, _n, _t in rows if st == UNREVIEWED]
+    if todo:
+        return (f"{len(todo)} claim(s) have never been put to a reviewer. Review them, and "
+                f"record what the review DID - `withdrawn` is the verdict that teaches.",
+                "scprofile paper --out {out} --round " + todo[0]
+                + " --verdict standing|narrowed|withdrawn --why '...'")
+    stale = [c for c, st, _n, _t in rows if st == STALE]
+    if stale:
+        return (f"{len(stale)} claim(s) cite a figure that has been REDRAWN since the claim was "
+                f"made. The section describes pictures that no longer exist; defend them again.",
+                "scprofile paper --out {out} --round " + stale[0]
+                + " --verdict standing|narrowed|withdrawn --why '...'")
+    if not have_draft:
+        return ("Every claim is defended and no section has been written. The ledger holds the "
+                "sentences and not the document they came from.",
+                "scprofile paper --out {out} --write section.md")
+    if not (Path(out) / "report" / "paper.html").is_file():
+        return ("The section is written and every claim defended. Render it into the run.",
+                "scprofile paper --out {out} --render")
+    withdrawn = [c for c, st, _n, _t in rows if st == WITHDRAWN]
+    if not withdrawn:
+        return ("Every claim survived unchanged, which is also what a loop looks like when "
+                "nobody pushed. Consider another round against a different standard.",
+                "scprofile paper --out {out} --brief")
+    return ("The loop has run: claims written, reviewed, and the section rendered into the run.",
+            "")
+
+
+def write_draft(out, text, *, author=""):
+    """Store the authored result section IN THE RUN, and return where it went.
+
+    WHY THIS IS A RUN OUTPUT AND NOT A SCRATCH FILE. The rule this tool applies to figures - a
+    figure a run does not regenerate is a draft - was not being applied to the writing. A
+    written result kept in a scratchpad has no run key, cannot be traced to the figures it was
+    read off, and disappears with the session that produced it. It is a draft by the tool's own
+    definition, and the ledger without it holds four sentences and four verdicts but not the
+    section they came from: not the numbers, not the caveats, not why those figures and not
+    others.
+
+    The prose is AUTHORED - this tool cannot write the science and does not try. What it does is
+    keep it beside the run that produced the figures, bind it to them through the claims, and
+    render it with those figures inline so the document and the pictures cannot drift apart.
+    """
+    root = Path(out)
+    body = str(text or "").rstrip() + "\n"
+    if len(body.split()) < MIN_CLAIM_WORDS * 4:
+        raise Refused(f"a result section of {len(body.split())} words is a note, not a section. "
+                      f"Write what you would submit.")
+    (root / DRAFT).write_text(body, encoding="utf-8")
+    _append(out, {"kind": "draft", "words": len(body.split()), "author": str(author or ""),
+                  "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+    return root / DRAFT
+
+
+def read_draft(out):
+    """The authored section, or "" when none has been written."""
+    p = Path(out) / DRAFT
+    return p.read_text(encoding="utf-8") if p.is_file() else ""
+
+
+def render(out, *, run_key="", title="Result section"):
+    """Write `report/paper.html`: the authored section, the claims, and every figure they cite.
+
+    ASSEMBLED FROM THE RUN, so it cannot describe figures that are not there. Every claim's
+    state is printed beside it and a stale claim is called out at the top, which is the whole
+    reason the claims carry digests: a document written from pictures that have since been
+    redrawn is the failure this project calls rule six, and here it is structural rather than
+    remembered.
+    """
+    root = Path(out)
+    body = read_draft(out)
+    rows = status(out)
+    if not body and not rows:
+        return None
+    from .report import _page, _e                                     # noqa: PLC0415
+
+    stale = [c for c, st, _n, _t in rows if st in (STALE, UNREVIEWED)]
+    out_html = [f"<h1>{_e(title)}</h1>"]
+    if run_key:
+        out_html.append(f'<p class="sub">Written from run <code>{_e(run_key)}</code>. '
+                        f'Every figure cited below is in that run.</p>')
+    if stale:
+        out_html.append(
+            '<div class="bad"><b>NOT CURRENT.</b> ' + str(len(stale)) +
+            ' claim(s) in this section are undefended, or cite a figure that has been redrawn '
+            'since the claim was made. A section written from pictures that no longer exist '
+            'reads exactly like one that is right.</div>')
+    if body:
+        out_html.append(_md(body))
+    else:
+        out_html.append('<div class="warn">No result section has been written for this run. '
+                        'The claims below exist without the document they came from.</div>')
+
+    if rows:
+        out_html.append("<h2>The claims, and what review did to them</h2>")
+        out_html.append('<div class="wrap"><table><tr><th>claim</th><th>state</th>'
+                        '<th>rounds</th><th>cites</th></tr>')
+        cites = {r["id"]: r.get("cites") or {} for r in read_ledger(out)
+                 if r.get("kind") == "claim"}
+        for cid, st, n, txt in rows:
+            names = ", ".join(Path(f).name for f in sorted(cites.get(cid, {})))
+            out_html.append(f"<tr><td>{_e(txt)}</td><td><b>{_e(st)}</b></td>"
+                            f"<td>{n}</td><td class='sub'>{_e(names)}</td></tr>")
+        out_html.append("</table></div>")
+        seen, figs = set(), []
+        for cid, _st, _n, _t in rows:
+            for f in sorted(cites.get(cid, {})):
+                if f not in seen and (root / f).is_file():
+                    seen.add(f)
+                    figs.append(f)
+        if figs:
+            out_html.append("<h2>The figures this section is read off</h2>")
+            for f in figs:
+                rel = Path(f)
+                try:
+                    href = str(rel.relative_to("report")) if str(rel).startswith("report/") \
+                        else "../" + str(rel)
+                except Exception:                                     # noqa: BLE001
+                    href = "../" + str(rel)
+                out_html.append(f'<figure><img src="{_e(href)}" alt="{_e(rel.name)}">'
+                                f'<figcaption class="sub">{_e(rel.name)}</figcaption></figure>')
+
+    out_html.append("<h2>What this test does not cover</h2><div class='warn'><ul>"
+                    + "".join(f"<li>{_e(x)}</li>" for x in NARROW) + "</ul></div>")
+    d = root / "report"
+    d.mkdir(parents=True, exist_ok=True)
+    path = d / "paper.html"
+    path.write_text(_page(f"{title} — scProfile", "".join(out_html)), encoding="utf-8")
+    return path
+
+
+def _md(text):
+    """The smallest markdown the section needs: headings, tables, bold, code, paragraphs.
+
+    NOT A MARKDOWN LIBRARY. The host depends on numpy and pandas and nothing else, and a
+    dependency added so a document can have italics is a dependency every plugin environment
+    then has to resolve around.
+    """
+    import html as _h
+    import re as _re
+
+    out, rows = [], []
+
+    def _flush_table():
+        if not rows:
+            return
+        head, body = rows[0], [r for r in rows[1:] if not set(r) <= set("-: |")]
+        out.append('<div class="wrap"><table><tr>'
+                   + "".join(f"<th>{_inline(c)}</th>" for c in head) + "</tr>"
+                   + "".join("<tr>" + "".join(f"<td>{_inline(c)}</td>" for c in r) + "</tr>"
+                             for r in body) + "</table></div>")
+        rows.clear()
+
+    def _inline(t):
+        t = _h.escape(str(t).strip())
+        t = _re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", t)
+        t = _re.sub(r"`(.+?)`", r"<code>\1</code>", t)
+        return t
+
+    para = []
+    for line in str(text).splitlines():
+        st = line.strip()
+        if st.startswith("|") and st.endswith("|"):
+            if para:
+                out.append("<p>" + _inline(" ".join(para)) + "</p>")
+                para = []
+            rows.append([c.strip() for c in st.strip("|").split("|")])
+            continue
+        _flush_table()
+        if not st:
+            if para:
+                out.append("<p>" + _inline(" ".join(para)) + "</p>")
+                para = []
+            continue
+        if st.startswith("#"):
+            if para:
+                out.append("<p>" + _inline(" ".join(para)) + "</p>")
+                para = []
+            lvl = min(len(st) - len(st.lstrip("#")), 4)
+            out.append(f"<h{lvl}>{_inline(st.lstrip('#'))}</h{lvl}>")
+            continue
+        if st.startswith(("- ", "* ")):
+            if para:
+                out.append("<p>" + _inline(" ".join(para)) + "</p>")
+                para = []
+            out.append(f"<ul><li>{_inline(st[2:])}</li></ul>")
+            continue
+        if st.startswith(">"):
+            out.append(f'<div class="warn">{_inline(st.lstrip("> "))}</div>')
+            continue
+        para.append(st)
+    _flush_table()
+    if para:
+        out.append("<p>" + _inline(" ".join(para)) + "</p>")
+    return "".join(out)
+
+
 #: WHAT THIS TEST DOES NOT YET COVER. Named, because a test whose limits are unwritten gets used
 #: as though it had none. Each line is a concrete gap, not a disclaimer.
 NARROW = (

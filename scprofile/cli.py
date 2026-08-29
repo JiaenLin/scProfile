@@ -2617,6 +2617,32 @@ def _paper(a):
               f"--verdict standing|narrowed|withdrawn --why '...'")
         return 0
 
+    if a.brief:
+        print(PA.brief(out))
+        return 0
+
+    if a.write:
+        src = Path(a.write)
+        if not src.is_file():
+            print(f"scprofile: no such file: {src}", file=sys.stderr)
+            return REFUSE
+        try:
+            dst = PA.write_draft(out, src.read_text(encoding="utf-8"), author=a.author)
+        except PA.Refused as e:
+            print(f"scprofile: REFUSED - {e}", file=sys.stderr)
+            return REFUSE
+        print(f"the result section is now part of this run: {dst}")
+        print(f"    scprofile paper --out {out} --render")
+        return 0
+
+    if a.render:
+        path = PA.render(out, run_key=out.name)
+        if path is None:
+            print("scprofile: nothing to render - no section and no claims.", file=sys.stderr)
+            return REFUSE
+        print(f"wrote {path}")
+        return 0
+
     if a.round:
         if not (a.verdict and a.why):
             print("scprofile: --round needs --verdict and --why", file=sys.stderr)
@@ -2636,6 +2662,13 @@ def _paper(a):
         print(f"\n  {len(todo)} claim(s) not defended:")
         for cid, st in todo:
             print(f"    {cid}  {st}")
+    # ALWAYS SAY WHAT TO DO NEXT. A status nobody can act on is a report to interpret, and this
+    # command drives a loop rather than describing a state.
+    head, cmd = PA.next_step(out)
+    print(f"\n  NEXT: {head}")
+    if cmd:
+        print(f"    {cmd.format(out=out)}")
+
     print("\n  WHAT THIS TEST DOES NOT COVER (docs/PAPER_TEST.md):")
     for line in PA.NARROW:
         print(f"    - {line}")
@@ -3066,6 +3099,17 @@ def main(argv=None):
     pa.add_argument("--why", help="what the reviewer put to it, and what happened")
     pa.add_argument("--author", default="", help="who wrote the claim")
     pa.add_argument("--reviewer", default="", help="who reviewed it")
+    pa.add_argument("--brief", action="store_true",
+                    help="what this run holds, ready to write from: the panels a reader meets "
+                         "first with the caption each carries, the design, the arms, the "
+                         "populations that cannot carry a comparison, and the upstream "
+                         "constraint. Read this before writing anything")
+    pa.add_argument("--write", metavar="FILE",
+                    help="take an authored result section INTO the run as PAPER.md, so it has a "
+                         "run key and travels with the figures it was read off")
+    pa.add_argument("--render", action="store_true",
+                    help="write report/paper.html: the section, the claims and their verdicts, "
+                         "and every figure they cite, inline")
     pa.add_argument("--strict", action="store_true",
                     help="exit non-zero while any claim is undefended or has gone stale")
     pa.set_defaults(fn=_paper)
