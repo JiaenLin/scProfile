@@ -50,7 +50,7 @@ ordering the reporter exists to prevent.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.3.0",
+    "version": "0.3.1",
     "summary": "cell-cycle phase per cell, and the check that a trajectory is not a "
                "cell-cycle axis",
     "when_to_use": "you are about to read a trajectory, or want to know which populations are "
@@ -987,7 +987,14 @@ def _fig_by_population(ctx, phase):
     # with exactly the cohort's cycling fraction would break.
     cohort_g1 = float(ct["G1"].sum()) / max(1, int(n_per.sum()))
     ax.axvline(cohort_g1, color=F.INK, lw=0.6, ls="--", zorder=3)
-    _right = cohort_g1 > 0.6                      # the label goes on the side with room for it
+    # THE SIDE WITH MORE ROOM IS THE SIDE WITH MORE ROOM - which is a comparison against the
+    # MIDDLE, not against 0.6. At a cohort G1 fraction of 0.545 the old cut put this label on
+    # the left-anchored side, so it grew rightward from past the middle of the axis and ran 2 px
+    # off the canvas. Measured, not guessed: the drawing audit reported "runs off the canvas:
+    # right by 2px (canvas 310x552px)", and two earlier explanations of the same finding - both
+    # about the label growing upward off the TOP - were written and reverted before the audit
+    # was made to say which edge it left.
+    _right = cohort_g1 > 0.5                      # the label goes on the side with room for it
     ax.annotate(f"cohort {100 * (1 - cohort_g1):.1f}% cycling", xy=(cohort_g1, -0.62),
                 xytext=(-3 if _right else 3, 0), textcoords="offset points",
                 ha=("right" if _right else "left"), va="bottom", fontsize=6, color=F.INK)
