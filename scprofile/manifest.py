@@ -285,6 +285,20 @@ def _figure(v, rel):
         for k in ("vector", "source"):
             if v.get(k):
                 e[k] = rel(v[k])
+        # THE DRAWING AUDIT TRAVELS WITH THE FIGURE, and this serialiser is why it did not.
+        # SECOND TIME. The paragraph above records the id being stripped here for the same
+        # reason: this builds a fresh mapping from a fixed list of keys, so anything
+        # `emit_figure` learns about a panel and is not on that list is dropped between the
+        # plugin and the run. The audit ran on all 223 panels of a real run, found what it found,
+        # and none of it arrived.
+        #
+        # The whitelist is right - a plugin must not be able to inject arbitrary keys into the
+        # payload - so the fix is the entry, not the design. What this needs and does not have is
+        # a check that every key `emit_figure` writes is one this function carries; until then,
+        # the next key added will be dropped exactly like the last two.
+        if v.get("audit"):
+            e["audit"] = [{"code": str(a.get("code")), "detail": str(a.get("detail"))}
+                          for a in v["audit"] if isinstance(a, dict)]
         return e
     return {"id": Path(str(v)).stem, "path": rel(v), "caption": ""}
 
