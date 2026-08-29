@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.7.0",
+    "version": "0.8.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -1951,7 +1951,22 @@ def _fig_pathway_roles(ctx, pre, top_n=18):
         # NOT comparable between rows, which is exactly the misreading the label prevents.
         rmax = M.max(axis=1, keepdims=True)
         Mn = np.divide(M, rmax, out=np.zeros_like(M), where=rmax > 0)
-        im = ax.imshow(Mn, aspect="auto", cmap="magma_r", vmin=0, vmax=1)
+        # ABSENCE IS NOT A LOW SCORE (`panels.R2`). A population that does not appear in a
+        # pathway's network at all has centrality exactly 0, and so does one that appears and is
+        # peripheral - the same pale cell for "never in it" and "in it, weakly". Found by
+        # opening the panel: three populations were pale across almost the whole sender side,
+        # which reads as "these barely signal" and means "these are not in these pathways".
+        #
+        # Off the ramp and crossed, the way the sender-by-receiver matrix already marks a pair
+        # with no edge. The colour scale then starts at the smallest score that was actually
+        # measured, so the ramp is spent on the range that exists.
+        _absent = M <= 0
+        _shown = np.where(_absent, np.nan, Mn)
+        _cm = plt.get_cmap("magma_r").copy()
+        _cm.set_bad("white")
+        im = ax.imshow(_shown, aspect="auto", cmap=_cm, vmin=0, vmax=1)
+        _ys, _xs = np.nonzero(_absent)
+        ax.scatter(_xs, _ys, marker="x", s=9, linewidths=0.45, color="#B0B0B0", zorder=3)
         ax.set_xticks(range(len(pops)))
         ax.set_xticklabels(short, rotation=45, ha="right", fontsize=5.5)
         ax.set_yticks(range(len(shown)))
@@ -1971,7 +1986,10 @@ def _fig_pathway_roles(ctx, pre, top_n=18):
 
     ctx.emit_figure(
         "F7_pathway_roles", fig,
-        caption=(f"Which populations send and which receive, PER PATHWAY. Left is weighted "
+        caption=(f"White crossed cells are populations NOT IN that pathway's network at all, "
+                 f"which is a different thing from being in it and peripheral - both used to be "
+                 f"the same pale colour. "
+                 f"Which populations send and which receive, PER PATHWAY. Left is weighted "
                  f"out-degree and right weighted in-degree, the two measures CellChat labels "
                  f"Sender and Receiver. EACH ROW IS SCALED TO ITS OWN MAXIMUM, so colour shows "
                  f"where a pathway acts and never how strong it is - a faint row and a bright "
