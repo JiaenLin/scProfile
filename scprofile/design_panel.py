@@ -315,23 +315,31 @@ def draw(per_sample, design, path, *, cells=None, width=None):
                  for r in rows], fontsize=5.6)
             for _t, _r in zip(ax.get_yticklabels(), rows):
                 _t.set_fontweight("bold" if _r["kind"] == "marginal" else "normal")
-            # n ON THE ROW, because it is the confidence and it must travel with the number.
+            # n ON THE ROW, because it is the confidence and it must travel with the number -
+            # BUT NOT AT THE POINT. Anchored to the marker, a near-zero effect puts the n on the
+            # axis, which is exactly where the contrast's own name ends: on a real design panel
+            # `diet` rendered as `diet⁵ᵛ⁵` and three other rows were unreadable the same way.
+            # The size of an arm does not depend on where its effect landed, so it belongs at a
+            # fixed place - the right edge of the row, clear of the marker and the label both.
             for y, r in enumerate(rows):
-                ax.annotate(f"n {r['n_from']}v{r['n_to']}",
-                            (r["difference"], y), fontsize=4.4, color="#8A8A8A",
-                            xytext=(6 if r["difference"] >= 0 else -6, 0),
-                            textcoords="offset points",
-                            ha="left" if r["difference"] >= 0 else "right", va="center")
+                ax.annotate(f"n {r['n_from']}v{r['n_to']}", (1.0, y),
+                            xycoords=("axes fraction", "data"), fontsize=4.4, color="#8A8A8A",
+                            xytext=(3, 0), textcoords="offset points", ha="left", va="center",
+                            annotation_clip=False)
             ax.set_ylim(max(len(rows) - .4, .6), -.6)
             ax.set_xlim(-span, span)
             ax.tick_params(labelsize=5.6, length=0)
             for sp in ("top", "right", "left"):
                 ax.spines[sp].set_visible(False)
+            # SHORT ENOUGH FOR THE COLUMN IT SITS OVER. Both of these were written for a
+            # column that is a quarter of the figure and both ran off the right edge of the
+            # canvas: the title read "observed difference betwe" and the axis label stopped at
+            # "DESCRIPTIV". A label that does not fit is not a label, and the full sentence
+            # belongs in the figcaption, where it is selectable and costs no pixels.
             if i == 0:
-                ax.set_title("observed difference between arms", fontsize=7.5,
-                             weight="bold", pad=4)
+                ax.set_title("difference\nbetween arms", fontsize=7.0, weight="bold", pad=4)
             if i == len(measures) - 1:
-                ax.set_xlabel("difference in arm medians — DESCRIPTIVE, not a test", fontsize=5.8)
+                ax.set_xlabel("arm medians — descriptive", fontsize=5.8)
     # NO SUPTITLE. It wrapped and truncated at this width, and a figure that carries its own
     # explanation in raster text cannot be re-worded without redrawing it. The page states it
     # in the figcaption, where it is selectable, translatable and part of the prose budget.
