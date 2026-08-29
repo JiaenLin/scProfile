@@ -1,0 +1,91 @@
+# The test loop
+
+**A tool is not tested by its own suite. It is tested by putting a project's real runs through
+every element in order, and refusing to advance past a station that has produced no evidence.**
+
+The suite proves a function returns. This proves the chain works on runs somebody actually made,
+in the state they are actually in — some sealed, some not, some carded, some not — which is the
+state a tool meets and a fixture never reproduces.
+
+Run it with `python tests/loop_stations.py --runs <dir> --round N`. It reports each station,
+names the evidence missing, and prints the one thing to do next. **It does not do the looking or
+the writing** — nothing can — but it will not let the loop advance without them.
+
+---
+
+## The stations, in order
+
+Reuse first, because everything downstream is built on results the tool decided were fit to
+build on. Manuscript last, because it is the only station that asks whether any of it supported
+a claim.
+
+| # | station | asks | evidence it must leave behind |
+|---|---|---|---|
+| 1 | **exists** | what do these runs already hold? | `status` per run: every instance in one of five states |
+| 2 | **landscape** | which results could a new run reuse? | candidates named, with the run each came from |
+| 3 | **licence** | is any of it fit to build on? | a grade per instance, from the criteria, on disk |
+| 4 | **adopt** | does reuse actually reuse? | `ADOPTED` lines, and **the shared inode measured** |
+| 5 | **merge** | did the adopted result reach the object? | the merged object's columns, per adopted instance |
+| 6 | **report** | is the page readable? | `standard` on the rendered HTML, per criterion |
+| 7 | **eye** | are the pictures right? | a review ledger entry per figure in the scan set |
+| 8 | **paper** | does any of it support a claim? | claims, verdicts, and a rendered section in the run |
+
+**A station is BLOCKED, not skipped, when its evidence is absent.** Skipping is how a chain gets
+reported working on the strength of the stations that happened to be easy.
+
+---
+
+## What counts as evidence
+
+Three kinds, and an assertion is none of them:
+
+- **A file the station wrote**, that a later reader can open — a ledger, a licence, a card.
+- **A measurement of the filesystem or the object**, not of the tool's own report of itself.
+  Station 4 is the example: the tool says `ADOPTED … by hardlink`, and the station believes it
+  only after comparing inode numbers. *A tool's account of its own behaviour is a claim.*
+- **A recorded look**, with a note that says what was seen. Bound to the image's digest, so a
+  redraw destroys it.
+
+---
+
+## The eye scan, and its coverage rule
+
+Nothing mechanises looking, and the defects that matter are only found by it — a chord drawn as
+a starburst, labels driven off the axes, an absent population drawn at the origin. Every one of
+those passed a green suite.
+
+**But "look at every figure" is not a rule anybody follows twice.** A run of a few hundred
+figures is a few dozen *kinds* repeated over units, and a drawing defect lives in the kind. So:
+
+> **Scan every distinct figure KIND once, plus every panel on the page a reader meets first.**
+> Kind is the id with its unit suffix removed. Where a kind is drawn per unit, scan the instance
+> from the LARGEST unit and the SMALLEST — the two that break layouts.
+
+That is a stated, repeatable rule with stated coverage, and the driver prints the worklist. A
+scan that covers three quarters of the kinds is a scan that says so.
+
+---
+
+## The round
+
+1. Run the driver. It names the first blocked station.
+2. Clear that station — run the command, do the looking, write the claim.
+3. **Every finding becomes a change in this repository, or it did not happen.** A defect seen and
+   not fixed is a defect found twice.
+4. Commit, push, and if the finding changed what a run produces, make a new run rather than
+   editing one: a run key names the commit that produced what is in the directory.
+5. Start the next round from station 1, because a change upstream invalidates what is downstream
+   — that is what the digests are for.
+
+**A round that finds nothing is a result**, and it is the only evidence that a previous round's
+fix worked. Record it as a round.
+
+---
+
+## What this loop does not do
+
+- **It does not prove the science.** Every station is about whether the tool did what it says.
+- **It tests the elements a project's runs exercise.** A project that runs one plugin over one
+  design leaves the rest untested, and the driver prints which commands were never reached.
+- **It cannot see a missing station.** The list above is what is known to matter; a chain has as
+  many failure modes as it has links, and this is the eight somebody thought of.
