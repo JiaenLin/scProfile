@@ -1258,13 +1258,19 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
             # same thing by luck; with three factors it would have given the first two everything
             # and the third nothing, silently. Two per contrast is a rule that holds whatever the
             # design is, and it left the room the interaction and the census now use.
-            _seen, _inline = {}, []
+            # ONE PANEL PER CONTRAST PER KIND, not the first two of a flat list. The list order
+            # is [count, strength, flow, role shift], so "first two" gave every contrast the
+            # same matrix twice - once in edge counts and once in summed strength - and pushed
+            # the pathway ranking and the role shift, which ask DIFFERENT questions, off the
+            # page entirely. A reader got one question answered twice and two not at all.
+            _seen, _inline = set(), []
             for t in _arms["contrast"]:
                 if "|" in t[3]:
                     continue
-                if _seen.get(t[3], 0) >= 2:
+                _kind = str(t[0]).split("_")[0]          # C1, C3, C4 ...
+                if (t[3], _kind) in _seen:
                     continue
-                _seen[t[3]] = _seen.get(t[3], 0) + 1
+                _seen.add((t[3], _kind))
                 _inline.append(t)
             _inline = _inline[:_INLINE_ARM_FIGURES]
             _rest = _n_arm - len(_inline)

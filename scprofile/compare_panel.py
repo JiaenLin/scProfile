@@ -507,9 +507,11 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     plt.close(fig)
 
     rel = str(weight_scale or "per_object") != "absolute"
-    cap = (f"Does the effect of {fa} depend on {fb}? Each point is one {what}: its change from "
-           f"{a0} to {a1} within {fb} = {b0} against the same change within {fb} = {b1}. On the "
-           f"dashed line the response is the same in both; off it, it is not.",
+    # THE LEAD IS BUDGETED. The visible caption is capped at 45 words and the host spends about
+    # eight of them, so a lead written as three explanatory sentences fails the page it is on.
+    cap = (f"Does {fa} act differently under each {fb}? One point per {what}, drawn by arm: its "
+           f"{a0}→{a1} change within {fb} = {b0} against the same within {fb} = {b1}. Off the "
+           f"dashed line, the response differs.",
            f"{len(keys)} of {len(seen)} {what}s are present in all four arms and drawn — the "
            f"rest are absent from at least one arm, where a difference would be a difference of "
            f"PRESENCE and not of magnitude. {flips} REVERSE DIRECTION — marked apart, and "
