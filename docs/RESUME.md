@@ -76,3 +76,105 @@ get the figure right.
   drawing would remove that, and is the obvious next step for this module.
 - It does not merge across run directories. A resume reuses instances **in the directory it was
   pointed at** and nowhere else.
+
+---
+
+# Across runs: the landscape, and why provenance alone is not enough
+
+`resume` answers *"what is left in THIS directory"*. It cannot help the ordinary case, because
+**every run gets a new run key** — so a result computed last week sits one directory away and is
+recomputed from nothing. On a wrapped method taking hours per unit, that is the difference
+between iterating and not.
+
+```
+scprofile landscape --root runs/<tool>/<stage>                 # inventory
+scprofile landscape --root runs/<tool>/<stage> --h5ad OBJ      # a PLAN
+```
+
+Without `--h5ad` it is an inventory. With it, it is a plan — because **the input decides
+reusability as much as the code does**, and without knowing the input nothing can honestly be
+called reusable.
+
+## The decision has three independent inputs
+
+A result is reused only if all three agree. They fail for different reasons and none substitutes
+for another.
+
+### 1. Does it exist, and in what state? — `resume`
+
+Read from the unit directory, using `manifest.py`'s own vocabulary:
+
+| state | on disk | outstanding |
+|---|---|---|
+| `done` | `out.json` with entries | no |
+| `empty` | `out.json`, no entries | **no — it is a RESULT** |
+| `stale` | complete, but a different plugin version made it | yes |
+| `died` | inputs staged, no `out.json`, or a truncated one | yes |
+| `absent` | never staged | yes |
+
+### 2. Is it still valid? — the reuse key
+
+A hash of **only** what determines the result:
+
+```
+plugin · version · unit · input path · input size · input mtime · params · keys
+```
+
+The run key, the date, the machine and who launched it are **excluded on purpose** — include any
+of them and nothing is ever reusable. When the key differs, the map names the fields that differ,
+so `version: '0.3.1' -> '0.4.0'` tells you that you changed the code and `input_mtime` tells you
+the object was rebuilt underneath you.
+
+**What this cannot check, printed on every report:** a run records the input's PATH and no digest
+of its contents. An object rebuilt at the same path with the same size and mtime is
+indistinguishable from the original by anything written down. The report states which parts of
+the key were verified against the filesystem just now and which were taken on trust from what the
+run wrote.
+
+### 3. Is it TRUSTWORTHY? — `RUN_CARD.json`
+
+**Provenance is not trust, and reuse on provenance alone launders errors.** A unit that ran to
+completion and produced nonsense has the same inputs and the same code as one that did not. The
+key cannot tell them apart, and reusing the bad one carries it into every later run with a trail
+that makes it look verified.
+
+So each run publishes its own verdict on its own output, per instance:
+
+| verdict | what it means | reusable |
+|---|---|---|
+| `ok` | completed, nothing objected | yes |
+| `empty` | ran and produced nothing — a RESULT | yes |
+| `suspect` | the plugin **contradicted its own output**, or a diagnosis was raised against the **METHOD** | no |
+| `failed` | did not complete | no |
+| `unknown` | no card, or a card predating this field | **no** |
+
+`unknown` defaulting to not-reusable is the only safe default: **a map that treats silence as
+approval launders every result it has no information about.** Every run made before the card
+existed is therefore `unknown`, and correctly not reused.
+
+A **method**-layer diagnosis makes a result suspect. An **environment**- or **host**-layer one
+does not — those are about the machinery around the answer, not the answer itself.
+
+The card also records what the run could NOT check about itself:
+- whether any figure was **looked at** (`scprofile review`),
+- whether the numbers are **correct**, as opposed to merely unobjected-to.
+
+## So: run, re-run, or reuse?
+
+| the map says | why | what to do |
+|---|---|---|
+| `REUSE` | key matches, state finished, verdict trusted | nothing — it is already computed |
+| `RUN` … *version changed* | you changed the plugin | re-run: the old result is a different quantity |
+| `RUN` … *input_mtime changed* | the object was rebuilt | re-run: nothing downstream of it is valid |
+| `RUN` … *calls it 'suspect'* | the producing run objected to its own output | look at it before anything else |
+| `RUN` … *calls it 'unknown'* | no card | re-run, or inspect and decide deliberately |
+| `RUN` … *never run here* | genuinely new work | run it |
+
+## What is NOT yet automatic
+
+**The landscape REPORTS; it does not yet copy.** There is no `run --reuse-from <root>` that
+hardlinks a trusted earlier result into a new run directory — the map tells you what could be
+reused and you act on it. That is the obvious next step, and it is deliberately not taken
+first: a wrong answer from a reporting tool costs a reader a minute, and a wrong answer from a
+tool that silently adopts an earlier result costs a run nobody knows is contaminated.
+
