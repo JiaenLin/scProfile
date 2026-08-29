@@ -383,11 +383,41 @@ def _run(a):
     # CORRECTNESS declaration before it is a speed one: an inference pooled over a cohort
     # describes the average of its conditions and may describe neither.
     sample_key = keys["sample"][0]
-    units = (sorted(set(A.obs[sample_key].astype(str))) if sample_key else None)
+    samples = sorted(set(A.obs[sample_key].astype(str))) if sample_key else []
+    # THE UNIT AXIS IS RESOLVED FROM THE DESIGN, GROUP FIRST. Single-cell inference is made over
+    # a GROUP of cells; pooling an arm is the analysis, not a fallback from it. The sample axis
+    # is run as well where the design supports it, and reports whether the members of an arm
+    # agree - it is confidence, never a precondition.
+    #
+    # `--unit-by` selects the axis; the default runs the group axis and the sample axis both.
+    from . import units as _UN
+
+    # THE DESIGN IS READ HERE, AGAINST THE SAMPLES. It is read again further down against the
+    # final unit list; that is cheap and keeps the later call unchanged. Reading it there only
+    # would be circular - the unit axis needs the design, and that call needs the units.
+    _axis_design = {}
+    if getattr(a, "design", None):
+        try:
+            _axis_design, _adk, _adf = inputs.read_design(a.design, samples)
+        except Exception as _e:                                              # noqa: BLE001
+            print(f"  units: design not readable for axis resolution ({_e}); sample axis only")
+    _plan_axes, _why_axes = _UN.resolve(_axis_design or {}, sample_key=sample_key,
+                                        samples=samples,
+                                        prefer=getattr(a, "unit_by", "both") or "both")
+    unit_members = {}
+    for _ax in _plan_axes:
+        for _u, _mem in _ax["units"].items():
+            unit_members.setdefault(str(_u), list(_mem))
+    units = sorted(unit_members) or (samples or None)
+    for _w in _why_axes:
+        print(f"  units: {_w}")
     # HOW BIG EACH UNIT ACTUALLY IS. Memory is charged per instance against the cells that
     # instance touches, and units are not equal - assuming n_obs/len(units) would under-charge
-    # the largest sample, which is the one that decides whether the wave fits.
-    unit_cells = (A.obs[sample_key].astype(str).value_counts().to_dict() if sample_key else {})
+    # the largest, which is the one that decides whether the wave fits. A group unit is charged
+    # the sum of its members.
+    _per_sample = (A.obs[sample_key].astype(str).value_counts().to_dict() if sample_key else {})
+    unit_cells = {u: sum(_per_sample.get(m, 0) for m in mem)
+                  for u, mem in unit_members.items()} or _per_sample
     # WHAT THE CODE LOOKED LIKE WHEN THIS RUN STARTED. Re-checked before every instance.
     _tool_root = Path(__file__).resolve().parent.parent
     _tool_at_start = tool_fingerprint(_tool_root)
@@ -537,7 +567,7 @@ def _run(a):
             provenance=prov,
             resources={"cores": cores, **({"memory_gb": round(float(mem_gb), 2)}
                                           if mem_gb else {})},
-            unit=unit,
+            unit=unit, unit_members=unit_members.get(str(unit)),
             constraint=constraint)
         return kout
 
@@ -2086,6 +2116,93 @@ def _write_readme(out, payload):
     return out / "README.md"
 
 
+def _check(a):
+    """One line per element: GREEN if it is wired and working, RED if it is not.
+
+    A check exists to give an answer, not a report to interpret. Every line is a claim that is
+    either true of this installation or is not, and the exit code is red if any is red.
+    """
+    import ast as _ast
+    from . import panels as _P
+
+    root = Path(__file__).resolve().parent
+    rows = []
+
+    def row(name, ok, detail=""):
+        rows.append((name, bool(ok), detail))
+
+    # --- every module reachable, counting the subprocess launch -------------------------------
+    mods = {f.stem: f for f in root.glob("*.py") if not f.stem.startswith("__")}
+    g = {}
+    for m, f in mods.items():
+        deps = set()
+        for n in _ast.walk(_ast.parse(f.read_text(encoding="utf-8"))):
+            if isinstance(n, _ast.ImportFrom) and n.module:
+                b = n.module.split(".")[-1]
+                if b in mods:
+                    deps.add(b)
+            if isinstance(n, _ast.ImportFrom) and n.level and not n.module:
+                deps |= {x.name for x in n.names if x.name in mods}
+            if isinstance(n, _ast.Import):
+                deps |= {x.name.split(".")[-1] for x in n.names
+                         if x.name.split(".")[-1] in mods}
+        g[m] = deps
+    g["kernels"] = g.get("kernels", set()) | {"_entry"}
+    seen, stack = {"cli"}, ["cli"]
+    while stack:
+        for nxt in g.get(stack.pop(), ()):
+            if nxt not in seen:
+                seen.add(nxt)
+                stack.append(nxt)
+    unreached = sorted(set(mods) - seen - {"panels"})
+    row("every module reachable from the CLI", not unreached, ", ".join(unreached))
+
+    src = (root / "cli.py").read_text(encoding="utf-8")
+    ent = (root / "_entry.py").read_text(encoding="utf-8")
+    rep = (root / "report.py").read_text(encoding="utf-8")
+    man = (root / "manifest.py").read_text(encoding="utf-8")
+
+    row("group-level inference: the unit axis is resolved from the design",
+        "_UN.resolve(" in src, "run still resolves units as samples")
+    row("group-level inference: a unit carries its members",
+        '"unit_members"' in man and "unit_members=" in src, "in.json has no unit_members")
+    row("group-level inference: a plugin subsets by membership",
+        "col.isin(want)" in ent, "_entry subsets by equality on the sample key")
+    row("group-level comparison: between-arm panels are drawn",
+        "_arm_content" in rep and "draw_arm_networks" in rep)
+    row("figures: the reporter reads unit_network", "unit_network" in rep)
+    row("run publishes its own verdict", "_RC.write(out, payload)" in src)
+    row("resume is honoured by run", "_resume.state(" in src)
+    row("the exit standard is run by the writer of the report", "standard" in rep)
+    for c in ("status", "landscape", "licence", "review", "check", "scaffold"):
+        row(f"command `{c}` is registered", f'add_parser("{c}"' in src)
+    row("panel registry agrees with what is drawn",
+        set(_P.IMPLEMENTED) <= set(_P.BY_ID)
+        and set(_P.IMPLEMENTED) | set(_P.gaps()) == set(_P.BY_ID),
+        "registry and IMPLEMENTED disagree")
+
+    # --- what a run directory actually produced, if one was named -----------------------------
+    if a.out:
+        from . import resume as _RS, review as _RV, runcard as _RC2
+        out = Path(a.out)
+        rows_ = _RS.status(out)
+        row("run: every instance finished",
+            bool(rows_) and all(st in _RS.FINISHED for _r, st, _w in rows_),
+            f"{sum(1 for _r, st, _w in rows_ if st not in _RS.FINISHED)} outstanding")
+        row("run: a card was published", _RC2.read(out) is not None, "no RUN_CARD.json")
+        todo = _RV.outstanding(out)
+        row("run: every figure has been looked at", not todo,
+            f"{len(todo)} not looked at")
+
+    width = max(len(n) for n, _o, _d in rows)
+    red = 0
+    for name, ok, detail in rows:
+        mark = "GREEN" if ok else "RED  "
+        red += 0 if ok else 1
+        print(f"  {mark}  {name:<{width}}" + (f"   {detail}" if detail and not ok else ""))
+    print(f"\n  {len(rows) - red} green, {red} red")
+    return 0 if red == 0 else REFUSE
+
 def _licence(a):
     """Evaluate what a run produced and, with --grant, licence it for adoption by a later run."""
     from . import licence as LC, resume
@@ -2416,6 +2533,10 @@ def main(argv=None):
     f.set_defaults(fn=_fetch)
 
     r = sub.add_parser("run", help="[you] run kernels, merge results, write the report")
+    r.add_argument("--unit-by", choices=("group", "sample", "both"), default="both",
+                   help="which unit axis to run. `group` runs one instance per design arm over "
+                        "its pooled cells; `sample` runs one per sample; `both` (default) runs "
+                        "the group axis and the sample axis.")
     r.add_argument("--resume", action="store_true",
                    help="reuse instances this --out already holds and run only what is "
                         "outstanding. `status --out` says in advance what that would be.")
@@ -2567,6 +2688,11 @@ def main(argv=None):
     p = sub.add_parser("report", help="[you] rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)
     p.set_defaults(fn=_report)
+
+    ck_ = sub.add_parser("check",
+                         help="[you] one green/red line per element of scProfile")
+    ck_.add_argument("--out", type=Path, help="a run directory, to check what it produced")
+    ck_.set_defaults(fn=_check)
 
     lc = sub.add_parser("licence",
                         help="[you] evaluate a run's results and licence them for reuse")

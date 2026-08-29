@@ -37,6 +37,7 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | `scprofile landscape` | Across many run directories: what earlier runs hold, and what a new run would still have to compute. |
 | `scprofile licence` | Evaluates a run's results against the licence criteria and, with `--grant`, records licences for reuse. |
 | `scprofile review` | Records that a figure has been looked at, and reports which have not. |
+| `scprofile check` | One green/red line per element of scProfile. Exits non-zero if any is red. With `--out`, also checks what a run produced. |
 | `scprofile validate` | Checks a plugin declaration and its references without running anything. |
 | `scprofile scaffold` | With `--new`, writes a new one-file plugin from the template. Without it, writes an already-declared plugin's build skeleton. |
 | `scprofile fetch` | Downloads a plugin's declared reference data. |
@@ -208,23 +209,25 @@ cohort page links to them.
 
 ## Units and group-level analysis
 
-Two different things are meant by "group level". They have different status today.
+A **unit** is a set of samples. A sample unit has one member; a group unit has the members of a
+design arm. `_entry` subsets the object by membership in that set, so a plugin invoked on a
+group unit sees the arm's pooled cells.
 
-**Group-level comparison — ACTIVE.** The report pools each unit's results into design arms and
-draws every contrast the design supports, plus each arm's own network. This is what
-`compare_panel` and `network_panels` do, and it is drawn on every run whose plugin declares
-`unit_network`. It is never gated on arm size.
+`scprofile/units.py` resolves the axis from the design:
 
-**Group-level inference — NOT ACTIVE.** A plugin is still invoked once per **sample**. A run
-does not currently invoke a plugin once per arm over pooled cells. `_entry` subsets by equality
-on the sample key, so a unit is one sample.
+- **Group first.** An arm is the combination of the design's biological factors. Technical
+  factors — batch, chemistry, lane — are excluded from the arm label.
+- **Sample as well**, where the design has more than one sample.
+- A thin sample axis never withholds a group-level result.
 
-`scprofile/units.py` provides `resolve()`, which returns the group axis followed by the sample
-axis. It is **not yet called by `run`**. Wiring it requires the instance contract to carry the
-members of a unit so `_entry` can subset by membership rather than equality.
+`run --unit-by group|sample|both` selects the axis; the default is `both`.
 
-When reading a report: an arm-level panel summarises per-sample inferences pooled after the
-fact. It is not a single inference computed over the arm's cells.
+Each instance's `in.json` carries `unit_members`, the samples that unit covers. Memory is
+charged to a group unit as the sum of its members' cells.
+
+**Group-level comparison** is separate and also active: the report pools each unit's results
+into arms and draws every contrast the design supports, plus each arm's own network, whenever a
+plugin declares `unit_network`.
 
 ---
 

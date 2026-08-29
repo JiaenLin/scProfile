@@ -70,7 +70,8 @@ DEFAULT_SENTINELS = ("EXCLUDED", "UNRESOLVED")
 def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=None,
                 references=None, reference_specs=None, params=None, upstream=None,
                 upstream_units=None, sentinels=DEFAULT_SENTINELS,
-                provenance=None, resources=None, unit=None, constraint="",
+                provenance=None, resources=None, unit=None, unit_members=None,
+                constraint="",
                 contract=CONTRACT_VERSION):
     """Write `in.json`. Every path is made ABSOLUTE first.
 
@@ -138,6 +139,13 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
         # threads and the wave runs slower than serial. Plugins are required to use this.
         "resources": dict(resources or {}),
         "unit": unit,
+        # THE SAMPLES THIS UNIT COVERS. One for a sample unit, several for a design arm. `_entry`
+
+        # subsets by membership in this list, which is what lets a plugin be invoked once per arm
+
+        # over the arm's pooled cells rather than once per sample.
+
+        "unit_members": list(unit_members) if unit_members else None,
     }
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)

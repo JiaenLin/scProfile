@@ -233,10 +233,18 @@ def main(argv):
     #
     # A per-unit plugin sees ONE unit's cells. Doing this here rather than in each plugin is what
     # stops one of them forgetting and reporting a cohort-wide number under a unit's name.
+    # A UNIT IS A SET OF SAMPLES, NOT ALWAYS ONE. `unit_members` names them; a sample unit is
+    # the case where that set has one element. Subsetting by MEMBERSHIP rather than equality is
+    # the whole change that lets a plugin be invoked once per design ARM, over the arm's pooled
+    # cells, which is the unit single-cell inference is actually made over.
     ukey = keys.get("sample")
+    members = inp.get("unit_members")
     if unit is not None and ukey and ukey in A.obs:
-        A = A[A.obs[ukey].astype(str) == str(unit)].copy()
-        log(f"  subset to {unit!r}: {A.n_obs:,} cells")
+        col = A.obs[ukey].astype(str)
+        want = [str(m) for m in members] if members else [str(unit)]
+        A = A[col.isin(want)].copy()
+        log(f"  subset to {unit!r}: {A.n_obs:,} cells"
+            + (f" over {len(want)} member(s)" if len(want) > 1 else ""))
         if A.n_obs == 0:
             manifest.write_output(out, kernel=Path(plugin_path).stem, status="refused",
                                   headline=f"no cells in unit {unit!r}",

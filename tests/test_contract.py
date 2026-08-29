@@ -2333,8 +2333,10 @@ def test_the_panel_registry_matches_what_is_drawn():
                 seen.add(nxt)
                 stack.append(nxt)
     unreached = sorted(set(mods) - seen)
-    check("every module is reachable from the CLI, except the declared specification",
-          unreached == ["panels"],
+    # `panels` WAS the one named exception; `scprofile check` now imports it, so the honest
+    # expectation is that NOTHING is unreachable. A module nothing can invoke fails here.
+    check("every module is reachable from the CLI",
+          unreached == [],
           f"unreachable: {unreached} - wire it, delete it, or name it here")
 
 
