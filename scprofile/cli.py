@@ -2301,6 +2301,16 @@ def _check(a):
         row("run: every figure has been looked at", not todo,
             f"{len(todo)} not looked at")
 
+    # BEHAVIOURAL CHECKS, not source greps. Everything above proves code is PRESENT; these
+    # build a real run directory and put the same question to the tool that a run puts.
+    if getattr(a, "deep", False):
+        from . import selfcheck as _SC
+
+        for title, _exp, _got, ok_, detail in _SC.reuse_ablation():
+            row(f"reuse: {title}", ok_, detail)
+        ok_hl, why_hl = _SC.adoption_is_a_hardlink()
+        row("adoption shares the inode rather than copying", ok_hl, why_hl)
+
     width = max(len(n) for n, _o, _d in rows)
     red = 0
     for name, ok, detail in rows:
@@ -2808,6 +2818,9 @@ def main(argv=None):
     ck_ = sub.add_parser("check",
                          help="[you] one green/red line per element of scProfile")
     ck_.add_argument("--out", type=Path, help="a run directory, to check what it produced")
+    ck_.add_argument("--deep", action="store_true",
+                     help="also BUILD real situations and assert the tool responds correctly - "
+                          "the reuse ablation and the adoption hardlink")
     ck_.set_defaults(fn=_check)
 
     lc = sub.add_parser("licence",
