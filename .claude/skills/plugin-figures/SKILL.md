@@ -135,6 +135,26 @@ talked around:
 and does not gate on it: an unattended run has nobody at the screen to satisfy, and a gate that
 fires on correct behaviour gets switched off.
 
+## Rule minus-one-and-three-quarters — THE GROUP IS THE UNIT. THE SAMPLE IS CONFIDENCE.
+
+**Single-cell inference is made over a GROUP of cells. It is not a bulk experiment.** A method
+infers from the cells in an arm; pooling the arm is the analysis, not a fallback from it.
+
+The sample axis answers a different and also useful question — *do the animals in this arm
+agree* — and that is **confidence**, not a precondition. It must never gate:
+
+- **Draw the group comparison first**, from cells pooled within each arm, and draw it whatever
+  the arm sizes are.
+- **Add the sample axis where the design supports it**, as an additional view.
+- **Never withhold a panel because an arm holds few samples.** State `n` beside the number and
+  let the reader weigh it. A contrast the design supports is described; a thin arm is a fact
+  about the experiment, reported, not a reason for silence.
+
+*Written because the opposite was built: a design panel computed from per-sample summaries — a
+bulk framing — that marked a contrast "unestimable" and drew it hollow whenever an arm held
+fewer than two samples. That is the sample-level gate this tool must not have, and it withheld
+exactly the comparisons a small arm most needs described.*
+
 ## Rule minus-two — USE THE WRAPPED TOOL'S OWN STATISTICS. NEVER INVENT ONE.
 
 A plugin wraps a method that has already decided how its results are tested. **That decision is

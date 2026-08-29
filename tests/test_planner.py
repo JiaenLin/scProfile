@@ -554,13 +554,18 @@ ck("and all four SIMPLE contrasts are too",
    {"F | G = g1", "F | G = g2",
     "G | F = f1", "G | F = f2"} <= set(_lab), sorted(_lab))
 ck("six contrasts for a 2x2, which is what the design supports", len(_c) == 6, str(len(_c)))
-ck("THE MARGINAL EFFECT OF F IS ZERO on a pure interaction",
-   abs(_lab["F"]["g"]) < 0.01, f"{_lab['F']['g']:.3f}")
-ck("while both simple F effects are large and OPPOSITE - the finding it would have hidden",
-   _lab["F | G = g1"]["g"] * _lab["F | G = g2"]["g"] < 0
-   and min(abs(_lab["F | G = g1"]["g"]),
-           abs(_lab["F | G = g2"]["g"])) > 1.0,
-   f"{_lab['F | G = g1']['g']:.2f} vs {_lab['F | G = g2']['g']:.2f}")
+ck("THE MARGINAL DIFFERENCE OF F IS ZERO on a pure interaction",
+   abs(_lab["F"]["difference"]) < 0.01, f"{_lab['F']['difference']:.3f}")
+ck("while both simple F differences are large and OPPOSITE - the finding it would have hidden",
+   _lab["F | G = g1"]["difference"] * _lab["F | G = g2"]["difference"] < 0
+   and min(abs(_lab["F | G = g1"]["difference"]),
+           abs(_lab["F | G = g2"]["difference"])) > 1.0,
+   f"{_lab['F | G = g1']['difference']:.2f} vs {_lab['F | G = g2']['difference']:.2f}")
+ck("NO invented statistic is returned - no effect size, no interval, no p-value",
+   not ({"g", "lo", "hi", "se", "p", "pval", "estimable"} & set(_lab["F"])),
+   f"keys are {sorted(_lab['F'])}")
+ck("and n travels with every row, because it is the CONFIDENCE not the gate",
+   all(r["n_from"] and r["n_to"] for r in _c))
 ck("marginal rows are ordered before the simple rows they pool",
    [r["kind"] for r in _c if r["factor"] == "F"][0] == "marginal",
    str([r["label"] for r in _c]))
@@ -576,12 +581,7 @@ for _s in list(_des):
 _des["S12"] = {"G": "g1", "F": "f1", "site": "satellite"}
 _per["S12"] = {"m": 99.0}
 _c2 = _DPn.contrasts(_per, _des, ["G", "F", "site"])
-_thin = [r for r in _c2 if not r["estimable"]]
-ck("a contrast with too few samples is REPORTED, not dropped", _thin, "silence is not a finding")
-ck("and carries no interval, so it cannot read as a tested estimate",
-   all(r["lo"] is None and r["hi"] is None for r in _thin))
-ck("while the estimable ones keep theirs",
-   all(r["lo"] is not None for r in _c2 if r["estimable"]))
+_thin = [r for r in _c2 if min(r["n_from"], r["n_to"]) < 2]
 
 # ALIASED FACTORS ARE NOT CONDITIONED ON TWICE.
 for _s in list(_des):
