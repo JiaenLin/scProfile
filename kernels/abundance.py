@@ -238,7 +238,17 @@ PLUGIN = {
             # from pertpy's own metadata. Measured on PBS 677555. A dependency a wrapped tool
             # forgot is still a dependency this plugin needs, and naming it here is the only
             # place it can be said.
-            "filelock": ">=3",
+            # BOUNDED ON BOTH SIDES, BECAUSE `>=3` IS A LOWER BOUND IN NAME ONLY. It admits
+            # filelock 3.0.0, published in 2018 and shipped as an sdist that pip must BUILD to
+            # read - and pip went there: a resolve of this environment ended in
+            # `resolution-too-deep` after downloading `filelock-3.0.0.tar.gz`, with pip's own
+            # hint being to add lower bounds. One unbounded dimension is enough to make a
+            # fourteen-package solve intractable, and this was the only one in the group.
+            #
+            # The floor is the version the environment that WORKED had resolved, read from it
+            # rather than chosen: 3.32.4. It is expressed as >=3.13 - old enough not to exclude
+            # anything measured to work, new enough that pip never walks back into the sdists.
+            "filelock": ">=3.13,<4",
         },
     },
 
