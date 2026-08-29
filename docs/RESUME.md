@@ -31,10 +31,8 @@ it means, and this is the vocabulary for reading it back.
 | `absent` | never staged | yes |
 
 **`empty` is a RESULT, not a failure.** A unit where the method ran correctly and returned
-nothing is finished. Re-running it costs the same and answers the same, and a resume that
-retries empty units silently converts a negative result into an unstable one — the next run may
-differ for unrelated reasons and nobody will know which run the emptiness came from. Pass
-`--force-all` to discard that judgement deliberately.
+nothing is finished. Re-running it costs the same and answers the same, and Re-running an empty unit costs the same and returns the same. Pass `--force-all` to redo
+empty units deliberately.
 
 **`stale` is what makes `--resume` safe to use at all.** The check compares the plugin version
 recorded in `out.json` against the version that would run now. Without it, a resume across a
@@ -172,9 +170,7 @@ The card also records what the run could NOT check about itself:
 
 ## What is NOT yet automatic
 
-**The landscape REPORTS; it does not yet copy.** There is no `run --reuse-from <root>` that
-hardlinks a trusted earlier result into a new run directory — the map tells you what could be
-reused and you act on it. That is the obvious next step, and it is deliberately not taken
-first: a wrong answer from a reporting tool costs a reader a minute, and a wrong answer from a
-tool that silently adopts an earlier result costs a run nobody knows is contaminated.
+**The landscape reports; adoption is a separate, explicit step.** `scprofile licence`
+grants a licence and `licence.adopt()` materialises a licensed instance into a new run by
+hardlink. There is no flag that adopts automatically as part of `run`.
 

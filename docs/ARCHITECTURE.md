@@ -1,3 +1,5 @@
+> **Looking for a definition?** [REFERENCE.md](REFERENCE.md) defines every element of scProfile — concepts, commands, run-directory files, reuse, licences, figures and the exit standard.
+
 # Five domains, and what each is allowed to know
 
 scProfile is a plugin host. Its correctness rests on the boundaries between five things, and
@@ -33,8 +35,8 @@ and each has a different remedy.
 It was added to this table after a report on a real cohort arrived with **191 figures, 51 of
 them distinct and 140 the same fifteen plots redrawn once per sample**, no statement anywhere of
 what the cohort was, not one panel comparing an arm of the design, and two pages carrying a
-headline their own figures refute. None of that was a plugin being careless. It was work nobody
-owned: a plugin cannot see the cohort by construction — a per-unit instance is handed one unit —
+headline their own figures refute. scProfile makes these the host's responsibility so
+that every plugin gets them without implementing them.
 and the host was not asked to.
 
 Its boundary is one line: **a plugin knows its method, the host knows the cohort.** Anything a
@@ -54,7 +56,7 @@ Two prohibitions carry the weight:
 And it is held to a **standard measured on the artifact**: `scprofile standard` takes a
 directory, so it can only ever be pointed at a report that was actually written, and whatever
 writes a report measures it in the same breath. A module somebody has to think to call is the
-same as not having one, and the report that fails is exactly the report nobody checks.
+same as not having one. `scprofile standard` measures the rendered report itself.
 
 ---
 

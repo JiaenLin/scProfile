@@ -11,7 +11,7 @@ one method belongs to the host, and anything the host would have to guess belong
 Every fix that stuck this cycle moved work in that direction. The report that started with 191
 figures, 51 of them distinct and 140 of them the same fifteen plots redrawn per sample, had no
 cohort overview, no comparison between design arms anywhere, and two headlines its own figures
-refuted. None of that was a plugin being careless: it was work nobody owned.
+refuted. The host owns these so that every plugin gets them without implementing them.
 
 ## What a plugin owes
 

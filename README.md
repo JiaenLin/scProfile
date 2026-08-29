@@ -144,10 +144,36 @@ the caveats each declared.
 
 ## Figures
 
-Every panel is written as a raster preview and a vector PDF with live text, at journal column
-width, with a caption and the table it was drawn from. Points are rasterised and axes are not, so
-a 100,000-cell embedding stays a few hundred kilobytes without turning its labels into paths.
-Colours are colourblind-safe and stable across panels.
+A plugin declares its figures in `PLUGIN["report"]["figures"]` and draws them with
+`ctx.emit_figure`.
+
+The host draws three things itself, from a plugin's `unit_network` declaration:
+
+- the **design panel** — every contrast the design supports, described;
+- the **between-arm comparisons** — for each contrast, drawn from cells pooled within each arm;
+- the **per-arm networks** — a ring and a chord for every arm.
+
+```python
+"unit_network": {"table": "tables/ccc_edges.csv", "source": "source",
+                 "target": "target", "weight": "prob", "group": "pathway_name"}
+```
+
+`weight` must be a magnitude, not a rank. `group` is optional. Any plugin that declares this
+gets the panels; no host code names a method.
+
+Two rules apply throughout:
+
+- **The group is the unit.** Comparisons are drawn from cells pooled within an arm, whatever the
+  arm sizes. The sample axis reports whether the members of a group agree; it never gates a
+  panel.
+- **Statistics come from the wrapped method.** The host computes none of its own. Where a method
+  ships no test, the panel is descriptive and says so.
+
+`scprofile standard` measures the rendered cohort page. `scprofile review` records which figures
+have been looked at.
+
+**Panel kinds, the rules each obeys, and the report page layout are in
+[docs/REFERENCE.md](docs/REFERENCE.md).**
 
 ## Inputs that are not in the object
 
@@ -194,77 +220,32 @@ which of them scProfile can verify.
 
 ## Reusing an earlier run
 
-A run is expensive. scProfile can tell you what an earlier run already computed, whether it is
-still valid, and whether it is fit to build on — and can then adopt it into a new run by
-**hardlink**, so the bytes are shared rather than copied.
+A run is expensive. scProfile can report what an earlier run already computed, whether it is
+still valid, and whether it is fit to build on — and adopt it into a new run by hardlink.
 
 ```
-scprofile status    --out RUNDIR                  # what is left in THIS run
-scprofile landscape --root RUNS --h5ad OBJ        # what EARLIER runs hold, and what to compute
-scprofile licence   --out RUNDIR --grant          # evaluate results and licence them for reuse
+scprofile status    --out RUNDIR                # what is left in this run
+scprofile landscape --root RUNS --h5ad OBJ      # what earlier runs hold, and what to compute
+scprofile licence   --out RUNDIR --grant        # evaluate results and licence them for reuse
+scprofile review    --out RUNDIR                # which figures have not been looked at
 ```
 
-### The licence criteria
+Reuse requires three things to be true at once:
 
-**A grade is derived from evidence alone.** Nothing passed on the command line changes what the
-evidence says. What a person decides is which grades they are willing to *adopt* — a policy,
-applied at adoption and recorded there.
+1. **The result exists and is finished** — `status` reads the instance directory.
+2. **It is the same thing** — the reuse key covers plugin, version, unit, input identity, params
+   and keys. Nothing else.
+3. **It is fit to build on** — the producing run's `RUN_CARD.json` verdict.
 
-Criteria are versioned (`licence.CRITERIA_VERSION`, currently **1**) and every licence records
-the version it was granted under, so adding a criterion does not silently re-bless everything
-already on disk.
+A licence records the evidence for all three plus, optionally, that the figures were looked at.
+Adoption re-verifies every hash and then hardlinks, so an adopted file cannot differ from the
+licensed one.
 
-| criterion | requires | measured by | required? |
-|---|---|---|---|
-| `integrity` | every produced file exists and hashes cleanly | sha256 of each file, recorded **into** the licence | **yes** |
-| `completeness` | the instance finished and everything the plugin **declares** it produces is present | `resume.state()` + the plugin's `produces` | **yes** |
-| `provenance` | the reuse key is computable — plugin, version, unit, input identity, params, keys | `landscape.unit_record()` | **yes** |
-| `self_report` | the producing run published a card and its verdict is trusted | `runcard.verdict_for()` | no — grades |
-| `inspection` | every figure has a recorded look | `review` ledger vs figures on disk | no — grades |
+Grades are `refused`, `retrospective`, `provisional` and `full`. The grade comes from evidence;
+which grades you accept is set at adoption.
 
-Each criterion also states **what it does not establish**, in the code beside it. `integrity`
-does not say the bytes are correct, only that they have not changed. `provenance` does not say
-the input is unchanged — runs record a path and no content digest. `self_report` does not say the
-run would have noticed a problem; it reports what it checked, not what it did not.
-
-### The grades
-
-Read top to bottom; the first matching row wins.
-
-| grade | when | adoptable |
-|---|---|---|
-| `refused` | any **required** criterion fails | no |
-| `refused` | `self_report` is present and **not trusted** — the run that made it objected | no |
-| `retrospective` | `self_report` is **absent** — the run published no card, and that cannot be reconstructed afterwards | by explicit policy |
-| `full` | every criterion passes, inspection included | yes |
-| `provisional` | required criteria and `self_report` pass; nobody looked at the figures | yes |
-
-**A retrospective licence is not a full one with an asterisk.** It is a different claim — *the
-bytes are intact, complete, and I know where they came from* — not *the run that made them
-reported nothing wrong*. Keeping those apart is the whole reason there are grades and not a
-boolean: with earlier runs sitting there and re-running costing hours, blurring them is exactly
-the temptation.
-
-### Adoption
-
-```python
-licence.adopt(lic, dest_run, min_grade=licence.PROVISIONAL)
-```
-
-`min_grade` is the policy. Adoption **re-verifies every hash first** — the licence is a claim
-about a moment; the bytes are the authority — and then **hardlinks**. The reason is not disk
-space: a hardlink is the same inode, so an adopted file *cannot* silently differ from the
-licensed one. Where a link is impossible (a different filesystem) it copies and records that it
-did, because a copy is a weaker claim. Every adopted instance carries `ADOPTED.json` naming the
-source run, the grade, the criteria version, the minimum grade accepted, and everything the
-licence did **not** evidence.
-
-### Updating the criteria
-
-Add a `Criterion` to `licence.CRITERIA`, state its `establishes` and `does_not_establish`, mark
-it `required_for_any_licence` only if no licence of any grade may fail it, add a row to
-`GRADE_RULES` if it changes grading, and **bump `CRITERIA_VERSION`**. Licences granted under an
-earlier version remain readable and are distinguishable by that field.
+**Definitions of every criterion, grade, verdict and file are in
+[docs/REFERENCE.md](docs/REFERENCE.md).**
 
 ## Reading the results
 
@@ -342,12 +323,22 @@ Python 3.10+.
 
 ## Documentation
 
-**Users:** [Run plan](docs/RUN_PLAN.md) · [Reference data](docs/REFERENCES.md) ·
-[What a report owes a reader](docs/REPORTING.md)
-**Maintainers:** [Plugin design](docs/PLUGIN_DESIGN.md) ·
-[Maintaining plugins](docs/MAINTAINING_PLUGINS.md) · [Architecture](docs/ARCHITECTURE.md) ·
-[Execution](docs/EXECUTION.md) · [Design](DESIGN.md) · [Roadmap](ROADMAP.md)
+**Users:** you run scProfile and read its reports. You never write a plugin.
 
-## Licence
+| document | what it covers |
+|---|---|
+| [REFERENCE.md](docs/REFERENCE.md) | **Every element defined once** — concepts, commands, run-directory files, reuse, licences, figures, the exit standard |
+| [RUN_PLAN.md](docs/RUN_PLAN.md) | How the plan is built and how to read it |
+| [RESUME.md](docs/RESUME.md) | Resuming a run, and reuse across runs |
+| [REPORTING.md](docs/REPORTING.md) | How the documents are assembled |
+| [REFERENCES.md](docs/REFERENCES.md) | Reference data: declaring, fetching, verifying |
 
-MIT. Each wrapped tool keeps its own licence; `scprofile doctor` lists them.
+**Maintainers:** you write or repair plugins.
+
+| document | what it covers |
+|---|---|
+| [PLUGIN_DESIGN.md](docs/PLUGIN_DESIGN.md) | Writing a plugin |
+| [MAINTAINING_PLUGINS.md](docs/MAINTAINING_PLUGINS.md) | Keeping a plugin's declaration true |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the host, plugins and environments fit together |
+| [EXECUTION.md](docs/EXECUTION.md) | Scheduling, cores, memory and waves |
+| [DEVLOG.md](docs/DEVLOG.md) | Development history |
