@@ -27,6 +27,7 @@ a claim.
 | 4 | **adopt** | does reuse actually reuse? | `ADOPTED` lines, and **the shared inode measured** |
 | 5 | **merge** | did the adopted result reach the object? | the merged object's columns, per adopted instance |
 | 6 | **report** | is the page readable? | `standard` on the rendered HTML, per criterion |
+| 6b | **drawing** | what can a machine see wrong? | an audit recorded on every panel as it was written |
 | 7 | **eye** | are the pictures right? | a review ledger entry per figure in the scan set |
 | 8 | **paper** | does any of it support a claim? | claims, verdicts, and a rendered section in the run |
 
@@ -47,6 +48,23 @@ Three kinds, and an assertion is none of them:
   redraw destroys it.
 
 ---
+
+## Station 6b: spend the eye only on what a machine cannot see
+
+The eye station is by far the slowest, and the first eleven defects it found included **three
+that a measurement can make**: text printed over text, a label clipped by its own canvas, and a
+size channel with no key. Every one of them also shipped, because nothing looked at the figure
+between drawing it and writing it.
+
+Those are now measured by `emit_figure` at the moment the figure is complete and the artists are
+still live, and recorded on the panel. Station 6b reads them. It **reports and never refuses**: a
+panel it catches is usually still worth shipping, and a gate that blocks a run over a label two
+pixels out is a gate somebody removes.
+
+**This is what makes the loop converge.** Each defect class that moves from the eye to a
+measurement makes every future round cheaper, permanently. The eye is then spent on the kinds
+that have no mechanical form — a scale that hides its own finding, a rank rule that returns a
+boundary, absence drawn as a measured zero, a claim the picture does not support.
 
 ## The eye scan, and its coverage rule
 

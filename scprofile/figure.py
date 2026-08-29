@@ -703,3 +703,109 @@ def spread_labels(ax, texts, *, iterations=80, pad=1.2, clip=True, max_shift=14.
         except Exception:
             pass
     return used
+
+
+# --------------------------------------------------------------------------------------------
+# WHAT A MACHINE CAN SEE IN A FIGURE, so the eye is spent on what it cannot.
+#
+# Eleven defects were found in one figure set by opening every panel. THREE OF THEM WERE
+# MECHANICAL - text printed over text, a label outside the canvas, a size channel with no key -
+# and finding those by eye is a waste of the one check that cannot be automated. Every one was
+# also found LATE, after the panel had shipped, because nothing looked at the figure between
+# drawing it and saving it.
+#
+# `audit` runs at the moment the figure is complete and about to be written, where the artists
+# are still live and their rendered positions are knowable. It REPORTS; it does not refuse.
+# A drawing this catches is usually still worth shipping, and a gate that blocks a run over a
+# label two pixels out is a gate somebody removes.
+# --------------------------------------------------------------------------------------------
+
+#: A text artist smaller than this is a tick label or a footnote, and those legitimately sit
+#: close to things. The check is for a LABEL landing on a LABEL, not for tight typesetting.
+_AUDIT_MIN_PT = 4.0
+
+#: Two boxes overlapping by less than this fraction of the smaller one are touching, not
+#: colliding. Chosen before the first run rather than tuned to its output.
+_AUDIT_OVERLAP = 0.20
+
+
+def audit(fig):
+    """[(code, detail)] - what is measurably wrong with this figure. Empty is the good case.
+
+    Three checks, each the mechanical half of a defect found by eye:
+
+      text_overlap   two text artists whose rendered boxes overlap. Found by eye four times in
+                     one set: a note through a label, an n through a contrast name, eleven
+                     labels through each other, and a title through a point.
+      off_canvas     an artist rendered outside the figure. Found by eye twice: a title cut to
+                     "observed difference betwe" and a label starting before its own axis.
+      size_unkeyed   a scatter drawing more than one marker size, with no legend on the axes.
+                     A size channel a reader cannot decode is decoration that looks like
+                     evidence, and it shipped on two panels at once.
+    """
+    out = []
+    try:
+        fig.canvas.draw()
+        rend = fig.canvas.get_renderer()
+    except Exception:                                                     # noqa: BLE001
+        return out                       # a figure that will not render is not this check's job
+
+    def _bb(a):
+        try:
+            b = a.get_window_extent(renderer=rend)
+            return b if b.width > 0 and b.height > 0 else None
+        except Exception:                                                 # noqa: BLE001
+            return None
+
+    # ---- text on text -------------------------------------------------------------------
+    texts = []
+    for ax in fig.get_axes():
+        for t in ax.texts:
+            if t.get_visible() and str(t.get_text()).strip() \
+                    and float(t.get_fontsize() or 0) >= _AUDIT_MIN_PT:
+                texts.append((t, _bb(t)))
+    for t in fig.texts:
+        if t.get_visible() and str(t.get_text()).strip() \
+                and float(t.get_fontsize() or 0) >= _AUDIT_MIN_PT:
+            texts.append((t, _bb(t)))
+    texts = [(t, b) for t, b in texts if b is not None]
+    for i in range(len(texts)):
+        for j in range(i + 1, len(texts)):
+            a, b = texts[i][1], texts[j][1]
+            w = min(a.x1, b.x1) - max(a.x0, b.x0)
+            h = min(a.y1, b.y1) - max(a.y0, b.y0)
+            if w <= 0 or h <= 0:
+                continue
+            small = min(a.width * a.height, b.width * b.height) or 1.0
+            if (w * h) / small >= _AUDIT_OVERLAP:
+                out.append(("text_overlap",
+                            f"{str(texts[i][0].get_text())[:24]!r} over "
+                            f"{str(texts[j][0].get_text())[:24]!r}"))
+
+    # ---- outside the canvas -------------------------------------------------------------
+    # `bbox_inches="tight"` GROWS the canvas for anything outside it, so this catches only what
+    # is clipped by an artist's own clip box - which is what truncated a title and a label.
+    fw, fh = fig.canvas.get_width_height()
+    for t, b in texts:
+        if not t.get_clip_on():
+            continue
+        if b.x0 < -1 or b.y0 < -1 or b.x1 > fw + 1 or b.y1 > fh + 1:
+            out.append(("off_canvas", f"{str(t.get_text())[:32]!r} is clipped by the canvas"))
+
+    # ---- a size channel with no key -----------------------------------------------------
+    for ax in fig.get_axes():
+        sized = False
+        for c in ax.collections:
+            try:
+                sizes = c.get_sizes()
+            except Exception:                                             # noqa: BLE001
+                continue
+            if sizes is not None and len(sizes) > 1 and float(max(sizes)) > 0:
+                if float(max(sizes)) / (float(min(sizes)) or 1.0) >= 1.5:
+                    sized = True
+        if sized and ax.get_legend() is None and not any(
+                a.get_legend() is not None for a in fig.get_axes()):
+            out.append(("size_unkeyed",
+                        "a scatter varies marker size and no axes carries a legend"))
+            break
+    return out

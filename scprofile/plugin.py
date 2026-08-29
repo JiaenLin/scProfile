@@ -716,6 +716,23 @@ class Context:
             _F.fit_column(fig)
         except Exception:                                                 # noqa: BLE001
             pass                    # a figure that will not measure is still a figure to write
+        # WHAT A MACHINE CAN SEE, MEASURED HERE, WHERE THE ARTISTS ARE STILL LIVE. Three of the
+        # eleven defects found by opening panels one at a time were mechanical - text over text,
+        # a label clipped by the canvas, a size channel with no key - and every one shipped
+        # because nothing looked at the figure between drawing it and writing it. The eye is the
+        # only check for the other eight; spending it on these three is waste.
+        #
+        # RECORDS, NEVER REFUSES. A panel this catches is usually still worth shipping, and a
+        # gate that blocks a run over a label two pixels out is a gate somebody removes.
+        try:
+            from . import figure as _FA
+            _audit = _FA.audit(fig)
+        except Exception:                                                 # noqa: BLE001
+            _audit = []
+        if _audit:
+            self.log(f"  {name}: {len(_audit)} drawing issue(s) a machine can see")
+            for _code, _detail in _audit[:4]:
+                self.log(f"      {_code}: {_detail}")
         want_in = float(fig.get_size_inches()[0])
         fig.savefig(png, dpi=dpi, bbox_inches="tight")
         fig.savefig(pdf, bbox_inches="tight")
@@ -741,7 +758,10 @@ class Context:
         # it cannot say which declared panel is missing, and a missing panel is the one thing a
         # reader cannot see for themselves.
         self._figures.append({"id": str(name), "path": png, "vector": pdf, "source": src,
-                              "caption": caption})
+                              "caption": caption,
+                              # CARRIED, so the run reports it and the eye scan can be pointed
+                              # at the panels a machine already has doubts about.
+                              "audit": [{"code": c, "detail": d} for c, d in _audit]})
         if close:
             try:
                 import matplotlib.pyplot as plt

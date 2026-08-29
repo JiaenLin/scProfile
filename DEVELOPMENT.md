@@ -1,6 +1,6 @@
 # Development guideline
 
-*Enforced by `.claude/hooks/dev_guideline.py`, which DENIES rather than reminds: tool code written outside the package, scProfile material written to a scratchpad, ad-hoc scProfile code run from a shell heredoc, a commit while any suite or `scprofile check` is red, and figure code committed while `check --deep` is red. What it cannot enforce is whether anyone LOOKED at a figure — `scprofile review` records that, and the count is printed on every figure-code commit.*
+*Enforced by `.claude/hooks/dev_guideline.py`, which DENIES rather than reminds: tool code written outside the package, scProfile material written to a scratchpad, ad-hoc scProfile code run from a shell heredoc, a commit while any suite or `scprofile check` is red, and figure code committed while `check --deep` is red. The TEST LOOP below is how the tool is exercised against real runs; `docs/TEST_LOOP.md` is its design. What it cannot enforce is whether anyone LOOKED at a figure — `scprofile review` records that, and the count is printed on every figure-code commit.*
 
 **THE REPOSITORY IS THE ONLY HOME.**
 Every scProfile artefact — code, tests, docs, skills, examples, the scripts you use to look at a
@@ -27,6 +27,34 @@ never deliver it. Wire it or delete it — nothing that nothing calls.
 **Look at the real output.**
 A green suite proves a file was written, not that it is right. Open every figure. Verify on real
 data; a convenient fixture hides the bug it was built to catch.
+
+**THE LOOP IS HOW THIS TOOL IS TESTED, and it is not optional.**
+The suite proves a function returns. It cannot prove the chain works on runs somebody actually
+made, in the state they are actually in. So a project's real runs go through every element in
+order — `exists · landscape · licence · adopt · merge · report · drawing · eye · paper` — and a
+station that has produced no evidence is **BLOCKED, never skipped**. Skipping is how a chain gets
+reported working on the strength of the stations that happened to be easy.
+
+`python tests/loop_stations.py --runs <dir>` names the first blocked station and the one thing to
+do next. Four rules, each paid for:
+
+- **Evidence, not assertion.** A file the station wrote; a MEASUREMENT of the filesystem rather
+  than of the tool's report of itself — `ADOPTED … by hardlink` is a claim and `st_nlink` is a
+  fact; or a recorded look bound to the image's digest.
+- **Scan the whole set before fixing anything.** Every fix that changes a rendering makes a new
+  run, and the review ledger binds to digests, so a new run resets the scan set. Fixing as you go,
+  the eye station went 0 → 3 → 5 → 8 → 0 across five rounds while real defects were being found.
+  Collect on one build, fix in one commit, rebuild, re-scan.
+- **Every finding becomes a change in this repository, or it did not happen.** A defect seen and
+  not fixed is a defect found twice.
+- **Move what you can from the eye to a measurement.** The eye is the slowest station and the only
+  irreplaceable one. Three of the first eleven defects were mechanical — text over text, a label
+  off the canvas, an unkeyed size channel — and are now measured by `emit_figure` on every panel
+  of every run. **Each class that moves makes every future round cheaper, permanently.**
+
+**A round that finds nothing is a result** — the only evidence a previous fix worked. The loop
+ends when a complete scan produces no fix, and that is the only definition of "the figures are
+right" this tool has.
 
 **Use the wrapped tool's own statistics.**
 Never invent an effect size, interval or p-value beside them. A descriptive panel is fine and

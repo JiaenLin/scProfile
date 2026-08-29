@@ -153,6 +153,38 @@ def station_report(runs):
         "; ".join(bad[:2])
 
 
+def station_drawing(runs):
+    """6b. What a machine can see in the panels, before anyone spends an eye on them.
+
+    THE STATION THAT MAKES THE LOOP CONVERGE. The eye station is the slowest by far and it was
+    being spent on defects a measurement can make: text over text, a label clipped by the canvas,
+    a size channel with no key. Those are now recorded by `emit_figure` on every panel of every
+    run, so this station reads them and the eye is spent on the eight kinds of defect that have
+    no mechanical form.
+    """
+    newest = sorted(runs, key=lambda p: p.name, reverse=True)
+    for r in newest:
+        pay = _load(r / "report.json")
+        figs = [f for pl in (pay.get("kernels") or {}).values()
+                for f in (pl.get("figures") or [])]
+        if not figs:
+            continue
+        audited = [f for f in figs if "audit" in f]
+        if not audited:
+            return BLOCKED, (f"{r.name}: no panel carries a drawing audit — this run predates it"), \
+                "re-run so every figure is measured as it is written"
+        hits = [(f.get("id"), a) for f in audited for a in (f.get("audit") or [])]
+        by = Counter(a.get("code") for _i, a in hits)
+        if hits:
+            named = "; ".join(f"{i}: {a.get('code')}" for i, a in hits[:4])
+            return BLOCKED, (f"{r.name}: {len(hits)} drawing issue(s) across "
+                             f"{len({i for i, _a in hits})} panel(s) — "
+                             + " · ".join(f"{n} {k}" for k, n in by.items())), \
+                f"FIX THESE FIRST, they need no eye: {named}"
+        return PASS, f"{r.name}: {len(audited)} panel(s) measured, none with a drawing issue", ""
+    return BLOCKED, "no figures in any run", "run something that draws"
+
+
 def _kind(fig):
     """A figure id with its unit suffix removed - the KIND, which is where a defect lives."""
     stem = Path(fig).stem
@@ -262,6 +294,7 @@ STATIONS = (
     ("1 exists", station_exists), ("2 landscape", station_landscape),
     ("3 licence", station_licence), ("4 adopt", station_adopt),
     ("5 merge", station_merge), ("6 report", station_report),
+    ("6b drawing", station_drawing),
     ("7 eye", station_eye), ("8 paper", station_paper),
 )
 
