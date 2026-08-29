@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.8.0",
+    "version": "0.8.1",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -1808,12 +1808,19 @@ def _fig_signaling_roles(ctx, pre, names):
     lo = 0.0 if lo_d <= 0.25 * span else lo_d - 0.12 * span
     hi = hi_d + 0.12 * span
     ax.plot([lo, hi], [lo, hi], color=F.GREY, lw=0.8, ls="--", zorder=1)
-    # UNDER THE AXES, NOT INSIDE THEM. At the top-left of the plotting area this note sat in the
-    # region a high-receiving population occupies, and on a real unit it was overprinted by that
-    # population's own label - two true statements rendered as one unreadable one. Outside the
-    # axes it cannot collide with any mark, and the tight bbox grows the canvas to hold it.
-    ax.text(0.0, -0.16, "above the line: receives more than it sends", transform=ax.transAxes,
-            fontsize=5.0, color="#8A8A8A", ha="left", va="top")
+    # ON THE FIGURE, NOT ON THE AXES, AND THIS IS THE SECOND ATTEMPT. At the top-left of the
+    # plotting area the note was overprinted by a high-receiving population's own label. Moved
+    # to a GUESSED offset below the axes, it printed straight through the x-axis title instead -
+    # one collision traded for another, because an offset in axes coordinates knows nothing
+    # about the tick labels and the axis title that live outside them.
+    #
+    # Figure coordinates, beside the provenance stamp, where `bbox_inches="tight"` GROWS the
+    # canvas to hold it rather than laying it over something. The stamp has worked that way on
+    # every panel since it was added; this is the same mechanism, and the lesson is that a text
+    # block anchored below a plot needs a measurement or a place outside the layout, never a
+    # number that looked right once.
+    fig.text(0.0, -0.055, "above the line: receives more than it sends",
+             transform=fig.transFigure, fontsize=5.0, color="#8A8A8A", ha="left", va="top")
     # LABELS PUSHED OUTWARD FROM THE CENTRE. Every label offset by the same (2.5, 2.5) collided
     # wherever points cluster, which on this panel is exactly where the populations of interest
     # are. Offsetting along each point's own direction from the centroid separates a cluster
