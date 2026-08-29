@@ -437,7 +437,11 @@ def _run(a):
     _dtab = None
     if a.design:
         try:
-            _dtab, _dkey, _dfactors = inputs.read_design(a.design, units or [])
+            # SAMPLES, NOT UNITS. A design table has one row per SAMPLE; a unit may now be
+            # a design arm, and passing the unit list made four arm labels look like
+            # samples missing from the table - "design table unreadable" on a table that
+            # was perfectly readable.
+            _dtab, _dkey, _dfactors = inputs.read_design(a.design, samples or [])
             _run_facts = _PL.design_facts(_dtab, _dfactors, sample_key, units or [])
         except Exception as e:
             print(f"  WARNING: design table unreadable, so the plan's decisions cannot be made "
@@ -981,7 +985,7 @@ def _run(a):
     _by_arm = {}
     if _run_facts.get("has_design") and sample_key:
         try:
-            _dt, _dk, _df = inputs.read_design(a.design, units or [])
+            _dt, _dk, _df = inputs.read_design(a.design, samples or [])
             for _n, _slots in sorted(merged_slots.items()):
                 _cols = list((_slots or {}).get("obs") or [])
                 # AND ITS ARRAYS. A plugin whose per-cell output is a matrix has no obs column,
@@ -1587,14 +1591,28 @@ def _plan(a):
     # only ever ask about a plugin's declared properties - never about what the plugin would
     # actually test. A verdict on a study needs the study's own numbers in scope first.
     from . import planner as PL
-    units = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
-             if keys["sample"][0] else [])
+    from . import units as _UNP
+
+    samples = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
+               if keys["sample"][0] else [])
     dtab, dfactors = None, []
     if a.design:
         try:
-            dtab, _dkey, dfactors = inputs.read_design(a.design, units)
+            dtab, _dkey, dfactors = inputs.read_design(a.design, samples)
         except Exception:                                                 # noqa: BLE001
             dtab, dfactors = None, []          # already reported above, as a refusal
+    # THE PLAN SCHEDULES WHAT THE RUN WILL RUN. `plan` resolved units as samples while `run`
+    # resolved them from the design, so a plan promised ten instances and the run did fourteen.
+    # A preview that disagrees with the action is the defect this project has already fixed
+    # once, in the licence.
+    _pax, _pwhy = _UNP.resolve(dtab or {}, sample_key=keys["sample"][0], samples=samples,
+                               prefer=getattr(a, "unit_by", "both") or "both")
+    _pmem = {}
+    for _ax in _pax:
+        for _u, _m in _ax["units"].items():
+            _pmem.setdefault(str(_u), list(_m))
+    units = sorted(_pmem) or samples
+
     facts = PL.design_facts(dtab, dfactors, keys["sample"][0], units)
     facts["units"] = units
 
@@ -2166,6 +2184,16 @@ def _check(a):
         "_UN.resolve(" in src, "run still resolves units as samples")
     row("group-level inference: a unit carries its members",
         '"unit_members"' in man and "unit_members=" in src, "in.json has no unit_members")
+    row("plan and run resolve the SAME unit axis",
+        src.count("_UN.resolve(") + src.count("_UNP.resolve(") >= 2,
+        "plan schedules a different set of instances than run creates")
+    # THE PATTERN IS ASSEMBLED, NOT WRITTEN. A check that greps its own file for a literal
+    # finds the literal in its own line and reports a defect that is only its own text. Built
+    # from parts, it appears nowhere in the source it scans.
+    _bad_call = "read_design(a." + "design, units"
+    row("the design table is read against SAMPLES, not units",
+        _bad_call not in src,
+        "a group unit label is not a sample and will look like a missing row")
     row("group-level inference: a plugin subsets by membership",
         "col.isin(want)" in ent, "_entry subsets by equality on the sample key")
     row("group-level comparison: between-arm panels are drawn",
@@ -2655,6 +2683,9 @@ def main(argv=None):
                          "accounted for once, no UNRESOLVED, every SKIP citing a design fact the "
                          "table supports, every BLOCKED naming where it looked, and no plugin "
                          "left below a rung the project would support")
+    pl.add_argument("--unit-by", choices=("group", "sample", "both"), default="both",
+                     help="which unit axis to plan. Must match what `run` will use, or the plan "
+                          "promises a different set of instances than the run creates.")
     pl.set_defaults(fn=_plan)
 
     va = sub.add_parser("validate", help="[maintainer] static checks on plugins and their references")
