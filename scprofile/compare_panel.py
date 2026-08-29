@@ -635,6 +635,35 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     off = np.abs(dy - dx)
     order = np.argsort(-off)
 
+    # A SHARE IS COMPOSITIONAL, AND A LINEAR DIFFERENCE OF SHARES RANKS BY WHAT IS ABUNDANT.
+    # This panel names the elements furthest from the line, so the ranking IS the claim - and on
+    # a real cohort the ranking was not stable. Ranked by percentage points, the largest
+    # interaction was a component holding 14-24% of every arm; ranked by log-ratio, that
+    # component was mid-table and the largest was one holding under 3%, whose swing is small in
+    # points and eight-fold in ratio. Both are correct arithmetic on the same numbers.
+    #
+    # Neither scale is safe alone: the linear one is dominated by abundant components and the
+    # log one by near-zero components. So BOTH are computed and their top ranks compared, and
+    # where they disagree the panel says so and declines to present its own ordering as the
+    # finding. This is a disagreement to disclose, not to resolve by picking a favourite.
+    _agree, _alt = None, []
+    with np.errstate(divide="ignore", invalid="ignore"):
+        _lg = {}
+        for k in tot:
+            v = np.array([max(tot[k].get(q, 0.0), 0.0) for q in keys], dtype=float)
+            pos = v[v > 0]
+            floor = float(pos.min()) / 2.0 if len(pos) else 1.0
+            l = np.log2(np.where(v > 0, v, floor))
+            _lg[k] = l - l.mean()                       # centred log-ratio
+        lx = _lg[(a1, b0)] - _lg[(a0, b0)]
+        ly = _lg[(a1, b1)] - _lg[(a0, b1)]
+        loff = np.abs(ly - lx)
+    _n_top = min(5, len(keys))
+    _lin_top = [keys[i] for i in order[:_n_top]]
+    _log_top = [keys[i] for i in np.argsort(-loff)[:_n_top]]
+    _agree = len(set(_lin_top) & set(_log_top))
+    _alt = [k for k in _log_top if k not in _lin_top]
+
     # AN INTERACTION IS THE DIFFERENCE OF TWO CONTRASTS, so it inherits what each of them
     # cannot separate — and it acquires one more: if the two strata sit in different batches, an
     # ADDITIVE batch effect cancels but a batch-BY-factor interaction does not, and the two are
@@ -716,6 +745,15 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
            f"{a0}→{a1} change within {fb} = {b0} against the same within {fb} = {b1}. Off the "
            f"dashed line, the response differs.",
            _isent
+           + (f"THE RANKING IS NOT STABLE ACROSS SCALES and the labels are therefore NOT a "
+              f"finding: ranked by log-ratio — the scale a compositional readout requires — the "
+              f"largest interactions include {', '.join(map(str, _alt))}, which do not appear in "
+              f"the top {_n_top} here. A linear difference of shares ranks by what is ABUNDANT; "
+              f"a log-ratio ranks by what changes most in RATIO, and a small component can lead "
+              f"one and not the other. Only the {_agree} element(s) leading BOTH should be read "
+              f"as ordered. " if rel and _alt else
+              f"The top {_n_top} are the same ranked by log-ratio, so the ordering is not an "
+              f"artefact of the linear share scale. " if rel else "")
            + f"{len(keys)} of {len(seen)} {what}s are present in all four arms and drawn — the "
            f"rest are absent from at least one arm, where a difference would be a difference of "
            f"PRESENCE and not of magnitude. {flips} REVERSE DIRECTION — marked apart, and "
