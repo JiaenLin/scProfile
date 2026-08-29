@@ -103,8 +103,9 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
     e_lo, e_hi = pool(per_unit_edges, lo_m), pool(per_unit_edges, hi_m)
     if e_lo is None or e_hi is None or len(e_lo) < min_edges or len(e_hi) < min_edges:
         return []
-    pops = sorted(set(e_lo["source"].astype(str)) | set(e_lo["target"].astype(str))
-                  | set(e_hi["source"].astype(str)) | set(e_hi["target"].astype(str)))
+    _seen_lo = set(e_lo["source"].astype(str)) | set(e_lo["target"].astype(str))
+    _seen_hi = set(e_hi["source"].astype(str)) | set(e_hi["target"].astype(str))
+    pops = sorted(_seen_lo | _seen_hi)
     c_lo, w_lo = matrices(e_lo, pops, weight)
     c_hi, w_hi = matrices(e_hi, pops, weight)
     short = _short(pops)
@@ -121,14 +122,45 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
     arm_n = f"{lo_lv} (n={len(lo_m)}) vs {hi_lv} (n={len(hi_m)})"
 
     # ---- 1. differential interactions, sender x receiver -------------------------------------
+    # A DIFFERENCE OF PRESENCE IS NOT A DIFFERENCE OF MAGNITUDE, AND IT DOMINATED THE PANEL.
+    # `pops` is the UNION of both arms, so a population with cells in one arm and none in the
+    # other contributed its entire count as a "change" - the largest number on the figure, in
+    # the strongest colour, for a population that was never scored on one side. Measured on a
+    # real cohort: the four heaviest columns of the diet panel were populations missing from one
+    # arm outright, and the panel read as a large, specific, directional effect.
+    #
+    # They are NOT dropped - a dropped row is invisible and a reader cannot tell it was ever
+    # there. They are taken off the colour scale, hatched, and named, the way `panels.R2` asks.
+    only_lo = {p for p in pops if p in _seen_lo and p not in _seen_hi}
+    only_hi = {p for p in pops if p in _seen_hi and p not in _seen_lo}
+    one_arm = sorted(only_lo | only_hi)
+    _ix = {p: i for i, p in enumerate(pops)}
+    unscored = np.zeros((len(pops), len(pops)), dtype=bool)
+    for p in one_arm:
+        unscored[_ix[p], :] = True
+        unscored[:, _ix[p]] = True
+
     for what, A, B, unit in (("count", c_lo, c_hi, "significant interactions"),
                              ("strength", w_lo, w_hi, "summed probability")):
         D = B - A
         if not np.any(D):
             continue
         fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.92), layout="constrained")
-        m = float(np.abs(D).max()) or 1.0
-        im = ax.imshow(D, cmap="RdBu_r", vmin=-m, vmax=m)
+        Dm = np.where(unscored, np.nan, D)
+        m = float(np.nanmax(np.abs(Dm))) if np.isfinite(Dm).any() else 0.0
+        m = m or 1.0
+        cmap = plt.get_cmap("RdBu_r").copy()
+        cmap.set_bad("#F2F2F2")
+        im = ax.imshow(Dm, cmap=cmap, vmin=-m, vmax=m)
+        if unscored.any():
+            ax.imshow(np.where(unscored, 1.0, np.nan), cmap="gray", vmin=0, vmax=1,
+                      alpha=0.0)
+            for i in range(len(pops)):
+                for j in range(len(pops)):
+                    if unscored[i, j]:
+                        ax.add_patch(plt.Rectangle((j - .5, i - .5), 1, 1, fill=False,
+                                                   hatch="////", lw=0.0,
+                                                   edgecolor="#B0B0B0", zorder=2))
         ax.set_xticks(range(len(pops)))
         ax.set_xticklabels(short, rotation=45, ha="right", fontsize=5)
         ax.set_yticks(range(len(pops)))
@@ -142,20 +174,33 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
         cb.outline.set_visible(False)
         cb.set_label(f"{hi_lv} minus {lo_lv}   ({unit})", fontsize=6)
         _save(fig, f"C1_diff_{what}",
-              (f"Change in {unit} from {lo_lv} to {hi_lv}, per sender-receiver pair. "
-               f"{arm_n}.",
-               f"Cells are pooled within each arm before inference, so this is a group-level "
-               f"comparison and needs no single sample to support one. Blue is lower in "
-               f"{hi_lv}, red higher, on a symmetric scale so both directions read at the same "
-               f"weight. Nothing here is a test: no interval is drawn because none was "
-               f"computed."))
+              (f"Change in {unit} from {lo_lv} to {hi_lv}, per sender-receiver pair, cells "
+               f"pooled within each arm. {arm_n}."
+               + (f" Hatched cells are NOT a difference." if one_arm else ""),
+               (f"HATCHED AND OFF THE SCALE: every pair involving "
+                f"{', '.join(short[_ix[p]] for p in one_arm)}, which "
+                f"{'has' if len(one_arm) == 1 else 'have'} cells in only one of these two arms. "
+                f"A difference there is a difference of PRESENCE, not of magnitude, and drawn on "
+                f"this scale it would be the largest number on the panel for a population that "
+                f"was never scored on one side. " if one_arm else "Every population has cells in "
+                "both arms, so no pair is a comparison of presence. ")
+               + f"Cells are pooled within each arm before inference, so this is a group-level "
+                 f"comparison and needs no single sample to support one. Blue is lower in "
+                 f"{hi_lv}, red higher, on a symmetric scale so both directions read at the same "
+                 f"weight. Nothing here is a test: no interval is drawn because none was "
+                 f"computed."))
 
     # ---- 2. information flow per group (rankNet, paired) -------------------------------------
     if group_col and group_col in e_lo.columns and group_col in e_hi.columns:
         fl = e_lo.groupby(group_col)[weight].sum()
         fh = e_hi.groupby(group_col)[weight].sum()
+        # THE SAME RULE AS THE MATRIX ABOVE. A group scored in one arm and not the other is a
+        # difference of presence; drawn as a paired bar with one bar at zero it reads as the
+        # largest change on the panel. Kept, marked, and named - not dropped.
+        _both = set(fl.index) & set(fh.index)
         keys = sorted(set(fl.index) | set(fh.index),
                       key=lambda k: -(float(fl.get(k, 0)) + float(fh.get(k, 0))))[:22]
+        _one = [k for k in keys if k not in _both]
         if keys:
             a = np.array([float(fl.get(k, 0.0)) for k in keys])
             b = np.array([float(fh.get(k, 0.0)) for k in keys])
@@ -164,8 +209,11 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                                    layout="constrained")
             ax.barh(y + 0.19, a, height=0.36, color=F.OKABE_ITO[0], label=str(lo_lv))
             ax.barh(y - 0.19, b, height=0.36, color=F.OKABE_ITO[1], label=str(hi_lv))
+            for yi, k in zip(y, keys):
+                if k in _one:
+                    ax.axhspan(yi - 0.42, yi + 0.42, color="#B0B0B0", alpha=0.22, zorder=0)
             ax.set_yticks(y)
-            ax.set_yticklabels(keys, fontsize=5)
+            ax.set_yticklabels([f"{k} †" if k in _one else k for k in keys], fontsize=5)
             ax.set_xlabel("information flow (summed probability)")
             ax.legend(fontsize=5.5, frameon=False, loc="lower right")
             ax.tick_params(axis="y", length=0)
@@ -173,11 +221,17 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                 ax.spines[sp].set_visible(False)
             _save(fig, "C3_flow",
                   (f"Information flow per {group_col.replace('_', ' ')} in each arm, ranked by "
-                   f"their combined total. {arm_n}.",
-                   f"Arms are pooled groups, not averages of samples. Bars are on the method's "
-                   f"own probability scale and are comparable between these two arms - inferred "
-                   f"from the same database over the same populations - and not against any "
-                   f"other figure."))
+                   f"their combined total. {arm_n}."
+                   + (" † is scored in one arm only." if _one else ""),
+                   (f"MARKED †, ON A SHADED ROW, AND NOT A MAGNITUDE: "
+                    f"{', '.join(str(k) for k in _one)} — scored in one of these arms and not "
+                    f"the other, so the empty bar is an absence and not a zero. " if _one else "")
+                   + f"Arms are pooled groups, not averages of samples. THE TWO ARMS DO NOT "
+                     f"NECESSARILY CONTAIN THE SAME POPULATIONS — the earlier claim that they do "
+                     f"was untrue whenever a population is missing from one — so a bar's HEIGHT "
+                     f"carries the arm's total composition as well as the pathway, and the "
+                     f"reliable comparison is the RANK. Bars are on the method's own probability "
+                     f"scale and not comparable with any other figure."))
 
     # ---- 3. signalling role shift ------------------------------------------------------------
     o_lo, i_lo = w_lo.sum(1), w_lo.sum(0)
@@ -188,17 +242,30 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
         # MARKERS FIRST, ARROWS ON TOP, AND THE HEAD STOPPING SHORT OF THE MARKER. The first
         # version drew each arrow and then painted its destination marker over the arrowhead,
         # so DIRECTION - the entire content of the panel - was legible only from the legend.
+        # AN ARROW FROM THE ORIGIN IS NOT A ROLE SHIFT. A population absent from one arm sits at
+        # (0, 0) there, so the panel drew the longest arrow on the figure - from nowhere to its
+        # full position - for a population that was never scored on one side. Same defect as the
+        # difference matrix, in the one encoding where it looks most like a finding: a long
+        # arrow reads as a large, directional change.
         for k, p in enumerate(pops):
-            ax.plot([o_lo[k]], [i_lo[k]], "o", ms=3.4, color=cmap[p], mec="white", mew=.5,
-                    zorder=2)
-            ax.plot([o_hi[k]], [i_hi[k]], "o", ms=5.6, color=cmap[p], mec=F.INK, mew=.5,
-                    zorder=2)
+            _one = p in one_arm
+            ax.plot([o_lo[k]], [i_lo[k]], "o", ms=3.4,
+                    color="none" if _one else cmap[p],
+                    mec="#B0B0B0" if _one else "white", mew=.6, zorder=2)
+            ax.plot([o_hi[k]], [i_hi[k]], "o", ms=5.6,
+                    color="none" if _one else cmap[p],
+                    mec="#B0B0B0" if _one else F.INK, mew=.6, zorder=2)
         for k, p in enumerate(pops):
+            if p in one_arm:
+                continue                # no arrow: there is no pair of positions to join
             ax.annotate("", xy=(o_hi[k], i_hi[k]), xytext=(o_lo[k], i_lo[k]),
                         arrowprops=dict(arrowstyle="-|>,head_width=.22,head_length=.42",
                                         lw=0.9, color=cmap[p], shrinkA=2, shrinkB=5,
                                         alpha=.95), zorder=3)
-        lim = float(max(o_lo.max(), o_hi.max(), i_lo.max(), i_hi.max())) * 1.12 or 1.0
+        _live = [k for k, p in enumerate(pops) if p not in one_arm]
+        lim = (float(max(max(o_lo[_live], default=0), max(o_hi[_live], default=0),
+                         max(i_lo[_live], default=0), max(i_hi[_live], default=0)))
+               * 1.12) or 1.0
         ax.plot([0, lim], [0, lim], color=F.GREY, lw=.8, ls="--", zorder=0)
         _tx = [ax.annotate(s, (o_hi[k], i_hi[k]), fontsize=5, xytext=(4, 2),
                            textcoords="offset points", color=F.INK)
@@ -227,8 +294,13 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
             ax.spines[sp].set_visible(False)
         _save(fig, "C4_role_shift",
               (f"How each population's signalling role moves from {lo_lv} to {hi_lv}. "
-               f"{arm_n}.",
-               f"The small marker is {lo_lv}, the arrowhead {hi_lv}. Above the dashed line a "
+               f"{arm_n}."
+               + (" Hollow rings have no arrow." if one_arm else ""),
+               (f"NO ARROW IS DRAWN for {', '.join(short[_ix[p]] for p in one_arm)}: absent from "
+                f"one of these arms, so one end of the arrow would be the origin and its length "
+                f"would be a presence, not a shift. Hollow rings mark where they sit in the arm "
+                f"that has them. " if one_arm else "")
+               + f"The small marker is {lo_lv}, the arrowhead {hi_lv}. Above the dashed line a "
                f"population receives more than it sends. Arms are pooled groups. An arrow is "
                f"the difference of two point estimates and carries no interval - its length is "
                f"not evidence of size."))
