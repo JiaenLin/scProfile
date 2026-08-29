@@ -787,7 +787,9 @@ def audit(fig):
                      labels through each other, and a title through a point.
       off_canvas     an artist rendered outside the figure. Found by eye twice: a title cut to
                      "observed difference betwe" and a label starting before its own axis.
-      size_unkeyed   a scatter drawing more than one marker size, with no legend on the axes.
+      size_unkeyed   a scatter drawing more than one marker size, with no legend anywhere
+                     on the figure - axes-level or figure-level. Both count: `legend_outside`
+                     places a real key on the figure rather than on an axes.
                      A size channel a reader cannot decode is decoration that looks like
                      evidence, and it shipped on two panels at once.
     """
@@ -827,9 +829,16 @@ def audit(fig):
                 continue
             small = min(a.width * a.height, b.width * b.height) or 1.0
             if (w * h) / small >= _AUDIT_OVERLAP:
+                # WHERE, AND BY HOW MUCH - see the note on `off_canvas` below. A pair of
+                # names with no position sent three separate attempts to rebuild the panel
+                # from its own coordinates, all of which came back clean while the real panel
+                # stayed broken. The overlap fraction and the location make the finding
+                # actionable without re-deriving it.
                 out.append(("text_overlap",
                             f"{str(texts[i][0].get_text())[:24]!r} over "
-                            f"{str(texts[j][0].get_text())[:24]!r}"))
+                            f"{str(texts[j][0].get_text())[:24]!r} — "
+                            f"{(w * h) / small:.0%} of the smaller, at "
+                            f"({max(a.x0, b.x0):.0f},{max(a.y0, b.y0):.0f})px"))
 
     # ---- outside the canvas -------------------------------------------------------------
     # `bbox_inches="tight"` GROWS the canvas for anything outside it, so this catches only what
@@ -847,8 +856,26 @@ def audit(fig):
     for t, b in texts:
         if id(t) in fig_level or not t.get_clip_on():
             continue
-        if b.x0 < -1 or b.y0 < -1 or b.x1 > fw + 1 or b.y1 > fh + 1:
-            out.append(("off_canvas", f"{str(t.get_text())[:32]!r} is clipped by the canvas"))
+        # WHERE, AND BY HOW MUCH. A report that says only THAT a label is off the canvas sends
+        # the reader to rebuild the panel from its own coordinates to find out where it went -
+        # which was tried, three times, on a different defect, and every reconstruction came
+        # back clean while the real panel stayed broken. A measurement that cannot be acted on
+        # without re-deriving it is half a mechanism, so the edge and the overflow in points are
+        # part of the finding.
+        over = []
+        if b.x0 < -1:
+            over.append(f"left by {-b.x0:.0f}px")
+        if b.y0 < -1:
+            over.append(f"bottom by {-b.y0:.0f}px")
+        if b.x1 > fw + 1:
+            over.append(f"right by {b.x1 - fw:.0f}px")
+        if b.y1 > fh + 1:
+            over.append(f"top by {b.y1 - fh:.0f}px")
+        if over:
+            out.append(("off_canvas",
+                        f"{str(t.get_text())[:32]!r} runs off the canvas: "
+                        + ", ".join(over)
+                        + f" (canvas {fw:.0f}x{fh:.0f}px)"))
 
     # ---- a size channel with no key -----------------------------------------------------
     for ax in fig.get_axes():
@@ -861,9 +888,18 @@ def audit(fig):
             if sizes is not None and len(sizes) > 1 and float(max(sizes)) > 0:
                 if float(max(sizes)) / (float(min(sizes)) or 1.0) >= 1.5:
                     sized = True
+        # A FIGURE-LEVEL LEGEND IS A LEGEND. `legend_outside`, which is the host's own helper
+        # and what the figure standard tells a plugin to use for a key that will not fit inside
+        # the axes, returns `fig.legend(...)` - so the key it places is attached to the FIGURE
+        # and no axes carries one. This check looked only at the axes and reported 14 correctly
+        # keyed panels as unkeyed, in one run, all from the same plugin: it was blind to the one
+        # placement the standard recommends.
+        #
+        # A gate that fires on correct behaviour is a gate somebody switches off, and this one
+        # would have sent someone to add a second legend to a panel that already had one.
         if sized and ax.get_legend() is None and not any(
-                a.get_legend() is not None for a in fig.get_axes()):
+                a.get_legend() is not None for a in fig.get_axes()) and not fig.legends:
             out.append(("size_unkeyed",
-                        "a scatter varies marker size and no axes carries a legend"))
+                        "a scatter varies marker size and nothing on the figure keys it"))
             break
     return out
