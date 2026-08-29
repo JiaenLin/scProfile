@@ -661,7 +661,16 @@ def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=Non
     import matplotlib.pyplot as plt
     from matplotlib.colors import LogNorm
 
-    units = [u for u in sorted(label_by_unit or {})]
+    # GROUP UNITS FIRST, THEN SAMPLES, WITH A RULE BETWEEN THEM. Sorted alphabetically the four
+    # arms landed on the right, and because an arm pools two or three samples its column is
+    # systematically brighter - so the eye reads "more cells at the right" as a gradient across
+    # the cohort rather than as the difference between an arm and an animal. Ordering them the
+    # way the rest of the tool does, and drawing the boundary, makes the two blocks two blocks.
+    _ax = unit_axis or {}
+    _all = sorted(label_by_unit or {})
+    _grp = [u for u in _all if _ax.get(u) == "group"]
+    units = _grp + [u for u in _all if u not in _grp]
+    n_grp = len(_grp)
     labels = [l for l, _n in sorted((label_total or {}).items(), key=lambda kv: -kv[1])]
     if len(units) < 2 or not labels:
         return False
@@ -686,10 +695,17 @@ def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=Non
         ys2, xs2 = np.nonzero(thin)
         ax.scatter(xs2, ys2, marker="o", s=22, facecolor="none", edgecolor="#D55E00",
                    lw=0.9, zorder=4)
+    if 0 < n_grp < len(units):
+        ax.axvline(n_grp - 0.5, color=F.INK, lw=1.1, zorder=5)
+        ax.text(n_grp / 2 - 0.5, -0.75, "design arms (pooled)", ha="center", va="bottom",
+                fontsize=6, color=F.INK)
+        ax.text((n_grp + len(units)) / 2 - 0.5, -0.75, "samples", ha="center", va="bottom",
+                fontsize=6, color=F.INK)
     ax.set_xticks(range(len(units)),
-                  [f"{u}*" if (unit_axis or {}).get(u) == "group" else u for u in units],
+                  [f"{u}*" if _ax.get(u) == "group" else u for u in units],
                   rotation=90, fontsize=6)
     ax.set_yticks(range(len(labels)), [short[l] for l in labels], fontsize=6)
+    ax.set_ylabel("population   (ordered by cells in the whole cohort)", fontsize=7)
     cb = fig.colorbar(im, ax=ax, fraction=0.02, pad=0.01)
     cb.ax.tick_params(labelsize=6)
     cb.set_label("cells (log)", fontsize=6)
@@ -721,7 +737,9 @@ def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=Non
     cap = (f"Which populations each unit contains, before any method runs: {len(labels)} labels "
            f"across {len(units)} units, colour is cells on a log scale. White crosses are "
            f"populations with NO cells in that unit.",
-           f"{n_abs} of {absent.size} unit-population cells are empty"
+           f"{n_abs} of {absent.size} unit-population cells are empty. AN ARM COLUMN IS NOT "
+           f"COMPARABLE WITH A SAMPLE COLUMN: an arm pools its members, so it is brighter for "
+           f"that reason alone and the rule separates the two blocks"
            + (f"; the rate per design level is — " + "; ".join(lines) + ". "
               if lines else ". ")
            + (f"Rings mark a population present but below {floor:g} cells, which is where a "

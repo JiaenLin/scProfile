@@ -494,7 +494,12 @@ def _run(a):
     # cannot know what it is missing; the reporter cannot open the object. So it is taken here
     # and carried, per label and per unit, as counts rather than as a presence flag - "absent"
     # and "two cells" are different facts and a boolean throws the second away.
-    label_key = keys.get("label")
+    # `keys[role]` IS (name, why), NOT a name. The first version of this took `keys.get("label")`
+    # whole, so the census silently produced nothing: a two-element list is not a column, the
+    # `in A.obs` test was False, and the panel that depends on it was simply never drawn - on a
+    # run that otherwise passed everything. `sample_key` two hundred lines up already does the
+    # right thing and reads `keys["sample"][0]`.
+    label_key = (keys.get("label") or (None,))[0]
     label_by_unit, label_total = {}, {}
     if label_key and label_key in A.obs and sample_key and sample_key in A.obs:
         _lab = A.obs[label_key].astype(str)
@@ -2410,6 +2415,20 @@ def _check(a):
         todo = _RV.outstanding(out)
         row("run: every figure has been looked at", not todo,
             f"{len(todo)} not looked at")
+        # A HOST BLOCK THAT PRODUCES NOTHING LOOKS EXACTLY LIKE ONE THAT WAS NOT NEEDED. The
+        # population census reached the payload as an empty dict for a whole run - `keys[role]`
+        # is (name, why) and was read whole - so the panel depending on it was never drawn, on a
+        # run that passed every other check. An empty census with a label key present is a
+        # defect; an empty one with no label key is a fact about the object.
+        import json as _json
+        try:
+            _pay = _json.loads((out / "report.json").read_text(encoding="utf-8"))
+        except Exception:                                                 # noqa: BLE001
+            _pay = {}
+        _lk = _pay.get("label_key")
+        row("run: the population census was recorded",
+            not _lk or bool(_pay.get("label_by_unit")),
+            f"label key {_lk!r} but label_by_unit is empty — the presence panel cannot draw")
 
     # BEHAVIOURAL CHECKS, not source greps. Everything above proves code is PRESENT; these
     # build a real run directory and put the same question to the tool that a run puts.
