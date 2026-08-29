@@ -366,6 +366,42 @@ def _run(a):
     # report prints it.
     reused = []
     from . import resume as _resume
+
+    def _collect_existing(name_, unit_, why_):
+        """Fold an instance that is ALREADY on disk into this run's payload.
+
+        AN INSTANCE THAT IS NOT RECOMPUTED IS STILL PART OF THE RUN. Skipping the computation
+        and skipping the COLLECTION are different things, and doing both produced a run whose
+        report.json held `ran: 0, kernels: []` while fourteen complete instances sat in its
+        directory: 140 figures on disk and one page rendered. Reuse that loses the result is
+        not reuse.
+        """
+        d = _resume.unit_dir(out, name_, unit_)
+        try:
+            pl_ = json.loads((d / "out.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False
+        pl_.setdefault("kernel", name_)
+        pl_.setdefault("unit", unit_)
+        # THE SAME MERGE A COMPUTED INSTANCE GETS. An adopted instance that skipped this would
+        # reach the report but not the object: its obs columns and arrays would be missing from
+        # the merged h5ad while its figures sat in the run directory.
+        try:
+            got_ = merge.merge_many(A, [(d, pl_)])
+            for _slot, _names in (got_ or {}).items():
+                if _names:
+                    print(f"  merged {_slot}: {', '.join(_names)}")
+            merge.copy_tables(d, pl_, out / "tables")
+            merge.link_objects(d, pl_, out / "objects")
+        except Exception as _e:                                              # noqa: BLE001
+            print(f"  WARNING merging a reused instance failed: {_e}")
+            return False
+        payloads.append(pl_)
+        if name_ not in ran:
+            ran.append(name_)
+        reused.append({"kernel": name_, "unit": unit_, **why_})
+        return True
+
     from . import landscape as _LS, licence as _LCN
 
     # READ ONCE, NOT PER INSTANCE. Scanning every earlier run for each of fourteen instances
@@ -604,9 +640,10 @@ def _run(a):
                                else _resume.FINISHED)
                 if reuse:
                     lbl = name + (f"[{inst['unit']}]" if inst.get("unit") else "")
-                    print(f"  REUSED  {lbl}  ({st}: {why})")
-                    reused.append({"kernel": name, "unit": inst.get("unit"), "state": st})
-                    continue
+                    if _collect_existing(name, inst.get("unit"), {"state": st}):
+                        print(f"  REUSED  {lbl}  ({st}: {why})")
+                        continue
+                    print(f"  not reused {lbl}: its out.json could not be read back")
             # ADOPT A LICENSED RESULT FROM AN EARLIER RUN INSTEAD OF RECOMPUTING IT.
             # `--resume` above reuses what THIS directory already holds; this reaches into
             # earlier runs, which is the ordinary case - a new run key means last week's work
@@ -627,12 +664,14 @@ def _run(a):
                     n_f, how, bad = _LCN.adopt(_lic, out,
                                                min_grade=getattr(a, "reuse_min_grade",
                                                                  _LCN.PROVISIONAL))
-                    if n_f:
+                    if n_f and _collect_existing(
+                            name, inst.get("unit"),
+                            {"state": "adopted", "from": _src["run"],
+                             "grade": _lic.get("grade"), "how": how}):
                         print(f"  ADOPTED {lbl}  {n_f} file(s) by {how} from {_src['run']}")
-                        reused.append({"kernel": name, "unit": inst.get("unit"),
-                                       "state": "adopted", "from": _src["run"],
-                                       "grade": _lic.get("grade"), "how": how})
                         continue
+                    if n_f:
+                        print(f"  not adopted {lbl}: its out.json could not be read back")
                     print(f"  not adopted {lbl}: {'; '.join(bad) or 'refused'}")
                 elif _src is not None:
                     print(f"  not adopted {lbl}: {'; '.join(_why[:1])}")

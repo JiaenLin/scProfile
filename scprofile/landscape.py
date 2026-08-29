@@ -157,7 +157,16 @@ def match(want, have):
         # never published a card. Without this the licence and the landscape disagreed - one
         # calling a result adoptable, the other calling it unknown.
         lic = _LC.read(h["run_dir"], h["plugin"], h.get("unit"))
-        if lic and lic.get("grade") in _LC.ADOPTABLE:
+        if lic:
+            # A LICENCE THAT EXISTS IS DECISIVE, IN BOTH DIRECTIONS. Falling through to the run
+            # card when a licence was REFUSED reused a result whose required figure was missing:
+            # the licence said no, the card said `ok`, and the card won. The card is the run's
+            # own impression; the licence is that impression PLUS integrity, completeness and
+            # provenance checked against what is on disk. It cannot be the weaker authority.
+            if lic.get("grade") not in _LC.ADOPTABLE:
+                rejected.append(f"{h['run']}: licence REFUSED - "
+                                + "; ".join(lic.get("refused_because") or ["no reason given"]))
+                continue
             ok, bad = _LC.verify(lic)
             if ok:
                 return REUSABLE, dict(h, verdict=lic["grade"], licensed=True), []
