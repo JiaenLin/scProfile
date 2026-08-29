@@ -94,8 +94,9 @@ CRITERIA = (
         required_for_any_licence=True),
     Criterion(
         "completeness",
-        "the instance finished, and everything its plugin DECLARES it produces is present",
-        "resume.state() against the unit directory, plus the plugin's `produces` list",
+        "the instance finished, everything its plugin DECLARES it produces is present, and "
+        "every figure the plugin marks REQUIRED is in the manifest",
+        "resume.state(), the plugin's `produces` list, and its `report.figures` required set",
         "that nothing the plugin promised is missing",
         "that what is present is right, nor that the plugin promised everything it should",
         required_for_any_licence=True),
@@ -181,7 +182,8 @@ def _artifacts(unit_dir):
     return {r: review.digest(d / r) for r in products(d)}
 
 
-def evaluate(rundir, plugin, unit=None, *, declared=None):
+def evaluate(rundir, plugin, unit=None, *, declared=None, required_figures=(),
+             declared_version=None):
     """The evidence, class by class. No judgement here - `grant` decides what it adds up to."""
     from . import landscape, resume, runcard, review
 
@@ -196,13 +198,41 @@ def evaluate(rundir, plugin, unit=None, *, declared=None):
 
     # COMPLETENESS IS AGAINST THE DECLARATION, not against "some files exist". A plugin that
     # declares three tables and wrote one leaves a directory that looks fine.
+    #
+    # AND AGAINST THE DECLARED REQUIRED FIGURES, WHICH IS THE HOLE AN AUDIT FOUND. Checking only
+    # `produces` verified ONE path on a plugin whose licence covered thirteen artifacts: ten
+    # figures were licensed and checked by no declaration at all. Worse, the covered set is read
+    # FROM the manifest, so an instance that drew three figures of ten would licence three,
+    # report "every file hashed" and "nothing missing", and be indistinguishable from a run of
+    # an older version that only ever drew three. A missing REQUIRED figure is now incomplete.
     want = list(declared or [])
     absent = [w for w in want if not (d / w).exists()]
+    man_figs, man = set(), {}
+    try:
+        man = json.loads((d / "out.json").read_text(encoding="utf-8"))
+        for _f in (man.get("figures") or []):
+            fid = _f.get("id") if isinstance(_f, dict) else None
+            if fid:
+                man_figs.add(str(fid))
+    except (OSError, ValueError):
+        man = {}
+    missing_req = [f for f in (required_figures or ()) if f not in man_figs]
+    # THE DECLARATION USED IS THE CURRENT ONE, and the run may predate it. Judging an old run
+    # against a newer plugin's required list would refuse a result that was complete when it was
+    # made - a false negative as bad as the false positive above. It is recorded, not hidden.
+    ver = man.get("version")
+    drift = (declared_version is not None and ver is not None
+             and str(ver) != str(declared_version))
     ev["completeness"] = {
-        "ok": st in resume.FINISHED and not absent,
+        "ok": st in resume.FINISHED and not absent and not missing_req,
         "state": st, "declared": want, "absent": absent,
+        "required_figures": list(required_figures or ()), "missing_required": missing_req,
+        "judged_against_version": declared_version, "produced_by_version": ver,
+        "declaration_drift": drift,
         "why": (why if st not in resume.FINISHED else
-                (f"declared but not present: {absent}" if absent else "finished, nothing missing"))}
+                (f"declared but not present: {absent}" if absent else
+                 (f"required figure(s) absent from the manifest: {missing_req}"
+                  if missing_req else "finished, nothing declared is missing")))}
 
     v, reasons = runcard.verdict_for(rundir, plugin, unit)
     ev["self_report"] = {"ok": v in runcard.TRUSTED, "verdict": v, "reasons": reasons}
@@ -216,6 +246,10 @@ def evaluate(rundir, plugin, unit=None, *, declared=None):
                         "version": rec.get("version") if rec else None,
                         "input": rec.get("input") if rec else None,
                         "why": "reuse key computable" if rec else "no in.json to key on"}
+    if drift:
+        missing.append(f"completeness was judged against the CURRENT declaration "
+                       f"({declared_version!r}); this instance was produced by {ver!r}, so a "
+                       f"figure required now may not have been required then")
     if rec and rec.get("input_size") is None:
         missing.append("the input object is not reachable from here, so its identity could not "
                        "be confirmed - only the path it was recorded under")
@@ -230,7 +264,8 @@ def evaluate(rundir, plugin, unit=None, *, declared=None):
     return ev, missing
 
 
-def decide(rundir, plugin, unit=None, *, declared=None, granter="", **_ignored):
+def decide(rundir, plugin, unit=None, *, declared=None, required_figures=(),
+           declared_version=None, granter="", **_ignored):
     """The licence this WOULD be, written nowhere.
 
     SPLIT FROM `grant` BECAUSE A PREVIEW THAT DISAGREES WITH THE ACTION IS WORSE THAN NEITHER.
@@ -240,13 +275,29 @@ def decide(rundir, plugin, unit=None, *, declared=None, granter="", **_ignored):
     """
     from . import resume, runcard
 
-    ev, missing = evaluate(rundir, plugin, unit, declared=declared)
+    ev, missing = evaluate(rundir, plugin, unit, declared=declared,
+                           required_figures=required_figures,
+                           declared_version=declared_version)
     hard = [k for k in ("integrity", "completeness", "provenance") if not ev[k]["ok"]]
     if hard:
+        reasons = [f"{k}: {ev[k]['why']}" for k in hard]
+        # NAME THE CAUSE CORRECTLY WHEN IT IS DRIFT, NOT A DEFECT. A result that was complete
+        # when it was made, judged against a declaration that has since required more, reads as
+        # a broken run unless the refusal says otherwise. It is still refused - the adopting run
+        # would not get what its own declaration now demands - but "this predates a requirement
+        # added later" and "this run failed" send a reader to entirely different places.
+        c = ev["completeness"]
+        if c.get("declaration_drift") and c.get("missing_required"):
+            reasons.append(
+                f"NOTE: this instance was produced by version "
+                f"{c['produced_by_version']!r} and judged against "
+                f"{c['judged_against_version']!r}. The missing figure(s) may not have been "
+                f"required when it ran, so this is declaration drift rather than a failed run. "
+                f"It is still refused: what a later run adopts must satisfy the declaration "
+                f"that run is using.")
         return {"licence": 1, "grade": REFUSED, "run": Path(rundir).name,
                 "plugin": plugin, "unit": unit,
-                "refused_because": [f"{k}: {ev[k]['why']}" for k in hard],
-                "evidence": ev}
+                "refused_because": reasons, "evidence": ev}
 
     self_ok = ev["self_report"]["ok"]
     unknown = ev["self_report"]["verdict"] == runcard.UNKNOWN

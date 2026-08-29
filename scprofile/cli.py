@@ -2087,12 +2087,16 @@ def _licence(a):
     for plugin, unit in found:
         k = ks.get(plugin)
         declared = list((k.spec or {}).get("produces") or []) if k else []
+        _figs = ((k.spec or {}).get("report") or {}).get("figures") or [] if k else []
+        required = [f.get("id") for f in _figs if isinstance(f, dict) and f.get("required")]
+        cur_ver = (k.spec or {}).get("version") if k else None
         # ONE DECISION FUNCTION FOR BOTH PATHS. `--grant` differs from the dry run only in
         # whether the result is written down; a preview computed by a shortened check is a
         # preview that can disagree with the action, and this one did.
         fn = LC.grant if a.grant else LC.decide
-        lic = fn(out, plugin, unit, declared=declared,
-                 retrospective=a.retrospective, granter=a.granter)
+        lic = fn(out, plugin, unit, declared=declared, required_figures=required,
+                 declared_version=cur_ver, retrospective=a.retrospective,
+                 granter=a.granter)
         g = lic["grade"]
         tally[g] = tally.get(g, 0) + 1
         lbl = f"{plugin}[{unit}]" if unit else plugin
