@@ -44,6 +44,43 @@ R5  A SCALE THAT IS PER-OBJECT IS NOT COMPARABLE ACROSS OBJECTS.
 R6  NO PANEL IS GATED ON THE SAMPLE AXIS.
     Every kind is drawn at GROUP level first - units pooled into design arms - and additionally
     per sample where the design supports it. A thin sample axis withholds nothing.
+
+R7  A COMPOSITIONAL READOUT IS CHECKED ON A SECOND SCALE, AND DISAGREEMENT IS DISCLOSED.
+    Where values are shares of a total, a LINEAR difference of shares ranks by what is abundant
+    and a LOG-RATIO ranks by what changes most in ratio. Both are correct arithmetic on the same
+    numbers and they routinely give different orderings. A panel that NAMES elements is making a
+    claim about the ordering, so it computes both, compares the top ranks, and where they
+    disagree says so and declines to present its own ordering as the finding. Measured: the
+    element leading the linear ranking was mid-table on the log ranking, and the element leading
+    the log ranking had been used as a control on the grounds that it "does not move".
+
+R8  A DIFFERENCE OF PRESENCE IS NOT A DIFFERENCE OF MAGNITUDE.
+    In any comparison between two sets, an element present in one and absent from the other
+    contributes its whole value as a "change". In every encoding it does so in the way that
+    looks most like a finding - the extreme of a colour scale, an empty bar beside a full one,
+    an arrow from the origin - and it sets the limits, compressing every real difference. Mark
+    those elements, take them OFF the magnitude scale, and name them. Do not drop them: a
+    dropped row is invisible and a reader cannot tell it was ever there.
+
+R9  A CONTRAST STATES WHAT IT CANNOT SEPARATE.
+    Aliasing is a property of the COMPARISON, not only of the factor pair. Two factors can be
+    perfectly crossed over a whole cohort and still be aliased inside one conditional contrast,
+    because conditioning discards the samples that crossed them. Each panel audits the samples
+    it actually compares and says, on itself, which other factors are aliased, which are partly
+    confounded, and which are balanced.
+
+R10 A PANEL NAMES ON ITS FACE WHAT IT WAS DRAWN FROM.
+    A caption does not travel with an image into a slide, a grant or a referee's PDF. The unit,
+    what kind of unit it is, and n go ON the figure. A pooled group and a single member render
+    identically otherwise, and the reader supplies the cohort the picture never claimed.
+
+R11 WHERE THE WEIGHT IS NORMALISED WITHIN A UNIT, COMPARE SHARES AND PRINT THE TOTALS.
+    Many methods return a quantity computed over the elements present, so two units' values are
+    on two scales and a raw difference between them mostly reports which unit is smaller.
+    Measured: four groups whose totals spanned a factor of four, where the raw comparison found
+    no reversals at all and the share comparison found five. Whether a weight is per-object or
+    absolute is not knowable from the numbers - it is DECLARED, and the conservative reading is
+    the default.
 """
 
 from __future__ import annotations
@@ -53,7 +90,9 @@ GROUP, SAMPLE = "group", "sample"
 
 #: The rule ids, so a kind can declare which it is bound by and a test can check it obeys them.
 RULES = ("R1_one_scale", "R2_absence_split", "R3_cut_names_omitted",
-         "R4_denominator_declared", "R5_per_object_scale", "R6_never_gated_on_sample")
+         "R4_denominator_declared", "R5_per_object_scale", "R6_never_gated_on_sample",
+         "R7_second_scale", "R8_presence_not_magnitude", "R9_contrast_confounds",
+         "R10_provenance_on_face", "R11_share_when_per_object")
 
 
 class Kind:

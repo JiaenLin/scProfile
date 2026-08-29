@@ -24,6 +24,8 @@ Writing or updating a method is a maintainer job — see
 
 ---
 
+> **Figures are held to a standard, and the standard is a test rather than a checklist:** a figure set is finished when someone can write the Results section from it and that section survives review. `docs/FIGURE_STANDARD.md`.
+
 ## What you get
 
 | method | gives you | needs |

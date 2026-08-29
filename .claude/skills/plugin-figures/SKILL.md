@@ -5,13 +5,19 @@ description: >-
   run - from what the analysis tool actually computes to a page that passes its own standard.
   Use whenever adding, rebuilding or fixing figures for any analysis tool or wrapper, for any
   project: choosing panels, writing a figure declaration, drawing panels, or when a page fails
-  a figure/caption/arm/identifier check. Carries a PORTABLE CATALOGUE of thirteen network and
-  per-unit panel kinds - matrix, diff_matrix, circle, chord, role_scatter, role_shift,
-  flow_rank, flow_compare, role_heatmap, patterns, similarity, contribution, coverage - each
-  with what it establishes and what it does NOT, plus six rules paid for by real defects: one
-  scale across a grid, absence is not zero and not one thing, a cut must name what it removed,
-  declare a denominator that is not what it looks like, a per-object scale is not comparable
-  across objects, and no panel is gated on the sample axis. MANDATORY: a figure a run does not
+  a figure/caption/arm/identifier check. THE TEST A FIGURE SET MUST PASS is to write the Results
+  section from it and have that section survive review, in rounds - every round removes a claim,
+  and what it removes is a missing figure or a wrong one. Carries a PORTABLE CATALOGUE of fifteen
+  network and per-unit panel kinds - matrix, diff_matrix, circle, chord, role_scatter,
+  role_shift, flow_rank, flow_compare, role_heatmap, patterns, similarity, contribution,
+  interaction, unit_presence, coverage - each with what it establishes and what it does NOT,
+  plus eleven rules paid for by real defects: one scale across a grid, absence is not zero and
+  not one thing, a cut must name what it removed, declare a denominator that is not what it
+  looks like, a per-object scale is not comparable across objects, no panel is gated on the
+  sample axis, a compositional readout is checked on a second scale, a difference of presence is
+  not a difference of magnitude, a contrast states what it cannot separate, a panel names on its
+  face what it was drawn from, and where a weight is normalised within a unit the comparison is
+  on shares with the totals printed. MANDATORY: a figure a run does not
   regenerate is NOT DELIVERED - plates and scratchpad scripts are drafts. MANDATORY: use the
   wrapped tool's OWN statistics, never invent an effect size, interval or p-value beside them.
   WHICH figures a page carries is the USER'S choice - enumerate candidates from the tool's
@@ -57,6 +63,39 @@ Every rule below ends in a question with a yes/no answer. Three standing rules a
   them — that is the text a 32-word cap truncates first.
 - **Record what you measured, not how many attempts it took.** A round count is bookkeeping
   nobody can falsify.
+
+## Rule minus-zero — THE TEST IS: WRITE THE PAPER FROM IT
+
+**A figure set is finished when someone can write the Results section from it and that section
+survives review.** Not when the suite is green, not when the exit standard passes.
+
+Take the figure set, write the claims a scientist would submit - with numbers, callouts and
+limitations - then have it reviewed against how the field actually judges such claims, and
+revise. Repeat until the section stops changing. **Every round removes something, and what it
+removes is a missing figure or a wrong one**: a claim you cannot write down is a figure that does
+not exist, and a claim that dies under review is a figure that was misleading you.
+
+Four things make it work, and the third is the one people skip:
+
+1. Write the CLAIM, not a description of the panel. "Figure 3 shows the comparison" tests
+   nothing; a claim can be wrong and that is the point.
+2. Check every number against its own denominator before writing it. Most of what dies, dies
+   here.
+3. Review against REAL standards - real papers, real practice - not your own. Imagined reviewers
+   only know what you already know.
+4. Run it more than once. One round finds the obvious; later rounds find the ones that survived
+   because you believed them.
+
+**Do not tune the loop to one dramatic failure.** The job is to find every claim the set cannot
+support, including the boring ones. A round returning "fine" for most panels and one real
+problem is a normal round.
+
+One full pass on a real set, four rounds: a claim about totals died (it was the groups' totals);
+half a claim about a switch died (one side was a self-interacting pair acting as an abundance
+readout); the named leading element died (the ranking was not stable across scales, and the
+"control" led the other scale). What survived was the existence of the effect and not the
+identity of what carried it. Three of four rounds produced a code change. The full standard,
+with the eleven rules those changes became, is `docs/FIGURE_STANDARD.md` in scProfile.
 
 ## Rule minus-one — A FIGURE A RUN DOES NOT REGENERATE IS NOT DELIVERED
 
@@ -233,6 +272,33 @@ quantity was measurable in fewer than N divides by N anyway. Measured under-read
 
 **R5 — A PER-OBJECT SCALE IS NOT COMPARABLE ACROSS OBJECTS.** Where each unit is normalised
 within itself, widths compare WITHIN a panel and rank-order across panels, nothing more.
+
+**R7 — A COMPOSITIONAL READOUT IS CHECKED ON A SECOND SCALE.** Where values are shares of a
+total, a LINEAR difference ranks by what is abundant and a LOG-RATIO ranks by what changes most
+in ratio; both are correct on the same numbers and they routinely disagree. A panel that NAMES
+elements is claiming an ordering: compute both, compare the top ranks, and where they disagree
+say so and decline to present yours as the finding. *Measured: the linear leader was mid-table on
+the log scale, and the log leader had been used as a control because it "does not move".*
+
+**R8 — A DIFFERENCE OF PRESENCE IS NOT A DIFFERENCE OF MAGNITUDE.** An element present on one
+side of a comparison and absent from the other contributes its whole value as a change, in
+whichever encoding looks most like a finding, and it sets the limits. Mark it, take it OFF the
+magnitude scale, name it - never drop it. *Measured: a colour range fell from ±150 to ±50 and a
+pair-specific pattern appeared that had read as a uniform shift.*
+
+**R9 — A CONTRAST STATES WHAT IT CANNOT SEPARATE.** Aliasing is a property of the COMPARISON.
+Two factors can be crossed over a whole cohort and aliased inside one conditional contrast,
+because conditioning discards the samples that crossed them. Audit the samples the panel
+compares, not the cohort.
+
+**R10 — A PANEL NAMES ON ITS FACE WHAT IT WAS DRAWN FROM.** Unit, kind of unit, and n go on the
+image. A caption does not travel into a slide or a referee's PDF, and a pooled group and a single
+member render identically without it.
+
+**R11 — WHERE THE WEIGHT IS NORMALISED WITHIN A UNIT, COMPARE SHARES AND PRINT THE TOTALS.**
+Whether a weight is per-object or absolute is not knowable from the numbers - it is declared, and
+the conservative reading is the default. *Measured: four groups spanning a factor of four in
+total; the raw comparison found no reversals in the design and the share comparison found five.*
 
 **R6 — NO PANEL IS GATED ON THE SAMPLE AXIS.** Draw at GROUP level first — units pooled into
 design arms — and per sample additionally where the design supports it. A thin sample axis

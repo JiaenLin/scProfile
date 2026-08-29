@@ -213,10 +213,23 @@ the debt cannot be cleared by reclassifying it. Until 2026-08-29 the two were co
 and the catalogue read as five of thirteen drawn, which understated what a plugin inherits and
 overstated what was outstanding.
 
+### The standard the figure set is held to
+
+`docs/FIGURE_STANDARD.md` states it in one line: **a figure set is finished when someone can
+write the Results section from it and that section survives review.** It carries the test, the
+eleven rules the test produced, and the rule for choosing main against supplementary panels
+(a main figure is one the Results section cites for a claim).
+
 ### Rules every panel obeys
 
 | rule | requirement |
 |---|---|
+| the paper test | the set is finished when a Results section written from it survives review |
+| a compositional readout | ranked on a second scale too, and disagreement disclosed on the panel |
+| presence is not magnitude | an element absent from one side is marked and taken off the scale |
+| a contrast declares its confounds | audited on the samples it compares, not on the cohort |
+| provenance on the face | the unit, its kind and n are on the image, not only in the caption |
+| shares where the weight is per-object | with both totals printed; per-object or absolute is declared |
 | one scale across a grid | A grid of panels shares one maximum, printed, so a width converts back to a number. |
 | absence is not zero | A measured absence and a never-tested element are marked differently, or the panel states it cannot distinguish them. |
 | a cut names what it removed | Ring and chord panels state the fraction of strength kept and name anything left with no link. |
