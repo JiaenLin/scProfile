@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.5.0",
+    "version": "0.6.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -868,6 +868,20 @@ def _patterns(arr, pathways, pops, direction="outgoing", k=None, k_range=range(2
                 curve[kk] = _coph(kk)
         good = [(kk, v) for kk, v in curve.items() if v == v]
         k = max(good, key=lambda t: t[1])[0] if good else 2
+        # A RULE THAT ALWAYS RETURNS THE BOUNDARY IS NOT A SELECTION. Taking the maximum of the
+        # cophenetic curve picks the smallest k offered whenever the curve is MONOTONE
+        # DECREASING over the range tried - which it was on a real unit, where every k from 2 to
+        # 7 declined and the panel reported "rank chosen: k = 2" as though a criterion had
+        # discriminated. It had not: it had hit the left edge.
+        #
+        # The choice is unchanged, because the maximum is still the right rule where the curve
+        # has an interior peak. What changes is that the panel now SAYS which of the two
+        # happened, and that is the difference between a selection and an artefact of the range.
+        _ks = sorted(curve)
+        _vals = [curve[kk] for kk in _ks if curve[kk] == curve[kk]]
+        _monotone = len(_vals) > 2 and all(b <= a + 1e-12 for a, b in zip(_vals, _vals[1:]))
+        _at_edge = bool(good) and k == min(kk for kk, _v in good)
+        curve["_boundary"] = 1.0 if (_monotone and _at_edge) else 0.0
     w, h = _nmf_lee(m, k, seed=0)
     w = np.divide(w, w.sum(axis=1, keepdims=True),
                   out=np.zeros_like(w), where=w.sum(axis=1, keepdims=True) > 0)   # rows sum 1
@@ -1598,8 +1612,24 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
     # them tracing a dot back to its row and its column is guesswork over several centimetres.
     ax.set_axisbelow(True)
     ax.grid(True, color="#EDEDED", lw=0.4)
+    # A LINEAR SCALE WITH ONE LARGE OUTLIER MAKES EVERY OTHER VALUE THE SAME COLOUR. Measured
+    # by opening this panel: a single self-signalling pair sat at 0.28 while the other ~200 dots
+    # were under 0.06, so the ramp spent four fifths of its range on one mark and the channel
+    # could not be decoded anywhere else. The colour is the METHOD's probability and is not
+    # touched; what changes is the range the ramp is spread over.
+    #
+    # CLIPPED AT A PERCENTILE, AND THE CLIP IS PRINTED. Anything above it is drawn at the top
+    # colour and the colourbar says how many marks that is, so a reader knows the top of the
+    # ramp means "at least this" rather than "this". `decoupler` in this repository already
+    # solves the same problem the same way and prints its own percentile for the same reason.
+    _c = sub["prob"].to_numpy()
+    _hi = float(np.percentile(_c, 98)) if _c.size else 1.0
+    _over = int((_c > _hi).sum())
+    if not (_hi > 0):
+        _hi = float(_c.max()) if _c.size else 1.0
     pts = ax.scatter([xi[t] for t in sub["interaction"]], [yi[p] for p in sub["pair"]],
-                     c=sub["prob"].to_numpy(), s=size, cmap="viridis", linewidths=0)
+                     c=_c, s=size, cmap="viridis", linewidths=0,
+                     vmin=float(_c.min()) if _c.size else 0.0, vmax=_hi)
     # RASTERISED ONLY WHEN IT BUYS SOMETHING. The convention exists for scatters of 100,000
     # points; a few hundred dots stay vector, so the circles print crisp and stay editable.
     if len(sub) > 5000:
@@ -1626,7 +1656,10 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
     cb = fig.colorbar(pts, ax=ax, orientation="horizontal", location="top", fraction=0.035,
                       pad=0.02, aspect=45)
     cb.outline.set_visible(False)
-    cb.set_label("communication probability")
+    cb.set_label("communication probability"
+                 + (f"   (clipped at the 98th percentile, {_hi:.3g}; {_over} mark"
+                    f"{'s' if _over != 1 else ''} above it drawn at the top colour)"
+                    if _over else ""))
     if levels is not None:
         # A SIZE SCALE WITH NO KEY IS NOT A SCALE, and this key is now every attainable value
         # rather than three quantiles of a continuous one. `s` is an area and Line2D's `ms` is a
@@ -1965,6 +1998,7 @@ def _fig_patterns(ctx, pre, direction="outgoing"):
     # THE RANK, SHOWN. `k` is chosen by cophenetic correlation over restarts, and a decomposition
     # whose rank was picked silently is a decomposition nobody can check. The chosen k is marked
     # on the curve it was chosen from.
+    _boundary = bool(curve.pop("_boundary", 0.0)) if curve else False
     if curve:
         ks = sorted(curve)
         ax2.plot(ks, [curve[i] for i in ks], marker="o", ms=3, lw=1,
@@ -1972,7 +2006,17 @@ def _fig_patterns(ctx, pre, direction="outgoing"):
         ax2.axvline(k, color=F.OKABE_ITO[3], lw=1, ls="--")
         ax2.set_xlabel("k")
         ax2.set_ylabel("cophenetic correlation", fontsize=6)
-        ax2.set_title(f"rank chosen: k = {k}", fontsize=7)
+        # SAY WHICH OF THE TWO HAPPENED. Where the curve declines over the whole range tried,
+        # taking its maximum returns the SMALLEST k offered for any data - the title then reads
+        # like a criterion that discriminated, and no criterion did. Found by opening the panel
+        # on a real unit, where every k from 2 to 7 declined.
+        ax2.set_title(f"rank chosen: k = {k}" if not _boundary
+                      else f"k = {k}: the LOWEST TRIED", fontsize=7)
+        if _boundary:
+            ax2.text(0.5, -0.30, "the curve declines throughout, so the maximum is the left\n"
+                                 "edge of the range — a boundary, not a selection",
+                     transform=ax2.transAxes, ha="center", va="top", fontsize=5.2,
+                     color="#B25E00")
     else:
         ax2.set_axis_off()
         ax2.text(0.5, 0.5, f"k = {k}\n(no curve)", ha="center", va="center", fontsize=6)
@@ -2045,6 +2089,26 @@ def _fig_similarity(ctx, pre):
     fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.9), layout="constrained")
     ax.scatter(xy[:, 0], xy[:, 1], s=size, color=F.OKABE_ITO[2], alpha=0.8,
                edgecolor=F.INK, linewidth=0.35, zorder=3)
+    # A SIZE CHANNEL WITH NO KEY IS DECORATION THAT LOOKS LIKE EVIDENCE. Dot area varied about
+    # tenfold across this panel and nothing on it said what area meant - found by opening the
+    # figure, and it is the single most common defect in the catalogue this project keeps.
+    #
+    # THE MAP IS AFFINE AND THE KEY SAYS SO. `16 + 130 * f/fmax` has an intercept, so area is
+    # NOT proportional to flow: at the small end the floor dominates. The key is drawn at the
+    # SMALLEST value actually plotted as well as the largest, which is what makes the floor
+    # self-evident rather than a footnote nobody reads.
+    _raw = np.array([fmap.get(p, 0.0) for p in kept], dtype=float)
+    if _raw.size and _raw.max() > 0:
+        import matplotlib.lines as _ml
+        _lo, _hi = float(_raw[_raw > 0].min()), float(_raw.max())
+        _keys = [(_lo, 16.0 + 130.0 * (_lo / _hi)), (_hi, 146.0)]
+        ax.legend(handles=[_ml.Line2D([], [], marker="o", ls="", color=F.OKABE_ITO[2],
+                                      markeredgecolor=F.INK, markeredgewidth=0.35,
+                                      markersize=(sz ** 0.5) * 0.72,
+                                      label=f"{v:.3g}") for v, sz in _keys],
+                  title="total flow", fontsize=5, title_fontsize=5.5, frameon=False,
+                  loc="upper left", bbox_to_anchor=(1.0, 1.0), labelspacing=1.1,
+                  handletextpad=0.9, borderpad=0.2)
     # LABELS PUSHED OUTWARD FROM THE CENTRE, for the reason F6 does it: this panel's whole
     # message is that pathways CLUSTER, so the labels collide exactly where the reader is
     # looking. Radial offset is the one direction that stays free inside a cluster.
@@ -2076,7 +2140,11 @@ def _fig_similarity(ctx, pre):
     # shows distances that are not the distances it computed, which is the one thing this
     # plot must not do.
     ax.set_aspect("equal", adjustable="datalim")
-    ax.margins(0.18)
+    # ROOM FOR THE LABEL, NOT JUST FOR THE POINT. `margins` reserves space around the DATA, and
+    # a label is drawn in display space outside it - so the leftmost pathway's name started
+    # before the axis and was clipped by it. Found by opening the panel. The declutter is left
+    # alone: it separates vertically and cannot fix a name that is simply wider than the margin.
+    ax.margins(0.30)
     ax.set_xlabel("MDS 1")
     ax.set_ylabel("MDS 2")
     for sp in ("top", "right"):
