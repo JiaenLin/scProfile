@@ -296,7 +296,12 @@ def _figure(v, rel):
         # payload - so the fix is the entry, not the design. What this needs and does not have is
         # a check that every key `emit_figure` writes is one this function carries; until then,
         # the next key added will be dropped exactly like the last two.
-        if v.get("audit"):
+        # ALWAYS WRITTEN, EVEN EMPTY, and that is the whole point. Writing it only when
+        # something was found makes "measured and clean" indistinguishable from "never
+        # measured" - the absence-is-not-one-thing defect this tool corrects on four panels,
+        # committed here in its own metadata. An empty list is a RESULT: every artist was
+        # measured and none collided. A missing key is a run made before the audit existed.
+        if v.get("audit") is not None:
             e["audit"] = [{"code": str(a.get("code")), "detail": str(a.get("detail"))}
                           for a in v["audit"] if isinstance(a, dict)]
         return e

@@ -761,7 +761,10 @@ class Context:
                               "caption": caption,
                               # CARRIED, so the run reports it and the eye scan can be pointed
                               # at the panels a machine already has doubts about.
-                              "audit": [{"code": c, "detail": d} for c, d in _audit]})
+                              # A LIST ALWAYS, empty when the figure measured clean. See the
+                              # note in `manifest._figure`: clean and unmeasured must not look
+                              # the same downstream.
+                              "audit": [{"code": c, "detail": d} for c, d in (_audit or [])]})
         if close:
             try:
                 import matplotlib.pyplot as plt

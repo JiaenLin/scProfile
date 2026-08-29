@@ -114,6 +114,16 @@ _probe = {k: ("x" if k not in ("audit",) else [{"code": "c", "detail": "d"}])
 _probe["path"] = "figures/F.png"
 _carried = set(_M._figure(_probe, rel=lambda x: str(x)))
 _lost = sorted(_written - _carried - {"vector", "source"})   # those two are re-keyed, not lost
+# CLEAN IS NOT UNMEASURED. Writing the key only when something was found made a panel that
+# measured clean indistinguishable from one made before the audit existed - and the loop station
+# reading it reported "no panel carries an audit" for a run where every panel had been measured
+# and every panel was fine. The absence-is-not-one-thing defect, in this tool's own metadata,
+# committed while correcting it on four panels.
+_clean = _M._figure({"id": "F", "path": "figures/F.png", "audit": []}, rel=lambda x: str(x))
+_old = _M._figure({"id": "F", "path": "figures/F.png"}, rel=lambda x: str(x))
+ck("a panel that measured clean carries an empty audit", _clean.get("audit") == [])
+ck("and one never measured carries no audit key at all", "audit" not in _old)
+
 ck("every key emit_figure writes is one the serialiser carries",
    not _lost, f"dropped between the plugin and the run: {_lost}")
 
