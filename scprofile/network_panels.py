@@ -442,7 +442,15 @@ def role_scatter(ctx, edges, pops, *, fid="N4_role", title=None, note="", scale=
     # rather than as never seen here. Found by opening the panel, on the first render after the
     # union landed. Absent populations are hollow, ringed in grey, and NAMED in the caption.
     silent = [p for i, p in enumerate(pops) if out_s[i] <= 0 and in_s[i] <= 0]
-    texts = []
+    # A SHARED SCALE COMPRESSES THE SMALL ARMS, AND EVERY LABEL THEN COLLIDES. Sharing the axis
+    # across arms is right - it is what makes them comparable - but an arm reaching a third of
+    # the grid maximum has all its points in one corner, and on a real arm eleven labels
+    # overprinted each other there. The declutter separates what it can; it cannot make room
+    # that is not there.
+    #
+    # So the same answer the similarity panel already uses: label the strongest, say how many,
+    # and leave every position in the source table. A panel that labels everything illegibly
+    # names nothing.
     for i, p in enumerate(pops):
         if p in silent:
             ax.scatter(out_s[i], in_s[i], s=26, facecolor="none", edgecolor="#9A9A9A",
@@ -450,6 +458,16 @@ def role_scatter(ctx, edges, pops, *, fid="N4_role", title=None, note="", scale=
         else:
             ax.scatter(out_s[i], in_s[i], s=26, color=cmap[p], edgecolor="white", lw=0.4,
                        zorder=2)
+    _rank = sorted(range(len(pops)), key=lambda i: -(out_s[i] + in_s[i]))
+    _n_lab = 8
+    _label_these = {pops[i] for i in _rank[:_n_lab]} | set(silent)
+    texts = []
+    for i, p in enumerate(pops):
+        if p not in _label_these:
+            continue
+        if p in silent:
+            ax.scatter(out_s[i], in_s[i], s=26, facecolor="none", edgecolor="#9A9A9A",
+                       lw=0.7, zorder=2)
         texts.append(ax.annotate(short[p], (out_s[i], in_s[i]), fontsize=5.5,
                                  color="#7A7A7A" if p in silent else F.INK,
                                  xytext=(3, 3), textcoords="offset points"))
@@ -466,7 +484,10 @@ def role_scatter(ctx, edges, pops, *, fid="N4_role", title=None, note="", scale=
            f"The line is parity; above it a population receives more than it sends."
            + (f" Hollow rings at the origin are populations with NO edge in this arm."
               if silent else ""),
-           (f"NOT SEEN AT ALL in this arm, and drawn hollow at the origin rather than as a "
+           (f"The {min(_n_lab, len(pops) - len(silent))} strongest populations are named and "
+            f"every position is in the source table; labelling all of them illegibly names "
+            f"none. " if len(pops) - len(silent) > _n_lab else "")
+           + (f"NOT SEEN AT ALL in this arm, and drawn hollow at the origin rather than as a "
             f"measured zero: {', '.join(short[p] for p in silent)}. The axis is the same across "
             f"arms so a population missing here can be compared with the arm where it is "
             f"present; whether it is absent because nothing was inferred or because it never "

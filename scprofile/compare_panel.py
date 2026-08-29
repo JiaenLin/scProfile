@@ -188,8 +188,20 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
     slug = "".join(ch if ch.isalnum() else "_" for ch in label).strip("_")
 
     def _save(fig, fid, caption):
+        # THE STAMP, HERE TOO. `panels.R10` says a panel names on its face what it was drawn
+        # from, and the per-arm panels have done so since the stamp was added - but the CONTRAST
+        # panels save through this function rather than through the shim that stamps, so four
+        # host kinds shipped with nothing on them. Found by opening one and noticing the foot of
+        # the figure was empty where every neighbouring panel had a line.
+        try:
+            fig.text(0.0, -0.006,
+                     f"{label}   ·   {len(lo_m)} vs {len(hi_m)} samples, cells pooled per arm",
+                     ha="left", va="top", fontsize=5.2, color="#5A5A5A",
+                     transform=fig.transFigure)
+        except Exception:                                                 # noqa: BLE001
+            pass
         p = Path(out_dir) / f"{prefix}_{fid}__{slug}.png"
-        fig.savefig(p, dpi=200)
+        fig.savefig(p, dpi=200, bbox_inches="tight")
         plt.close(fig)
         out.append((f"{fid}__{slug}", p, caption, label))
 
