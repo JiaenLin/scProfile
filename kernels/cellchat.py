@@ -1821,9 +1821,9 @@ def _fig_signaling_roles(ctx, pre, names):
     # number that looked right once.
     fig.text(0.0, -0.055, "above the line: receives more than it sends",
              transform=fig.transFigure, fontsize=5.0, color="#8A8A8A", ha="left", va="top")
-    # AND ONLY THE STRONGEST ARE NAMED. With every population labelled the drawing audit found
-    # 'Endocardial' over 'Vascular endothelial' and 'Working cardiomyocyte' over 'Macrophage' -
-    # horizontal neighbours at equal height, which the radial declutter cannot separate. Eight
+    # AND ONLY THE STRONGEST ARE NAMED. With every population labelled, the drawing audit found
+    # two pairs of names printed over each other - horizontal neighbours at equal height, which
+    # the radial declutter cannot separate because it moves labels vertically by design. Eight
     # is the same answer the similarity panel and the host role scatter already use, and every
     # position stays in the source table.
     _rank6 = sorted(range(len(pops)), key=lambda i: -(out_s[i] + in_s[i]))
