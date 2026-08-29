@@ -300,6 +300,11 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                 f"one of these arms, so one end of the arrow would be the origin and its length "
                 f"would be a presence, not a shift. Hollow rings mark where they sit in the arm "
                 f"that has them. " if one_arm else "")
+               + f"THE TWO ARMS' TOTALS ARE {float(w_lo.sum()):.4g} AND {float(w_hi.sum()):.4g} "
+                 f"({float(w_hi.sum()) / (float(w_lo.sum()) or 1):.2f}x), so much of any common "
+                 f"direction here is the arms differing in total inferred strength rather than "
+                 f"in the balance between populations — read the DEPARTURES from that common "
+                 f"direction, not the direction. "
                + f"The small marker is {lo_lv}, the arrowhead {hi_lv}. Above the dashed line a "
                f"population receives more than it sends. Arms are pooled groups. An arrow is "
                f"the difference of two point estimates and carries no interval - its length is "
