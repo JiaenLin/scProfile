@@ -163,15 +163,31 @@ def station_drawing(runs):
     no mechanical form.
     """
     newest = sorted(runs, key=lambda p: p.name, reverse=True)
+    # WHICH BUILD IS BEING JUDGED, SAID OUT LOUD. This station walks back to the newest run that
+    # actually drew something, and it used to do that silently - so when a run was skipped for a
+    # missing environment, the station reported an OLDER COMMIT'S defects under the heading of
+    # the current round. The findings were real; the build they belonged to was not the one
+    # under test, and nothing on the line said so.
+    #
+    # Walking back is still right - an empty run is not evidence that the previous defects are
+    # fixed - but it is now labelled, and a run that drew nothing is named as the reason.
+    skipped = []
     for r in newest:
         pay = _load(r / "report.json")
         figs = [f for pl in (pay.get("kernels") or {}).values()
                 for f in (pl.get("figures") or [])]
         if not figs:
+            skipped.append(r.name)
             continue
+        drew_nothing = ""
+        if skipped:
+            drew_nothing = (f" — NOTE: this is not the newest run. "
+                            f"{len(skipped)} newer run(s) drew no panels at all, starting with "
+                            f"{skipped[0]}, so they prove nothing about the defects below")
         audited = [f for f in figs if "audit" in f]
         if not audited:
-            return BLOCKED, (f"{r.name}: no panel carries a drawing audit — this run predates it"), \
+            return BLOCKED, (f"{r.name}: no panel carries a drawing audit — this run predates "
+                             f"it{drew_nothing}"), \
                 "re-run so every figure is measured as it is written"
         hits = [(f.get("id"), a) for f in audited for a in (f.get("audit") or [])]
         by = Counter(a.get("code") for _i, a in hits)
@@ -179,7 +195,7 @@ def station_drawing(runs):
             named = "; ".join(f"{i}: {a.get('code')}" for i, a in hits[:4])
             return BLOCKED, (f"{r.name}: {len(hits)} drawing issue(s) across "
                              f"{len({i for i, _a in hits})} panel(s) — "
-                             + " · ".join(f"{n} {k}" for k, n in by.items())), \
+                             + " · ".join(f"{n} {k}" for k, n in by.items()) + drew_nothing), \
                 f"FIX THESE FIRST, they need no eye: {named}"
         # A CLEAN RUN IS NOT A CLEAN BUILD. The same commit drew the same panels from the same
         # data twice and produced five text collisions once and none the next time - neither run
@@ -209,7 +225,7 @@ def station_drawing(runs):
                  f"Fix it, or show it cannot occur")
         extra = f", and in {len(siblings)} other run(s) of the same commit" if siblings else ""
         return PASS, (f"{r.name}: {len(audited)} panel(s) measured, none with a drawing "
-                      f"issue{extra}"), ""
+                      f"issue{extra}{drew_nothing}"), ""
     return BLOCKED, "no figures in any run", "run something that draws"
 
 
