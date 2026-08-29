@@ -161,32 +161,9 @@ PLUGIN = {
     },
 
     "requires": {
-        # 3.12 IS THE FLOOR BECAUSE pertpy PUT IT THERE. Every pertpy from 1.0.6 declares
-        # `Requires-Python: >=3.12`, so a declaration asking for pertpy >=1.1 on python 3.10
-        # cannot be satisfied - pip would resolve it by walking BACK to the broken version
-        # rather than by failing, which is the quiet form of this bug and the reason the floor
-        # is stated here rather than left implied by the package pin.
-        "python": ">=3.12,<3.13",
+        "python": ">=3.10,<3.13",
         "packages": {
-            # FLOORED AT 1.1 BECAUSE THAT IS THE VERSION THAT STOPPED IMPORTING A REMOVED
-            # SHIM; see the statsmodels note below for what this replaces. Measured across the
-            # wheels rather than assumed from a changelog: 1.0.5 and 1.0.6 both still carry
-            # `from statsmodels.sandbox.stats.multicomp import multipletests` in
-            # `pertpy/tools/_dialogue.py`, and 1.1.0 is the first that imports it from
-            # `statsmodels.stats.multitest`, where it actually lives. Every module in each wheel
-            # was searched, not only the one file the traceback happened to name.
-            #
-            # EXACT, NOT A RANGE, AND THE RANGE IS WHAT FAILED. `>=1.1,<2` twice ended a real
-            # build in `resolution-too-deep`: pertpy pulls a large transitive tree, and pip
-            # explored it across every version in the range - visibly, backtracking through
-            # filelock on one attempt and tqdm on the next. Closing one dimension at a time does
-            # not converge when the width itself is the problem.
-            #
-            # 1.3.0 is the version whose source was actually read for the import above, so
-            # pinning it asserts only what was checked. This is the same shape as the exact pins
-            # two other plugins carry, and it costs the usual thing: a new pertpy is adopted
-            # deliberately, by editing this line, rather than silently on the next resolve.
-            "pertpy": "==1.3.0", "pandas": ">=2.0,<3", "numpy": ">=1.24,<3",
+            "pertpy": ">=0.9,<2", "pandas": ">=2.0,<3", "numpy": ">=1.24,<3",
             # PINNED BECAUSE THE TOOL THIS WRAPS DOES NOT PIN IT. pertpy 1.0.5 declares a bare
             # `Requires-Dist: mudata` with no constraint at all, and calls
             # `mudata.set_options(pull_on_update=False)` at import. mudata 0.4 removed
@@ -203,35 +180,54 @@ PLUGIN = {
             # Ceiling only, deliberately: 0.4 is measured to break it and no floor has been
             # measured, so inventing one would be asserting something nobody checked.
             "mudata": "<0.4",
-            # STATSMODELS IS NOT PINNED, AND TWO ATTEMPTS ARE RECORDED HERE BECAUSE THE
-            # FIRST ONE MADE THINGS WORSE AND THE SECOND SHOWS WHERE THE FIX BELONGED.
+            # NOT PINNED, AND THE ATTEMPT IS RECORDED BECAUSE IT MADE THINGS WORSE.
+            # pertpy 1.0.5 imports `multipletests` from `statsmodels.sandbox.stats.multicomp`,
+            # which statsmodels 0.15 removed, so `import pertpy` fails. The obvious fix -
+            # `"statsmodels": "<0.15"`, by the same rule as the mudata ceiling above - was
+            # tried on a real build and is WRONG HERE: the ceiling sent pip backtracking
+            # through cellrank, pydeseq2, scipy and arviz-base and then into a SOURCE BUILD of
+            # statsmodels, which died on `ModuleNotFoundError: No module named 'pkg_resources'`.
+            # The pip stage aborted, so pandas and CellChat were never installed either and ALL
+            # SEVEN members of the shared environment failed their selftest.
             #
-            # The bug: pertpy 1.0.5 imports `multipletests` from
-            # `statsmodels.sandbox.stats.multicomp`, which statsmodels 0.15 removed, so
-            # `import pertpy` raises ImportError and the selftest fails.
+            # A CEILING THAT BREAKS THE RESOLVE IS WORSE THAN THE BUG IT FIXES: it converted one
+            # unusable plugin into seven. The same shape of fix is not automatically the right
+            # fix twice - mudata's ceiling was cheap because nothing else in the lock constrained
+            # mudata, and statsmodels sits under half the scientific stack.
             #
-            # ATTEMPT ONE - `"statsmodels": "<0.15"`, by the same rule as the mudata ceiling
-            # above - was tried on a real build and is WRONG HERE: the ceiling sent pip
-            # backtracking through cellrank, pydeseq2, scipy and arviz-base and then into a
-            # SOURCE BUILD of statsmodels, which died on `ModuleNotFoundError: No module named
-            # 'pkg_resources'`. The pip stage aborted, so pandas and CellChat were never
-            # installed either and ALL SEVEN members of the shared environment failed their
-            # selftest. A CEILING THAT BREAKS THE RESOLVE IS WORSE THAN THE BUG IT FIXES: it
-            # converted one unusable plugin into seven. The same shape of fix is not
-            # automatically the right fix twice - mudata's ceiling was cheap because nothing
-            # else in the lock constrained mudata, and statsmodels sits under half the
-            # scientific stack.
+            # So `abundance` remains blocked on this upstream incompatibility, deliberately and
+            # visibly: its selftest fails, the environment reports 6 of 7 proved, and the other
+            # six run. That is the correct trade until either pertpy stops importing a removed
+            # shim or a statsmodels pin is found that resolves - which needs measuring against a
+            # real solve, not choosing here.
             #
-            # ATTEMPT TWO, which is what ships: constrain the package that has the bug, not the
-            # package it imports from. pertpy 1.1 fixed the import, so the floor moved to 1.1
-            # and statsmodels is left alone. THE CONSTRAINT BELONGS ON THE THING THAT IS WRONG.
-            # Pinning the dependency of a broken caller pushes the whole solve around to
-            # preserve someone else's mistake; pinning the caller asks for the version where the
-            # mistake was fixed, and every other package in the environment is untouched.
+            # ATTEMPT TWO, 2026-08-30, ALSO REVERTED - AND IT SHARPENS THE BLOCKER. The first
+            # half of that condition is now MET: pertpy fixed the import. Measured across every
+            # .py in four wheels, 1.0.5 and 1.0.6 still carry
+            # `from statsmodels.sandbox.stats.multicomp import multipletests`, and 1.1.0 is the
+            # first that imports it from `statsmodels.stats.multitest`, where it lives.
             #
-            # It cost a plugin blocked for as long as the ceiling looked like the only option.
-            # When a pin breaks the resolve, look one step UP the import for a version that does
-            # not need it, before concluding the incompatibility is unfixable from here.
+            # It still does not ship, because pertpy >=1.1 CANNOT BE RESOLVED INTO THIS SHARED
+            # ENVIRONMENT. Three real builds, three `resolution-too-deep` failures from pip:
+            #
+            #   1. `pertpy>=1.1,<2`            - pip backtracked into filelock-3.0.0.tar.gz
+            #   2. same, with `filelock>=3.13` - pip backtracked through tqdm instead
+            #   3. `pertpy==1.3.0`             - failed identically
+            #
+            # The third is the informative one. An exact pin cannot be a search-width problem,
+            # so the width was never the cause: pertpy 1.3 simply carries a heavier transitive
+            # tree than 1.0.5, and this environment already holds fourteen pip packages beside
+            # fifty-one conda ones for six other plugins. THE CONSTRAINT THAT CANNOT BE MET IS
+            # THE SHARING, not the version.
+            #
+            # Reverted to the declaration that resolves, restoring the other six plugins, which
+            # were down for the duration. What would actually unblock this is giving `abundance`
+            # an environment of its own - it is the only member needing pertpy at all - and that
+            # is a change to how this plugin is grouped, not to a pin, so it is not made here.
+            #
+            # THE LESSON IS ABOUT THE FIRST FIX, NOT THE SECOND. "Pin the caller, not what it
+            # imports" was right about WHERE the bug was and still did not ship, because a
+            # correct pin in a shared environment is a claim about six other plugins' solve.
             # THE CONTRACT'S, NOT THIS METHOD'S. `_entry.py` reads the object with
             # `anndata.read_h5ad` before run() is called. This plugin happens to work today
             # because it SHARES an environment with plugins that do name anndata - which is
@@ -249,17 +245,7 @@ PLUGIN = {
             # from pertpy's own metadata. Measured on PBS 677555. A dependency a wrapped tool
             # forgot is still a dependency this plugin needs, and naming it here is the only
             # place it can be said.
-            # BOUNDED ON BOTH SIDES, BECAUSE `>=3` IS A LOWER BOUND IN NAME ONLY. It admits
-            # filelock 3.0.0, published in 2018 and shipped as an sdist that pip must BUILD to
-            # read - and pip went there: a resolve of this environment ended in
-            # `resolution-too-deep` after downloading `filelock-3.0.0.tar.gz`, with pip's own
-            # hint being to add lower bounds. One unbounded dimension is enough to make a
-            # fourteen-package solve intractable, and this was the only one in the group.
-            #
-            # The floor is the version the environment that WORKED had resolved, read from it
-            # rather than chosen: 3.32.4. It is expressed as >=3.13 - old enough not to exclude
-            # anything measured to work, new enough that pip never walks back into the sdists.
-            "filelock": ">=3.13,<4",
+            "filelock": ">=3",
         },
     },
 
