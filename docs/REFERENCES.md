@@ -57,7 +57,11 @@ provenance of the collection itself.
 **Cite:** Aibar *et al.*, *Nature Methods* 2017 (SCENIC); Van de Sande *et al.*, *Nature
 Protocols* 2020 (pySCENIC).
 
-Full declaration, with URLs, digests and sizes: [`kernels/scenic/references.yml`](../kernels/scenic/references.yml).
+Full declaration, with URLs, digests and sizes: the `references` block of
+[`kernels/scenic.py`](../kernels/scenic.py). *This pointed at a per-plugin `references.yml`
+inside a `kernels/scenic/` directory until 2026-08-29 — the directory-kernel shape, which no shipped plugin has used since they
+became one file each. The declaration moved into the file it describes, which is the only place
+it cannot drift from; the pointer did not move with it.*
 
 | entry | organism | what it is | why the run needs it |
 |---|---|---|---|
