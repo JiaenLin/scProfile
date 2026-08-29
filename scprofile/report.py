@@ -390,11 +390,11 @@ def _presence_block(payload_all, *, out_dir=None, name=""):
     lbu = (payload_all or {}).get("label_by_unit") or {}
     tot = (payload_all or {}).get("label_total") or {}
     if len(lbu) < 2 or not tot or not out_dir:
-        return ""
+        return "", []
     try:
         from . import network_panels as NP, compare_panel as CPan
     except Exception:                                                     # noqa: BLE001
-        return ""
+        return "", []
     figdir = Path(out_dir) / "kernels" / name / "figures"
     got = []
     shim = CPan._Shim(figdir, name, "cohort", got)
@@ -404,11 +404,11 @@ def _presence_block(payload_all, *, out_dir=None, name=""):
                          unit_axis=(payload_all or {}).get("unit_axis") or {},
                          sentinels=(payload_all or {}).get("sentinels") or ())
     except Exception:                                                     # noqa: BLE001
-        return ""
+        return "", []
     if not got:
         return ""
     return ("<h2>What the method was given</h2>"
-            + _arm_figs_html(name, got))
+            + _arm_figs_html(name, got), got)
 
 
 def _arm_content(units, design, spec, *, out_dir=None, name=""):
@@ -1227,7 +1227,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
         # BEFORE ANY RESULT: WHAT THE METHOD WAS GIVEN. Every per-unit panel draws the axis its
         # own unit happens to have, so a reader meeting a matrix before meeting this one has
         # already taken a missing population for a silent one.
-        body.append(_presence_block(payload_all, out_dir=out_dir, name=name))
+        _pres_html, _presence_placed = _presence_block(payload_all, out_dir=out_dir, name=name)
+        body.append(_pres_html)
         body.append(_across_units(units, _D.report_get(spec, "unit_metrics")))
         body.append(_units_by_arm(units, (payload_all or {}).get("design") or {},
                                   _D.report_get(spec, "unit_metrics"),
@@ -1381,6 +1382,27 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     body.append('<p class="sub"><a href="index.html">&larr; back to the index</a></p>')
     d = Path(out_dir) / "report"
     d.mkdir(parents=True, exist_ok=True)
+    # WHAT THE REPORTER ITSELF PUT ON EACH PAGE, RECORDED. The host draws the design panel, the
+    # census, the between-arm comparisons and the interaction at RENDER time, so they appear in
+    # no plugin's payload and nothing downstream can see them. The writing brief read the
+    # payload and reported "this plugin drew no cohort-level panel" for a page carrying nine of
+    # them - the nine a reader meets first. A page's contents are a fact about the run and
+    # belong beside it.
+    _placed = {"cohort": [{"id": t[0], "path": str(Path(t[1]).relative_to(Path(out_dir))),
+                           "caption": t[2], "label": t[3] if len(t) > 3 else ""}
+                          for t in (locals().get("_inline") or [])
+                          + ((locals().get("_arms") or {}).get("interaction") or [])
+                          + (locals().get("_presence_placed") or [])]}
+    try:
+        import json as _json
+        old_ = {}
+        _pf = d / "panels.json"
+        if _pf.is_file():
+            old_ = _json.loads(_pf.read_text(encoding="utf-8"))
+        old_[name] = _placed
+        _pf.write_text(_json.dumps(old_, indent=1), encoding="utf-8")
+    except Exception:                                                     # noqa: BLE001
+        pass
     if per_unit_figs:
         ap = ["<h1>" + _e(name) + " &mdash; per sample</h1>",
               "<p class='sub'>The same panels, once per sample. They are here rather than on "

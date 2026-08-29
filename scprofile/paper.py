@@ -260,8 +260,20 @@ def brief(out):
             L += ["What this method cannot show, from its own declaration:"]
             L += [f"  - {' '.join(str(c).split())}" for c in pl["cannot_show"]]
             L += [""]
+        # THE PANELS ON THE PAGE, WHICHEVER LAYER DREW THEM. The plugin's payload holds only
+        # what the plugin emitted; the design panel, the census, the between-arm comparisons and
+        # the interaction are drawn by the HOST at render time. Reading only the payload
+        # reported "no cohort-level panel" for a page carrying nine of them - the nine a reader
+        # meets first, and the ones every claim in the section is read off.
+        try:
+            placed = _json.loads((root / "report" / "panels.json")
+                                 .read_text(encoding="utf-8")).get(k, {}).get("cohort") or []
+        except Exception:                                                 # noqa: BLE001
+            placed = []
+        cohort = list(placed) + list(cohort)
         L += [f"Panels on the page a reader meets first ({len(cohort)}):" if cohort
-              else "This plugin drew no cohort-level panel; its panels are per unit.", ""]
+              else "No cohort-level panel on this page; every panel is per unit. Say so, and "
+                   "read the claims off the per-arm page instead.", ""]
         for f in cohort:
             cap = f.get("caption")
             lead, rest = (cap if isinstance(cap, (list, tuple)) and len(cap) == 2
