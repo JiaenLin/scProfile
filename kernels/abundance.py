@@ -175,7 +175,18 @@ PLUGIN = {
             # `pertpy/tools/_dialogue.py`, and 1.1.0 is the first that imports it from
             # `statsmodels.stats.multitest`, where it actually lives. Every module in each wheel
             # was searched, not only the one file the traceback happened to name.
-            "pertpy": ">=1.1,<2", "pandas": ">=2.0,<3", "numpy": ">=1.24,<3",
+            #
+            # EXACT, NOT A RANGE, AND THE RANGE IS WHAT FAILED. `>=1.1,<2` twice ended a real
+            # build in `resolution-too-deep`: pertpy pulls a large transitive tree, and pip
+            # explored it across every version in the range - visibly, backtracking through
+            # filelock on one attempt and tqdm on the next. Closing one dimension at a time does
+            # not converge when the width itself is the problem.
+            #
+            # 1.3.0 is the version whose source was actually read for the import above, so
+            # pinning it asserts only what was checked. This is the same shape as the exact pins
+            # two other plugins carry, and it costs the usual thing: a new pertpy is adopted
+            # deliberately, by editing this line, rather than silently on the next resolve.
+            "pertpy": "==1.3.0", "pandas": ">=2.0,<3", "numpy": ">=1.24,<3",
             # PINNED BECAUSE THE TOOL THIS WRAPS DOES NOT PIN IT. pertpy 1.0.5 declares a bare
             # `Requires-Dist: mudata` with no constraint at all, and calls
             # `mudata.set_options(pull_on_update=False)` at import. mudata 0.4 removed
