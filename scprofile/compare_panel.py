@@ -2,8 +2,8 @@
 
 WHAT THIS EXISTS TO FIX. A per-unit plugin drew every figure it had about ONE unit, and the
 cohort page carried a single summary strip. On a factorial design that is the wrong way round:
-the comparison between arms is the question, and it had no picture at all. Ten pages of "here
-is unit 3" and nothing showing one arm against another.
+the comparison between arms is the question, and it had no picture at all. A page of "here is
+unit 3", once per unit, and nothing showing one arm against another.
 
 IT IS DRIVEN BY A DECLARATION, NOT BY A PLUGIN NAME. A plugin says which of its per-unit tables
 carries a network:
@@ -91,6 +91,58 @@ def _short(pops):
     return [m[p] for p in pops]
 
 
+def contrast_confounds(design, lo_members, hi_members, exclude=()):
+    """{factor: state} for the samples ONE contrast actually compares.
+
+    ALIASING IS A PROPERTY OF THE CONTRAST, NOT ONLY OF THE FACTOR PAIR. Two factors can be
+    perfectly crossed over the whole design and still be aliased inside one conditional
+    contrast, because conditioning throws away the samples that crossed them. Measured on a real
+    two-factor study: a treatment factor and a technical factor were balanced over the whole
+    cohort, yet one of the conditional contrasts compared one technical level against the other
+    with NO OVERLAP at all - every sample on one side from one level, every sample on the other
+    side from the other. A reader told only that the design is "crossed" would take that
+    contrast at face value, and the crossing is a property of the cohort rather than of the
+    comparison being drawn.
+
+    Three states, and the middle one is the one people forget:
+      aliased   the two sides share no level of this factor, so it cannot be separated at all
+      partial   they overlap but are not balanced, so it is separable only in part
+      balanced  both levels appear on both sides
+    """
+    out = {}
+    facs = {f for m in list(lo_members) + list(hi_members)
+            for f in (design.get(m) or {})} - set(exclude)
+    for f in sorted(facs):
+        lo = {str((design.get(m) or {}).get(f)) for m in lo_members}
+        hi = {str((design.get(m) or {}).get(f)) for m in hi_members}
+        if len(lo) == 1 and len(hi) == 1 and lo == hi:
+            continue                      # held constant: not a confound, it is the condition
+        out[f] = ("aliased" if lo.isdisjoint(hi)
+                  else "balanced" if lo == hi else "partial")
+    return out
+
+
+def confound_sentence(conf, factor):
+    """The one-line statement a contrast panel carries about what it cannot separate."""
+    bad = sorted(f for f, st in conf.items() if st == "aliased" and f != factor)
+    part = sorted(f for f, st in conf.items() if st == "partial" and f != factor)
+    if not bad and not part:
+        return (f"Every other factor in the design is balanced across this contrast, so it is "
+                f"separable from all of them.")
+    out = ""
+    if bad:
+        out += (f"ALIASED WITH {', '.join(bad).upper()}: the two sides share no level of "
+                f"{'it' if len(bad) == 1 else 'them'}, so nothing in these data separates a "
+                f"{factor} effect from "
+                f"{'a ' + bad[0] + ' effect' if len(bad) == 1 else 'effects of ' + ', '.join(bad)}"
+                f". Any statement naming {factor} here is equally a statement about "
+                f"{', '.join(bad)}. ")
+    if part:
+        out += (f"Partly confounded with {', '.join(part)}: the sides overlap but are not "
+                f"balanced, so separation is incomplete. ")
+    return out
+
+
 def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob",
                   group_col=None, min_edges=1, weight_scale="per_object"):
     """Every panel for ONE contrast. Returns [(figure_id, path, caption)].
@@ -142,6 +194,9 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
         out.append((f"{fid}__{slug}", p, caption, label))
 
     arm_n = f"{lo_lv} (n={len(lo_m)}) vs {hi_lv} (n={len(hi_m)})"
+    # WHAT THIS PARTICULAR CONTRAST CANNOT SEPARATE, on every panel it produces.
+    _conf = contrast_confounds(design, lo_m, hi_m)
+    _csent = confound_sentence(_conf, str(fac))
 
     # ---- 1. differential interactions, sender x receiver -------------------------------------
     # A DIFFERENCE OF PRESENCE IS NOT A DIFFERENCE OF MAGNITUDE, AND IT DOMINATED THE PANEL.
@@ -199,7 +254,8 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
               (f"Change in {unit} from {lo_lv} to {hi_lv}, per sender-receiver pair, cells "
                f"pooled within each arm. {arm_n}."
                + (f" Hatched cells are NOT a difference." if one_arm else ""),
-               (f"HATCHED AND OFF THE SCALE: every pair involving "
+               _csent
+               + (f"HATCHED AND OFF THE SCALE: every pair involving "
                 f"{', '.join(short[_ix[p]] for p in one_arm)}, which "
                 f"{'has' if len(one_arm) == 1 else 'have'} cells in only one of these two arms. "
                 f"A difference there is a difference of PRESENCE, not of magnitude, and drawn on "
@@ -250,7 +306,8 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                   (f"Information flow per {group_col.replace('_', ' ')} in each arm, ranked by "
                    f"their combined total. {arm_n}."
                    + (" † is scored in one arm only." if _one else ""),
-                   (f"MARKED †, ON A SHADED ROW, AND NOT A MAGNITUDE: "
+                   _csent
+                   + (f"MARKED †, ON A SHADED ROW, AND NOT A MAGNITUDE: "
                     f"{', '.join(str(k) for k in _one)} — scored in one of these arms and not "
                     f"the other, so the empty bar is an absence and not a zero. " if _one else "")
                    + _wnote.strip() + " "
@@ -326,7 +383,8 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
               (f"How each population's signalling role moves from {lo_lv} to {hi_lv}. "
                f"{arm_n}."
                + (" Hollow rings have no arrow." if one_arm else ""),
-               (f"NO ARROW IS DRAWN for {', '.join(short[_ix[p]] for p in one_arm)}: absent from "
+               _csent
+               + (f"NO ARROW IS DRAWN for {', '.join(short[_ix[p]] for p in one_arm)}: absent from "
                 f"one of these arms, so one end of the arrow would be the origin and its length "
                 f"would be a presence, not a shift. Hollow rings mark where they sit in the arm "
                 f"that has them. " if one_arm else "")
@@ -577,6 +635,32 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     off = np.abs(dy - dx)
     order = np.argsort(-off)
 
+    # AN INTERACTION IS THE DIFFERENCE OF TWO CONTRASTS, so it inherits what each of them
+    # cannot separate — and it acquires one more: if the two strata sit in different batches, an
+    # ADDITIVE batch effect cancels but a batch-BY-factor interaction does not, and the two are
+    # indistinguishable. Audited on the samples this panel actually compares.
+    _c0 = contrast_confounds(design, _members(design, {fa: a0, fb: b0}),
+                             _members(design, {fa: a1, fb: b0}))
+    _c1 = contrast_confounds(design, _members(design, {fa: a0, fb: b1}),
+                             _members(design, {fa: a1, fb: b1}))
+    _bad = sorted({f for c in (_c0, _c1) for f, st in c.items()
+                   if st == "aliased" and f not in (fa, fb)})
+    _strata = contrast_confounds(design, _members(design, {fb: b0}),
+                                 _members(design, {fb: b1}))
+    _sbad = sorted(f for f, st in _strata.items() if st == "aliased" and f not in (fa, fb))
+    _isent = ""
+    if _bad:
+        _isent += (f"ALIASED WITH {', '.join(_bad).upper()} INSIDE AT LEAST ONE STRATUM, so the "
+                   f"{fa} effect on that axis is equally a {', '.join(_bad)} effect. ")
+    if _sbad:
+        _isent += (f"AND THE TWO STRATA DIFFER IN {', '.join(_sbad).upper()}: an ADDITIVE effect "
+                   f"of {', '.join(_sbad)} cancels in an interaction, but an interaction between "
+                   f"{', '.join(_sbad)} and {fa} does not, and this design cannot tell it from "
+                   f"the {fa}-by-{fb} interaction. ")
+    if not _isent:
+        _isent = (f"Every other design factor is balanced within both strata and between them, "
+                  f"so this interaction is separable from all of them. ")
+
     lim = float(max(np.abs(dx).max(), np.abs(dy).max())) or 1.0
     fig, ax = plt.subplots(figsize=(_F.SINGLE, _F.SINGLE * 1.02), layout="constrained")
     # SYMMETRIC AND CENTRED ON ZERO IN BOTH DIRECTIONS. A signed quantity drawn on a data-derived
@@ -631,7 +715,8 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     cap = (f"Does {fa} act differently under each {fb}? One point per {what}, drawn by arm: its "
            f"{a0}→{a1} change within {fb} = {b0} against the same within {fb} = {b1}. Off the "
            f"dashed line, the response differs.",
-           f"{len(keys)} of {len(seen)} {what}s are present in all four arms and drawn — the "
+           _isent
+           + f"{len(keys)} of {len(seen)} {what}s are present in all four arms and drawn — the "
            f"rest are absent from at least one arm, where a difference would be a difference of "
            f"PRESENCE and not of magnitude. {flips} REVERSE DIRECTION — marked apart, and "
            f"counted only where the effect reaches {FLIP_FLOOR:.0%} of the axis on both sides, "
