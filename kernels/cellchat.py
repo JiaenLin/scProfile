@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.8.1",
+    "version": "0.9.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -1821,13 +1821,22 @@ def _fig_signaling_roles(ctx, pre, names):
     # number that looked right once.
     fig.text(0.0, -0.055, "above the line: receives more than it sends",
              transform=fig.transFigure, fontsize=5.0, color="#8A8A8A", ha="left", va="top")
+    # AND ONLY THE STRONGEST ARE NAMED. With every population labelled the drawing audit found
+    # 'Endocardial' over 'Vascular endothelial' and 'Working cardiomyocyte' over 'Macrophage' -
+    # horizontal neighbours at equal height, which the radial declutter cannot separate. Eight
+    # is the same answer the similarity panel and the host role scatter already use, and every
+    # position stays in the source table.
+    _rank6 = sorted(range(len(pops)), key=lambda i: -(out_s[i] + in_s[i]))
+    _named6 = {pops[i] for i in _rank6[:8]}
     # LABELS PUSHED OUTWARD FROM THE CENTRE. Every label offset by the same (2.5, 2.5) collided
     # wherever points cluster, which on this panel is exactly where the populations of interest
     # are. Offsetting along each point's own direction from the centroid separates a cluster
     # radially, which is the one direction that is always free.
     cx, cy = float(np.mean(out_s)), float(np.mean(in_s))
     _texts = []
-    for x, y, lab in zip(out_s, in_s, short):
+    for x, y, lab, _pop in zip(out_s, in_s, short, pops):
+        if _pop not in _named6:
+            continue
         dx, dy = float(x) - cx, float(y) - cy
         norm = (dx * dx + dy * dy) ** 0.5 or 1.0
         ox, oy = 7.0 * dx / norm, 7.0 * dy / norm
@@ -2166,7 +2175,11 @@ def _fig_similarity(ctx, pre):
     # near-collinear chains this similarity produces, so twenty-four labels overprinted each
     # other and ran off the axes. A panel that labels everything illegibly names nothing. Every
     # pathway keeps its coordinates in the source table, so nothing is lost but the clutter.
-    _n_lab = 12
+    # EIGHT, NOT TWELVE. The drawing audit named three collisions here - 'CDH5' over 'ESAM',
+    # 'APP' over 'CypA', 'COLLAGEN' over 'CypA' - and all three are horizontal neighbours at
+    # equal height, which the declutter cannot fix because it separates vertically by design.
+    # Fewer labels is the honest fix: every position stays in the source table.
+    _n_lab = 8
     _rank = {p: i for i, p in enumerate(paths)}
     _label = {k for k in sorted(kept, key=lambda q: _rank.get(q, 10 ** 6))[:_n_lab]}
     cx, cy = float(xy[:, 0].mean()), float(xy[:, 1].mean())
