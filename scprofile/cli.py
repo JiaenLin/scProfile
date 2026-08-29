@@ -366,6 +366,14 @@ def _run(a):
     # report prints it.
     reused = []
     from . import resume as _resume
+    from . import landscape as _LS, licence as _LCN
+
+    # READ ONCE, NOT PER INSTANCE. Scanning every earlier run for each of fourteen instances
+    # would re-walk the same directories fourteen times.
+    _have_earlier = (_LS.scan(a.reuse_from, plugins=set(want))
+                     if getattr(a, "reuse_from", None) else [])
+    if _have_earlier:
+        print(f"  reuse: {len(_have_earlier)} instance(s) found under {a.reuse_from}")
     #: {kernel: out_dir} for kernels that have already finished, handed to each later kernel so it
     #: can read a predecessor's result directly. This is what makes `needs_kernels` mean something
     #: beyond ordering.
@@ -599,6 +607,35 @@ def _run(a):
                     print(f"  REUSED  {lbl}  ({st}: {why})")
                     reused.append({"kernel": name, "unit": inst.get("unit"), "state": st})
                     continue
+            # ADOPT A LICENSED RESULT FROM AN EARLIER RUN INSTEAD OF RECOMPUTING IT.
+            # `--resume` above reuses what THIS directory already holds; this reaches into
+            # earlier runs, which is the ordinary case - a new run key means last week's work
+            # sits one directory away and is otherwise recomputed from nothing.
+            #
+            # Nothing is adopted without a LICENCE that still verifies: the products are
+            # re-hashed before the hardlink, so an adopted file cannot differ from the licensed
+            # one. `--reuse-min-grade` is the policy and defaults to `provisional`; a
+            # `retrospective` licence - a run that published no card - must be asked for.
+            if getattr(a, "reuse_from", None):
+                _w = _LS.wanted(name, inst.get("unit"),
+                                version=(k.spec or {}).get("version"), h5ad=a.h5ad,
+                                params=_params_for(name), keys=_km)
+                _st, _src, _why = _LS.match(_w, _have_earlier)
+                lbl = name + (f"[{inst['unit']}]" if inst.get("unit") else "")
+                if _st == _LS.REUSABLE:
+                    _lic = _LCN.read(_src["run_dir"], name, inst.get("unit"))
+                    n_f, how, bad = _LCN.adopt(_lic, out,
+                                               min_grade=getattr(a, "reuse_min_grade",
+                                                                 _LCN.PROVISIONAL))
+                    if n_f:
+                        print(f"  ADOPTED {lbl}  {n_f} file(s) by {how} from {_src['run']}")
+                        reused.append({"kernel": name, "unit": inst.get("unit"),
+                                       "state": "adopted", "from": _src["run"],
+                                       "grade": _lic.get("grade"), "how": how})
+                        continue
+                    print(f"  not adopted {lbl}: {'; '.join(bad) or 'refused'}")
+                elif _src is not None:
+                    print(f"  not adopted {lbl}: {'; '.join(_why[:1])}")
             if k.status != "built":
                 if name not in {s["kernel"] for s in skipped}:
                     skipped.append({"kernel": name, "why": [
@@ -2184,6 +2221,9 @@ def _check(a):
         "_UN.resolve(" in src, "run still resolves units as samples")
     row("group-level inference: a unit carries its members",
         '"unit_members"' in man and "unit_members=" in src, "in.json has no unit_members")
+    row("run can ADOPT a licensed earlier result instead of recomputing",
+        '"--reuse-from"' in src and "_LCN.adopt(" in src,
+        "landscape reports reuse but run recomputes everything")
     row("plan and run resolve the SAME unit axis",
         src.count("_UN.resolve(") + src.count("_UNP.resolve(") >= 2,
         "plan schedules a different set of instances than run creates")
@@ -2561,6 +2601,12 @@ def main(argv=None):
     f.set_defaults(fn=_fetch)
 
     r = sub.add_parser("run", help="[you] run kernels, merge results, write the report")
+    r.add_argument("--reuse-from", type=Path,
+                   help="a directory of earlier run directories. A licensed instance whose "
+                        "reuse key matches is HARDLINKED into this run instead of recomputed.")
+    r.add_argument("--reuse-min-grade",
+                   choices=("full", "provisional", "retrospective"), default="provisional",
+                   help="the weakest licence grade this run will adopt")
     r.add_argument("--unit-by", choices=("group", "sample", "both"), default="both",
                    help="which unit axis to run. `group` runs one instance per design arm over "
                         "its pooled cells; `sample` runs one per sample; `both` (default) runs "
