@@ -141,23 +141,36 @@ def match(want, have):
              if h["plugin"] == want["plugin"] and h.get("unit") == want.get("unit")]
     if not cands:
         return ABSENT, None, ["no earlier run holds this instance"]
-    from . import runcard
+    from . import licence as _LC, runcard
 
+    # EVERY CANDIDATE IS CONSIDERED, NEWEST FIRST, AND THE SEARCH DOES NOT STOP AT THE FIRST
+    # UNTRUSTED ONE. It did, and the newest copy is often an IN-PROGRESS run - which has no card
+    # yet, is therefore `unknown`, and so shadowed every completed older run behind it. Measured:
+    # ten units whose determining fields were IDENTICAL to a finished earlier run were all
+    # reported unusable because a run started minutes earlier had not finished writing.
+    rejected = []
     for h in cands:
         if h["key"] != want["key"] or h["state"] not in resume.FINISHED:
             continue
-        # PROVENANCE IS NOT TRUST. The key says this was computed from the same inputs by the
-        # same code; the source run's own card says whether anything objected to the result.
-        # An unknown verdict is NOT an approval - a run that published no card is a run nothing
-        # is known about, and treating silence as fine is how a bad result is laundered.
+        # A GRANTED LICENCE IS THE EVIDENCE, and it outranks a bare card verdict: it was
+        # evaluated against the criteria, it hashes the products, and it survives a run that
+        # never published a card. Without this the licence and the landscape disagreed - one
+        # calling a result adoptable, the other calling it unknown.
+        lic = _LC.read(h["run_dir"], h["plugin"], h.get("unit"))
+        if lic and lic.get("grade") in _LC.ADOPTABLE:
+            ok, bad = _LC.verify(lic)
+            if ok:
+                return REUSABLE, dict(h, verdict=lic["grade"], licensed=True), []
+            rejected.append(f"{h['run']}: licence {lic['grade']!r} no longer verifies - "
+                            f"{bad[0] if bad else 'artifact changed'}")
+            continue
         v, why = runcard.verdict_for(h["run_dir"], h["plugin"], h.get("unit"))
         if v in runcard.TRUSTED:
-            h = dict(h, verdict=v)
-            return REUSABLE, h, []
-        return CHANGED, dict(h, verdict=v), (
-            [f"the run that produced it calls it {v!r}"] + why
-            + (["it published no card, so nothing is known about its output"]
-               if v == runcard.UNKNOWN else []))
+            return REUSABLE, dict(h, verdict=v, licensed=False), []
+        rejected.append(f"{h['run']}: the run that produced it calls it {v!r}"
+                        + (" and it holds no licence" if v == runcard.UNKNOWN else ""))
+    if rejected:
+        return CHANGED, cands[0], rejected[:3]
     best = cands[0]
     diffs = []
     for f in DETERMINING:
