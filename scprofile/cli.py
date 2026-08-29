@@ -1218,7 +1218,7 @@ def _run(a):
                # {unit: "group"|"sample"} - see the note where it is built.
                "unit_axis": unit_axis, "unit_members": unit_members,
                "label_key": label_key, "label_total": label_total,
-               "label_by_unit": label_by_unit,
+               "label_by_unit": label_by_unit, "sentinels": list(sentinels or ()),
                "timeout": a.timeout,
                "kernels": folded,
                "merged": merged_slots,

@@ -401,7 +401,8 @@ def _presence_block(payload_all, *, out_dir=None, name=""):
     try:
         NP.unit_presence(shim, lbu, tot,
                          design=(payload_all or {}).get("design") or {},
-                         unit_axis=(payload_all or {}).get("unit_axis") or {})
+                         unit_axis=(payload_all or {}).get("unit_axis") or {},
+                         sentinels=(payload_all or {}).get("sentinels") or ())
     except Exception:                                                     # noqa: BLE001
         return ""
     if not got:
@@ -421,7 +422,7 @@ def _arm_content(units, design, spec, *, out_dir=None, name=""):
     Driven entirely by the plugin's `unit_network` declaration, so nothing here knows what
     method produced the numbers.
     """
-    empty = {"contrast": [], "arm": []}
+    empty = {"contrast": [], "arm": [], "interaction": []}
     net = _D.report_get(spec, "unit_network")
     if not (net and design and out_dir and units):
         return empty
@@ -462,15 +463,25 @@ def _arm_content(units, design, spec, *, out_dir=None, name=""):
     con = []
     for sp in pairs:
         con += CPan.draw_contrast(per, design, sp, figdir, name, group_col=net.get("group"))
+    # THE INTERACTION, ONCE PER CROSSED PAIR OF TWO-LEVEL FACTORS. It is the question a factorial
+    # design is built to answer and the one nothing drew: the six two-arm contrasts were all
+    # there and a reader had to hold two of them side by side in their head. A marginal effect
+    # can be flat while both simple effects are large and opposite.
+    inter = []
+    for isp in CPan.interaction_specs(design):
+        inter += CPan.draw_interaction(per, design, isp, figdir, name,
+                                       group_col=net.get("group"),
+                                       weight_scale=net.get("weight_scale", "per_object"))
     arm = CPan.draw_arm_networks(per, design, CPan.arms_in(design, pairs), figdir, name,
-                                 group_col=net.get("group"), member_col=net.get("member"))
-    return {"contrast": con, "arm": arm}
+                                 group_col=net.get("group"), member_col=net.get("member"),
+                                 weight_scale=net.get("weight_scale", "per_object"))
+    return {"contrast": con, "arm": arm, "interaction": inter}
 
 
 #: How many between-arm panels the plugin page itself carries. The rest are one click away.
 #: Below the standard's figure cap with room for the design panel and anything else the page
 #: already holds - a page that is exactly at its cap fails the moment anything is added to it.
-_INLINE_ARM_FIGURES = 8
+_INLINE_ARM_FIGURES = 6
 
 
 def _arm_figs_html(name, items):
@@ -1222,6 +1233,17 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
                                   out_dir=out_dir, name=name))
         _arms = _arm_content(units, (payload_all or {}).get("design") or {}, spec,
                              out_dir=out_dir, name=name)
+        # THE INTERACTION FIRST, because on a factorial design it is the question and the
+        # marginal effects are its summary. A marginal effect can be flat while both simple
+        # effects are large and opposite, so a page that leads with the marginals leads with the
+        # one number that can hide the finding.
+        if _arms.get("interaction"):
+            body.append("<h2>Does one factor's effect depend on the other?</h2>"
+                        '<p class="sub">The effect of a factor within each level of a second '
+                        'factor, one against the other, over the elements present in all four '
+                        'arms. This is what a factorial design is for, and the marginal '
+                        'comparisons below average it away when the two halves disagree.</p>')
+            body.append(_arm_figs_html(name, _arms["interaction"]))
         _n_arm = len(_arms["contrast"]) + len(_arms["arm"])
         if _n_arm:
             # THE MARGINAL COMPARISONS GO ON THE PAGE A READER READS; the conditional ones and
@@ -1231,8 +1253,20 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
             # criterion is right: above a dozen, a reader stops. The split is by what the panel
             # answers, not by what fits: a marginal contrast is the question the design asks
             # first, and its simple effects refine it.
-            _inline = [t for t in _arms["contrast"]
-                       if "|" not in t[3]][:_INLINE_ARM_FIGURES]
+            # AT MOST TWO PANELS PER MARGINAL CONTRAST, not the first N of a flat list. Taking
+            # the first eight gave one factor four panels and the next factor four, which is the
+            # same thing by luck; with three factors it would have given the first two everything
+            # and the third nothing, silently. Two per contrast is a rule that holds whatever the
+            # design is, and it left the room the interaction and the census now use.
+            _seen, _inline = {}, []
+            for t in _arms["contrast"]:
+                if "|" in t[3]:
+                    continue
+                if _seen.get(t[3], 0) >= 2:
+                    continue
+                _seen[t[3]] = _seen.get(t[3], 0) + 1
+                _inline.append(t)
+            _inline = _inline[:_INLINE_ARM_FIGURES]
             _rest = _n_arm - len(_inline)
             body.append("<h2>Between the arms</h2>"
                         '<p class="sub">Drawn from cells POOLED WITHIN EACH ARM, so no panel '
@@ -1354,8 +1388,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
         ap += [_panel(f_, i + 1) for i, f_ in enumerate(per_unit_figs)]
         (d / f"{name}_by_sample.html").write_text(
             _page(f"{name} per sample — scProfile", "".join(ap)), encoding="utf-8")
-    _armc = locals().get("_arms") or {"contrast": [], "arm": []}
-    if _armc["contrast"] or _armc["arm"] or arm_figs:
+    _armc = locals().get("_arms") or {"contrast": [], "arm": [], "interaction": []}
+    if _armc["contrast"] or _armc["arm"] or _armc.get("interaction") or arm_figs:
         (d / f"{name}_by_arm.html").write_text(
             _page(f"{name} — the arms — scProfile",
                   _arm_appendix(name, _armc, plugin_arm_figs=arm_figs)),

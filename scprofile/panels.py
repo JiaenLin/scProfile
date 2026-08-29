@@ -139,6 +139,14 @@ KINDS = (
          "that a member absent from a panel was tested and returned nothing - see R2",
          rules=("R1_one_scale", "R2_absence_split", "R4_denominator_declared"),
          per_contrast=False, needs=("group", "member")),
+    Kind("interaction", "Whether one factor's effect depends on another",
+         "which elements respond to a factor differently at each level of a second factor, and "
+         "which reverse direction outright",
+         "that any single departure from the identity line exceeds noise - no interval is "
+         "computed, and an element absent from any of the four arms is not drawn at all",
+         rules=("R1_one_scale", "R2_absence_split", "R5_per_object_scale",
+                "R6_never_gated_on_sample"),
+         per_contrast=False, levels=(GROUP,), cohort_only=True),
     Kind("unit_presence", "Which populations each unit contains",
          "which populations were available to the method in each unit, and how that varies "
          "across the design",
@@ -193,6 +201,7 @@ def expand(kinds, contrasts, levels=(GROUP, SAMPLE)):
 HOST, PLUGIN = "host", "plugin"
 
 OWNER = {
+    "interaction": (HOST, ""),
     "unit_presence": (HOST, ""),
     "matrix": (HOST, ""),
     "diff_matrix": (HOST, ""),
@@ -232,6 +241,7 @@ IMPLEMENTED = {
     "contribution": "network_panels.contribution — N7_contribution, per arm, needs "
                     "`group` and `member`",
     "unit_presence": "network_panels.unit_presence — P1_population_presence, on the cohort page",
+    "interaction": "compare_panel.draw_interaction — C5_interaction, one per crossed pair",
 }
 
 #: Registered, specified, and NOT drawn by any run. Named so the gap is auditable.

@@ -166,7 +166,14 @@ REPORT_KEYS = ("figures", "reads_with", "unit_metrics", "unit_network")
 #: `group` the flow ranking and the role heatmap, `group` with `member` the decomposition. What a
 #: plugin declares is what it gets, which is why an unrecognised key here is an ERROR and not a
 #: warning: a misspelt column name removes panels in silence.
-UNIT_NETWORK_KEYS = ("table", "source", "target", "weight", "group", "member")
+UNIT_NETWORK_KEYS = ("table", "source", "target", "weight", "group", "member", "weight_scale")
+
+#: What `weight_scale` may say. `per_object` means the weight was normalised within each unit -
+#: a communication probability computed over the cells present is the usual case - so widths
+#: compare WITHIN a panel and rank-order across panels. `absolute` means two units' values are on
+#: one ruler. The host cannot tell them apart and the difference decides what a grid of arms is
+#: allowed to claim, so it is declared, and the conservative reading is the default.
+WEIGHT_SCALES = ("per_object", "absolute")
 
 
 def report_get(spec, key, default=None):
@@ -293,6 +300,10 @@ def _check_report(spec, out) -> None:
                 out.append(("ERROR", f"`report.unit_network` is missing {', '.join(missing)} — "
                                      f"without all four the host cannot read the network and "
                                      f"draws none of the panels a declaration earns"))
+            _ws = net.get("weight_scale")
+            if _ws is not None and str(_ws) not in WEIGHT_SCALES:
+                out.append(("ERROR", f"`report.unit_network.weight_scale` is {_ws!r}; one of "
+                                     f"{', '.join(WEIGHT_SCALES)}"))
             odd = sorted(set(net) - set(UNIT_NETWORK_KEYS))
             if odd:
                 out.append(("ERROR", f"`report.unit_network` carries unknown key(s) "

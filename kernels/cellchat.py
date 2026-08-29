@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.4.1",
+    "version": "0.5.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -987,8 +987,25 @@ def _fig_coverage(ctx, db, var_names, detected, edges, thresh):
 
     y = np.arange(len(rows))
     vals = [r["n_interactions"] for _, r in rows]
-    fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.9, 0.42 * len(rows) + 1.15)),
-                           layout="constrained")
+    # TWO PANELS, BECAUSE ONE CHANNEL CANNOT CARRY BOTH CLAIMS. The counts panel shows the
+    # attrition - the whole database narrowing to what came back - and on a real arm the last
+    # bar was 3% of the first, which makes the CLASS COMPOSITION INSIDE IT unreadable. That
+    # composition is the point: this plugin's caveats state that the classes are not equally
+    # measurable here and quote the shift, and the panel that was supposed to show it drew it
+    # in a sliver two pixels wide. Found by opening the image on a real cohort.
+    #
+    # So the right panel normalises every stage to 100%. The counts say how much survived; the
+    # shares say WHAT survived, and the second is invisible in the first by construction.
+    stacked = bool(classes) and len(classes) <= len(F.CATEGORY_COLOURS)
+    if stacked:
+        fig, axes = plt.subplots(1, 2, figsize=(F.DOUBLE, max(1.9, 0.42 * len(rows) + 1.15)),
+                                 layout="constrained", sharey=True,
+                                 gridspec_kw={"width_ratios": [1.55, 1.0]})
+        ax, ax2 = axes
+    else:
+        fig, ax = plt.subplots(figsize=(F.SINGLE, max(1.9, 0.42 * len(rows) + 1.15)),
+                               layout="constrained")
+        ax2 = None
     # THE WHOLE DATABASE BEHIND EVERY BAR. A funnel is a set of fractions of ONE thing, and
     # without the ghost the narrowing - which is the entire content of the panel - has to be
     # reconstructed by reading four bar lengths against a tick axis.
@@ -998,14 +1015,24 @@ def _fig_coverage(ctx, db, var_names, detected, edges, thresh):
     # whose transcripts are the ones a nuclear preparation retains least. A single bar reports a
     # coverage that could be carried entirely by the contact classes and look identical. The
     # per-class counts were already computed for the source table and drawn nowhere.
-    stacked = bool(classes) and len(classes) <= len(F.CATEGORY_COLOURS)
     if stacked:
         left = np.zeros(len(rows))
+        left2 = np.zeros(len(rows))
+        _tot = np.array([max(1.0, float(r["n_interactions"])) for _, r in rows])
         for i, c in enumerate(classes):
             seg = np.array([float(r[f"n_{c}"]) for _, r in rows])
             ax.barh(y, seg, left=left, height=0.72, color=F.CATEGORY_COLOURS[i], zorder=2,
                     label=c)
             left += seg
+            share = 100.0 * seg / _tot
+            ax2.barh(y, share, left=left2, height=0.72, color=F.CATEGORY_COLOURS[i], zorder=2)
+            # THE NUMBER, ON THE SEGMENT, WHERE IT FITS. A share panel a reader has to measure
+            # against a tick axis gives back a fifth of the precision the number already has.
+            for yi, sh, lf in zip(y, share, left2):
+                if sh >= 9.0:
+                    ax2.text(lf + sh / 2.0, yi, f"{sh:.0f}", va="center", ha="center",
+                             fontsize=5.4, color="white", zorder=3)
+            left2 += share
         fig.legend(loc="outside lower center", ncol=min(3, len(classes)), fontsize=5.5,
                    handlelength=1.0, handleheight=0.9, columnspacing=1.2, handletextpad=0.4,
                    frameon=False)
@@ -1033,6 +1060,13 @@ def _fig_coverage(ctx, db, var_names, detected, edges, thresh):
     ax.invert_yaxis()
     ax.set_xlim(0, n0)
     ax.set_xlabel("interactions")
+    if ax2 is not None:
+        ax2.set_xlim(0, 100)
+        ax2.set_xlabel("% of that stage")
+        ax2.set_xticks([0, 25, 50, 75, 100])
+        ax2.tick_params(labelsize=6)
+        if returned_stage:
+            ax2.axhline(len(rows) - 1.5, color=F.INK, lw=0.5, ls=":", zorder=4)
     # FOUR OR FIVE TICKS, NOT NINE. Every bar carries its own count and its own percentage, so
     # the axis is a rough scale and a dense one is only ink.
     from matplotlib.ticker import MaxNLocator

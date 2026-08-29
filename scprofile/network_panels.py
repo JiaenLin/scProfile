@@ -108,7 +108,7 @@ def _ring(n, r=1.0, start=90.0):
              r * math.sin(math.radians(start - 360.0 * k / n))) for k in range(n)]
 
 
-def circle(ctx, edges, pops, *, fid="N1_circle", keep=0.90, title=None, note=""):
+def circle(ctx, edges, pops, *, fid="N1_circle", keep=0.90, title=None, note="", scale=None):
     """The aggregate network as a ring. Returns True if drawn.
 
     Node AREA - never radius - encodes the count, with a legend carrying real values: a radius
@@ -132,7 +132,11 @@ def circle(ctx, edges, pops, *, fid="N1_circle", keep=0.90, title=None, note="")
     fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 1.10), layout="constrained")
     ax.set_aspect("equal")
     ax.axis("off")
-    wmax = float(w[mask].max()) or 1.0
+    # R1: ONE SCALE ACROSS THE GRID. `scale` is the maximum over EVERY arm, computed before any
+    # panel is drawn. Without it each arm's widest edge was drawn at full width whatever it was
+    # worth, so four arms of a 2x2 laid out side by side all looked equally strong - the most
+    # repeated figure defect on record, and the one a design comparison is most damaged by.
+    wmax = float((scale or {}).get("edge") or 0.0) or float(w[mask].max()) or 1.0
 
     for i in range(len(pops)):
         for j in range(len(pops)):
@@ -356,7 +360,7 @@ def chord(ctx, edges, pops, *, fid="N2_chord", keep=0.75, title=None, note=""):
 # two remove none, which is what makes them the panels a reader checks a cut against.
 # --------------------------------------------------------------------------------------------
 
-def matrix(ctx, edges, pops, *, fid="N3_matrix", title=None, note=""):
+def matrix(ctx, edges, pops, *, fid="N3_matrix", title=None, note="", scale=None):
     """Sender by receiver, every ordered pair, nothing cut. Returns True if drawn."""
     import numpy as np
     import matplotlib.pyplot as plt
@@ -412,7 +416,7 @@ def matrix(ctx, edges, pops, *, fid="N3_matrix", title=None, note=""):
     return True
 
 
-def role_scatter(ctx, edges, pops, *, fid="N4_role", title=None, note=""):
+def role_scatter(ctx, edges, pops, *, fid="N4_role", title=None, note="", scale=None):
     """Outgoing against incoming strength, one point per population. Returns True if drawn."""
     import matplotlib.pyplot as plt
 
@@ -424,7 +428,10 @@ def role_scatter(ctx, edges, pops, *, fid="N4_role", title=None, note=""):
     short = F.short_labels(list(pops))
 
     fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.92), layout="constrained")
-    hi = float(max(out_s.max(), in_s.max())) or 1.0
+    hi = float((scale or {}).get("role") or 0.0) or float(max(out_s.max(), in_s.max())) or 1.0
+    ax.set_xlim(-0.04 * hi, 1.06 * hi)
+    ax.set_ylim(-0.04 * hi, 1.06 * hi)
+    ax.set_aspect("equal")
     # THE DIAGONAL IS THE ONLY REFERENCE LINE THAT MEANS ANYTHING HERE. Net sender and net
     # receiver is a statement about which side of y = x a population falls, and without the line
     # drawn a reader compares two axes by eye and gets it wrong for anything near the middle.
@@ -481,7 +488,8 @@ def role_scatter(ctx, edges, pops, *, fid="N4_role", title=None, note=""):
 # silently when it does not - `panels.R2` applies to a panel's own absence as much as to a cell.
 # --------------------------------------------------------------------------------------------
 
-def flow_rank(ctx, edges, pops, group_col, *, fid="N5_flow", top=18, title=None, note=""):
+def flow_rank(ctx, edges, pops, group_col, *, fid="N5_flow", top=18, title=None, note="",
+              scale=None):
     """Groups ranked by total strength within this unit. Returns True if drawn."""
     import matplotlib.pyplot as plt
 
@@ -500,6 +508,9 @@ def flow_rank(ctx, edges, pops, group_col, *, fid="N5_flow", top=18, title=None,
     ax.invert_yaxis()
     ax.set_xlabel("summed strength", fontsize=7)
     ax.tick_params(axis="x", labelsize=6)
+    _hi = float((scale or {}).get("flow") or 0.0)
+    if _hi:
+        ax.set_xlim(0, 1.04 * _hi)
     if title:
         ax.set_title(title, fontsize=8)
 
@@ -645,7 +656,7 @@ def contribution(ctx, edges, pops, group_col, member_col, *, fid="N7_contributio
 # --------------------------------------------------------------------------------------------
 
 def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=None,
-                  fid="P1_population_presence", floor=None, title=None, note=""):
+                  sentinels=(), fid="P1_population_presence", floor=None, title=None, note=""):
     """Which populations each unit contains, against the study's whole label set.
 
     THE PANEL THAT WAS MISSING WHILE EVERY OTHER PANEL DEPENDED ON IT. A method fitted per unit
@@ -704,7 +715,18 @@ def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=Non
     ax.set_xticks(range(len(units)),
                   [f"{u}*" if _ax.get(u) == "group" else u for u in units],
                   rotation=90, fontsize=6)
-    ax.set_yticks(range(len(labels)), [short[l] for l in labels], fontsize=6)
+    # AN ANNOTATOR SENTINEL IS NOT A CELL TYPE, and drawn in the same ink as one it reads as a
+    # population with an odd name. On the first real render `UNRESOLVED` and `EXCLUDED` sat in
+    # the middle of the ordering between two genuine populations, ranked by cell count like
+    # everything else. They are kept - they are cells and nothing here drops them - and marked.
+    _sent = {str(x) for x in (sentinels or ())}
+    _tick = [f"{short[l]}  (sentinel)" if l in _sent else short[l] for l in labels]
+    ax.set_yticks(range(len(labels)), _tick, fontsize=6)
+    for i, l in enumerate(labels):
+        if l in _sent:
+            ax.get_yticklabels()[i].set_color("#B25E00")
+            ax.get_yticklabels()[i].set_style("italic")
+            ax.axhspan(i - 0.5, i + 0.5, color="#B25E00", alpha=0.06, zorder=0)
     ax.set_ylabel("population   (ordered by cells in the whole cohort)", fontsize=7)
     cb = fig.colorbar(im, ax=ax, fraction=0.02, pad=0.01)
     cb.ax.tick_params(labelsize=6)
@@ -744,6 +766,10 @@ def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=Non
               if lines else ". ")
            + (f"Rings mark a population present but below {floor:g} cells, which is where a "
               f"per-unit floor removes one. " if thin.any() else "")
+           + (f"Rows marked (sentinel) are ANNOTATOR SENTINELS, not cell types — "
+              f"{', '.join(sorted(_sent & set(labels)))} — kept because they are cells, and "
+              f"named because a result reported under one of these names is a defect rather "
+              f"than a finding. " if (_sent & set(labels)) else "")
            + "A UNIT MARKED * IS A DESIGN ARM, its members pooled; the others are single "
              "samples. A population absent here is absent from every panel that unit produces, "
              "and that is why those panels do not share an axis. This panel does NOT say why a "

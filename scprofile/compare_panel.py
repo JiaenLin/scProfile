@@ -295,7 +295,7 @@ def arms_in(design, pairs):
 
 
 def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edges=1,
-                     group_col=None, member_col=None):
+                     group_col=None, member_col=None, weight_scale="per_object"):
     """The single-network kinds for each arm, pooled. Returns [(fid, path, caption)].
 
     GROUP LEVEL BY CONSTRUCTION: an arm's cells are pooled before anything is drawn, so no panel
@@ -328,22 +328,197 @@ def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edge
     pops = sorted({str(x) for e in pooled.values()
                    for x in set(e["source"].astype(str)) | set(e["target"].astype(str))})
 
+    # THE GRID MAXIMUM, COMPUTED BEFORE ANY PANEL IS DRAWN (panels.R1). Each arm was scaled to
+    # its own maximum, so four arms of a factorial design drawn side by side all showed their
+    # widest edge at full width whatever it was worth - the defect this project has measured at
+    # 3.2x on a nine-panel grid and the one a design comparison is most damaged by.
+    #
+    # AND WHAT A SHARED SCALE DOES NOT LICENCE IS DECLARED, NOT ASSUMED (panels.R5). Where the
+    # weight is normalised within each object - which is the usual case for a communication
+    # probability - widths compare within a panel and RANK-ORDER across panels, nothing more.
+    # The host cannot know which it is, so `unit_network.weight_scale` says: `per_object` (the
+    # conservative default) or `absolute`.
+    from . import network_panels as _NP
+    scale, per_object = {}, str(weight_scale or "per_object") != "absolute"
+    for e in pooled.values():
+        _c, _w = _NP.aggregate(e, pops)
+        if _w.sum() <= 0:
+            continue
+        scale["pair"] = max(scale.get("pair", 0.0), float(_w.max()))
+        _m, _k, _x = _NP.strength_cut(_w, keep=0.90)
+        scale["edge"] = max(scale.get("edge", 0.0),
+                            float(_w[_m].max()) if _m.any() else float(_w.max()))
+        scale["role"] = max(scale.get("role", 0.0),
+                            float(max(_w.sum(1).max(), _w.sum(0).max())))
+        if group_col and group_col in getattr(e, "columns", ()):
+            scale["flow"] = max(scale.get("flow", 0.0),
+                                float(e.groupby(group_col)["prob"].sum().max()))
+    _scale_note = (
+        "  ONE SCALE ACROSS EVERY ARM, so a width here is the same number as a width on any "
+        "other arm's panel." + (
+            "  The weight is normalised WITHIN each unit, so that comparison is a RANK ordering "
+            "and not a magnitude." if per_object else
+            "  The weight is on an absolute scale, so magnitudes compare directly."))
+
     made = []
     for label, e in sorted(pooled.items()):
         slug = "".join(ch if ch.isalnum() else "_" for ch in label).strip("_")
         got = []
         shim = _Shim(out_dir, prefix, slug, got, label=label,
                      members=_members(design, arms[label]))
-        NP.circle(shim, e, pops, title=label)
+        NP.circle(shim, e, pops, title=label, scale=scale, note=_scale_note)
         NP.chord(shim, e, pops, title=label)
-        NP.matrix(shim, e, pops, title=label)
-        NP.role_scatter(shim, e, pops, title=label)
+        NP.matrix(shim, e, pops, title=label, scale=scale, note=_scale_note)
+        NP.role_scatter(shim, e, pops, title=label, scale=scale, note=_scale_note)
         # DECLARED OR NOT DRAWN. Each of these returns False rather than raising when the
         # declaration names no grouping column, so a plugin that declares less gets fewer
         # panels and never a broken one.
-        NP.flow_rank(shim, e, pops, group_col, title=label)
+        NP.flow_rank(shim, e, pops, group_col, title=label, scale=scale, note=_scale_note)
         NP.role_heatmap(shim, e, pops, group_col, title=label)
         NP.contribution(shim, e, pops, group_col, member_col, title=label)
         made += got
     return made
 
+
+
+def interaction_specs(design, factors=None, technical=None):
+    """[(fA, fB, lo_a, hi_a, lo_b, hi_b)] - every pair of crossed two-level factors.
+
+    A FACTORIAL DESIGN'S HEADLINE IS THE INTERACTION AND NOTHING DREW IT. Six two-arm contrasts
+    were drawn for a 2x2 - each factor marginally and each held at every level of the other - and
+    a reader was left to compare two of them in their head. "Does the diet effect depend on age"
+    is not the difference of two panels a page apart; it is one panel, and the marginal effect
+    can be flat while both simple effects are large and opposite, which is the case a design like
+    this most often exists to find.
+
+    Only factors with EXACTLY TWO levels and all four cells populated qualify. A cell with no
+    samples makes the interaction undefined rather than small, and drawing it would put a
+    difference of presence on a magnitude axis.
+    """
+    from . import units as _U
+    facs = factors or _U.biological_factors(
+        design, technical=technical or _U.DEFAULT_TECHNICAL)
+    lv = {}
+    for row in design.values():
+        for f, v in (row or {}).items():
+            if f in facs:
+                lv.setdefault(str(f), set()).add(str(v))
+    two = sorted(f for f, s in lv.items() if len(s) == 2)
+    out = []
+    for i, fa in enumerate(two):
+        for fb in two[i + 1:]:
+            la, lb = sorted(lv[fa]), sorted(lv[fb])
+            cells = {(a, b): _members(design, {fa: a, fb: b}) for a in la for b in lb}
+            if all(cells[k] for k in cells):
+                out.append((fa, fb, la[0], la[1], lb[0], lb[1]))
+    return out
+
+
+def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob",
+                     group_col=None, min_edges=1, weight_scale="per_object"):
+    """Does the effect of one factor depend on the level of the other? Returns [(fid, path, cap)].
+
+    The effect of factor A within each level of factor B, one against the other. A point on the
+    identity line responds to A the same way in both; a point off it is an interaction. The
+    quadrants are the readable part: opposite sides of the diagonal means the direction itself
+    flips, which a marginal contrast averages to nothing.
+    """
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from pathlib import Path
+    from . import figure as _F
+
+    fa, fb, a0, a1, b0, b1 = spec
+    cell = {}
+    for a in (a0, a1):
+        for b in (b0, b1):
+            e = pool(per_unit_edges, _members(design, {fa: a, fb: b}))
+            if e is None or len(e) < min_edges:
+                return []
+            cell[(a, b)] = e
+
+    # THE ELEMENT IS THE COARSEST NAMEABLE ONE THE DECLARATION SUPPORTS. A named group is what a
+    # reader can act on; an ordered population pair is what every declaration has.
+    def _totals(e):
+        if group_col and group_col in getattr(e, "columns", ()):
+            return e.groupby(group_col)[weight].sum().to_dict()
+        return (e.assign(_k=e["source"].astype(str) + " → " + e["target"].astype(str))
+                 .groupby("_k")[weight].sum().to_dict())
+
+    what = (group_col or "pathway").replace("_", " ") if group_col else "population pair"
+    tot = {k: _totals(v) for k, v in cell.items()}
+    # PRESENT IN ALL FOUR CELLS, or the point is a difference of presence on a magnitude axis.
+    # What that costs is printed rather than absorbed.
+    keys = set(tot[(a0, b0)])
+    for k in tot:
+        keys &= set(tot[k])
+    seen = set().union(*[set(v) for v in tot.values()])
+    keys = sorted(keys)
+    if len(keys) < 3:
+        return []
+
+    dx = np.array([tot[(a1, b0)].get(k, 0.0) - tot[(a0, b0)].get(k, 0.0) for k in keys])
+    dy = np.array([tot[(a1, b1)].get(k, 0.0) - tot[(a0, b1)].get(k, 0.0) for k in keys])
+    off = np.abs(dy - dx)
+    order = np.argsort(-off)
+
+    lim = float(max(np.abs(dx).max(), np.abs(dy).max())) or 1.0
+    fig, ax = plt.subplots(figsize=(_F.SINGLE, _F.SINGLE * 1.02), layout="constrained")
+    # SYMMETRIC AND CENTRED ON ZERO IN BOTH DIRECTIONS. A signed quantity drawn on a data-derived
+    # box puts "no change" somewhere off-centre and invites reading a quadrant boundary that is
+    # not there.
+    ax.axhline(0, color=_F.GREY, lw=0.6, zorder=0)
+    ax.axvline(0, color=_F.GREY, lw=0.6, zorder=0)
+    ax.plot([-lim, lim], [-lim, lim], color=_F.GREY, lw=0.7, ls="--", zorder=0)
+    # A REVERSAL NEEDS TWO REAL EFFECTS, NOT TWO SIGNS. Marking every sign disagreement made an
+    # element at (+0.05, -0.02) - noise on both axes - carry the same mark as one that genuinely
+    # flips, so the panel claimed a reversal it could not support. Found by opening it: two of
+    # the marked points sat on the origin.
+    #
+    # THE FLOOR IS DECLARED HERE, ABOVE THE RENDER THAT USES IT: an effect counts only if it
+    # reaches a twentieth of the axis on BOTH sides. It is a readability threshold, not a test,
+    # and the panel prints it so a reader sees what was and was not called a reversal.
+    FLIP_FLOOR = 0.05
+    _big = (np.abs(dx) >= FLIP_FLOOR * lim) & (np.abs(dy) >= FLIP_FLOOR * lim)
+    _rev = _big & ((dx > 0) != (dy > 0))
+    flips = int(_rev.sum())
+    col = ["#D55E00" if r else "#0072B2" for r in _rev]
+    ax.scatter(dx, dy, s=22, c=col, edgecolor="white", lw=0.35, zorder=2)
+    texts = []
+    for i in order[:8]:
+        texts.append(ax.annotate(str(keys[i])[:22], (dx[i], dy[i]), fontsize=5.4,
+                                 xytext=(3, 3), textcoords="offset points"))
+    _F.spread_labels(ax, texts)
+    ax.set_xlim(-1.08 * lim, 1.08 * lim)
+    ax.set_ylim(-1.08 * lim, 1.08 * lim)
+    ax.set_aspect("equal")
+    ax.set_xlabel(f"effect of {fa}  ({a0} → {a1})   within {fb} = {b0}", fontsize=6.5)
+    ax.set_ylabel(f"effect of {fa}  ({a0} → {a1})   within {fb} = {b1}", fontsize=6.5)
+    ax.tick_params(labelsize=6)
+    ax.set_title(f"{fa} × {fb}", fontsize=8)
+    fig.text(0.0, -0.006,
+             f"{fa} x {fb} interaction   ·   4 arms, cells pooled within each",
+             ha="left", va="top", fontsize=5.2, color="#5A5A5A", transform=fig.transFigure)
+
+    Path(out_dir).mkdir(parents=True, exist_ok=True)
+    slug = f"{fa}__x__{fb}"
+    path = Path(out_dir) / f"{prefix}_C5_interaction__{slug}.png"
+    fig.savefig(path, dpi=200, bbox_inches="tight")
+    plt.close(fig)
+
+    rel = str(weight_scale or "per_object") != "absolute"
+    cap = (f"Does the effect of {fa} depend on {fb}? Each point is one {what}: its change from "
+           f"{a0} to {a1} within {fb} = {b0} against the same change within {fb} = {b1}. On the "
+           f"dashed line the response is the same in both; off it, it is not.",
+           f"{len(keys)} of {len(seen)} {what}s are present in all four arms and drawn — the "
+           f"rest are absent from at least one arm, where a difference would be a difference of "
+           f"PRESENCE and not of magnitude. {flips} REVERSE DIRECTION — marked apart, and "
+           f"counted only where the effect reaches {FLIP_FLOOR:.0%} of the axis on both sides, "
+           f"so a sign disagreement between two near-zero values is not called a reversal. A "
+           f"reversal is the case a marginal contrast averages to nothing. NOTHING HERE IS "
+           f"TESTED: these are differences of sums, with no "
+           f"interval and no significance marking, and the eight furthest from the line are "
+           f"labelled by distance, not by evidence."
+           + ("  The weight is normalised within each unit, so both axes are on that scale and "
+              "the comparison between them is a ranking." if rel else ""))
+    return [(f"C5_interaction__{slug}", path, cap, f"{fa} × {fb}")]
