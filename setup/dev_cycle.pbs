@@ -114,7 +114,30 @@ if [ "${SNAPSHOT:-1}" = "1" ]; then
   # because a `.pyc` is written by RUNNING the code, not by changing it, and the fingerprint
   # check already excludes it for that reason.
   tar -C "$TOOL" --exclude=.git --exclude=__pycache__ -cf - . | tar -C "$_SNAP" -xf -
-  # `git` is absent on a compute node, so the commit is carried in HEAD.txt and copied above.
+  # THE COMMIT IS READ FROM `.git`, NOT FROM THE FILE BESIDE IT. `HEAD.txt` is untracked, so
+  # nothing updates it when the checkout moves: a run of new code reported itself as the commit
+  # that happened to be current the last time somebody wrote that file by hand. It is the same
+  # stale-stamp failure the layout notes already record, and it is worse than an absent version,
+  # because a run labelled with the wrong commit is compared against the wrong code.
+  #
+  # `git` is absent on a compute node, so this reads the plumbing directly - `.git/HEAD` is
+  # either a sha or a `ref:` line naming a file that holds one, and a ref that has been packed
+  # lives in `packed-refs` instead. Whatever is found overwrites the copied HEAD.txt; if none is
+  # (a tarball deploy with no `.git`), the copied file stands and is the best available.
+  # EVERY READ ENDS IN `|| true`, BECAUSE `set -e` IS ON. A `$(cat missing-file)` carries the
+  # command's exit status into the assignment, so the first absent ref would not have produced
+  # an unknown version - it would have KILLED THE JOB, at the snapshot step, before any work.
+  # A checkout whose refs are packed has no `refs/heads/<branch>` file at all, so that is the
+  # ordinary case rather than a corner one.
+  _H=$(cat "$TOOL/.git/HEAD" 2>/dev/null || true)
+  _SHA=""
+  case "$_H" in
+    ref:*) _R="${_H#ref: }"
+           _SHA=$(cat "$TOOL/.git/$_R" 2>/dev/null || true)
+           [ -n "$_SHA" ] || _SHA=$(awk -v r="$_R" '$2==r{print $1}' "$TOOL/.git/packed-refs" 2>/dev/null || true) ;;
+    *)     _SHA="$_H" ;;
+  esac
+  [ -n "$_SHA" ] && printf '%s\n' "$_SHA" > "$_SNAP/HEAD.txt"
   TOOL="$_SNAP"
   # HELD, NOT ECHOED. stdout is not attached to the live log until further down, so echoing here
   # sent the one line that says the run is isolated to the PBS job file - which is written at
