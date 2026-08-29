@@ -235,9 +235,14 @@ def station_paper(runs):
         rendered = (r / "report" / "paper.html").is_file()
         best = (r, rows, withdrawn, out, rendered)
         break
-    if best is None or not best[1]:
-        return BLOCKED, "no claim has been written from any run's figures", \
-            "scprofile paper --out <RUN> --brief"
+    if best is None:
+        return BLOCKED, "no run to write from", "run something first"
+    if not best[1]:
+        # NAME THE RUN. "no claim in any run" was the message even when older runs had plenty -
+        # what is true is that the NEWEST one has none, and the difference is the whole point of
+        # testing the run the current code produced.
+        return BLOCKED, f"{best[0].name}: no claim written from the newest run", \
+            f"scprofile paper --out {best[0]} --brief"
     r, rows, withdrawn, out, rendered = best
     if not rows:
         return BLOCKED, f"{r.name}: no claim written from the newest run", \
