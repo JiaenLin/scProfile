@@ -266,6 +266,7 @@ print("\nthe keys a report block may carry are stated once, not twice")
 # permanent warning saying the reporter ignores a key the reporter uses. Two statements of one
 # fact, drifting, in the same function.
 import ast as _ast                                                              # noqa: E402
+import pathlib as _pathlib                                                      # noqa: E402
 import inspect as _insp                                                         # noqa: E402
 
 _read = {n.args[0].value
@@ -281,6 +282,74 @@ _elsewhere = _insp.getsource(declare)
 ck("and every key it allows is read somewhere",
    all(f'"{k}"' in _elsewhere for k in declare.REPORT_KEYS),
    str([k for k in declare.REPORT_KEYS if f'"{k}"' not in _elsewhere]))
+
+# THE GUARD ABOVE COMPARED TWO STATEMENTS INSIDE ONE MODULE AND MISSED THE ONE THAT DRIFTED.
+# Both of its directions read `declare`; the consumer that had gone out of step was the
+# REPORTER, in report.py, which read `unit_network` while the checker warned - on the only two
+# plugins using it - that "the reporter ignores them". A guard that watches the checker watch
+# itself will pass every time the checker is self-consistent and wrong.
+#
+# So the scan is now over the WHOLE PACKAGE, for the one accessor every consumer goes through.
+_pkg = _pathlib.Path(declare.__file__).parent
+_srcs = {f.name: f.read_text(encoding="utf-8") for f in sorted(_pkg.glob("*.py"))}
+_consumed = {}
+for _fn, _src in _srcs.items():
+    for _n in _ast.walk(_ast.parse(_src)):
+        if (isinstance(_n, _ast.Call)
+                and getattr(_n.func, "attr", getattr(_n.func, "id", "")) == "report_get"
+                and len(_n.args) >= 2 and isinstance(_n.args[1], _ast.Constant)):
+            _consumed.setdefault(_n.args[1].value, set()).add(_fn)
+
+ck("every report key a CONSUMER reads is a key the checker allows",
+   set(_consumed) <= set(declare.REPORT_KEYS),
+   str(sorted((k, sorted(v)) for k, v in _consumed.items()
+              if k not in set(declare.REPORT_KEYS))))
+ck("the reporter is one of those consumers, so the scan covers the module that drifted",
+   any("report.py" in v for v in _consumed.values()),
+   "no report_get call in report.py — the accessor was bypassed")
+ck("`unit_network`, the key this guard was widened for, is read through the accessor",
+   "report.py" in _consumed.get("unit_network", set()),
+   str(sorted(_consumed.get("unit_network", ()))))
+
+# AND THE BACK DOOR IS CLOSED. An accessor nobody is obliged to use is a convention, and a
+# convention is what the last two versions of this guard were. A consumer reaching into the
+# block directly can read a key the checker has never heard of, which is exactly the defect.
+#
+# BY THE SHAPE, NOT BY THE WORD `spec`. The first version of this check grepped for `spec.get(`
+# and named ten modules, because `spec` in this package is also a reference spec, a plugin
+# declaration and a resolved requirement - a gate red on eight correct modules, which is the
+# same failure as the reference-tier gate two fixes ago and would have been switched off just
+# as fast. What identifies a read of the REPORT BLOCK is the receiver (`spec` or `block`, the
+# two names the block travels under) together with a key this module governs. `p.get("figures")`
+# in report.py reads the PAYLOAD's emitted figures and is untouched by any of this.
+def _receiver(node):
+    """The name a `.get` is called on, seeing through `(spec or {})`."""
+    v = node.func.value
+    if isinstance(v, _ast.BoolOp) and v.values:
+        v = v.values[0]
+    return getattr(v, "id", "")
+
+_direct = []
+for _fn, _src in _srcs.items():
+    if _fn == "declare.py":            # the checker reads the block; that is its job
+        continue
+    for _n in _ast.walk(_ast.parse(_src)):
+        if (isinstance(_n, _ast.Call) and getattr(_n.func, "attr", "") == "get"
+                and _receiver(_n) in ("spec", "block")
+                and _n.args and isinstance(_n.args[0], _ast.Constant)
+                and _n.args[0].value in set(declare.REPORT_KEYS)):
+            _direct.append(f"{_fn}:{_n.lineno} {_n.args[0].value}")
+ck("no module reads a plugin's report block around the accessor",
+   not _direct, f"{sorted(_direct)} reach into the block directly")
+
+# EVERY CHECK MUST BE ABLE TO FAIL. An unlisted key must raise at the call, not warn later.
+try:
+    declare.report_get({"nope": 1}, "nope")
+    _raised = False
+except KeyError:
+    _raised = True
+ck("report_get REFUSES a key that is not declared", _raised,
+   "an undeclared key was read without complaint, which is how the drift starts")
 
 _ok = {"name": "x", "summary": "s", "cannot_show": ["a"], "api": 1, "per_unit": "sample",
        "executor": {"memory_gb_per_100k": 1},
@@ -364,6 +433,74 @@ ck("the host declares an anndata floor at all", _host is not None)
 ck("the host's anndata floor is not below any plugin's",
    bool(_host and _worst and _host >= _worst),
    f"host >={_host}, {_who} >={_worst} - the host reads the object BEFORE any plugin does")
+
+print("\na reference is checked against the tier it declares")
+# THE CHECKER DEMANDED A URL AND A DIGEST FROM A DATABASE THAT SHIPS INSIDE AN R PACKAGE.
+# `validate_references` was written when every reference was a file this tool downloads, and it
+# never learned about the tiers `refs.status()` has honoured since they were added. The result
+# was 12 ERRORs across three of the nine shipped plugins - on SIX OF THE SIX references in the
+# tree, every one of them correctly declared - each reported as "a defect that would produce a
+# plausible wrong answer". A gate red on everything correct teaches its reader to skip it, and
+# this project has written that lesson down twice already.
+from scprofile import refs as _refs, validate as _V                             # noqa: E402
+
+
+class _K:
+    """The two attributes `validate_references` touches, and nothing else."""
+
+    name = "t"
+    path = Path("/nonexistent")
+
+    def __init__(self, refs):
+        self._refs = refs
+
+    def references(self, organism=None):
+        return self._refs
+
+
+def _lv(refs, level):
+    return [f.check for f in _V.validate_references(_K(refs)) if f.level == level]
+
+
+_FETCH_OK = {"r": {"tier": "fetch", "url": "https://x/y.gz", "sha256": "a" * 64, "size": "1 GB"}}
+ck("a downloadable reference with its url and digest passes", not _lv(_FETCH_OK, "ERROR"),
+   str(_lv(_FETCH_OK, "ERROR")))
+ck("and one missing its digest is STILL an error — the check that mattered still fires",
+   len(_lv({"r": {**_FETCH_OK["r"], "sha256": ""}}, "ERROR")) == 1)
+ck("and a truncated digest is still caught",
+   len(_lv({"r": {**_FETCH_OK["r"], "sha256": "abc"}}, "ERROR")) == 1)
+
+_BUNDLED = {"r": {"tier": "bundled", "package": "CellChat", "source": "https://github.com/x"}}
+ck("a bundled reference is not asked for a url or a digest it cannot have",
+   not _lv(_BUNDLED, "ERROR"), str(_lv(_BUNDLED, "ERROR")))
+ck("but one naming no package IS an error — nothing would pin it at all",
+   len(_lv({"r": {"tier": "bundled"}}, "ERROR")) == 1)
+
+_RUNTIME = {"r": {"tier": "runtime", "source": "OmniPath"}}
+ck("a run-time reference is not asked for a digest nothing can compute",
+   not _lv(_RUNTIME, "ERROR"), str(_lv(_RUNTIME, "ERROR")))
+ck("and it WARNS that the compute node needs the network, which is the real hazard",
+   any("run time" in c for c in _lv(_RUNTIME, "WARN")), str(_lv(_RUNTIME, "WARN")))
+ck("a misspelt tier is an error, not silently treated as a download",
+   len(_lv({"r": {"tier": "bundeld", "package": "p"}}, "ERROR")) >= 1)
+
+ck("the tier vocabulary is stated once, not restated by the checker",
+   'TIERS = (' in (Path(_refs.__file__)).read_text(encoding="utf-8")
+   and "_R.TIERS" in Path(_V.__file__).read_text(encoding="utf-8"),
+   "validate carries its own copy of the tier list")
+ck("and the checker defaults a missing tier exactly as the status reader does",
+   _refs.tier_of({}) == _refs.DEFAULT_TIER == "fetch")
+
+# EVERY SHIPPED PLUGIN, NOT A FIXTURE. The convenient fixture hides the bug it was built to
+# catch: nothing in this suite read the kernels the tool actually ships, so twelve errors on
+# three of them survived a green run of everything here.
+print("\nevery shipped plugin validates")
+from scprofile.kernels import discover                                          # noqa: E402
+
+for _n, _k in sorted(discover().items()):
+    _f = _V.validate_plugin(_k) + _V.validate_references(_k)
+    _bad = [x.check for x in _f if x.level == "ERROR"]
+    ck(f"{_n} declares itself without error", not _bad, "; ".join(_bad))
 
 print("\n" + ("the declaration holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

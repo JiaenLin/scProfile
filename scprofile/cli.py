@@ -254,7 +254,12 @@ def _run(a):
         from . import validate as V
         errs = 0
         for n in [x for x in want if ks[x].status == "built"]:
-            f = V.validate_plugin(ks[n])
+            # THE DECLARATION *AND* ITS REFERENCES. Only `validate_plugin` was called here, so
+            # every reference check lived in a maintainer command that no pipeline runs - which
+            # is why a checker demanding a url from a bundled database went unnoticed through
+            # eighteen runs. Static: no `dest`, so nothing is hashed and nothing is fetched.
+            f = V.validate_plugin(ks[n]) + V.validate_references(
+                ks[n], organism=getattr(a, "organism", None))
             bad = [x for x in f if x.level == "ERROR"]
             if bad:
                 errs += len(bad)
@@ -2327,6 +2332,28 @@ def _check(a):
         set(_P.IMPLEMENTED) <= set(_P.BY_ID)
         and set(_P.IMPLEMENTED) | set(_P.gaps()) == set(_P.BY_ID),
         "registry and IMPLEMENTED disagree")
+
+    # --- the plugins this installation actually ships -----------------------------------------
+    # NOT A SOURCE GREP AND NOT A FIXTURE. Every row above asks whether the host's code is
+    # present; this one asks whether the plugins on the kernel path pass the host's own
+    # validator. Nothing did - not `check`, not `check --deep`, not a suite - and twelve errors
+    # across three of the nine shipped plugins stood green for as long as they existed.
+    from . import validate as _V
+    from .kernels import discover as _disc
+    try:
+        _ks = _disc()
+    except Exception as e:                                                  # pragma: no cover
+        _ks, _why = {}, str(e)
+        row("every shipped plugin validates", False, f"discovery failed: {_why}")
+    else:
+        _bad = {}
+        for _n, _k in sorted(_ks.items()):
+            _e = [x.check for x in _V.validate_plugin(_k) + _V.validate_references(_k)
+                  if x.level == "ERROR"]
+            if _e:
+                _bad[_n] = _e
+        row(f"every shipped plugin validates ({len(_ks)} found)", not _bad,
+            "; ".join(f"{n}: {len(v)} error(s) — {v[0]}" for n, v in _bad.items()))
 
     # --- what a run directory actually produced, if one was named -----------------------------
     if a.out:

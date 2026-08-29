@@ -18,6 +18,7 @@ from pathlib import Path
 # THE SAME PALETTE THE PLUGINS DRAW WITH. Imported, never copied: a second list of the same
 # sixteen colours is how a convention drifts, and `figure.py` imports no plotting library at
 # module scope, so the reporter takes on no dependency by asking it.
+from . import declare as _D
 from .figure import CATEGORY_COLOURS
 
 CSS = """
@@ -391,7 +392,7 @@ def _arm_content(units, design, spec, *, out_dir=None, name=""):
     method produced the numbers.
     """
     empty = {"contrast": [], "arm": []}
-    net = (spec or {}).get("unit_network")
+    net = _D.report_get(spec, "unit_network")
     if not (net and design and out_dir and units):
         return empty
     try:
@@ -1160,9 +1161,9 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
     # meets the first unit's panel before meeting the spread has already formed the finding.
     units = p.get("units") or []
     if p.get("per_unit") and units:
-        body.append(_across_units(units, (spec or {}).get("unit_metrics")))
+        body.append(_across_units(units, _D.report_get(spec, "unit_metrics")))
         body.append(_units_by_arm(units, (payload_all or {}).get("design") or {},
-                                  (spec or {}).get("unit_metrics"),
+                                  _D.report_get(spec, "unit_metrics"),
                                   out_dir=out_dir, name=name))
         _arms = _arm_content(units, (payload_all or {}).get("design") or {}, spec,
                              out_dir=out_dir, name=name)

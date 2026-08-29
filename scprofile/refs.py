@@ -32,6 +32,28 @@ from pathlib import Path
 
 CHUNK = 1 << 22          # 4 MiB — large enough that a multi-GB file is not a syscall storm
 
+#: THE THREE TIERS, STATED ONCE, BECAUSE TWO STATEMENTS OF THEM DRIFTED. `status()` below has
+#: honoured all three since the tier was added; `validate` was written against the older shape,
+#: where every reference was a file this tool downloads, and never learned about them. It
+#: therefore demanded a url and a sha256 from a database that ships inside an R package — an
+#: ERROR, on a correct declaration, on three of the nine shipped plugins and on SIX OF THE SIX
+#: references in the tree. A gate that is red on everything correct is a gate that gets ignored,
+#: and this one had already trained its reader to ignore it.
+#:
+#: What each tier is pinned BY differs, and that is the whole point of the distinction:
+#:   fetch    a file this tool downloads. Pinned by sha256 - the only tier that can be.
+#:   bundled  ships inside a package. Pinned by that package's version and by nothing else.
+#:   runtime  fetched by the wrapped tool when it runs. Pinned by nothing, and needs the
+#:            network on the COMPUTE NODE, which is where a batch job discovers it does not
+#:            have one.
+TIERS = ("fetch", "bundled", "runtime")
+DEFAULT_TIER = "fetch"
+
+
+def tier_of(spec):
+    """The declared tier of one reference, defaulted exactly as `status()` defaults it."""
+    return str((spec or {}).get("tier") or DEFAULT_TIER)
+
 
 def _sha256(path, chunk=CHUNK, progress=None):
     h = hashlib.sha256()
@@ -112,7 +134,7 @@ def status(kernel, dest, organism=None, verify=False):
         # `bundled` is pinned by the package version and by nothing else; `runtime` is fetched
         # when the tool runs and NEEDS THE NETWORK THEN - which is the one a batch job on a node
         # with no outbound route discovers after its queue slot is spent.
-        tier = str(spec.get("tier") or "fetch")
+        tier = tier_of(spec)
         if tier == "bundled":
             out[name] = ("bundled", "", spec.get("note")
                          or f"ships with {spec.get('package', 'the wrapped package')}; "

@@ -147,9 +147,33 @@ def report_figures(spec) -> list:
 #: same declaration, that the key was unknown and "the reporter ignores them". Three shipped
 #: plugins carried that warning permanently, and it was false: the reporter uses it.
 #:
-#: A guard asserts this tuple against the keys `_check_report` actually reads, so the list and
-#: the checker cannot say different things again.
-REPORT_KEYS = ("figures", "reads_with", "unit_metrics")
+#: IT THEN HAPPENED AGAIN, WITH `unit_network`, AND THE GUARD DID NOT SEE IT. The guard compared
+#: this tuple against the keys `_check_report` reads - two statements inside ONE module, both of
+#: which I updated together. The consumer that drifted was the REPORTER, in another module, and
+#: nothing compared the list against it. So `validate` told the author of the only two plugins
+#: using the newest capability that "the reporter ignores them", while `report.py` read the key
+#: and `check` carried a row asserting that it does. A checker and a reporter contradicting each
+#: other about the same declaration, with the checker's message the wrong way round.
+#:
+#: The fix is structural rather than another entry: every consumer now reads the block through
+#: `report_get`, which REFUSES a key that is not listed here, and the guard scans the whole
+#: package for those calls. A new key cannot be consumed before it is declared, and a declared
+#: key that nothing consumes is reported as dead.
+REPORT_KEYS = ("figures", "reads_with", "unit_metrics", "unit_network")
+
+
+def report_get(spec, key, default=None):
+    """One value out of a plugin's `report` block, by a key this module has declared.
+
+    THE SINGLE DOOR. A consumer that reaches into the block directly can read a key the checker
+    has never heard of, and the checker will then tell the plugin's author that the key is
+    ignored - which is what happened to `unit_network`. Going through here makes that a
+    programming error at the first call rather than a false warning in a maintainer's terminal.
+    """
+    if key not in REPORT_KEYS:
+        raise KeyError(f"`report.{key}` is read but not declared in declare.REPORT_KEYS — "
+                       f"add it there, or the checker will warn that the reporter ignores it")
+    return (spec or {}).get(key, default)
 
 
 def _check_report(spec, out) -> None:

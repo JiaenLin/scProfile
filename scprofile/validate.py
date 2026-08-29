@@ -252,20 +252,67 @@ def validate_references(kernel, dest=None, organism=None, deep=False):
                              "check the indentation — one level of nesting is supported"))
         return f
 
+    from . import refs as _R
+
     for name, spec in refs.items():
-        if not spec.get("url"):
-            f.append(Finding("ERROR", f"reference {name!r} has no url"))
-        sha = str(spec.get("sha256") or "")
-        if not sha:
-            f.append(Finding("ERROR", f"reference {name!r} has no sha256",
-                             "it cannot be shown to be the file the result was produced against, "
-                             "and a truncated database returns a smaller answer than an error"))
-        elif not HEX64.match(sha.lower()):
-            f.append(Finding("ERROR", f"reference {name!r} sha256 is not a 64-char hex digest",
-                             sha[:20]))
-        if not spec.get("size"):
-            f.append(Finding("WARN", f"reference {name!r} declares no size",
-                             "the fetch cannot report the total or check it fits before starting"))
+        # THE CHECK IS DECIDED BY THE TIER, and this is the fix for a gate that was red on every
+        # reference in the tree. `url` and `sha256` are the pins of a file THIS TOOL DOWNLOADS;
+        # demanding them of a database that ships inside an R package reports a defect that
+        # cannot be fixed, in the words of one that would "produce a plausible wrong answer".
+        # `refs.status()` has honoured the three tiers since they were added - this function was
+        # the copy that never heard about them. See `refs.TIERS`.
+        tier = _R.tier_of(spec)
+        if tier not in _R.TIERS:
+            f.append(Finding("ERROR", f"reference {name!r} declares unknown tier {tier!r}",
+                             f"one of {', '.join(_R.TIERS)} — an unrecognised tier is fetched as "
+                             f"{_R.DEFAULT_TIER!r}, so a typo silently changes what pins it"))
+            tier = _R.DEFAULT_TIER
+
+        if tier == "fetch":
+            if not spec.get("url"):
+                f.append(Finding("ERROR", f"reference {name!r} has no url"))
+            sha = str(spec.get("sha256") or "")
+            if not sha:
+                f.append(Finding("ERROR", f"reference {name!r} has no sha256",
+                                 "it cannot be shown to be the file the result was produced "
+                                 "against, and a truncated database returns a smaller answer "
+                                 "than an error"))
+            elif not HEX64.match(sha.lower()):
+                f.append(Finding("ERROR", f"reference {name!r} sha256 is not a 64-char hex digest",
+                                 sha[:20]))
+            if not spec.get("size"):
+                f.append(Finding("WARN", f"reference {name!r} declares no size",
+                                 "the fetch cannot report the total or check it fits before "
+                                 "starting"))
+
+        elif tier == "bundled":
+            # A BUNDLED REFERENCE IS PINNED BY ITS PACKAGE AND BY NOTHING ELSE, so the package is
+            # the one field that carries any pin at all. Without it the declaration records that
+            # a database was consulted and gives a reader no way to find which version.
+            if not spec.get("package"):
+                f.append(Finding("ERROR", f"reference {name!r} is bundled but names no package",
+                                 "a bundled reference is pinned by the version of the package "
+                                 "that ships it; with no package named, nothing pins it and "
+                                 "nothing records what was consulted"))
+            for k in ("url", "sha256"):
+                if spec.get(k):
+                    f.append(Finding("WARN", f"reference {name!r} is bundled but declares {k}",
+                                     "the file used is the one inside the package; a url or "
+                                     "digest here describes a copy the run does not read"))
+
+        elif tier == "runtime":
+            # NOTHING HERE PINS IT AND THE NETWORK IS NEEDED ON THE COMPUTE NODE. Both are facts
+            # about the result, not defects in the declaration - a WARN a reader wants, not an
+            # ERROR a maintainer cannot clear.
+            if not spec.get("source"):
+                f.append(Finding("ERROR", f"reference {name!r} is fetched at run time but names "
+                                          f"no source",
+                                 "a reader has no way to find out what was downloaded"))
+            f.append(Finding("WARN", f"reference {name!r} is fetched at run time",
+                             f"nothing pins it, so two runs may consult different data, and the "
+                             f"COMPUTE NODE needs outbound access to "
+                             f"{spec.get('source') or 'the network'} — a node without it fails "
+                             f"after the queue slot is spent"))
         # A LIST OF WHAT THIS TOOL HAPPENS TO KNOW IS NOT A LIST OF WHAT IS VALID. Six species
         # were listed and every other one drew a warning - on a correct declaration, for a
         # correct organism, which is how a check trains people to ignore it. It stays only to
