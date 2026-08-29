@@ -161,3 +161,36 @@ def expand(kinds, contrasts, levels=(GROUP, SAMPLE)):
             else:
                 out.append((k, None, lv))
     return out
+
+
+#: WHICH KINDS A RUN ACTUALLY DRAWS TODAY, and where. A registry nothing consults is a
+#: specification of intent; pairing it with the implemented set turns the difference into a
+#: recorded gap instead of an assumption. `tests/test_contract.py` asserts every id here is a
+#: registered kind, so the two cannot drift apart silently.
+IMPLEMENTED = {
+    # host-drawn, from a plugin's `report.unit_network` declaration
+    # The id is built as C1_diff_<count|strength>; the checkable literal is the stem.
+    "diff_matrix": "compare_panel.draw_contrast — C1_diff_",
+    "flow_compare": "compare_panel.draw_contrast — C3_flow",
+    "role_shift": "compare_panel.draw_contrast — C4_role_shift",
+    "circle": "network_panels.circle — N1_circle, per arm",
+    "chord": "network_panels.chord — N2_chord, per arm",
+}
+
+#: Registered, specified, and NOT drawn by any run. Named so the gap is auditable.
+NOT_IMPLEMENTED = tuple(k.id for k in KINDS if k.id not in IMPLEMENTED)
+
+
+def implemented():
+    """{kind id: where it is drawn} for the kinds a run currently produces."""
+    return dict(IMPLEMENTED)
+
+
+def gaps():
+    """Kinds this tool has specified and does not yet draw at the host level.
+
+    Several are drawn INSIDE plugins rather than by the host - a plugin's own F-numbered panels
+    - which is why a gap here is not the same as a kind nobody has ever rendered. It is a kind
+    the host does not draw from a declaration, and so does not give every plugin for free.
+    """
+    return tuple(NOT_IMPLEMENTED)

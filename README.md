@@ -163,9 +163,11 @@ gets the panels; no host code names a method.
 
 Two rules apply throughout:
 
-- **The group is the unit.** Comparisons are drawn from cells pooled within an arm, whatever the
-  arm sizes. The sample axis reports whether the members of a group agree; it never gates a
-  panel.
+- **The group is the unit of comparison.** Arm-level panels pool each unit's results and are
+  drawn whatever the arm sizes. The sample axis reports whether the members of a group agree; it
+  never gates a panel. Note that a plugin is currently invoked once per sample, so an arm-level
+  panel summarises per-sample inferences pooled after the fact — see
+  [REFERENCE.md](docs/REFERENCE.md#units-and-group-level-analysis).
 - **Statistics come from the wrapped method.** The host computes none of its own. Where a method
   ships no test, the panel is descriptive and says so.
 

@@ -166,10 +166,14 @@ method.
 
 ### Panel kinds
 
-Thirteen kinds are registered in `scprofile/panels.py`, each declaring what it establishes and
-what it does not: `matrix`, `diff_matrix`, `circle`, `chord`, `role_scatter`, `role_shift`,
-`flow_rank`, `flow_compare`, `role_heatmap`, `patterns`, `similarity`, `contribution`,
-`coverage`.
+`scprofile/panels.py` registers thirteen kinds, each declaring what it establishes and what it
+does not: `matrix`, `diff_matrix`, `circle`, `chord`, `role_scatter`, `role_shift`, `flow_rank`,
+`flow_compare`, `role_heatmap`, `patterns`, `similarity`, `contribution`, `coverage`.
+
+The registry is a **specification**, not a dispatcher. It records what each kind must establish
+and which rules bind it; the drawing code implements them. `IMPLEMENTED` names the kinds a run
+currently draws, and a test asserts the two agree, so a kind listed here and not drawn is a
+recorded gap rather than an assumption.
 
 ### Rules every panel obeys
 
@@ -202,14 +206,25 @@ cohort page links to them.
 
 ---
 
-## Units
+## Units and group-level analysis
 
-`scprofile/units.py` resolves the unit axis from the design.
+Two different things are meant by "group level". They have different status today.
 
-- **Group first.** Arms are the combination of the design's biological factors. Technical
-  factors — batch, chemistry, lane — are excluded from the arm label.
-- **Sample as well**, where the design has more than one sample.
-- A thin sample axis never withholds a group-level result.
+**Group-level comparison — ACTIVE.** The report pools each unit's results into design arms and
+draws every contrast the design supports, plus each arm's own network. This is what
+`compare_panel` and `network_panels` do, and it is drawn on every run whose plugin declares
+`unit_network`. It is never gated on arm size.
+
+**Group-level inference — NOT ACTIVE.** A plugin is still invoked once per **sample**. A run
+does not currently invoke a plugin once per arm over pooled cells. `_entry` subsets by equality
+on the sample key, so a unit is one sample.
+
+`scprofile/units.py` provides `resolve()`, which returns the group axis followed by the sample
+axis. It is **not yet called by `run`**. Wiring it requires the instance contract to carry the
+members of a unit so `_entry` can subset by membership rather than equality.
+
+When reading a report: an arm-level panel summarises per-sample inferences pooled after the
+fact. It is not a single inference computed over the arm's cells.
 
 ---
 

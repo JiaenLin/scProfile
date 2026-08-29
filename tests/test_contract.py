@@ -2257,6 +2257,7 @@ def main():
     _guarded(test_a_figure_is_saved_at_the_width_it_declared)
     _guarded(test_the_saved_width_is_measured_from_the_file_not_from_the_figure)
     _guarded(test_no_local_shadows_a_module_function_it_also_calls)
+    _guarded(test_the_panel_registry_matches_what_is_drawn)
     _guarded(test_a_figure_review_is_bound_to_the_image_it_describes)
     print()
     if FAILED:
@@ -2266,6 +2267,42 @@ def main():
     return 0
 
 
+
+
+def test_the_panel_registry_matches_what_is_drawn():
+    """A registry nothing consults is a wish. This makes the two agree or fail."""
+    print("\nthe panel registry and the drawing code agree")
+    from scprofile import panels as P
+    import pathlib as _pl
+
+    root = _pl.Path(__file__).resolve().parents[1]
+    check("every implemented id is a registered kind",
+          set(P.IMPLEMENTED) <= set(P.BY_ID),
+          str(sorted(set(P.IMPLEMENTED) - set(P.BY_ID))))
+    check("implemented and gaps together cover the registry",
+          set(P.IMPLEMENTED) | set(P.gaps()) == set(P.BY_ID))
+    check("the gap list is not empty and is therefore honest about it",
+          len(P.gaps()) > 0, "a registry claiming everything is drawn would be the wish again")
+
+    # WHERE IT SAYS IT IS DRAWN MUST BE TRUE. A pointer to a function that does not exist is
+    # exactly the drift this pairing exists to stop.
+    src = "".join((root / "scprofile" / f).read_text()
+                  for f in ("compare_panel.py", "network_panels.py"))
+    missing = []
+    for kid, where in P.IMPLEMENTED.items():
+        for tok in where.replace("—", " ").replace(",", " ").split():
+            # A STEM IS ENOUGH WHERE THE ID IS BUILT. `C1_diff_count` is assembled from
+            # `C1_diff_` and a variable, so the full id is nowhere in the source; the stem is
+            # what can be checked, and checking nothing would defeat the pairing.
+            if tok.startswith(("C1_", "C3_", "C4_", "N1_", "N2_")) and tok not in src:
+                missing.append(f"{kid}: {tok}")
+    check("every figure id the registry names is present in the drawing code",
+          not missing, str(missing))
+
+    # EVERY KIND STATES BOTH HALVES. A kind described only by what it shows invites every
+    # reading its geometry allows.
+    bad = [k.id for k in P.KINDS if not (k.establishes and k.does_not_establish)]
+    check("every kind says what it establishes AND what it does not", not bad, str(bad))
 
 
 def test_a_figure_review_is_bound_to_the_image_it_describes():
