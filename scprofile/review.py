@@ -1,0 +1,155 @@
+"""Which figures have actually been LOOKED AT, and which have not.
+
+A GREEN TEST SAYS A FILE WAS WRITTEN. IT SAYS NOTHING ABOUT WHETHER THE PICTURE IS RIGHT.
+Every figure defect worth finding in this codebase was found by opening the image, and the
+suite was green through all of them: a chord whose ribbon geometry was inverted and rendered as
+a starburst of spikes; ring labels sitting on top of the nodes they named; arrowheads painted
+over by their own destination markers, so direction - the whole content of the panel - was
+legible only from the legend; and a decluttering fix, correct in itself, applied where the
+geometry did not need it, which drove ten of twelve labels off the axes and passed every test
+before and after.
+
+Nothing here can verify that a human or an agent moved their eyes. What it CAN do is make the
+unreviewed set impossible to overlook and impossible to keep once it is stale, which is the
+same shape as every other gate in this tool: not a reminder, a refusal.
+
+THREE PROPERTIES DO THE WORK.
+
+1. A REVIEW IS BOUND TO THE IMAGE'S CONTENT. The sha256 of the file is recorded with the note.
+   Redraw the figure and the review is INVALIDATED - not merely old, gone. This is the property
+   that cannot be talked around: a panel cannot be reviewed once and then quietly change.
+
+2. A NOTE MUST SAY SOMETHING. An empty note, a note shorter than a few words, or a note
+   IDENTICAL TO ANOTHER FIGURE'S in the same ledger is refused. Copying one line across forty
+   panels is the obvious way to defeat this, so it is the one thing checked directly.
+
+3. THE UNREVIEWED SET IS REPORTED AS A COUNT AND AS NAMES. A number is ignorable; a list of
+   filenames is a task. Both are printed, always, including when it is zero.
+
+The ledger is append-only and lives beside the run it describes, so it travels with the run key
+and cannot be confused with a review of some other render.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import time
+from pathlib import Path
+
+#: Where the ledger lives, relative to a run directory.
+LEDGER = "FIGURE_REVIEW.jsonl"
+
+#: A note below this many words is not a look, it is a keystroke.
+MIN_NOTE_WORDS = 4
+
+#: Image suffixes a run can produce. Anything else is not a figure.
+SUFFIXES = (".png", ".jpg", ".jpeg", ".svg", ".pdf")
+
+REVIEWED, STALE, UNREVIEWED = "reviewed", "stale", "unreviewed"
+
+
+def digest(path):
+    """sha256 of a file's bytes, or None. The identity a review is bound to."""
+    try:
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def figures(out):
+    """Every figure a run directory holds, as paths relative to it, sorted."""
+    root = Path(out)
+    if not root.is_dir():
+        return []
+    return sorted(str(p.relative_to(root)) for p in root.rglob("*")
+                  if p.is_file() and p.suffix.lower() in SUFFIXES
+                  and "report" not in p.relative_to(root).parts[:1])
+
+
+def read_ledger(out):
+    """{relpath: latest entry}. Append-only on disk; last entry per figure wins."""
+    f = Path(out) / LEDGER
+    seen = {}
+    if not f.exists():
+        return seen
+    for line in f.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(rec, dict) and rec.get("figure"):
+            seen[str(rec["figure"])] = rec
+    return seen
+
+
+class Refused(Exception):
+    """A note that does not evidence a look. Raised, never returned - see the module docstring."""
+
+
+def record(out, figure, note, *, reviewer=""):
+    """Append one review. REFUSES a note that cannot have come from looking.
+
+    The refusals are deliberately few and mechanical: emptiness, brevity, and being identical
+    to another figure's note. A check that tried to judge whether a sentence was INSIGHTFUL
+    would be a check nobody could satisfy twice, and would be switched off.
+    """
+    root = Path(out)
+    rel = str(figure)
+    path = root / rel
+    if not path.is_file():
+        raise Refused(f"no such figure in this run: {rel}")
+    text = " ".join(str(note or "").split())
+    if len(text.split()) < MIN_NOTE_WORDS:
+        raise Refused(f"a note of {len(text.split())} word(s) is not a look. Say what the panel "
+                      f"shows, or what is wrong with it, in at least {MIN_NOTE_WORDS} words.")
+    for other, rec in read_ledger(out).items():
+        if other != rel and " ".join(str(rec.get("note", "")).split()).lower() == text.lower():
+            raise Refused(f"this note is identical to the one recorded for {other!r}. One line "
+                          f"copied across figures is the obvious way to defeat this, so it is "
+                          f"the one thing checked directly.")
+    rec = {"figure": rel, "sha256": digest(path), "note": text,
+           "reviewer": str(reviewer or ""), "at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                                                time.gmtime())}
+    with open(root / LEDGER, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(rec) + "\n")
+    return rec
+
+
+def status(out):
+    """[(relpath, state, why)] for every figure, sorted. `state` is one of the three above."""
+    led = read_ledger(out)
+    rows = []
+    for rel in figures(out):
+        rec = led.get(rel)
+        if rec is None:
+            rows.append((rel, UNREVIEWED, "never looked at"))
+            continue
+        now = digest(Path(out) / rel)
+        if now and rec.get("sha256") and now != rec["sha256"]:
+            rows.append((rel, STALE,
+                         "REDRAWN since it was reviewed - the review describes an image that no "
+                         "longer exists"))
+            continue
+        rows.append((rel, REVIEWED, str(rec.get("note", ""))[:120]))
+    return rows
+
+
+def outstanding(out):
+    """Figures needing a look: never reviewed, or redrawn since."""
+    return [(r, st) for r, st, _w in status(out) if st != REVIEWED]
+
+
+def summarise(out):
+    """{state: count}."""
+    c = {}
+    for _r, st, _w in status(out):
+        c[st] = c.get(st, 0) + 1
+    return c

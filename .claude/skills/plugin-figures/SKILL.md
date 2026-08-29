@@ -97,6 +97,44 @@ A figure that exists only in a document is a **draft that was published**. Say s
 it, and do not let it be quoted as a result — a plate has no run key, so nothing in it can be
 traced to a file on disk.
 
+## Rule minus-one-and-a-half — OPEN EVERY FIGURE, AND RECORD THAT YOU DID
+
+A passing suite proves a file was written and a function returned. **It says nothing about
+whether the picture is right**, and it never will:
+
+| defect | how it was found | suite |
+|---|---|---|
+| chord ribbons drawn as spikes — the path curved the ENDS through the centre | opened the image | green |
+| ring labels sitting on top of the nodes they named | opened the image | green |
+| arrowheads painted over by their own destination markers | opened the image | green |
+| a declutter fix that drove ten of twelve labels off the axes | opened the image | green before AND after |
+
+Every one. So looking is not a final polish, it is the step that finds the defects.
+
+**The mechanism, because prose is bypassable and a ledger is not:**
+
+```
+scprofile review --out RUNDIR                 # what has NOT been looked at, by name
+scprofile review --out RUNDIR --figure P --note "what you saw"
+scprofile review --out RUNDIR --strict        # exit non-zero while any remain
+```
+
+Three properties make it a gate rather than a reminder, and the first is the one that cannot be
+talked around:
+
+1. **A review is bound to the image's sha256.** Redraw the figure and the review is not old, it
+   is GONE — the figure returns to the outstanding list. A panel cannot be reviewed once and
+   then quietly change underneath the review.
+2. **A note must say something.** Empty, under four words, or identical to another figure's note
+   is refused. Copying one line across forty panels is the obvious way to defeat this, so it is
+   the one thing checked directly.
+3. **The outstanding set is reported as NAMES, not a count.** A number is ignorable; a list of
+   filenames is a task.
+
+`--strict` belongs where a human promotes a run. The automated cycle PRINTS the outstanding set
+and does not gate on it: an unattended run has nobody at the screen to satisfy, and a gate that
+fires on correct behaviour gets switched off.
+
 ## Rule minus-two — USE THE WRAPPED TOOL'S OWN STATISTICS. NEVER INVENT ONE.
 
 A plugin wraps a method that has already decided how its results are tested. **That decision is

@@ -2060,6 +2060,54 @@ def _write_readme(out, payload):
     return out / "README.md"
 
 
+def _review(a):
+    """The figure-review ledger: record a look, or report what has not been looked at.
+
+    A GATE, NOT A REMINDER, when `--strict` is passed. Every figure defect found in this
+    codebase was found by opening the image while the suite was green, so a report that a
+    figure exists is not evidence about the figure.
+    """
+    from . import review as RV
+
+    out = Path(a.out)
+    if not out.is_dir():
+        print(f"scprofile: no such run directory: {out}", file=sys.stderr)
+        return REFUSE
+    if a.figure or a.note:
+        if not (a.figure and a.note):
+            print("scprofile: --figure and --note go together", file=sys.stderr)
+            return REFUSE
+        try:
+            rec = RV.record(out, a.figure, a.note, reviewer=a.reviewer)
+        except RV.Refused as e:
+            print(f"scprofile: REFUSED - {e}", file=sys.stderr)
+            return REFUSE
+        print(f"recorded: {rec['figure']}  ({rec['sha256'][:12]})")
+        return 0
+
+    rows = RV.status(out)
+    counts = RV.summarise(out)
+    if not rows:
+        print(f"{out}\n  no figures here yet.")
+        return 0
+    print(f"{out}")
+    print("  " + ", ".join(f"{n} {k}" for k, n in sorted(counts.items())))
+    todo = [(r, st, w) for r, st, w in rows if st != RV.REVIEWED]
+    if todo:
+        # NAMES, NOT JUST A COUNT. A number is ignorable; a list of filenames is a task.
+        print(f"\n  {len(todo)} figure(s) have not been looked at, or were redrawn since:")
+        for r, st, w in todo:
+            print(f"    {st:10s} {r}")
+            if st == RV.STALE:
+                print(f"               {w}")
+        print("\n  Open each one. Then record what you saw:")
+        print(f"    scprofile review --out {out} --figure <path> --note \"...\"")
+    else:
+        print("\n  every figure has been looked at, and none has been redrawn since.")
+    if a.strict and todo:
+        return REFUSE
+    return 0
+
 def _status(a):
     """What is already on disk, and what a `--resume` would still run.
 
@@ -2361,6 +2409,18 @@ def main(argv=None):
     p = sub.add_parser("report", help="[you] rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)
     p.set_defaults(fn=_report)
+
+    rv = sub.add_parser("review",
+                        help="[you] which figures have been LOOKED AT, and which have not")
+    rv.add_argument("--out", required=True, type=Path, help="a run directory")
+    rv.add_argument("--figure", help="record a look at this figure (path relative to --out)")
+    rv.add_argument("--note", help="what you saw. Refused if empty, too short, or copied "
+                                   "from another figure's note")
+    rv.add_argument("--reviewer", default="", help="who looked")
+    rv.add_argument("--strict", action="store_true",
+                    help="exit non-zero while any figure is unreviewed or has been redrawn "
+                         "since it was reviewed. For a gate, a CI step, or a job script.")
+    rv.set_defaults(fn=_review)
 
     sv = sub.add_parser("status",
                         help="[you] what does this run directory already hold, and what is left?")

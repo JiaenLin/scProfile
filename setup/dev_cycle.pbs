@@ -334,6 +334,15 @@ if [ -d "${OUT:-}/report" ]; then
   echo
   echo "########## 7. THE EXIT STANDARD ##########"
   "$PY" -m scprofile.cli standard --out "$OUT" || echo "  standard exit $?"
+
+  # WHICH FIGURES NOBODY HAS LOOKED AT. Printed on every cycle, NOT gated - a gate that fires
+  # on correct behaviour gets switched off, and an automated cycle has nobody at the screen to
+  # satisfy it. What it must not do is let the set stay invisible: every figure defect found in
+  # this tool was found by opening the image while the suite was green, so a run that reports
+  # only "standard MET" is reporting on the half that never catches those.
+  #
+  # `review --strict` is the gate, and belongs where a human is promoting a run, not here.
+  "$PY" -m scprofile.cli review --out "$OUT" || echo "  review exit $?"
 fi
 
 echo "finished : $(date)"

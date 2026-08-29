@@ -2257,12 +2257,82 @@ def main():
     _guarded(test_a_figure_is_saved_at_the_width_it_declared)
     _guarded(test_the_saved_width_is_measured_from_the_file_not_from_the_figure)
     _guarded(test_no_local_shadows_a_module_function_it_also_calls)
+    _guarded(test_a_figure_review_is_bound_to_the_image_it_describes)
     print()
     if FAILED:
         print(f"{len(FAILED)} FAILED: {', '.join(FAILED)}")
         return 1
     print("all contract checks passed")
     return 0
+
+
+
+
+def test_a_figure_review_is_bound_to_the_image_it_describes():
+    """Looking cannot be verified; a review outliving its picture can be made impossible."""
+    print("\na figure review is bound to the IMAGE, so a redraw destroys it")
+    # THE MECHANISM THAT MAKES LOOKING ENFORCEABLE. Nothing can verify that eyes moved; what this
+    # must guarantee is that a review cannot outlive the picture it describes, and that the obvious
+    # ways to fake one are refused.
+    import tempfile as _t3                                                          # noqa: E402
+    from pathlib import Path as _P3                                                 # noqa: E402
+    from scprofile import review as _RV                                             # noqa: E402
+
+    _d3 = _P3(_t3.mkdtemp())
+    (_d3 / "kernels" / "k" / "figures").mkdir(parents=True)
+    _f1 = _d3 / "kernels" / "k" / "figures" / "a.png"
+    _f2 = _d3 / "kernels" / "k" / "figures" / "b.png"
+    _f1.write_bytes(b"\x89PNG-one")
+    _f2.write_bytes(b"\x89PNG-two")
+    _rel1, _rel2 = "kernels/k/figures/a.png", "kernels/k/figures/b.png"
+
+    check("every figure starts unreviewed",
+       _RV.summarise(_d3) == {_RV.UNREVIEWED: 2}, str(_RV.summarise(_d3)))
+    try:
+        _RV.record(_d3, _rel1, "ok")
+        _short_ok = False
+    except _RV.Refused:
+        _short_ok = True
+    check("a note too short to be a look is REFUSED", _short_ok)
+    _RV.record(_d3, _rel1, "eleven populations, both legends carry real values, no collisions")
+    check("a real note is recorded", dict(_RV.summarise(_d3)).get(_RV.REVIEWED) == 1,
+       str(_RV.summarise(_d3)))
+    try:
+        _RV.record(_d3, _rel2,
+                   "Eleven populations, both legends carry real values, no collisions")
+        _dupe_ok = False
+    except _RV.Refused:
+        _dupe_ok = True
+    check("the SAME note on another figure is refused, case included", _dupe_ok,
+       "one line copied across forty panels is the obvious way to defeat this")
+    try:
+        _RV.record(_d3, "kernels/k/figures/nope.png", "a note about a figure that is not here")
+        _ghost_ok = False
+    except _RV.Refused:
+        _ghost_ok = True
+    check("a figure that does not exist cannot be reviewed", _ghost_ok)
+
+    # THE PROPERTY THAT CANNOT BE TALKED AROUND
+    _f1.write_bytes(b"\x89PNG-one-REDRAWN")
+    _st = dict((r, s_) for r, s_, _w in _RV.status(_d3))
+    check("REDRAWING A REVIEWED FIGURE INVALIDATES ITS REVIEW", _st[_rel1] == _RV.STALE, str(_st))
+    check("and it returns to the outstanding list",
+       _rel1 in [r for r, _s in _RV.outstanding(_d3)], str(_RV.outstanding(_d3)))
+    check("a review that still matches its image survives",
+       _RV.record(_d3, _rel1, "redrawn: the ribbons are arcs at the ends now, not spikes")
+       and dict((r, s_) for r, s_, _w in _RV.status(_d3))[_rel1] == _RV.REVIEWED)
+
+    _cli = (_P3(__file__).resolve().parents[1] / "scprofile" / "cli.py").read_text()
+    check("`review` is a command, so it can be run without importing anything",
+       'add_parser("review"' in _cli and "def _review(" in _cli)
+    check("and it has a --strict mode that EXITS non-zero, for a gate",
+       '"--strict"' in _cli and "if a.strict and todo:" in _cli)
+    _dev = (_P3(__file__).resolve().parents[1] / "setup" / "dev_cycle.pbs").read_text()
+    check("the development cycle prints the outstanding set every time",
+       "cli review --out" in _dev, "an invisible backlog is not a backlog")
+    check("but does NOT gate on it there - an unattended run has nobody to satisfy",
+       "review --strict" not in _dev.split("cli review --out")[1][:200],
+       "a gate that fires on correct behaviour gets switched off")
 
 
 if __name__ == "__main__":
