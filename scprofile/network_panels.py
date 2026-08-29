@@ -80,6 +80,15 @@ def unconnected(mask, pops):
     return out
 
 
+def _side(x, tol=0.28):
+    """Horizontal anchor for a label at ring position x: outward, never back over its mark."""
+    if x > tol:
+        return "left"
+    if x < -tol:
+        return "right"
+    return "center"
+
+
 def _ring(n, r=1.0, start=90.0):
     """Positions on a circle, clockwise from the top - a stable order across panels."""
     return [(r * math.cos(math.radians(start - 360.0 * k / n)),
@@ -129,6 +138,7 @@ def circle(ctx, edges, pops, *, fid="N1_circle", keep=0.90, title=None, note="")
                                          lw=lw, color=col, alpha=.75, zorder=2,
                                          shrinkA=7, shrinkB=8))
     dmax = float(deg.max()) or 1.0
+    _nlabels = []
     for k, p in enumerate(pops):
         # A RADIUS FLOOR, DISCLOSED. Without it the smallest population is a dot nobody can
         # click on; with it the smallest are drawn slightly larger than proportional, and the
@@ -138,8 +148,15 @@ def circle(ctx, edges, pops, *, fid="N1_circle", keep=0.90, title=None, note="")
         ax.add_patch(MCircle((x, y), rr, color=cmap[p], zorder=3))
         ax.text(x, y, str(k + 1), ha="center", va="center", fontsize=4.6,
                 color="white", zorder=4, weight="bold")
-        ax.annotate(f"{k + 1} {short[p]}", (x * 1.30, y * 1.30), fontsize=4.6,
-                    ha="center", va="center", color=F.INK, zorder=4)
+        # ANCHORED BY SIDE. A centred label on a node at the left or right of the ring runs
+        # back over its own disc: "Lymphatic endothelial" sat on top of the node it named.
+        _nlabels.append(ax.annotate(f"{k + 1} {short[p]}", (x * 1.22, y * 1.22),
+                                    xytext=(0, 0), textcoords="offset points", fontsize=4.6,
+                                    ha=_side(x), va="center", color=F.INK, zorder=4))
+    # NOT DECLUTTERED. A ring PLACES its labels by construction - one per node, evenly spaced,
+    # anchored outward by side - so the only collision it had was a long name running back over
+    # its own disc, which `_side` fixes. Adding a vertical declutter on top made it worse, not
+    # better: see `figure.spread_labels`, which is now bounded for the same reason.
     # THE TWO LEGENDS, WITH REAL VALUES ON THEM. Both channels here carry a number, and an
     # encoding a reader cannot invert is decoration. Without these the panel says "area is
     # interactions, width is strength" and offers no way to turn either back into a quantity.
@@ -235,12 +252,16 @@ def chord(ctx, edges, pops, *, fid="N2_chord", keep=0.75, title=None, note=""):
     ax.axis("off")
     R, RW = 1.0, 0.075
     cursor = {i: arcs[i][1] for i in drawn}
+    _labels = []
     for i in drawn:
         a0, a1 = arcs[i]
         ax.add_patch(Wedge((0, 0), R, a0, a1, width=RW, facecolor=cmap[pops[i]], lw=0))
         mid = math.radians((a0 + a1) / 2.0)
-        ax.annotate(short[pops[i]], (1.13 * math.cos(mid), 1.13 * math.sin(mid)),
-                    ha="center", va="center", fontsize=4.8, color=F.INK)
+        mx, my = math.cos(mid), math.sin(mid)
+        _labels.append(ax.annotate(short[pops[i]], (1.10 * mx, 1.10 * my),
+                                   xytext=(0, 0), textcoords="offset points", ha=_side(mx),
+                                   va="bottom" if my >= 0 else "top", fontsize=4.8,
+                                   color=F.INK))
         # TICKS WORTH A STATED AMOUNT, so arc length inverts to a quantity instead of being
         # read as a share of a circle whose total nobody knows.
         step = grand / span
@@ -255,8 +276,13 @@ def chord(ctx, edges, pops, *, fid="N2_chord", keep=0.75, title=None, note=""):
             deg_at -= _tick_deg
             k += 1
 
-    def _pt(deg, r=R - RW):
+    def _arc_pt(deg, r=R - RW):
         return (r * math.cos(math.radians(deg)), r * math.sin(math.radians(deg)))
+
+    def _arc(d0, d1, step=1.2):
+        """Points along the circumference from d0 to d1 - the flat end of a ribbon."""
+        n = max(2, int(abs(d1 - d0) / step) + 1)
+        return [_arc_pt(d0 + (d1 - d0) * k / (n - 1.0)) for k in range(1, n)]
 
     for i in drawn:
         for j in drawn:
@@ -267,11 +293,30 @@ def chord(ctx, edges, pops, *, fid="N2_chord", keep=0.75, title=None, note=""):
             cursor[i] -= ext
             b_lo, b_hi = cursor[j] - ext, cursor[j]
             cursor[j] -= ext
-            p0, p1, p2, p3 = _pt(a_hi), _pt(a_lo), _pt(b_hi), _pt(b_lo)
-            path = Path([p0, (0, 0), p1, p2, (0, 0), p3, p0],
-                        [Path.MOVETO, Path.CURVE3, Path.CURVE3,
-                         Path.LINETO, Path.CURVE3, Path.CURVE3, Path.CLOSEPOLY])
-            ax.add_patch(PathPatch(path, facecolor=cmap[pops[i]], lw=0, alpha=.55, zorder=1))
+            # A RIBBON'S ENDS ARE ARCS AND ITS SIDES ARE THE CURVES THROUGH THE CENTRE.
+            # The first version had this exactly inverted - it curved each END through (0,0)
+            # and joined the two with a straight line - which draws a lens pinched at the
+            # middle, not a ribbon. On a dense network the result was a starburst of spikes,
+            # and it looked like a property of the data rather than of the path.
+            verts = [_arc_pt(a_lo)]
+            codes = [Path.MOVETO]
+            for v in _arc(a_lo, a_hi):
+                verts.append(v)
+                codes.append(Path.LINETO)
+            verts += [(0.0, 0.0), _arc_pt(b_lo)]
+            codes += [Path.CURVE3, Path.CURVE3]
+            for v in _arc(b_lo, b_hi):
+                verts.append(v)
+                codes.append(Path.LINETO)
+            verts += [(0.0, 0.0), _arc_pt(a_lo)]
+            codes += [Path.CURVE3, Path.CURVE3]
+            ax.add_patch(PathPatch(Path(verts, codes), facecolor=cmap[pops[i]], lw=0,
+                                   alpha=.55, zorder=1))
+    # TWO ADJACENT SLIVERS SHARE A LABEL POSITION. Arcs sized by strength put the smallest
+    # populations side by side at one point on the ring, and their names overprinted into an
+    # unreadable stack - the case a label is most needed for, since a sliver cannot be
+    # identified any other way.
+    F.spread_labels(ax, _labels)
     ax.set_xlim(-1.35, 1.35)
     ax.set_ylim(-1.35, 1.35)
     if title:

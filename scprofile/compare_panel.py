@@ -185,12 +185,19 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
     if float(o_lo.sum() + o_hi.sum()) > 0:
         fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.92), layout="constrained")
         cmap = F.palette(list(pops))
+        # MARKERS FIRST, ARROWS ON TOP, AND THE HEAD STOPPING SHORT OF THE MARKER. The first
+        # version drew each arrow and then painted its destination marker over the arrowhead,
+        # so DIRECTION - the entire content of the panel - was legible only from the legend.
+        for k, p in enumerate(pops):
+            ax.plot([o_lo[k]], [i_lo[k]], "o", ms=3.4, color=cmap[p], mec="white", mew=.5,
+                    zorder=2)
+            ax.plot([o_hi[k]], [i_hi[k]], "o", ms=5.6, color=cmap[p], mec=F.INK, mew=.5,
+                    zorder=2)
         for k, p in enumerate(pops):
             ax.annotate("", xy=(o_hi[k], i_hi[k]), xytext=(o_lo[k], i_lo[k]),
-                        arrowprops=dict(arrowstyle="-|>", lw=0.9, color=cmap[p],
-                                        shrinkA=0, shrinkB=0, alpha=0.9))
-            ax.plot([o_lo[k]], [i_lo[k]], "o", ms=3.4, color=cmap[p], mec="white", mew=.5)
-            ax.plot([o_hi[k]], [i_hi[k]], "o", ms=6.4, color=cmap[p], mec=F.INK, mew=.5)
+                        arrowprops=dict(arrowstyle="-|>,head_width=.22,head_length=.42",
+                                        lw=0.9, color=cmap[p], shrinkA=2, shrinkB=5,
+                                        alpha=.95), zorder=3)
         lim = float(max(o_lo.max(), o_hi.max(), i_lo.max(), i_hi.max())) * 1.12 or 1.0
         ax.plot([0, lim], [0, lim], color=F.GREY, lw=.8, ls="--", zorder=0)
         _tx = [ax.annotate(s, (o_hi[k], i_hi[k]), fontsize=5, xytext=(4, 2),
@@ -206,11 +213,16 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
         # slide leaves its caption behind - so the two arms are named in the panel itself. The
         # marker sizes here are the same ones the arrows use.
         import matplotlib.lines as _ml
+        # OUTSIDE THE DATA. `loc="lower right"` put the key on top of the longest arrow in the
+        # panel - the one population whose role moved furthest, which is the thing a reader
+        # came for.
         ax.legend(handles=[_ml.Line2D([], [], marker="o", ls="", ms=3.4, color=F.INK,
                                       label=f"{lo_lv}  (tail)"),
-                           _ml.Line2D([], [], marker="o", ls="", ms=6.4, color=F.INK,
-                                      label=f"{hi_lv}  (head)")],
-                  fontsize=5.5, frameon=False, loc="lower right", handletextpad=0.4)
+                           _ml.Line2D([], [], marker="o", ls="", ms=5.6, color=F.INK,
+                                      label=f"{hi_lv}  (arrowhead)")],
+                  fontsize=5.5, frameon=False, loc="upper left",
+                  bbox_to_anchor=(0.0, -0.235), ncol=2, handletextpad=0.4,
+                  columnspacing=1.4)
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
         _save(fig, "C4_role_shift",

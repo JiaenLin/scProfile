@@ -632,7 +632,7 @@ def legend_outside(fig, ax, handles=None, labels=None, ncol=1, markerscale=2.5):
         return fig.legend(handles, labels, **kw)
     return ax.legend(**kw)
 
-def spread_labels(ax, texts, *, iterations=80, pad=1.2, clip=True):
+def spread_labels(ax, texts, *, iterations=80, pad=1.2, clip=True, max_shift=14.0):
     """Nudge annotation labels apart, in DISPLAY space, until they stop overlapping.
 
     RADIAL OFFSET IS NOT ENOUGH WHERE IT MATTERS. Offsetting each label away from the centroid
@@ -679,7 +679,15 @@ def spread_labels(ax, texts, *, iterations=80, pad=1.2, clip=True):
                 up, down = (i, j) if bi.y0 >= bj.y0 else (j, i)
                 for t, dy in ((texts[up], step), (texts[down], -step)):
                     ox, oy = t.xyann
-                    t.set_position((ox, oy + dy * 72.0 / fig.dpi))
+                    # BOUNDED, BECAUSE AN UNBOUNDED DECLUTTER LOSES THE LABEL. Pushing purely
+                    # vertically accumulates wherever several labels share a y-band - which is
+                    # every label on a ring - and on a twelve-node ring it drove ten of them
+                    # clean off the axes and left one at the bottom of the canvas, nowhere near
+                    # its mark. A label that has travelled further than `max_shift` points can
+                    # no longer be associated with the thing it names, so overlapping slightly
+                    # is the better failure.
+                    ny = oy + dy * 72.0 / fig.dpi
+                    t.set_position((ox, max(-max_shift, min(max_shift, ny))))
                 moved = True
         if not moved:
             break
