@@ -48,7 +48,16 @@ DETERMINING = ("plugin", "version", "unit", "input", "input_size", "input_mtime"
 #: wrote. A change to the reporter or the CLI does not change an instance's contents - the
 #: reporter redraws from the payload on every render - so folding the whole tree in would
 #: invalidate every cached result on every commit and the reuse layer would be worth nothing.
-HOST_MODULES = ("_entry.py", "plugin.py", "manifest.py")
+#: THE RULE, so the next module is judged rather than remembered: a module belongs here if its
+#: code can change what an INSTANCE contains. `figure.py` was left out on the first attempt and
+#: the loop caught it within the hour - a fix to the drawing audit did not invalidate reuse, so
+#: the next run adopted fourteen of fifteen instances carrying the flaw the fix removed, and the
+#: station reported the same 154 false positives on a tool that had just stopped producing them.
+#:
+#: What is NOT here and must not be: the reporter and the panel modules. They draw at REPORT
+#: time from the payload, on every render, so a change to them reaches an adopted instance
+#: anyway - and folding them in would invalidate every cached result on every commit.
+HOST_MODULES = ("_entry.py", "plugin.py", "manifest.py", "figure.py")
 
 
 def host_version():

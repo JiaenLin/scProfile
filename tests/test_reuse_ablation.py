@@ -58,8 +58,18 @@ check("a different host version is a DIFFERENT result",
       "a host change that alters what an instance records must not be adopted over")
 check("and an instance written before the host was recorded does not match a current one",
       _LS.reuse_key(_noneho) != _LS.reuse_key(_base))
-check("the host version is scoped to the modules that WRITE an instance",
-      set(_LS.HOST_MODULES) == {"_entry.py", "plugin.py", "manifest.py"},
-      "folding in the reporter or the CLI would invalidate every cached result on every commit")
+# THE RULE, NOT THE LIST. A module belongs in the fingerprint if its code can change what an
+# INSTANCE contains. `figure.py` was omitted on the first attempt and cost an hour: a fix to the
+# drawing audit did not invalidate reuse, the next run adopted fourteen of fifteen instances
+# carrying the flaw, and the station reported the same false positives on a tool that had just
+# stopped producing them.
+check("every module the emit path imports at draw time is in the fingerprint",
+      {"_entry.py", "plugin.py", "manifest.py", "figure.py"} <= set(_LS.HOST_MODULES),
+      "a module that can change what an instance contains must invalidate reuse")
+check("and the render-time panel modules are NOT",
+      not ({"report.py", "panels.py", "compare_panel.py", "network_panels.py", "cli.py"}
+           & set(_LS.HOST_MODULES)),
+      "those draw from the payload on every render, so folding them in would invalidate every "
+      "cached result on every commit for no gain")
 check("and it is stable when nothing changes",
       _LS.host_version() == _LS.host_version())
