@@ -383,6 +383,14 @@ def _run(a):
             return False
         pl_.setdefault("kernel", name_)
         pl_.setdefault("unit", unit_)
+        # THE PAYLOAD MUST SAY WHERE IT LIVES. `fold_payloads` falls back to `kernels/<plugin>`
+        # when `dir` is absent - the PLUGIN directory, not the instance's - so every reused unit
+        # pointed one level too high and the reporter found no per-unit table under it: the arm
+        # panels silently vanished from a run whose figures were all present on disk.
+        try:
+            pl_["dir"] = str(d.relative_to(out))
+        except ValueError:
+            pl_["dir"] = str(d)
         # THE SAME MERGE A COMPUTED INSTANCE GETS. An adopted instance that skipped this would
         # reach the report but not the object: its obs columns and arrays would be missing from
         # the merged h5ad while its figures sat in the run directory.
@@ -1157,6 +1165,11 @@ def _run(a):
                # documents from this file alone, months later and possibly on another machine:
                # a reporter that went back to the declaration would render a page describing
                # whatever the plugin says TODAY over numbers from the run that happened then.
+               # WHAT WAS NOT RECOMPUTED, AND WHERE IT CAME FROM. A run that adopted fourteen
+               # instances and one that computed them leave the same directory; only this
+               # distinguishes them, and a reader of the report is entitled to know which they
+               # are looking at.
+               "reused": reused,
                "report_spec": {n: ks[n].report_spec for n in sorted(ks)},
                # THE CLAIM, carried beside the output that would make it true, so the page can
                # say "declares it reports per arm and produced nothing to split" rather than
@@ -2260,6 +2273,10 @@ def _check(a):
         "_UN.resolve(" in src, "run still resolves units as samples")
     row("group-level inference: a unit carries its members",
         '"unit_members"' in man and "unit_members=" in src, "in.json has no unit_members")
+    row("a reused instance records WHERE IT LIVES, so its figures are found",
+        'pl_["dir"] = str(d.relative_to(out))' in src,
+        "fold_payloads falls back to the plugin dir and the per-unit table is not found")
+    row("a run records what it reused", '"reused": reused,' in src)
     row("run can ADOPT a licensed earlier result instead of recomputing",
         '"--reuse-from"' in src and "_LCN.adopt(" in src,
         "landscape reports reuse but run recomputes everything")
