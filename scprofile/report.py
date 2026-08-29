@@ -462,7 +462,8 @@ def _arm_content(units, design, spec, *, out_dir=None, name=""):
     pairs = CPan.arm_pairs(design)
     con = []
     for sp in pairs:
-        con += CPan.draw_contrast(per, design, sp, figdir, name, group_col=net.get("group"))
+        con += CPan.draw_contrast(per, design, sp, figdir, name, group_col=net.get("group"),
+                                  weight_scale=net.get("weight_scale", "per_object"))
     # THE INTERACTION, ONCE PER CROSSED PAIR OF TWO-LEVEL FACTORS. It is the question a factorial
     # design is built to answer and the one nothing drew: the six two-arm contrasts were all
     # there and a reader had to hold two of them side by side in their head. A marginal effect

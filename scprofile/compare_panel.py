@@ -92,8 +92,20 @@ def _short(pops):
 
 
 def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob",
-                  group_col=None, min_edges=1):
-    """Every panel for ONE contrast. Returns [(figure_id, path, caption)]."""
+                  group_col=None, min_edges=1, weight_scale="per_object"):
+    """Every panel for ONE contrast. Returns [(figure_id, path, caption)].
+
+    WHERE THE WEIGHT IS NORMALISED WITHIN EACH UNIT, EVERY WEIGHT-DERIVED PANEL IS DRAWN ON
+    SHARES. Measured on a real cohort: two arms of one contrast had total inferred strength of
+    23.4 and 7.8 - a factor of THREE - so a raw difference between them is mostly the difference
+    in totals, and the largest "effect" on the page was the smaller arm being smaller. On the
+    same pathway the raw comparison said the effect of one factor DISAPPEARED under the other
+    (-4.15 against +0.16) while the share comparison said it REVERSED (-8.6 pp against +8.7 pp).
+    Same numbers, opposite conclusions, and the difference is entirely the denominator.
+
+    Counts are left as counts - a count of significant interactions is not a normalised weight -
+    and every panel says which of the two it is drawing.
+    """
     import numpy as np
     import matplotlib.pyplot as plt
     from pathlib import Path
@@ -108,6 +120,16 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
     pops = sorted(_seen_lo | _seen_hi)
     c_lo, w_lo = matrices(e_lo, pops, weight)
     c_hi, w_hi = matrices(e_hi, pops, weight)
+    rel = str(weight_scale or "per_object") != "absolute"
+    _tot_lo, _tot_hi = float(w_lo.sum()) or 1.0, float(w_hi.sum()) or 1.0
+    if rel:
+        w_lo, w_hi = 100.0 * w_lo / _tot_lo, 100.0 * w_hi / _tot_hi
+    _wunit = "% of the arm's own total" if rel else "summed probability"
+    _wnote = (f"  THE WEIGHT IS NORMALISED WITHIN EACH UNIT, so the two arms' raw totals "
+              f"({_tot_lo:.4g} and {_tot_hi:.4g}, {_tot_hi / _tot_lo:.2f}x) are not comparable "
+              f"and every weight here is that arm's OWN SHARE. A raw difference would be mostly "
+              f"the difference in totals." if rel else
+              f"  The weight is on an absolute scale, so the two arms' values compare directly.")
     short = _short(pops)
     out = []
     Path(out_dir).mkdir(parents=True, exist_ok=True)
@@ -141,7 +163,7 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
         unscored[:, _ix[p]] = True
 
     for what, A, B, unit in (("count", c_lo, c_hi, "significant interactions"),
-                             ("strength", w_lo, w_hi, "summed probability")):
+                             ("strength", w_lo, w_hi, _wunit)):
         D = B - A
         if not np.any(D):
             continue
@@ -188,12 +210,17 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                  f"comparison and needs no single sample to support one. Blue is lower in "
                  f"{hi_lv}, red higher, on a symmetric scale so both directions read at the same "
                  f"weight. Nothing here is a test: no interval is drawn because none was "
-                 f"computed."))
+                 f"computed."
+               + (_wnote if what == "strength" else
+                  "  This panel counts EDGES, not weight, so no normalisation applies to it — "
+                  "though a count still rises with an arm's total power.")))
 
     # ---- 2. information flow per group (rankNet, paired) -------------------------------------
     if group_col and group_col in e_lo.columns and group_col in e_hi.columns:
         fl = e_lo.groupby(group_col)[weight].sum()
         fh = e_hi.groupby(group_col)[weight].sum()
+        if rel:
+            fl, fh = 100.0 * fl / (fl.sum() or 1.0), 100.0 * fh / (fh.sum() or 1.0)
         # THE SAME RULE AS THE MATRIX ABOVE. A group scored in one arm and not the other is a
         # difference of presence; drawn as a paired bar with one bar at zero it reads as the
         # largest change on the panel. Kept, marked, and named - not dropped.
@@ -214,7 +241,7 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                     ax.axhspan(yi - 0.42, yi + 0.42, color="#B0B0B0", alpha=0.22, zorder=0)
             ax.set_yticks(y)
             ax.set_yticklabels([f"{k} †" if k in _one else k for k in keys], fontsize=5)
-            ax.set_xlabel("information flow (summed probability)")
+            ax.set_xlabel("information flow  (" + _wunit + ")")
             ax.legend(fontsize=5.5, frameon=False, loc="lower right")
             ax.tick_params(axis="y", length=0)
             for sp in ("top", "right", "left"):
@@ -226,6 +253,7 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                    (f"MARKED †, ON A SHADED ROW, AND NOT A MAGNITUDE: "
                     f"{', '.join(str(k) for k in _one)} — scored in one of these arms and not "
                     f"the other, so the empty bar is an absence and not a zero. " if _one else "")
+                   + _wnote.strip() + " "
                    + f"Arms are pooled groups, not averages of samples. THE TWO ARMS DO NOT "
                      f"NECESSARILY CONTAIN THE SAME POPULATIONS — the earlier claim that they do "
                      f"was untrue whenever a population is missing from one — so a bar's HEIGHT "
@@ -262,6 +290,8 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                         arrowprops=dict(arrowstyle="-|>,head_width=.22,head_length=.42",
                                         lw=0.9, color=cmap[p], shrinkA=2, shrinkB=5,
                                         alpha=.95), zorder=3)
+        # ALREADY ON SHARES where the weight is per-object: o_lo/i_lo are read off w_lo, which
+        # was normalised above, so an arrow is a change in the population's SHARE of its arm.
         _live = [k for k, p in enumerate(pops) if p not in one_arm]
         lim = (float(max(max(o_lo[_live], default=0), max(o_hi[_live], default=0),
                          max(i_lo[_live], default=0), max(i_hi[_live], default=0)))
@@ -300,11 +330,10 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                 f"one of these arms, so one end of the arrow would be the origin and its length "
                 f"would be a presence, not a shift. Hollow rings mark where they sit in the arm "
                 f"that has them. " if one_arm else "")
-               + f"THE TWO ARMS' TOTALS ARE {float(w_lo.sum()):.4g} AND {float(w_hi.sum()):.4g} "
-                 f"({float(w_hi.sum()) / (float(w_lo.sum()) or 1):.2f}x), so much of any common "
-                 f"direction here is the arms differing in total inferred strength rather than "
-                 f"in the balance between populations — read the DEPARTURES from that common "
-                 f"direction, not the direction. "
+               + _wnote.strip() + " "
+               + (f"Axes are therefore each population's SHARE of its arm, and an arrow is a "
+                  f"change in the BALANCE between populations rather than in the arm's total. "
+                  if rel else "")
                + f"The small marker is {lo_lv}, the arrowhead {hi_lv}. Above the dashed line a "
                f"population receives more than it sends. Arms are pooled groups. An arrow is "
                f"the difference of two point estimates and carries no interval - its length is "
@@ -516,11 +545,20 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
 
     # THE ELEMENT IS THE COARSEST NAMEABLE ONE THE DECLARATION SUPPORTS. A named group is what a
     # reader can act on; an ordered population pair is what every declaration has.
+    rel = str(weight_scale or "per_object") != "absolute"
+
     def _totals(e):
         if group_col and group_col in getattr(e, "columns", ()):
-            return e.groupby(group_col)[weight].sum().to_dict()
-        return (e.assign(_k=e["source"].astype(str) + " → " + e["target"].astype(str))
-                 .groupby("_k")[weight].sum().to_dict())
+            t = e.groupby(group_col)[weight].sum()
+        else:
+            t = (e.assign(_k=e["source"].astype(str) + " → " + e["target"].astype(str))
+                  .groupby("_k")[weight].sum())
+        # SHARES WHERE THE WEIGHT IS PER-OBJECT, AND THIS PANEL IS WHERE IT DECIDED THE ANSWER.
+        # On a real cohort the raw version put one pathway at -4.15 within one level and +0.16
+        # within the other - an effect that DISAPPEARS - while the same pathway on shares was
+        # -8.6 pp against +8.7 pp, an effect that REVERSES. The four arms' totals spanned 7.8 to
+        # 30.4, so the raw version was largely reporting which arm was smallest.
+        return (100.0 * t / (t.sum() or 1.0)).to_dict() if rel else t.to_dict()
 
     what = (group_col or "pathway").replace("_", " ") if group_col else "population pair"
     tot = {k: _totals(v) for k, v in cell.items()}
@@ -569,8 +607,13 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     ax.set_xlim(-1.08 * lim, 1.08 * lim)
     ax.set_ylim(-1.08 * lim, 1.08 * lim)
     ax.set_aspect("equal")
-    ax.set_xlabel(f"effect of {fa}  ({a0} → {a1})   within {fb} = {b0}", fontsize=6.5)
-    ax.set_ylabel(f"effect of {fa}  ({a0} → {a1})   within {fb} = {b1}", fontsize=6.5)
+    # SHORT ENOUGH TO FIT THE COLUMN. The first version wrote the factor, both levels and the
+    # unit into each axis label; at 85 mm the y-label was clipped at the top of the panel and
+    # the x-label ran off the right edge, so the one thing a reader needs to know - which
+    # stratum each axis is - was the part that did not render.
+    _u = "Δ share, pp" if rel else "Δ weight"
+    ax.set_xlabel(f"{_u}   ({a0}→{a1})   |   {fb} = {b0}", fontsize=7)
+    ax.set_ylabel(f"{_u}   ({a0}→{a1})   |   {fb} = {b1}", fontsize=7)
     ax.tick_params(labelsize=6)
     ax.set_title(f"{fa} × {fb}", fontsize=8)
     fig.text(0.0, -0.006,
@@ -583,7 +626,6 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     fig.savefig(path, dpi=200, bbox_inches="tight")
     plt.close(fig)
 
-    rel = str(weight_scale or "per_object") != "absolute"
     # THE LEAD IS BUDGETED. The visible caption is capped at 45 words and the host spends about
     # eight of them, so a lead written as three explanatory sentences fails the page it is on.
     cap = (f"Does {fa} act differently under each {fb}? One point per {what}, drawn by arm: its "
@@ -598,6 +640,8 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
            f"TESTED: these are differences of sums, with no "
            f"interval and no significance marking, and the eight furthest from the line are "
            f"labelled by distance, not by evidence."
-           + ("  The weight is normalised within each unit, so both axes are on that scale and "
-              "the comparison between them is a ranking." if rel else ""))
+           + ("  THE WEIGHT IS NORMALISED WITHIN EACH UNIT, so both axes are each element's "
+              "SHARE OF ITS ARM in percentage points, not a raw sum: the four arms' totals are "
+              "not comparable and a raw difference between them would mostly report which arm "
+              "is smallest." if rel else ""))
     return [(f"C5_interaction__{slug}", path, cap, f"{fa} × {fb}")]
