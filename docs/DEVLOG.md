@@ -766,3 +766,79 @@ the answer was indistinguishable from a real one — a ruler measuring the wrong
 read as an outcome, a suite that aborted where it looked like it had finished. It cost three
 watcher failures in this session's own supervision before it was recognised as one defect wearing
 many hats, and the last one was written while fixing the one before it.
+
+---
+
+## 2026-08-28/29 — reuse across runs, and the group becomes a unit (PBS 698996, 699250–699319)
+
+tested: eight jobs on 2026-08-28 and seven on 2026-08-29, every one against the same real
+        ten-sample cohort, one cellchat run per commit. This entry was written on 2026-08-29
+        covering thirty commits, which is twenty-nine more than an entry should cover — the log
+        is per cycle, and a log written in arrears is a reconstruction.
+
+**The group became a unit, and it is the change that matters.** Until 6d52b0b a unit was a
+sample and the four arms of a 2×2 design were something the reporter pooled after the fact.
+`units.resolve()` now reads the axis from the design, so PBS 699276 onward scheduled **fourteen
+instances — the ten samples and the four arms** — and a plugin invoked on an arm sees that arm's
+pooled cells. It is the correct unit of single-cell inference and it had never been one here.
+
+**Reuse across runs works, on real output, by hardlink.** Not a fixture: PBS 699282 adopted
+**eight instances, 13 files each, from 699276**, and 699301 adopted six from 699295. The
+refusals are as informative as the adoptions — 699295 declined every candidate with *"grade None
+is below the minimum this adoption accepts ('provisional')"*, which is the licence layer doing
+its job on a run whose figures nobody had looked at.
+
+**Figures: 101 → 140 → 181.** The between-arm comparisons (`C1_diff_*`, `C3_flow`,
+`C4_role_shift`) and the per-arm networks (`N1_circle`, `N2_chord`) are drawn by the HOST from a
+plugin's `unit_network` declaration, so 41 of the 181 name no method anywhere in host code.
+liana declares the same key and inherits them; it has not yet been run.
+
+        [host] the exit standard failed four consecutive runs on ONE criterion — `caveats`, 876
+              words against a cap of 800 — while every other criterion passed and the pages
+              themselves were getting better. A fixed cap on the one section that must stay
+              visible penalises a page for covering more ground; it now scales with what the
+              page covers → c414c4f. MET again on 699319.
+
+        [host] `run` recomputed everything a licensed earlier run already held, because the
+              landscape could approve a candidate on its card while `adopt` demanded a licence.
+              Two answers to one question → 23e1efa, e336d6d.
+
+        [host] two elements documented as active were not called by anything. Found by import
+              graph over all 34 modules, and the first pass of that audit was itself wrong twice
+              → db6791c, 9fb17d5. `scprofile check` exists so the answer is one line rather than
+              an audit.
+
+        [declaration] `validate` demanded a url and a sha256 from a reference that ships inside
+              an R package. Twelve errors across three of the nine shipped plugins, on SIX OF THE
+              SIX references in the tree, every one correctly declared, each reported as a defect
+              that "would produce a plausible wrong answer" → d64cb00. `refs.status()` had
+              honoured the three tiers since they were added; this was the second copy of that
+              knowledge, and it never learned.
+
+        [declaration] `unit_network` was read by the reporter and absent from the checker's key
+              list, so validate told the authors of the only two plugins using the newest
+              capability that "the reporter ignores them" — while `check` carried a row asserting
+              the reporter reads it → d64cb00. This is `unit_metrics` (704da33) a second time,
+              and the guard written for that one could not see it: it compared the list against
+              the checker, two statements in ONE module, and the consumer that drifted was in
+              another. Every consumer now goes through one accessor that refuses an undeclared
+              key, and the guard scans the whole package in both directions.
+
+        [host] and the gate that ran neither: NOTHING validated the shipped plugins — not
+              `check`, not `check --deep`, not any suite. Every check in the tree ran against a
+              fixture, which is the failure `DEVELOPMENT.md` names in one line and which cost
+              twelve standing errors → d64cb00.
+
+        [method] `[0]PETSC ERROR: Caught signal number 13 Broken Pipe` in the install log of
+              699276, after the selftest it belongs to had computed its terminal states and
+              reported 100%. SIGPIPE at interpreter teardown in the GPCCA solver, not a failure
+              of anything. Said here because a PETSc banner in a log reads like a crash.
+
+clean:  PBS 699319 at `621d439` — fourteen instances, all `ok`, 181 figures, 196 tables, exit
+        standard MET, 7 m 30 s wall, no criterion outstanding. Eight suites green; four new
+        guards each broken deliberately and watched go red.
+
+**Two things this cycle did NOT establish.** No figure from any of these runs has been promoted —
+`results/04_profile/` does not exist and no number in them may be quoted. And 5 of 181 figures
+carry a recorded look, so no licence in this stage can reach `full`; every adoption above ran at
+`provisional` or was refused.

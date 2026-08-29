@@ -51,13 +51,24 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 <run key>/
 ├── kernels/<plugin>/<unit>/     one instance: in.json, out.json, figures/, tables/, staged inputs
 ├── objects/                     the merged object
-├── tables/  figures/            collected outputs
+├── tables/                      collected tables
 ├── report/                      the rendered documents
 ├── report.json                  the payload every document is rendered from
+├── README.md                    what ran, what did not, and what the directory holds
 ├── RUN_CARD.json                this run's verdict on its own output
 ├── LICENCES/                    one licence per instance, once granted
 └── FIGURE_REVIEW.jsonl          the record of which figures have been looked at
 ```
+
+**Figures are NOT collected into a top-level directory, and tables are.** This listing said
+`tables/  figures/` until 2026-08-29 and a reader would have gone looking; on a real ten-sample
+run all 181 figures were under `kernels/<plugin>/`, where they are written. The asymmetry is
+deliberate: a licence covers an instance's products and hashes them where they were produced, an
+adopted instance is hardlinked back into the same place, and a second copy of a figure elsewhere
+is a second thing to keep in step. The report reaches every one of them by relative path.
+
+A job script may add more — a run key file, a `logs/` directory, a seal. Those belong to
+whatever submitted the run, not to the host, and nothing here reads them.
 
 | file | definition |
 |---|---|
