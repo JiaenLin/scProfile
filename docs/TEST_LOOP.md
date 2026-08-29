@@ -124,3 +124,29 @@ no fix, which is also the only definition of "the figures are right" this loop h
   design leaves the rest untested, and the driver prints which commands were never reached.
 - **It cannot see a missing station.** The list above is what is known to matter; a chain has as
   many failure modes as it has links, and this is the eight somebody thought of.
+
+## An intermittent defect is cleared by a BUILD, not by a run
+
+Station 6b reads what a machine can see in the panels. It was written to clear when the newest
+run is clean, which is wrong, and the loop found out how:
+
+> The same commit drew the same panels from the same data twice. One run reported five text
+> collisions across two panel kinds; the next reported none, on 140 panels. Neither run adopted
+> anything — both drew afresh, from identical inputs. So the placement is not deterministic
+> across runs, and which of the two a station happens to read decides whether it passes.
+
+A station that clears on whichever run was clean signs off a build that still ships the defect
+to whoever runs it next. **So the station clears a commit, not a run:** it reads every run of
+the same tool version and holds open while any of them shows an issue. A build that genuinely
+fixed the defect is clean in all of its runs; a build that did not is caught by the run where
+the defect appeared.
+
+Two consequences worth stating plainly, because both are easy to get backwards:
+
+- **A single clean run is not evidence of a fix.** It is evidence that this run was clean. To
+  claim a fix, either show the defect gone in every run of that build, or show why it cannot
+  occur.
+- **Do not chase an intermittent defect by reconstructing the panel.** Three attempts to
+  reproduce those collisions from the panels' own coordinates all came back clean, which cost
+  more than the fix did. Where a defect is measured by the tool, extend the tool's measurement
+  until it says where and when — a defect report a person has to re-derive is half a mechanism.

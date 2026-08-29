@@ -181,8 +181,49 @@ def station_drawing(runs):
                              f"{len({i for i, _a in hits})} panel(s) — "
                              + " · ".join(f"{n} {k}" for k, n in by.items())), \
                 f"FIX THESE FIRST, they need no eye: {named}"
-        return PASS, f"{r.name}: {len(audited)} panel(s) measured, none with a drawing issue", ""
+        # A CLEAN RUN IS NOT A CLEAN BUILD. The same commit drew the same panels from the same
+        # data twice and produced five text collisions once and none the next time - neither run
+        # adopted anything, so both drew afresh. A mechanical defect that comes and goes is
+        # still a defect, and a station that passes on whichever run happened to be clean would
+        # sign off a build that ships the collision to whoever runs it next.
+        #
+        # So the station clears a COMMIT, not a run: every run of this same tool version is
+        # read, and any panel that showed an issue in any of them holds the station open. A
+        # build that has genuinely fixed the defect clears it in every run it has, and one that
+        # has not is caught by the run where it appeared.
+        commit = _commit_of(r)
+        siblings = [q for q in newest if q is not r and _commit_of(q) == commit] if commit else []
+        prior = []
+        for q in siblings:
+            qp = _load(q / "report.json")
+            for pl in (qp.get("kernels") or {}).values():
+                for f in (pl.get("figures") or []):
+                    for a in (f.get("audit") or []):
+                        prior.append((q.name, f.get("id"), a.get("code")))
+        if prior:
+            named = "; ".join(f"{i} ({c}) in {rn}" for rn, i, c in prior[:4])
+            return BLOCKED, (f"{r.name} is clean, but {len(prior)} drawing issue(s) appeared in "
+                             f"{len({rn for rn, _i, _c in prior})} other run(s) of the SAME "
+                             f"commit {commit} — the defect is intermittent, not gone"), \
+                (f"an intermittent defect is cleared by a build, not by a run: {named}. "
+                 f"Fix it, or show it cannot occur")
+        extra = f", and in {len(siblings)} other run(s) of the same commit" if siblings else ""
+        return PASS, (f"{r.name}: {len(audited)} panel(s) measured, none with a drawing "
+                      f"issue{extra}"), ""
     return BLOCKED, "no figures in any run", "run something that draws"
+
+
+def _commit_of(run):
+    """The tool version a run was drawn by, taken from its own directory name.
+
+    Read from the run key rather than from a file inside the run: the key is fixed when the
+    directory is created and nothing rewrites it, whereas the version stamp beside the code was
+    untracked and went stale often enough to mislabel a run with the commit before its own.
+    """
+    for part in run.name.split("__"):
+        if part.startswith("scprofile-"):
+            return part.split("-", 1)[1]
+    return ""
 
 
 def _kind(fig):
