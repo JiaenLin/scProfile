@@ -1,5 +1,7 @@
 # Development guideline
 
+*Enforced by `.claude/hooks/dev_guideline.py`, which DENIES rather than reminds: tool code written outside the package, a commit while any suite or `scprofile check` is red, and figure code committed while `check --deep` is red. What it cannot enforce is whether anyone LOOKED at a figure — `scprofile review` records that, and the count is printed on every figure-code commit.*
+
 **Ship it in the tool, or it does not exist.**
 A figure, check or fix a run does not regenerate is a draft. Scratchpads decide what to build,
 never deliver it. Wire it or delete it — nothing that nothing calls.

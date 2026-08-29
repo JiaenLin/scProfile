@@ -41,7 +41,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.4.0",
+    "version": "0.4.1",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -1701,10 +1701,21 @@ def _fig_signaling_roles(ctx, pre, names):
         dx, dy = float(x) - cx, float(y) - cy
         norm = (dx * dx + dy * dy) ** 0.5 or 1.0
         ox, oy = 7.0 * dx / norm, 7.0 * dy / norm
-        _texts.append(ax.annotate(lab, (x, y), fontsize=5.5,
-                                  xytext=(ox + (2.0 if ox >= 0 else -2.0), oy),
-                                  textcoords="offset points", color=F.INK,
-                                  ha="left" if ox >= 0 else "right",
+        # OUTWARD FROM THE CENTRE, UNLESS OUTWARD LEAVES THE PANEL. A population near the left
+        # edge is pushed further left by the radial rule and its name lands on the y-axis title
+        # or off the figure entirely - which is what a thirteen-population arm did to four
+        # labels that a nine-population sample never exposed. Near an edge the anchor flips
+        # INWARD: slightly worse placement, still readable, still attached to its own point.
+        _near_left = (float(x) - lo) < 0.18 * (hi - lo)
+        _near_right = (hi - float(x)) < 0.18 * (hi - lo)
+        if _near_left:
+            ox, ha = abs(ox) + 2.0, "left"
+        elif _near_right:
+            ox, ha = -abs(ox) - 2.0, "right"
+        else:
+            ox, ha = ox + (2.0 if ox >= 0 else -2.0), ("left" if ox >= 0 else "right")
+        _texts.append(ax.annotate(lab, (x, y), fontsize=5.5, xytext=(ox, oy),
+                                  textcoords="offset points", color=F.INK, ha=ha,
                                   va="bottom" if oy >= 0 else "top"))
     F.spread_labels(ax, _texts)
     # ROOM FOR THE LABELS THEMSELVES. Population names here are hierarchical and long, and an
