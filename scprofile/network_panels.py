@@ -560,10 +560,23 @@ def role_heatmap(ctx, edges, pops, group_col, *, fid="N6_role_heatmap", top=18, 
     short = F.short_labels(list(pops))
     lab = [short[p] for p in pops]
 
+    # ABSENCE IS NOT A LOW SHARE (`panels.R2`), AND THIS IS THE SAME DEFECT AS THE PLUGIN-SIDE
+    # ROLE HEATMAP HAD. A population that never appears in a group's edges has a share of
+    # exactly zero, and so does one that appears and is peripheral - the same pale cell for
+    # "never in it" and "in it, weakly". Found by opening this panel on a real arm, where three
+    # whole columns were pale and read as "these participate weakly" while meaning "these are
+    # not in any of these groups". Fixed in the plugin an hour earlier and missed here, which is
+    # what a sweep for the SHAPE catches and a fix for the instance does not.
+    _absent = (send + recv) <= 0
     fig, axes = plt.subplots(1, 2, figsize=(F.DOUBLE, F.SINGLE * 1.02), layout="constrained",
                              sharey=True)
-    for ax, M, what in ((axes[0], send / rmax, "as sender"), (axes[1], recv / rmax, "as receiver")):
-        im = ax.imshow(M, cmap="magma_r", vmin=0.0, vmax=1.0, aspect="auto")
+    _cm = plt.get_cmap("magma_r").copy()
+    _cm.set_bad("white")
+    for ax, M, A, what in ((axes[0], send / rmax, send <= 0, "as sender"),
+                           (axes[1], recv / rmax, recv <= 0, "as receiver")):
+        im = ax.imshow(np.where(A, np.nan, M), cmap=_cm, vmin=0.0, vmax=1.0, aspect="auto")
+        _ys, _xs = np.nonzero(A)
+        ax.scatter(_xs, _ys, marker="x", s=8, linewidths=0.4, color="#B0B0B0", zorder=3)
         ax.set_xticks(range(len(pops)), lab, rotation=90, fontsize=6)
         ax.set_title(what, fontsize=7)
     axes[0].set_yticks(range(len(groups)), [str(g) for g in groups], fontsize=6)
@@ -575,7 +588,7 @@ def role_heatmap(ctx, edges, pops, group_col, *, fid="N6_role_heatmap", top=18, 
 
     cap = (f"Where each {group_col.replace('_', ' ')} acts: its strength across populations as a "
            f"sender, and as a receiver. {len(groups)} of {len(tot)} drawn, the strongest by "
-           f"total.",
+           f"total. Crossed white cells carry no edge at all, which is not a low share.",
            f"EVERY ROW IS SCALED TO ITS OWN MAXIMUM ACROSS BOTH PANELS, so a row says where a "
            f"group acts and NOT how strong it is - a group carrying a hundredth of another's "
            f"strength fills its row identically. Read strength off the flow ranking instead. "
