@@ -482,8 +482,8 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None):
             group_col=net.get("group"), weight="prob")
         if _t:
             print(f"  wrote {_t.name}: every contrast on both scales")
-    except Exception as _e:                                               # noqa: BLE001
-        print(f"  two-scale table not written: {_e}")
+    except Exception as _err:                                             # noqa: BLE001
+        print(f"  two-scale table not written: {_err}")
 
     con = []
     for sp in pairs:
@@ -1803,6 +1803,24 @@ def write_index(out_dir, payload):
     ]
     dd = Path(out_dir) / "report"
     dd.mkdir(parents=True, exist_ok=True)
+    # THE FIGURE PANEL IS DERIVED, so a run produces it. Nothing about it needs an author: it is
+    # one plate per piece of evidence each comparison needs, chosen by the routes the plugin
+    # declares. It was reachable only through `paper --render`, which also renders the AUTHORED
+    # section - so a fresh run had no panel until someone wrote prose, and the newest run in a
+    # directory looked incomplete when only the writing was missing.
+    try:
+        from . import paper as _PA
+        for _pl in sorted(payload.get("kernels") or {}):
+            _pan = _PA.panel(out_dir, plugin=_pl, run_key=Path(out_dir).name)
+            if _pan:
+                print(f"      {_pan}")
+    except Exception as _panel_err:                                       # noqa: BLE001
+        # NOT `as _e`. `_e` is this module's HTML escape helper, and binding it in an except
+        # clause makes it a LOCAL of the whole function - so every earlier use of it in the same
+        # function raises UnboundLocalError. Python scopes the name for the entire function, not
+        # from the line the binding appears on.
+        print(f"      figure panel not written: {_panel_err}")
+
     f = dd / "index.html"
     body.append(_schedule_block(payload))
     f.write_text(_page("scProfile", "".join(body)), encoding="utf-8")

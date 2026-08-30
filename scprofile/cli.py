@@ -1283,6 +1283,7 @@ def _run(a):
     print(f"      {idx}")
     _judge(out)
     _write_readme(out, payload)
+    _carry_section(a, out, payload)
     # EVERY RUN RECORDS WHAT IT DELIVERED, and says so if it delivered less than the run before.
     # This is the one place that sees the finished output of a real run; a baseline recorded
     # only when someone remembers to type a command is a baseline nobody can be held to.
@@ -2868,6 +2869,48 @@ def _standard(a):
 
 
 
+
+def _carry_section(a, out, payload):
+    """Take the authored section into this run and render it, if one was handed in.
+
+    THE WRITING MUST TRAVEL WITH THE RUN THAT PRODUCED THE FIGURES. Before this it was reachable
+    only by running `paper --write` afterwards, so every fresh run had figures and no section and
+    the newest run in a directory looked incomplete. The prose is still AUTHORED - this tool
+    cannot write the science and does not try - but where it is authored is not a reason for it
+    to live outside the run.
+
+    Claims are NOT carried. They are bound to figures by digest, and figures are redrawn every
+    run: a claim copied across would be about pictures that no longer exist. The section arrives
+    undefended and the page says so, which is the truth of it.
+    """
+    spec = getattr(a, "section", None)
+    if not spec:
+        return
+    from . import paper as _PA
+
+    txt = str(spec)
+    per = {}
+    if "=" in txt and not Path(txt).exists():
+        name, _, path = txt.partition("=")
+        per[name.strip()] = Path(path.strip())
+    else:
+        ks = sorted(payload.get("kernels") or {})
+        if len(ks) != 1:
+            print(f"  section not carried: {len(ks)} plugins ran, so name one - "
+                  f"--section <plugin>=<file>")
+            return
+        per[ks[0]] = Path(txt)
+    for plugin, f in per.items():
+        if not f.is_file():
+            print(f"  section not carried: no file at {f}")
+            continue
+        try:
+            _PA.write_draft(out, f.read_text(encoding="utf-8"), plugin=plugin)
+            page = _PA.render(out, plugin=plugin, run_key=Path(out).name)
+            print(f"  section carried into this run: {page}")
+        except Exception as e:                                            # noqa: BLE001
+            print(f"  section not carried for {plugin}: {e}")
+
 def _record_capacity(out):
     """Record what this run delivered, and say so if it is less than the run before it.
 
@@ -3082,6 +3125,15 @@ def main(argv=None):
     # THE LEVER. A cache with no way to switch it off is a cache you have to trust; the first
     # thing anyone needs when a result looks wrong is to rule it out in one run. Off means the
     # host offers no directory at all, so every plugin recomputes and says so.
+    # THE AUTHORED SECTION IS AN INPUT, NOT AN AFTERTHOUGHT. It was reachable only by running
+    # `paper --write` after the run, so every new run had figures and no section, and the newest
+    # run in a directory looked incomplete. Handing it in makes the writing travel with the run
+    # that produced the figures - and if the numbers moved, the claims go stale and the page
+    # says NOT CURRENT, which is the mechanism that already exists.
+    r.add_argument("--section", type=Path,
+                   help="a written result section (Markdown) to carry into this run and render "
+                        "with its figures. One per plugin: `--section cellchat=path.md`, or a "
+                        "bare path when only one plugin runs.")
     r.add_argument("--no-cache", action="store_true",
                    help="offer no cache directory, so every plugin recomputes from the object. "
                         "Use it to rule the cache out when a result looks wrong.")
