@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.9.0",
+    "version": "0.10.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -168,7 +168,15 @@ PLUGIN = {
     "inject": {"required": ["lognorm", "label", "organism"],
                "optional": ["sample", "layout"]},
     "provides": ["communication"],
-    "produces": ["tables/ccc_edges.csv"],
+    # THE TOOL'S OWN QUANTITIES ARE OUTPUTS, so the report and the figures read CellChat's
+    # numbers rather than a second implementation of them. Marked optional because each is
+    # written by its own guarded block: one failing quantity costs its table, not the instance,
+    # and an instance that produced edges but no centrality is still worth keeping.
+    "produces": ["tables/ccc_edges.csv",
+                 "[optional] tables/cellchat_pathway_prob.csv",
+                 "[optional] tables/cellchat_centrality.csv",
+                 "[optional] tables/cellchat_rank_net.csv",
+                 "[optional] tables/cellchat_net_embedding.csv"],
     "per_unit": "sample",
 
     "config": {
@@ -499,6 +507,73 @@ cc <- filterCommunication(cc, min.cells = min_cells)
 df <- subsetCommunication(cc, thresh = thresh)
 write.csv(df, out, row.names = FALSE)
 cat("edges:", nrow(df), "\n")
+
+# ---------------------------------------------------------------------------------------------
+# CELLCHAT'S OWN DOWNSTREAM QUANTITIES, WRITTEN OUT RATHER THAN RECOMPUTED DOWNSTREAM.
+#
+# Everything past this point used to be re-derived in Python from the edge table above:
+# pathway-level probability, centrality, ranked information flow, network similarity. Each was a
+# faithful transcription and each was still a SECOND implementation of a statistic the wrapped
+# tool already computes - which is the one thing a wrapper must not do, because when the two
+# disagree there is nothing on the page that says which was read.
+#
+# Measured before this was written: 19 of 20 CellChat functions named by those transcriptions
+# resolve in this very environment, CellChat 2.2.0.9001. Nothing was unavailable; nobody had
+# asked.
+#
+# Each block is wrapped so that one failing quantity costs its own table and not the instance:
+# a plugin that dies after computing the edges would throw away the expensive part.
+`%||%` <- function(a, b) if (is.null(a)) b else a
+side <- function(name) file.path(dirname(out), paste0("cellchat_", name, ".csv"))
+try_write <- function(name, expr) {
+  ok <- tryCatch({ v <- expr; write.csv(v, side(name), row.names = TRUE); TRUE },
+                 error = function(e) { cat("native", name, "FAILED:", conditionMessage(e), "\n")
+                                       FALSE })
+  if (ok) cat("native", name, "written\n")
+}
+
+cc <- computeCommunProbPathway(cc)
+cc <- aggregateNet(cc)
+cc <- netAnalysis_computeCentrality(cc, slot.name = "netP")
+
+# pathway x (sender, receiver) probability, CellChat's own computeCommunProbPathway
+try_write("pathway_prob", {
+  P <- cc@netP$prob
+  d <- do.call(rbind, lapply(seq_len(dim(P)[3]), function(k) {
+    m <- P[, , k]
+    data.frame(pathway = dimnames(P)[[3]][k],
+               source = rep(rownames(m), times = ncol(m)),
+               target = rep(colnames(m), each = nrow(m)),
+               prob = as.vector(m))
+  }))
+  d[d$prob > 0, ]
+})
+
+# centrality per pathway and population, CellChat's own netAnalysis_computeCentrality
+try_write("centrality", {
+  cen <- cc@netP$centr
+  do.call(rbind, lapply(names(cen), function(pw) {
+    m <- cen[[pw]]
+    do.call(rbind, lapply(names(m), function(meas) {
+      v <- m[[meas]]
+      data.frame(pathway = pw, measure = meas, population = names(v), value = as.numeric(v))
+    }))
+  }))
+})
+
+# ranked information flow, CellChat's own rankNet (return.data, nothing drawn)
+try_write("rank_net", {
+  r <- rankNet(cc, mode = "single", stacked = FALSE, do.stat = FALSE, return.data = TRUE)
+  as.data.frame(r$signaling.contribution %||% r)
+})
+
+# network similarity and its embedding, CellChat's own computeNetSimilarity + netEmbedding
+try_write("net_embedding", {
+  cc2 <- computeNetSimilarity(cc, type = "functional")
+  cc2 <- netEmbedding(cc2, type = "functional", umap.method = "uwot")
+  e <- cc2@netP$similarity$functional$dr[["single"]]
+  data.frame(pathway = rownames(e), dim1 = e[, 1], dim2 = e[, 2])
+})
 '''
 
 
