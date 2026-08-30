@@ -672,6 +672,12 @@ def panel_name(plugin=""):
     return "panel.html" if not plugin else f"{plugin}_panel.html"
 
 
+
+def _re_strip_placeholders(html_text):
+    """Remove any ALSO placeholder that was never filled, so none reaches the page."""
+    import re as _re
+    return _re.sub(r"<!--ALSO:[^>]*-->", "", html_text)
+
 def panel(out, *, run_key="", plugin=""):
     """Write `report/<plugin>_panel.html`: ONE PLATE PER EVIDENCE NEED, PER COMPARISON.
 
@@ -735,6 +741,11 @@ def panel(out, *, run_key="", plugin=""):
             stems[kind] = stem
 
     cmps = _cmps(des)
+    # A FIGURE IS PLACED ONCE. Several evidence needs can route to the same panel - the presence
+    # map answers three of them - and the panel emitted it for every need of every comparison:
+    # one figure, twenty-one times, which reads as though absence were the finding. Once is
+    # enough for the reader; the needs it also answers are named beside it instead.
+    placed_at, also = {}, {}
     H = [f"<h1>Figure panel &mdash; {_e(plugin or 'this run')}</h1>"]
     if run_key:
         H.append(f'<p class="sub">Every plate below is in run <code>{_e(run_key)}</code>. '
@@ -742,23 +753,37 @@ def panel(out, *, run_key="", plugin=""):
                  f'needs, chosen by the route the plugin declares for that need, not by hand. '
                  f'The full set of between-arm figures is on the arms page.</p>')
     n_plate, n_gap = 0, 0
+    # ALIASING IS STATED ONCE. It was printed at the head of every comparison it affects - four
+    # times on this design - which put a design fact where the finding should be and read as
+    # though the comparison had been withheld. It has not been: the contrast is drawn and the
+    # result stands; the aliasing is a fact about attribution and belongs in one line.
+    _alias = {}
+    for c in cmps:
+        for a_ in (c.get("aliased_with") or []):
+            _alias.setdefault(str(c.get("factor") or ""), set()).add(str(a_))
+    if _alias:
+        H.append('<p class="sub">' + "; ".join(
+            f"<b>{_e(f)}</b> varies together with {_e(', '.join(sorted(v)))} across every "
+            f"sample, so a difference along {_e(f)} is a difference along both"
+            for f, v in sorted(_alias.items())) + ".</p>")
+
     for c in cmps:
         label = c.get("label") or c.get("question") or ""
         H.append(f'<h2>{_e(str(c.get("kind", "")).upper())} &mdash; {_e(label)}</h2>')
-        H.append(f'<p class="sub">{_e(str(c.get("question") or ""))}'
-                 + (f' <b>Aliased with {_e(", ".join(c.get("aliased_with") or []))}, so this '
-                    f'question cannot be answered as asked.</b>'
-                    if c.get("aliased_with") else "") + '</p>')
+        H.append(f'<p class="sub">{_e(str(c.get("question") or ""))}</p>')
         for need, route in sorted(routes.items()):
-            got = None
+            # EVERY ROUTE THAT RESOLVES, NOT ONLY THE FIRST. Two of the tool's own functions
+            # answer "which populations differ" - the differential network and the differential
+            # heatmap - and stopping at the first match meant the heatmap was drawn on every run
+            # and placed in none. They read differently: one shows the shape of the change, the
+            # other lets a reader find a pair.
+            found = []
             for r in (route or []):
                 r = str(r)
                 if r.startswith("native:"):
                     fn = r.split(":", 1)[1]
-                    hits = by.get((label, fn)) or []
-                    if hits:
-                        got = (fn, hits[0])
-                        break
+                    for h in (by.get((label, fn)) or []):
+                        found.append((fn, h))
                 elif r.startswith("host:"):
                     kind = r.split(":", 1)[1]
                     stem = stems.get(kind)
@@ -768,34 +793,49 @@ def panel(out, *, run_key="", plugin=""):
                     hits = [f for f in host
                             if str(f.get("id") or "").startswith(stem)
                             and (not f.get("label") or str(f.get("label")) == label)]
-                    if hits:
-                        got = (f"{kind} (drawn by scProfile)", hits[0])
-                        break
+                    if hits and not found:
+                        found.append((f"{kind} (drawn by scProfile)", hits[0]))
             # `NEEDS` maps a need to (question, why). It is a tuple, not a mapping - the
             # first version called .get on it and raised on the first plate.
             meta = _NEEDS.get(need) or ()
             title = str(meta[0]) if meta else str(need)
             why = str(meta[1]) if len(meta) > 1 else ""
-            if not got:
+            if not found:
                 n_gap += 1
                 H.append(f'<div class="bad"><b>{_e(title)}</b> &mdash; no plate. '
                          f'The route declared for this need drew nothing in this contrast.'
                          + (f' <span class="sub">{_e(why)}</span>' if why else "")
                          + '</div>')
                 continue
-            fn, f = got
-            n_plate += 1
-            cap = f.get("caption")
-            lead, rest = (cap if isinstance(cap, (list, tuple)) and len(cap) == 2
-                          else (cap or "", ""))
-            rel = "../" + str(f.get("path") or "")
-            H.append(f'<figure><figcaption class="lead"><b>{_e(title)}</b> '
-                     f'&mdash; <code>{_e(fn)}</code></figcaption>'
-                     f'<img src="{_e(rel)}" alt="{_e(title)}">'
-                     f'<figcaption>{_e(str(lead))}'
-                     + (f'<details><summary class="sub">what it does not establish</summary>'
-                        f'{_e(str(rest))}</details>' if rest else "")
-                     + '</figcaption></figure>')
+            for fn, f in found:
+                key = str(f.get("path") or "")
+                if key in placed_at:
+                    also.setdefault(placed_at[key], []).append(title)
+                    continue
+                placed_at[key] = (label, title)
+                n_plate += 1
+                cap = f.get("caption")
+                lead, rest = (cap if isinstance(cap, (list, tuple)) and len(cap) == 2
+                              else (cap or "", ""))
+                rel = "../" + str(f.get("path") or "")
+                # THE CONTRAST IS NAMED ON THE PLATE. Lifted out of the page a figure carried
+                # only the tool's own generic title, so nothing on it said which two arms it
+                # compared or in which direction.
+                H.append(f'<figure><figcaption class="lead"><b>{_e(title)}</b> '
+                         f'&mdash; <code>{_e(fn)}</code> '
+                         f'&middot; <b>{_e(label)}</b></figcaption>'
+                         f'<img src="{_e(rel)}" alt="{_e(title)} — {_e(label)}">'
+                         f'<figcaption>{_e(str(lead))}'
+                         + f"<!--ALSO:{label}|{title}-->"
+                         + (f' <span class="sub">{_e(str(rest))}</span>' if rest else "")
+                         + '</figcaption></figure>')
+
+    page = "".join(H)
+    for (lab, ttl), extra in also.items():
+        line = (" It also answers: " + "; ".join(sorted(set(extra))) + ".") if extra else ""
+        page = page.replace(f"<!--ALSO:{lab}|{ttl}-->", _e(line) if line else "")
+    page = _re_strip_placeholders(page)
+    H = [page]
     H.insert(1, f'<p class="sub"><b>{n_plate}</b> plate(s) over <b>{len(cmps)}</b> comparison(s)'
                 + (f', and <b>{n_gap}</b> need(s) with no plate' if n_gap else '') + '.</p>')
     H.append(f'<p class="sub"><a href="{_e(page_name(plugin))}">the written section</a> '

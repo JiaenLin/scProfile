@@ -757,20 +757,25 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi):
         for line in tsv.read_text(encoding="utf-8").splitlines():
             k, _, v = line.partition("\t")
             if k.startswith("absent_from_") and v.strip():
-                gone.append(f"{v.replace('|', ', ')} (absent from {k[len('absent_from_'):]})")
+                side = k[len("absent_from_"):]
+                gone.append(f"{v.replace('|', ', ')} is present in the other arm and not in "
+                            f"{side}")
         if gone:
-            lifted = (" The two arms did not carry the same populations: " + "; ".join(gone)
-                      + ". Both objects were lifted to the union with the tool's own "
-                        "liftCellChat, so a lifted-in population carries zero edges on the side "
-                        "it was absent from and its whole difference is the other side's value.")
+            # EXPLAIN, DO NOT WARN. This read as a caution about what the panel does not
+            # establish; it is a plain fact about what the arms contained, and a reader who
+            # knows it can use the figure rather than distrust it.
+            lifted = (" " + "; ".join(gone) + ". Both arms were put on the same population set "
+                      "so the difference could be taken, so that population's difference is the "
+                      "value of the arm that has it.")
     out = []
     for f in sorted(figdir.glob("*.png")):
         fn = _NAT.function_for(declared, f.name)
         stem = f.stem[len("nativecmp_"):] if f.stem.startswith("nativecmp_") else f.stem
         lead = (f"{label}: {stem.replace('_', ' ')}, drawn by "
                 + (f"the tool's own {fn}()." if fn else "the tool itself."))
-        rest = (f"{hi} relative to {lo}; the tool computes the second against the first."
-                + lifted)
+        # THE DIRECTION IS THE FIRST THING A READER NEEDS and it is a positive statement, not a
+        # caveat: it says what the picture shows. `lo` is the contrast's reference.
+        rest = (f"{hi} measured against {lo}, which is the reference." + lifted)
         out.append((f"NC_{label}_{stem}", str(f), (lead, rest), str(label),
                     str(f.relative_to(Path(out_dir)))))
     return out
