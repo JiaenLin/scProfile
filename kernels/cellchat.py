@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.16.1",
+    "version": "0.17.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -319,7 +319,7 @@ PLUGIN = {
         "netVisual_heatmap": {"use": "figures/native_heatmap_{count,weight}.png per unit, and figures/nativecmp_diff_heatmap_{count,weight}.png per arm pair"},
         "netAnalysis_signalingRole_scatter": {"use": "figures/native_signalingRole_scatter.png per unit, and figures/nativecmp_signalingRole_scatter_pair.png - both arms on one shared range"},
         "netAnalysis_signalingRole_heatmap": {"use": "figures/native_signalingRole_heatmap_{out,in}.png per unit, and figures/nativecmp_signalingRole_heatmap_<pattern>.png - both arms, shared maximum"},
-        "netVisual_bubble": {"use": "figures/native_bubble.png per unit, and figures/nativecmp_bubble_comparison.png - both arms, CellChat's comparison mode"},
+        "netVisual_bubble": {"use": "figures/native_bubble.png per unit; figures/nativecmp_bubble_comparison.png - every enriched pair, both arms; and figures/nativecmp_bubble_focused.png - the same function on the pathways carrying the most flow, which is the overview at a density a reader can use"},
         "identifyCommunicationPatterns": {"use": "figures/native_patterns_{outgoing,incoming}.png"},
         "rankSimilarity": {"use": "figures/nativecmp_rankSimilarity_functional.png, per arm pair"},
         "showDatabaseCategory": {"use": "figures/native_database_category.png"},
@@ -3403,18 +3403,56 @@ ndev <- function(nm, expr, w = 2000, h = 1600, res = 200) {
 }
 
 # 1. the differential interaction network - CellChat's own answer to "which pairs changed"
-ndev("diffInteraction_count", netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count"))
-ndev("diffInteraction_weight", netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight"))
+# A KEY FOR THE COLOURS. CellChat draws this network with red and blue edges and NO legend
+# anywhere, so nothing on the panel says which colour is an increase or against which arm. The
+# plot is the tool's, untouched; this only adds the key it does not draw, in the tool's own
+# colour convention - red for higher in the second arm, blue for lower.
+.diffkey <- function() {
+  graphics::legend("bottomleft", bty = "n", cex = 0.8, lwd = 3, seg.len = 1.2,
+                   col = c("#b2182b", "#2166ac"),
+                   legend = c(paste("higher in", name_b), paste("higher in", name_a)),
+                   title = paste(name_b, "against", name_a), title.adj = 0)
+}
+ndev("diffInteraction_count", {
+  netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count"); .diffkey()
+})
+ndev("diffInteraction_weight", {
+  netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight"); .diffkey()
+})
 
 # 2. the differential heatmap, same question in a form that reads pair by pair
 ndev("diff_heatmap_count", ComplexHeatmap::draw(netVisual_heatmap(m, measure = "count")))
 ndev("diff_heatmap_weight", ComplexHeatmap::draw(netVisual_heatmap(m, measure = "weight")))
 
 # 3. ranked information flow with BOTH arms on one axis, CellChat's own comparison mode
-npng("rankNet_stacked", rankNet(m, mode = "comparison", stacked = TRUE, do.stat = FALSE),
-     w = 1600, h = 2000)
-npng("rankNet_unstacked", rankNet(m, mode = "comparison", stacked = FALSE, do.stat = FALSE),
-     w = 1600, h = 2000)
+# CELLCHAT'S OWN BETWEEN-ARM TEST, RUN. `do.stat = TRUE` compares the two arms' per-pair
+# probabilities for each pathway with a Wilcoxon test and colours the bars by the result.
+#
+# It was OFF, and the section then reported "nothing here is tested between arms" as though that
+# were a property of the method. It is not: CellChat refuses only the PAIRED form, and says so in
+# its own message - "Paired test is not applicable to datasets with different cellular
+# compositions! Please set `do.stat = FALSE` or `paired.test = FALSE`". Two ways out were offered
+# and the one that switches the test off was taken. Arms fitted separately do have different
+# compositions here, so the unpaired test is the applicable one.
+npng("rankNet_stacked", rankNet(m, mode = "comparison", stacked = TRUE,
+                                do.stat = TRUE, paired.test = FALSE), w = 1600, h = 2000)
+npng("rankNet_unstacked", rankNet(m, mode = "comparison", stacked = FALSE,
+                                  do.stat = TRUE, paired.test = FALSE), w = 1600, h = 2000)
+
+# AND THE NUMBERS BEHIND IT, so a written result can quote the tool's own significance rather
+# than describe a picture. One row per pathway per arm, with the p-value CellChat computed.
+try({
+  rn <- rankNet(m, mode = "comparison", stacked = FALSE, do.stat = TRUE, paired.test = FALSE,
+                return.data = TRUE)
+  d <- rn$signaling.contribution
+  if (!is.null(d) && nrow(d)) {
+    tdir <- file.path(dirname(figdir), "tables")
+    dir.create(tdir, showWarnings = FALSE, recursive = TRUE)
+    write.csv(d, file.path(tdir, "rank_net_comparison.csv"), row.names = FALSE)
+    cat("wrote rank_net_comparison.csv:", nrow(d), "rows, columns:",
+        paste(colnames(d), collapse = ", "), "\n")
+  }
+}, silent = FALSE)
 
 # 4. the two arms' role space side by side, on ONE shared range so the panels are comparable.
 #    CellChat's own comparison vignette draws it exactly this way: the per-object function,
@@ -3478,9 +3516,30 @@ for (pat in c("outgoing", "incoming")) {
 
 # 7. the ligand-receptor pairs themselves, both arms on one bubble plot. CellChat's own
 #    comparison mode for the question "which specific pairs differ".
+# THE OVERVIEW, MADE READABLE. Every enriched pair against every population pair is the whole
+# point of this panel and also what made its axes illegible: several hundred rows of
+# ligand-receptor labels in the space of a page. `remove.isolate` drops the pairs with nothing
+# to show, the canvas is given room per row, and the x labels are rotated.
 npng("bubble_comparison",
-     netVisual_bubble(m, comparison = c(1, 2), angle.x = 45, remove.isolate = FALSE),
-     w = 2600, h = 2600)
+     netVisual_bubble(m, comparison = c(1, 2), angle.x = 45, remove.isolate = TRUE),
+     w = 2800, h = 5200)
+
+# AND A FOCUSED VIEW. The overview answers "is anything different anywhere"; this answers "in
+# what". It is the same function on the pathways that carry the most flow, so it is CellChat's
+# own plot at a density a reader can actually use - not a different encoding.
+.top <- tryCatch({
+  r <- rankNet(m, mode = "comparison", stacked = TRUE, do.stat = FALSE, return.data = TRUE)
+  d <- r$signaling.contribution
+  agg <- stats::aggregate(d$contribution, by = list(name = d$name), FUN = sum)
+  as.character(agg$name[order(-agg$x)][seq_len(min(10, nrow(agg)))])
+}, error = function(e) character(0))
+if (length(.top)) {
+  cat("focused bubble on:", paste(.top, collapse = ", "), "\n")
+  npng("bubble_focused",
+       netVisual_bubble(m, comparison = c(1, 2), signaling = .top, angle.x = 45,
+                        remove.isolate = TRUE),
+       w = 2400, h = 2600)
+}
 
 # 8. per-population signalling changes - the one figure that names WHICH signals moved for a
 #    given population. Drawn for every population the two arms SHARE: a population absent from
