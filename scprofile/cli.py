@@ -2618,7 +2618,7 @@ def _paper(a):
         return 0
 
     if a.brief:
-        print(PA.brief(out))
+        print(PA.brief(out, a.plugin))
         return 0
 
     if a.write:

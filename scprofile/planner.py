@@ -595,3 +595,95 @@ def audit(verdicts, known, facts, *, present=None, log=None):
         f.append(Finding("ERROR", "the verdicts do not account for every plugin",
                          f"{sum(counts.values())} verdicts for {len(known)} plugins: {counts}"))
     return f
+
+
+# --------------------------------------------------------------- what a result should look like
+
+def result_spec(design, plugin_spec, *, factors=None, technical=None):
+    """WHAT A RESULT SHOULD CONTAIN, from the design table and the plugin declaration ALONE.
+
+    NO RUN IS REQUIRED, AND THAT IS THE WHOLE POINT. Until this existed, the only way to learn
+    what a result should hold was to run the profile and look at what came out - which put a
+    compute job between a person and every design decision, and made a missing figure
+    discoverable only when somebody noticed they could not write a sentence. Design and execution
+    are now decoupled: the specification can be argued with before anything is scheduled, and the
+    difference between it and a run is then a measured gap rather than an impression.
+
+    THE SHAPE OF A RESULT. A section per question the design supports, in the order a reader
+    needs them - the cohort it is all asked of, then each marginal effect, then each simple
+    effect within a stratum, then each interaction. Every question carries the panels that answer
+    it, and every panel carries what it establishes and what it does NOT.
+
+    `design_panel.comparisons()` supplies the questions and needs only the design table.
+    `panels.SERVES` supplies the panel kinds per question kind. What the PLUGIN contributes is
+    which of those kinds it can support at all, read from its `report.unit_network` declaration -
+    a plugin that declares no network answers no contrast question, and says so here rather than
+    by drawing nothing.
+
+    Returns [{kind, question, arms, panels: [{kind, establishes, does_not, available}], ...}].
+    """
+    from . import panels as _P
+    from .design_panel import comparisons as _comparisons
+
+    spec = plugin_spec or {}
+    report = (spec.get("report") or {})
+    net = report.get("unit_network") or {}
+    has_network = bool(net)
+    has_group = bool(net.get("group"))
+    has_member = bool(net.get("member"))
+
+    def _can(kind_id):
+        """Whether the plugin's declaration supports this kind - not whether a run drew it."""
+        if not has_network:
+            return False, "the plugin declares no `unit_network`, so no contrast panel is drawn"
+        k = _P.BY_ID.get(kind_id)
+        needs = set(getattr(k, "needs", ()) or ())
+        if "group" in needs and not has_group:
+            return False, "needs `unit_network.group`, which this plugin does not declare"
+        if "member" in needs and not has_member:
+            return False, "needs `unit_network.member`, which this plugin does not declare"
+        return True, ""
+
+    def _panels_for(qkind):
+        out = []
+        for kid, est, no in _P.answered_by(qkind):
+            ok, why = _can(kid)
+            out.append({"kind": kid, "establishes": est, "does_not_establish": no,
+                        "available": ok, "unavailable_because": why})
+        return out
+
+    sections = [{"kind": "cohort", "factor": None, "other": None, "stratum": {},
+                 "arms": {}, "question": "What does this object contain, before any comparison?",
+                 "panels": _panels_for("cohort")}]
+    for c in _comparisons(design, factors=factors, technical=technical):
+        sections.append({**c, "panels": _panels_for(c["kind"])})
+    return sections
+
+
+def spec_text(sections):
+    """The specification as text, for a plan report or a writing brief."""
+    out = ["THE RESULT THIS DESIGN AND THIS PLUGIN SPECIFY",
+           "  Sections are the design's own questions. Nothing here has been run.", ""]
+    for i, s in enumerate(sections, 1):
+        head = s["kind"].upper()
+        if s.get("factor"):
+            head += f"  {s['factor']}"
+            if s["kind"] == "interaction" and s.get("other"):
+                head += f" x {s['other']}"
+            if s.get("stratum"):
+                head += "  [" + ", ".join(f"{k} = {v}" for k, v in s["stratum"].items()) + "]"
+        out.append(f"{i}. {head}")
+        out.append(f"     Q: {s['question']}")
+        if s.get("arms"):
+            out.append("     arms: " + ", ".join(f"{k} n={v}" for k, v in s["arms"].items()))
+        if s.get("aliased_with"):
+            out.append(f"     ALIASED with {', '.join(s['aliased_with'])} - this question cannot "
+                       f"be answered as asked")
+        for p in s["panels"]:
+            mark = "  " if p["available"] else "  (unavailable) "
+            out.append(f"     -{mark}{p['kind']}: {p['establishes']}")
+            out.append(f"          does NOT establish: {p['does_not_establish']}")
+            if not p["available"]:
+                out.append(f"          {p['unavailable_because']}")
+        out.append("")
+    return "\n".join(out)

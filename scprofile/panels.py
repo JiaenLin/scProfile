@@ -283,6 +283,40 @@ IMPLEMENTED = {
     "interaction": "compare_panel.draw_interaction — C5_interaction, one per crossed pair",
 }
 
+#: WHICH KINDS ANSWER WHICH KIND OF QUESTION. `design_panel.comparisons()` enumerates what a
+#: design can be asked - marginal, simple, interaction - from the design table alone. This says
+#: which panels serve each, so a RESULT SPECIFICATION can be assembled from a design table and a
+#: plugin declaration BEFORE anything runs.
+#:
+#: That decoupling is the point. Until now the only way to find out what a result should contain
+#: was to run the profile and look at what came out, which put a compute job between a person and
+#: every design decision, and made a missing figure discoverable only by someone noticing they
+#: could not write a sentence. A specification that exists before execution can be argued with,
+#: and the difference between it and the run is then a measured gap rather than an impression.
+#:
+#: `cohort` kinds answer no contrast - they describe the object every question is asked of, and
+#: belong in a section's opening rather than against any one comparison.
+SERVES = {
+    "marginal": ("diff_matrix", "flow_compare", "role_shift"),
+    "simple": ("diff_matrix", "flow_compare", "role_shift"),
+    "interaction": ("interaction",),
+    "cohort": ("unit_presence",),
+    "per_arm": ("circle", "chord", "matrix", "role_scatter", "flow_rank",
+                "role_heatmap", "contribution"),
+}
+
+
+def serves(question_kind):
+    """The panel kinds that answer a question of this kind. () for an unknown kind."""
+    return tuple(SERVES.get(str(question_kind), ()))
+
+
+def answered_by(question_kind):
+    """[(kind_id, what it establishes, what it does NOT)] for one kind of question."""
+    return [(k, BY_ID[k].establishes, BY_ID[k].does_not_establish)
+            for k in serves(question_kind) if k in BY_ID]
+
+
 #: Registered, specified, and NOT drawn by any run. Named so the gap is auditable.
 NOT_IMPLEMENTED = tuple(k.id for k in KINDS if k.id not in IMPLEMENTED)
 

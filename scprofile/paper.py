@@ -244,8 +244,28 @@ def summarise(out, plugin=""):
 DRAFT = "PAPER.md"
 
 
-def brief(out):
+def _plugin_spec_of(pay, plugin=""):
+    """The declaration of the plugin being written about, out of report.json."""
+    ks = (pay.get("kernels") or {})
+    if plugin and plugin in ks:
+        return ks[plugin].get("spec") or ks[plugin] or {}
+    if len(ks) == 1:
+        only = next(iter(ks.values()))
+        return only.get("spec") or only or {}
+    return {}
+
+
+def brief(out, plugin=""):
     """Everything needed to WRITE the section, read out of the run. Returns text.
+
+    IT OPENS WITH THE DESIGN'S OWN QUESTIONS, NOT WITH THE PANELS. A writer handed a directory of
+    figures writes about the figures; a writer handed the questions the design supports writes
+    about the experiment and then goes looking for the figure that answers each. The order of
+    those two decides whether a section is a survey of the tooling or a result - and the first
+    section written from this brief was a survey, because the brief led with panels.
+
+    The specification comes from `planner.result_spec` and needs no run at all; what the run adds
+    is which of the specified panels actually exist.
 
     THE STEP THAT MAKES THIS AN AGENTIC PROCESS RATHER THAN A FILING CONVENTION. An agent asked
     to "write the result" has to go and find the figures, guess which are the main ones, and
@@ -286,6 +306,20 @@ def brief(out):
             L += ["Arms (the unit of inference): "
                   + "; ".join(f"{a} n={len(mem.get(a) or [])}" for a in arms)]
         L += [""]
+
+        # THE DESIGN'S OWN QUESTIONS, BEFORE ANY PANEL IS MENTIONED. `planner.result_spec` needs
+        # only the design table and the plugin's declaration, so this section of the brief is
+        # identical whether or not anything has run - and a writer meets the experiment before
+        # meeting the output. The first section written from this brief was a survey of the
+        # tooling because the brief led with panels.
+        try:
+            from .planner import result_spec as _rs, spec_text as _st
+            _spec = _rs(des, _plugin_spec_of(pay, plugin))
+            L += [_st(_spec), ""]
+            L += ["WRITE ONE SUBSECTION PER QUESTION ABOVE, in that order. A question with no "
+                  "panel is a gap to report, not a section to skip.", ""]
+        except Exception as _e:                                           # noqa: BLE001
+            L += [f"(the design's questions could not be enumerated: {_e})", ""]
 
     con = pay.get("constraint_on_use")
     if con:

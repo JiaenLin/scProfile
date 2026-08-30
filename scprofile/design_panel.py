@@ -201,6 +201,101 @@ def _order(factors, alias):
     return keep
 
 
+def comparisons(design, factors=None, technical=None):
+    """EVERY QUESTION THIS DESIGN CAN BE ASKED, enumerated from the design table alone.
+
+    THIS IS THE SKELETON OF A RESULT SECTION, and its absence is why one was shallow. A writer
+    handed a directory of panels writes about the panels; a writer handed the design's own
+    questions writes about the experiment, and then goes looking for the panel that answers each.
+    The order of those two things decides whether a section is a survey of the tooling or a
+    result.
+
+    Nothing here is specific to two factors or to any project. For factors F (levels f1..fm) and
+    G (levels g1..gn) the design supports:
+
+        MARGINAL     F                      pooled over G - the main effect
+                     G                      pooled over F
+        SIMPLE       F | G = g               F within one level of G, one question per level
+                     G | F = f
+        INTERACTION  F x G                   does the F response depend on G? Equivalently:
+                                             (F | G = g1) against (F | G = g2)
+
+    which for a 2x2 is two marginals, four simples and one interaction. With three factors the
+    same rules give three marginals, twelve simples and three pairwise interactions, and the
+    enumeration is the same code.
+
+    A MARGINAL EFFECT CAN BE FLAT WHILE BOTH SIMPLE EFFECTS ARE LARGE AND OPPOSITE - that is what
+    an interaction IS - so a section built on marginals alone reports "no effect" for exactly the
+    design built to find one. Each returned question therefore carries its own `question` in
+    plain words, so the writer states what is being asked before saying what was found.
+
+    Each entry: kind, factor(s), the stratum if any, the arms with their sample n, whether the
+    factor is aliased with another (in which case the question cannot be answered as asked), and
+    the plain-language question.
+    """
+    factors = list(factors or sorted({f for r in design.values() for f in r}))
+    alias = aliased(design, factors)
+    tech = set(technical or [f for f in factors
+                             if any(h in f.lower() for h in TECHNICAL_HINTS)])
+    bio = [f for f in _order(factors, alias) if f not in tech]
+
+    def _levels(f, subset=None):
+        out = {}
+        for smp, row in design.items():
+            if subset and not all(str((row or {}).get(k)) == str(v) for k, v in subset.items()):
+                continue
+            out.setdefault(str((row or {}).get(f)), []).append(smp)
+        return {k: sorted(v) for k, v in sorted(out.items()) if k not in ("None", "nan", "")}
+
+    def _entry(kind, factor, lv, stratum, question, other=None):
+        return {"kind": kind, "factor": factor, "other": other, "stratum": dict(stratum or {}),
+                "arms": {k: len(v) for k, v in lv.items()},
+                "samples": lv,
+                "aliased_with": list(alias.get(factor) or []),
+                "question": question}
+
+    out = []
+    for f in bio:
+        lv = _levels(f)
+        if len(lv) < 2:
+            continue
+        names = " versus ".join(sorted(lv))
+        out.append(_entry("marginal", f, lv, None,
+                          f"Across the whole cohort, does this differ between {names}?"))
+
+    for f in bio:
+        for g in bio:
+            if f == g:
+                continue
+            for gl in _levels(g):
+                lv = _levels(f, {g: gl})
+                if len(lv) < 2:
+                    continue
+                names = " versus ".join(sorted(lv))
+                out.append(_entry("simple", f, lv, {g: gl},
+                                  f"Within {g} = {gl} alone, does this differ between {names}?",
+                                  other=g))
+
+    for a_i, fa in enumerate(bio):
+        for fb in bio[a_i + 1:]:
+            la, lb = _levels(fa), _levels(fb)
+            if len(la) < 2 or len(lb) < 2:
+                continue
+            cells = {}
+            for al in la:
+                for bl in lb:
+                    cells[f"{al}|{bl}"] = _levels(fa, {fb: bl}).get(al, [])
+            if any(not v for v in cells.values()):
+                continue                # a missing cell is not an interaction, it is a gap
+            out.append({"kind": "interaction", "factor": fa, "other": fb, "stratum": {},
+                        "arms": {k: len(v) for k, v in cells.items()}, "samples": cells,
+                        "aliased_with": list(alias.get(fa) or []),
+                        "question": (f"Does the {fa} difference depend on {fb}? Equivalently: is "
+                                     f"the {fa} response in one {fb} level different from the "
+                                     f"{fa} response in the other?")})
+    return out
+
+
 def draw(per_sample, design, path, *, cells=None, width=None):
     """The design panel: sample-level points per arm, and every effect on one axis.
 
