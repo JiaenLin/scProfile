@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.16.0",
+    "version": "0.16.1",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -607,6 +607,19 @@ thresh <- as.numeric(args[10])
 # normal. An index that lives away from its siblings is an index nobody can count.
 cache_dir <- if (length(args) >= 11 && nzchar(args[11])) args[11] else ""
 
+# A PHASE CLOCK, DEFINED AT THE TOP BECAUSE R DOES NOT HOIST. Twice the cost of a round has
+# been diagnosed by assumption and been wrong: the inference was assumed dominant and was not,
+# then the matrix write was, and it takes one to five seconds. Guessing where a run spends its
+# time is what makes every round of development expensive, so the run measures itself.
+.clock <- new.env(); .clock$t0 <- proc.time()[["elapsed"]]; .clock$marks <- list()
+mark <- function(what) {
+  now <- proc.time()[["elapsed"]]
+  .clock$marks[[what]] <- now - .clock$t0
+  .clock$t0 <- now
+  invisible(NULL)
+}
+
+
 X <- as(Matrix::readMM(mtx), "CsparseMatrix")
 mark("read the matrix")
 meta <- read.csv(meta_f, row.names = 1, stringsAsFactors = FALSE)
@@ -744,17 +757,6 @@ if (!identical(normalizePath(store, mustWork = FALSE),
 figdir <- file.path(dirname(dirname(out)), "figures")
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 .plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
-# A PHASE CLOCK. Twice now the cost of a round has been diagnosed by assumption and been wrong:
-# first the inference was assumed dominant and was not, then the matrix write was, and it turned
-# out to take one to five seconds. Guessing where a run spends its time is what makes every
-# round of development expensive, so the run measures itself and says so.
-.clock <- new.env(); .clock$t0 <- proc.time()[["elapsed"]]; .clock$marks <- list()
-mark <- function(what) {
-  now <- proc.time()[["elapsed"]]
-  .clock$marks[[what]] <- now - .clock$t0
-  .clock$t0 <- now
-  invisible(NULL)
-}
 npng <- function(name, expr, w = 1800, h = 1500, res = 200) {
   path <- file.path(figdir, paste0("native_", name, ".png"))
   ok <- tryCatch({
@@ -3306,6 +3308,19 @@ if (file.exists(.envpy)) Sys.setenv(RETICULATE_PYTHON = .envpy)
 suppressMessages({library(CellChat); library(patchwork); library(ComplexHeatmap)})
 args <- commandArgs(trailingOnly = TRUE)
 rds_a <- args[1]; rds_b <- args[2]; name_a <- args[3]; name_b <- args[4]; figdir <- args[5]
+
+# A PHASE CLOCK, DEFINED AT THE TOP BECAUSE R DOES NOT HOIST. Twice the cost of a round has
+# been diagnosed by assumption and been wrong: the inference was assumed dominant and was not,
+# then the matrix write was, and it takes one to five seconds. Guessing where a run spends its
+# time is what makes every round of development expensive, so the run measures itself.
+.clock <- new.env(); .clock$t0 <- proc.time()[["elapsed"]]; .clock$marks <- list()
+mark <- function(what) {
+  now <- proc.time()[["elapsed"]]
+  .clock$marks[[what]] <- now - .clock$t0
+  .clock$t0 <- now
+  invisible(NULL)
+}
+
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 
 a <- readRDS(rds_a); b <- readRDS(rds_b)
@@ -3363,16 +3378,6 @@ mark("align and merge")
 cat("merged:", name_a, "and", name_b, "\n")
 
 .plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
-# THE SAME PHASE CLOCK AS THE RUN BLOCK. Without it the tally line below, which is shared, would
-# reference an object this script never defined - and the compare phase would fail on its last
-# line after doing all its work.
-.clock <- new.env(); .clock$t0 <- proc.time()[["elapsed"]]; .clock$marks <- list()
-mark <- function(what) {
-  now <- proc.time()[["elapsed"]]
-  .clock$marks[[what]] <- now - .clock$t0
-  .clock$t0 <- now
-  invisible(NULL)
-}
 npng <- function(nm, expr, w = 2000, h = 1600, res = 200) {
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
   ok <- tryCatch({

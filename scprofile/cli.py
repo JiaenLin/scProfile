@@ -2903,7 +2903,7 @@ def _cache(a):
         r[1] += st.st_size
         r[2] = max(r[2], st.st_mtime)
     print(f"cache: {cache}")
-    print(f"  {len(rows)} entr(y/ies), {unique / 1e9:,.1f} GB on disk, of which "
+    print(f"  {len(rows)} entr(y/ies), {unique / 1e9:,.1f} GB of files, of which "
           f"{freed / 1e9:,.1f} GB would actually be freed by clearing it - the rest is "
           f"hard-linked into run directories that still reference it")
     now = _t.time()
