@@ -169,6 +169,116 @@ def _weight_name(spec):
     return str(n.get("weight_name") or "weight")
 
 
+#: WHICH EVIDENCE BACKS WHICH SENTENCE, in the order the section writes them.
+#:
+#: IT LIVES HERE ONCE BECAUSE THE PROSE AND THE FIGURE NUMBERS MUST AGREE. A citation that names
+#: a different plate from the one printed under that number is worse than no citation at all: it
+#: reads as a check a reader can make, and fails silently when they make it. Two copies of this
+#: list - one for the writing, one for the numbering - is exactly how the two come apart, which
+#: is the same disconnection between the panel and the paper, one level down.
+#:
+#: The keys are sentences; the values are needs from `evidence.NEEDS`, which are questions about
+#: a comparison and know nothing about any tool. A plugin routes each need to its own function.
+SENTENCE_EVIDENCE = (
+    ("ratio", ("who_changed", "what_carries_it")),
+    ("tested", ("what_carries_it", "specificity")),
+    ("presence", ("presence_or_magnitude", "what_carries_it")),
+    ("direction", ("direction",)),
+)
+
+
+def _native_index(run, plugin, spec):
+    """({(contrast, function): [path]}, {need: [route]}) - what this run actually drew.
+
+    ONLY FILES THAT EXIST enter the index. Everything downstream - the numbering, the citations,
+    the figures printed under them - is built from it, so filtering here is what guarantees the
+    prose cannot cite a number that has no picture under it, without any consumer having to
+    check separately and get it right.
+    """
+    routes = ((spec or {}).get("report") or {}).get("provides_evidence") or {}
+    declared = (spec or {}).get("native_plots") or {}
+    try:
+        placed = json.loads((Path(run) / "report" / "panels.json")
+                            .read_text(encoding="utf-8")).get(plugin) or {}
+        native = placed.get("native") or []
+    except (OSError, ValueError):
+        native = []
+    from . import native as _NAT
+
+    by = {}
+    for x in native:
+        rel = str(x.get("path") or "")
+        if not rel or not (Path(run) / rel).is_file():
+            continue
+        fn = _NAT.function_for(declared, rel)
+        if fn:
+            by.setdefault((str(x.get("label") or ""), fn), []).append(rel)
+    return by, dict(routes)
+
+
+def _figs_for(by, routes, label, needs):
+    """The plates this contrast drew for these needs, in route order, each once."""
+    out = []
+    for need in needs:
+        for r in (routes.get(need) or []):
+            r = str(r)
+            if r.startswith("native:"):
+                out += by.get((label, r.split(":", 1)[1])) or []
+    seen, uniq = set(), []
+    for x in out:
+        if x not in seen:
+            seen.add(x)
+            uniq.append(x)
+    return uniq
+
+
+def _order(f, design):
+    """The contrasts in the DESIGN's order, falling back to alphabetical.
+
+    One definition, because the section, the claims and the figure numbers all walk it and a
+    figure numbered in one order and printed in another is unreadable.
+    """
+    from .design_panel import comparisons as _cmps
+
+    cmps = _cmps(design or {}) if design else []
+    return [c.get("label") for c in cmps if c.get("label") in f] or sorted(f)
+
+
+def figure_index(run, plugin, spec=None, design=None):
+    """{figure path: number} - a stable figure number, in the order the section cites it.
+
+    A PAPER NUMBERS ITS FIGURES AND THE TEXT POINTS AT THEM. Without this the composed section
+    named measurements in prose while the figures sat underneath it in a block captioned with
+    their FILENAMES, and nothing on the page said which picture any sentence was read off. A
+    reader could not check a single number against a single plate.
+
+    The number is a position in this run's own reading order - design order, and within a
+    contrast the order the sentences are written - so it is stable across rebuilds of the same
+    run and means nothing outside it. Numbers are contiguous because the index is built only
+    from plates that exist.
+    """
+    f = findings(run, plugin, spec)
+    if not f:
+        return {}
+    by, routes = _native_index(run, plugin, spec)
+    idx, n = {}, 0
+    for label in _order(f, design):
+        for _key, needs in SENTENCE_EVIDENCE:
+            for path in _figs_for(by, routes, label, needs):
+                if path not in idx:
+                    n += 1
+                    idx[path] = n
+    return idx
+
+
+def cite(idx, paths):
+    """" (Figure 3, 4)" for these plates, or "" - the citation as it appears in a sentence."""
+    ns = sorted({idx[p] for p in paths if p in idx})
+    if not ns:
+        return ""
+    return (" (Figure " if len(ns) == 1 else " (Figures ") + ", ".join(str(i) for i in ns) + ")"
+
+
 def section(run, plugin, spec=None, design=None, run_key=""):
     """The result section, as Markdown, composed from this run's tables.
 
@@ -188,7 +298,16 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         return ""
     W = _weight_name(spec)
     cmps = _cmps(design or {}) if design else []
-    order = [c.get("label") for c in cmps if c.get("label") in f] or sorted(f)
+    order = _order(f, design)
+    # THE FIGURES, NUMBERED, so the sentences can point at them. Built from the same routes the
+    # panel places by, so a number in this text and the plate printed under it are the same
+    # object by construction rather than by anyone keeping two lists in step.
+    by, routes = _native_index(run, plugin, spec)
+    idx = figure_index(run, plugin, spec, design)
+
+    def _c(label, *needs):
+        return cite(idx, _figs_for(by, routes, label, needs))
+
     kind = {c.get("label"): str(c.get("kind", "")) for c in cmps}
     quest = {c.get("label"): str(c.get("question", "")) for c in cmps}
     alias = {}
@@ -235,22 +354,32 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         if d["ratio"]:
             L += [f"Total {W} is {_n(d['total_against'])} in **{d['against']}** against "
                   f"{_n(d['total_reference'])} in the reference arm **{d['reference']}**, over "
-                  f"{d['n_elements']} elements."]
+                  f"{d['n_elements']} elements"
+                  + _c(lab, "who_changed") + "."]
         if d["n_tested"]:
             L += [f"**{d['n_significant']} of {d['n_tested']}** elements differ significantly "
-                  f"between the arms by the method's own between-arm test."]
+                  f"between the arms by the method's own between-arm test"
+                  + _c(lab, "what_carries_it") + "."]
         if d["leading"]:
-            L += [f"The largest changes are {_lead_phrase(d['leading'])}."]
+            L += [f"The largest changes are {_lead_phrase(d['leading'])}"
+                  + _c(lab, "specificity") + "."]
         if d["only_against"]:
             L += [f"**{len(d['only_against'])}** element(s) are detected in "
                   f"**{d['against']}** and not in {d['reference']}"
                   + (f" — {', '.join(d['only_against'])}"
                      if len(d["only_against"]) <= 12 else "")
-                  + (f"; **{len(d['only_reference'])}** the other way." if d["only_reference"]
-                     else ", and none the other way.")]
+                  + (f"; **{len(d['only_reference'])}** the other way" if d["only_reference"]
+                     else ", and none the other way")
+                  + _c(lab, "presence_or_magnitude") + "."]
         elif d["only_reference"]:
             L += [f"**{len(d['only_reference'])}** element(s) are detected in {d['reference']} "
-                  f"and not in {d['against']}, and none the other way."]
+                  f"and not in {d['against']}, and none the other way"
+                  + _c(lab, "presence_or_magnitude") + "."]
+        _dir = _c(lab, "direction")
+        if _dir:
+            L += [f"Sending and receiving are shown separately: each population's outgoing and "
+                  f"incoming {W} in **{d['against']}** against the reference arm "
+                  f"**{d['reference']}**, over the same set of elements in both arms{_dir}."]
         if d["disagree"]:
             L += [f"{d['disagree']} of {d['n_elements']} elements move in opposite directions on "
                   f"the raw and share scales, because the arms differ in total {W}; both scales "
@@ -303,44 +432,18 @@ def claims(run, plugin, spec=None, design=None):
     Every sentence is a statement of what was measured. None interprets, and none is written
     where the measurement behind it is missing.
     """
-    import json as _json
-
     f = findings(run, plugin, spec)
     if not f:
         return []
     W = _weight_name(spec)
-    routes = ((spec or {}).get("report") or {}).get("provides_evidence") or {}
-    declared = (spec or {}).get("native_plots") or {}
-    try:
-        placed = _json.loads((Path(run) / "report" / "panels.json")
-                             .read_text(encoding="utf-8")).get(plugin) or {}
-        native = placed.get("native") or []
-    except Exception:                                                     # noqa: BLE001
-        native = []
-    from . import native as _NAT
-
-    by = {}
-    for x in native:
-        fn = _NAT.function_for(declared, str(x.get("path") or ""))
-        if fn:
-            by.setdefault((str(x.get("label") or ""), fn), []).append(str(x.get("path")))
+    by, routes = _native_index(run, plugin, spec)
 
     def figs_for(label, needs):
-        out = []
-        for need in needs:
-            for r in (routes.get(need) or []):
-                r = str(r)
-                if r.startswith("native:"):
-                    out += by.get((label, r.split(":", 1)[1])) or []
-        seen, uniq = set(), []
-        for x in out:
-            if x not in seen:
-                seen.add(x)
-                uniq.append(x)
-        return uniq
+        return _figs_for(by, routes, label, needs)
 
     made = []
-    for label, d in sorted(f.items()):
+    for label in _order(f, design):
+        d = f[label]
         if d["ratio"]:
             cites = figs_for(label, ("who_changed", "what_carries_it"))
             if cites:

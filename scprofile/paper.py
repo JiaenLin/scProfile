@@ -523,6 +523,46 @@ def read_draft(out, plugin=""):
     return p.read_text(encoding="utf-8") if p.is_file() else ""
 
 
+def _captions(out, plugin=""):
+    """{figure path: the caption it was drawn with} - read from the run's own `panels.json`.
+
+    The reporter records what it put on each page, caption included. Reading it here is what
+    lets the paper print a real legend instead of a filename, and it works for any plugin
+    because the reporter wrote it for all of them.
+    """
+    import json as _json
+
+    try:
+        pj = _json.loads((Path(out) / "report" / "panels.json")
+                         .read_text(encoding="utf-8")).get(plugin) or {}
+    except (OSError, ValueError):
+        return {}
+    caps = {}
+    for group in ("cohort", "native", "contrast", "arm"):
+        for f in (pj.get(group) or []):
+            cap = f.get("caption")
+            if isinstance(cap, (list, tuple)):
+                cap = " ".join(str(x) for x in cap if x)
+            caps[str(f.get("path") or "")] = " ".join(str(cap or "").split())
+    return caps
+
+
+def _figure_index(out, plugin=""):
+    """{figure path: number} for this run, or `{}` - the numbering the composed prose cites."""
+    import json as _json
+
+    try:
+        pay = _json.loads((Path(out) / "report.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    from . import compose as _C
+
+    try:
+        return _C.figure_index(out, plugin, _plugin_spec_of(pay, plugin), pay.get("design") or {})
+    except Exception:                                                     # noqa: BLE001
+        return {}
+
+
 def render(out, *, run_key="", title="Result section", plugin=""):
     """Write `report/paper.html`: the authored section, the claims, and every figure they cite.
 
@@ -567,15 +607,32 @@ def render(out, *, run_key="", title="Result section", plugin=""):
             out_html.append(f"<tr><td>{_e(txt)}</td><td><b>{_e(st)}</b></td>"
                             f"<td>{n}</td><td class='sub'>{_e(names)}</td></tr>")
         out_html.append("</table></div>")
+        # THE FIGURES, NUMBERED, WITH THE LEGEND THEY WERE DRAWN WITH.
+        #
+        # They were printed in an unordered block captioned with their FILENAMES - the whole of
+        # the legend a reader of the paper got. Nothing said what a panel showed, what its
+        # colours meant, or which sentence it belonged to, so no number in the text could be
+        # checked against any picture. A paper numbers its figures and its text points at them.
+        #
+        # The order and the numbers come from `compose.figure_index`, the same index the prose
+        # cites through, so "Figure 3" in a sentence and the plate printed under Figure 3 are one
+        # object by construction. Any figure a claim cites that the index does not carry is
+        # printed after them rather than dropped.
+        idx = _figure_index(out, plugin)
+        caps = _captions(out, plugin)
         seen, figs = set(), []
+        for f in sorted(idx, key=lambda x: idx[x]):
+            if (root / f).is_file():
+                seen.add(f)
+                figs.append(f)
         for cid, _st, _n, _t in rows:
             for f in sorted(cites.get(cid, {})):
                 if f not in seen and (root / f).is_file():
                     seen.add(f)
                     figs.append(f)
         if figs:
-            out_html.append("<h2>The figures this section is read off</h2>")
-            for f in figs:
+            out_html.append("<h2>Figures</h2>")
+            for i, f in enumerate(figs, 1):
                 # RELATIVE TO WHERE THE PAGE ACTUALLY IS, computed rather than assumed. The
                 # href was hard-coded as "../" + path, which was right while every page sat in
                 # `<run>/report/`. A plugin's page now sits in `<run>/kernels/<plugin>/report/`,
@@ -584,8 +641,17 @@ def render(out, *, run_key="", title="Result section", plugin=""):
                 # panel has to have.
                 rel = Path(f)
                 href = _os.path.relpath(root / rel, _report_dir(out, plugin))
-                out_html.append(f'<figure><img src="{_e(href)}" alt="{_e(rel.name)}">'
-                                f'<figcaption class="sub">{_e(rel.name)}</figcaption></figure>')
+                n = idx.get(f, i)
+                # THE LEGEND IS PRINTED WHOLE. `report.CAPTION_LEAD_WORDS` splits a caption into
+                # a lead and a disclosure, which is right for a page of a hundred panels and
+                # wrong for a paper: a figure legend that stops at 32 words is not a legend. No
+                # cap and no disclosure here - what the figure was drawn with is what is printed.
+                leg = caps.get(f, "")
+                out_html.append(
+                    f'<figure><img src="{_e(href)}" alt="Figure {n}">'
+                    f'<figcaption><b>Figure {n}.</b> {_e(leg) if leg else ""}'
+                    f'<span class="sub"> Source: <code>{_e(str(rel))}</code>.</span>'
+                    f'</figcaption></figure>')
 
     out_html.append("<h2>What this test does not cover</h2><div class='warn'><ul>"
                     + "".join(f"<li>{_e(x)}</li>" for x in NARROW) + "</ul></div>")

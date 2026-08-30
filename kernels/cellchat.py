@@ -387,9 +387,18 @@ PLUGIN = {
                              "test": "unpaired Wilcoxon between the two arms, via rankNet"},
 
         "provides_evidence": {
-            "who_changed": ["native:netVisual_diffInteraction", "host:diff_matrix"],
+            # BOTH OF CELLCHAT'S ANSWERS TO THIS, because they are read differently: the
+            # network shows the SHAPE of the change, the heatmap lets a reader find a PAIR. The
+            # heatmap was drawn on every run and placed in no paper, which is a figure the run
+            # pays for and nobody sees.
+            "who_changed": ["native:netVisual_diffInteraction", "native:netVisual_heatmap",
+                            "host:diff_matrix"],
             "what_carries_it": ["native:rankNet", "host:flow_compare"],
-            "direction": ["native:netAnalysis_signalingRole_scatter", "host:role_shift"],
+            # The scatter puts each population in one sending-against-receiving plane; the role
+            # heatmaps say WHICH programmes it sends and receives, per arm, over the same
+            # pathway set. Two halves of one need, and only the first was reaching a reader.
+            "direction": ["native:netAnalysis_signalingRole_scatter",
+                          "native:netAnalysis_signalingRole_heatmap", "host:role_shift"],
             "presence_or_magnitude": ["host:unit_presence"],
             "specificity": ["native:netVisual_bubble", "host:matrix"],
             "consistency": ["host:unit_presence"],
