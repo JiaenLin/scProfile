@@ -698,8 +698,13 @@ def ensure_section(out, *, plugin="", spec=None, design=None, run_key=""):
     from . import compose as _C
 
     existing = _root(out, plugin) / draft_name(plugin)
-    if existing.is_file() and existing.read_text(encoding="utf-8").strip():
-        return None
+    if existing.is_file():
+        head = existing.read_text(encoding="utf-8").strip()
+        # AN AUTHORED SECTION IS NEVER OVERWRITTEN. A COMPOSED ONE IS REBUILT: otherwise a
+        # rebuild keeps a section written by older code beside figures drawn by newer, which is
+        # the staleness this project treats as worse than being wrong, because it reads correctly.
+        if head and not head.startswith(_C.COMPOSED_MARK):
+            return None
     text = _C.section(out, plugin, spec=spec, design=design, run_key=run_key)
     if not text.strip():
         return None

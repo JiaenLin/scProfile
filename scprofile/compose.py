@@ -32,6 +32,12 @@ import json
 import math
 from pathlib import Path
 
+#: THE FIRST LINE OF A COMPOSED SECTION. An authored section must never be
+#: overwritten; a composed one must be REBUILT when the tool changes, or a rebuild
+#: keeps a section written by older code beside figures drawn by newer. The marker
+#: is how those two cases are told apart, and it is visible to a reader as well.
+COMPOSED_MARK = "<!-- composed by scprofile; edit and pass back with --section -->"
+
 
 def _rows(path):
     try:
@@ -103,7 +109,11 @@ def findings(run, plugin, spec=None):
     sig, sig_rel = _significance(run, plugin, spec)
     out = {}
     for label, c in ts.items():
-        el = sorted(c["elements"], key=lambda kv: kv[1])
+        # LEADING MEANS THE LARGEST CHANGE, in either direction. Sorted by the SIGNED delta this
+        # returned the most negative - the elements highest in the reference arm - so the section
+        # named five small movers as leading the difference while the largest changes in the
+        # contrast went unmentioned. Sorted by magnitude it names what actually moved.
+        el = sorted(c["elements"], key=lambda kv: -abs(kv[1]))
         p = sig.get(label) or {}
         lead = [(n, p.get(n)) for n, _d in el if p.get(n, 1.0) < 0.05][:5] if p else \
                [(n, None) for n, _d in el[:5]]
@@ -130,8 +140,17 @@ def _n(x, digits=2):
 
 
 def _p(v):
+    """Render a p-value, and never print an exact zero as though it were a measurement.
+
+    A test that returns 0 has not measured a vanishing probability; it has run out of resolution
+    - a permutation p of 0 means the statistic was not beaten in any draw, and an underflowed
+    analytic p means the same thing about the arithmetic. Printing `0.0e+00` states a certainty
+    the test did not produce.
+    """
     if v is None:
         return ""
+    if v <= 0:
+        return "p reported as 0, at the limit of what the test resolves"
     return f"p = {v:.3g}" if v >= 1e-4 else f"p = {v:.1e}"
 
 
@@ -171,7 +190,8 @@ def section(run, plugin, spec=None, design=None, run_key=""):
             alias.setdefault(str(c.get("factor")), set()).add(str(a))
 
     W = _weight_name(spec)
-    L = [f"# What this run measured across the design",
+    L = [COMPOSED_MARK,
+         f"# What this run measured across the design",
          "",
          f"Composed from run `{run_key or Path(run).name}`. Every number below is read from a "
          f"table in that run and the table is named where it is used; every difference is "
