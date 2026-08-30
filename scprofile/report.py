@@ -715,8 +715,12 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None,
             spath = fh.name
         cdir = kdir / "compare" / str(label)
         try:
+            # THE COMPARE PHASE GETS ITS OWN WORKING DIRECTORY for the same reason the run
+            # phase does: a wrapped tool that writes to the current directory must not write
+            # into the project.
+            cdir.mkdir(parents=True, exist_ok=True)
             subprocess.run([str(exe), str(entry), "--compare", str(plugin_file), spath],
-                           capture_output=False, timeout=3600, env=env)
+                           capture_output=False, timeout=3600, env=env, cwd=str(cdir))
         except Exception as e:                                            # noqa: BLE001
             print(f"  native compare {label} failed: {e}")
             continue

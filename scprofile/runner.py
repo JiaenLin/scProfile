@@ -958,10 +958,18 @@ def run(kernel, *, inp, out_dir, prefix=None, log=print, timeout=None):
     import json as _json
     _cores = ((_json.loads(Path(inp).read_text(encoding="utf-8")).get("resources") or {})
               .get("cores"))
+    # A WORKING DIRECTORY THE INSTANCE OWNS. Nothing set one, so every plugin inherited the
+    # directory the job was launched from - and a wrapped tool that writes to the current
+    # directory then writes into the PROJECT. Measured: CellChat's netVisual and its cluster-
+    # number estimator dropped eight plates and a PDF at the project root, beside the stage
+    # directories, on a run whose output was supposed to be sealed inside its own run key. The
+    # instance directory is where anything a tool drops belongs.
+    _cwd = Path(out).resolve()
+    _cwd.mkdir(parents=True, exist_ok=True)
     with open(logf, "w", encoding="utf-8") as fh:
         r = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT,
                            env=with_env_bin(exe, manifest.env_for_kernel(inp, cores=_cores)),
-                           timeout=timeout)
+                           cwd=str(_cwd), timeout=timeout)
     if r.returncode != 0:
         tail = "".join(logf.read_text(encoding="utf-8", errors="replace").splitlines(True)[-15:])
         raise RuntimeError(
