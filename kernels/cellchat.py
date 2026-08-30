@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.13.0",
+    "version": "0.14.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -2795,14 +2795,64 @@ def run(ctx):
                     f"reported as partial")
 
     # ---------------------------------------------------------- the scoring
+    # THE MATRIX IS CACHED TOO, and it is the larger cost of the two. MatrixMarket is a TEXT
+    # format: this unit's matrix is 1,382 MB of it, and writing it dominated a run that had
+    # already skipped the inference - a cache hit still took 386 seconds. What determines the
+    # file is the object, the unit and the label column, none of which a code change touches.
+    import hashlib as _hl
+    import os as _os
+    import shutil as _sh
+    import time as _t
+    from pathlib import Path as _P
+
     mtx = ctx.out / "cellchat_expr.mtx"
-    # GENES x CELLS: CellChat's convention, and transposing in the wrong place is the classic way
-    # to get a full, plausible, meaningless result out of it.
-    sio.mmwrite(str(mtx), Xc.T.tocoo())
-    pd.Series(var_names).to_csv(str(mtx) + ".genes", index=False, header=False)
     meta = ctx.out / "cellchat_meta.csv"
-    pd.DataFrame({"label": A.obs[ctx.keys["label"]].astype(str).to_numpy()},
-                 index=A.obs_names.astype(str)).to_csv(meta)
+    # THE KEY IS THE CELL SET AND THE GENE SET, not a path. Two runs of the same object give the
+    # same barcodes in the same order; a different unit, a different label column or a rebuilt
+    # object gives different ones. Hashing the names is cheap and does not depend on where the
+    # file happens to live, which a path-based key would.
+    _key = "|".join((
+        str(ctx.unit or ""), str(ctx.keys.get("label", "")), str(A.n_obs), str(A.n_vars),
+        _hl.sha1("\n".join(map(str, A.obs_names)).encode()).hexdigest(),
+        _hl.sha1("\n".join(map(str, var_names)).encode()).hexdigest()))
+    _mc = ctx.cache("matrix")
+    _hit = False
+    if _mc is not None:
+        _kf = _mc / "key.txt"
+        _cm, _cg, _cv = _mc / "expr.mtx", _mc / "expr.mtx.genes", _mc / "meta.csv"
+        if (_kf.is_file() and _kf.read_text(encoding="utf-8").strip() == _key
+                and _cm.is_file() and _cg.is_file() and _cv.is_file()):
+            for _src, _dst in ((_cm, mtx), (_cg, _P(str(mtx) + ".genes")), (_cv, meta)):
+                if _dst.exists():
+                    _dst.unlink()
+                try:
+                    _os.link(_src, _dst)
+                except OSError:
+                    _sh.copyfile(_src, _dst)
+            _hit = True
+            ctx.log(f"  matrix store: cache hit, {_cm.stat().st_size / 1e6:,.0f} MB not "
+                    f"rewritten")
+    if not _hit:
+        _t0 = _t.time()
+        # GENES x CELLS: CellChat's convention, and transposing in the wrong place is the
+        # classic way to get a full, plausible, meaningless result out of it.
+        sio.mmwrite(str(mtx), Xc.T.tocoo())
+        pd.Series(var_names).to_csv(str(mtx) + ".genes", index=False, header=False)
+        pd.DataFrame({"label": A.obs[ctx.keys["label"]].astype(str).to_numpy()},
+                     index=A.obs_names.astype(str)).to_csv(meta)
+        ctx.log(f"  matrix store: written in {_t.time() - _t0:,.0f}s, "
+                f"{mtx.stat().st_size / 1e6:,.0f} MB")
+        if _mc is not None:
+            try:
+                for _src, _dst in ((mtx, _mc / "expr.mtx"),
+                                   (_P(str(mtx) + ".genes"), _mc / "expr.mtx.genes"),
+                                   (meta, _mc / "meta.csv")):
+                    if _dst.exists():
+                        _dst.unlink()
+                    _os.link(_src, _dst)
+                (_mc / "key.txt").write_text(_key, encoding="utf-8")
+            except OSError as _e:
+                ctx.log(f"  matrix store: not cached ({_e})")
 
     script = ctx.out / "cellchat.R"
     script.write_text(_R_RUN, encoding="utf-8")
