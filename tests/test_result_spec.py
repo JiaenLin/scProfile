@@ -136,3 +136,54 @@ if __name__ == "__main__":
                 bad += 1
                 print(f"  FAIL {name}: {e}")
     sys.exit(1 if bad else 0)
+
+
+def _figs():
+    """Panel names in the shape the host writes them."""
+    return [
+        "p_C1_diff_count__f1.png", "p_C3_flow__f1.png", "p_C4_role_shift__f1.png",
+        "p_C1_diff_count__f2.png", "p_C3_flow__f2.png", "p_C4_role_shift__f2.png",
+        "p_C1_diff_count__f1___f2___p.png", "p_C3_flow__f1___f2___p.png",
+        "p_C4_role_shift__f1___f2___p.png",
+        "p_C1_diff_count__f1___f2___q.png", "p_C3_flow__f1___f2___q.png",
+        "p_C4_role_shift__f1___f2___q.png",
+        "p_C1_diff_count__f2___f1___lo.png", "p_C3_flow__f2___f1___lo.png",
+        "p_C4_role_shift__f2___f1___lo.png",
+        "p_C1_diff_count__f2___f1___hi.png", "p_C3_flow__f2___f1___hi.png",
+        "p_C4_role_shift__f2___f1___hi.png",
+        "p_C5_interaction__f1__x__f2.png",
+        "p_P1_population_presence__cohort.png",
+    ]
+
+
+def test_a_complete_run_reports_no_gap():
+    from scprofile.planner import delivered
+    secs = delivered(result_spec(_factorial(f1=["lo", "hi"], f2=["p", "q"]), _plugin()), _figs())
+    missing = [(s["kind"], p["kind"]) for s in secs for p in (s["missing"] or [])]
+    assert not missing, missing
+
+
+def test_a_removed_panel_IS_reported_missing():
+    """The matcher must be able to fail, or 20 of 20 means nothing."""
+    from scprofile.planner import delivered
+    figs = [f for f in _figs() if "C3_flow__f1___f2___p" not in f]
+    secs = delivered(result_spec(_factorial(f1=["lo", "hi"], f2=["p", "q"]), _plugin()), figs)
+    gone = [(s["kind"], s.get("stratum"), p["kind"])
+            for s in secs for p in (s["missing"] or [])]
+    assert gone == [("simple", {"f2": "p"}, "flow_compare")], gone
+
+
+def test_a_marginal_is_not_satisfied_by_a_stratified_panel():
+    """`C3_flow__f1___f2___p` answers f1 WITHIN f2=p, and must not stand in for f1 overall."""
+    from scprofile.planner import delivered
+    figs = [f for f in _figs() if "___" in f or "P1_" in f or "C5_" in f]
+    secs = delivered(result_spec(_factorial(f1=["lo", "hi"], f2=["p", "q"]), _plugin()), figs)
+    marg = [s for s in secs if s["kind"] == "marginal"]
+    assert marg and all(s["missing"] for s in marg), (
+        "a marginal question was reported satisfied by stratified panels alone")
+
+
+def test_an_empty_run_reports_everything_missing():
+    from scprofile.planner import delivered
+    secs = delivered(result_spec(_factorial(f1=["lo", "hi"], f2=["p", "q"]), _plugin()), [])
+    assert all(not s["have"] for s in secs), "panels were matched against no figures at all"

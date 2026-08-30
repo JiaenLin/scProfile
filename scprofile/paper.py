@@ -313,9 +313,16 @@ def brief(out, plugin=""):
         # meeting the output. The first section written from this brief was a survey of the
         # tooling because the brief led with panels.
         try:
-            from .planner import result_spec as _rs, spec_text as _st
+            from .planner import (result_spec as _rs, spec_text as _st,
+                                  delivered as _dl, gap_text as _gt)
             _spec = _rs(des, _plugin_spec_of(pay, plugin))
             L += [_st(_spec), ""]
+            # AND WHAT THIS RUN ACTUALLY HAS, against that specification. A missing panel is a
+            # gap to report in the section, not a section to quietly leave out.
+            _figs = [f.get("file") or f.get("id") or ""
+                     for k in (pay.get("kernels") or {}).values()
+                     for f in (k.get("figures") or [])]
+            L += [_gt(_dl(_spec, _figs)), ""]
             L += ["WRITE ONE SUBSECTION PER QUESTION ABOVE, in that order. A question with no "
                   "panel is a gap to report, not a section to skip.", ""]
         except Exception as _e:                                           # noqa: BLE001

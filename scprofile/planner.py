@@ -708,3 +708,82 @@ def spec_text(sections):
                     out.append(f"           does NOT establish: {_k.does_not_establish}")
         out.append("")
     return "\n".join(out)
+
+
+def delivered(sections, figures, *, prefix=""):
+    """Match a specification against the figures a run actually produced.
+
+    THE LAST LINK OF THE CHAIN. `result_spec` says what a result should contain and needs no run;
+    this says what the run holds, so the difference is a MEASURED GAP rather than something
+    somebody notices while writing. Without it a missing panel is found only when a writer cannot
+    make a sentence, which is the weakness the paper station has been printing about itself.
+
+    Matching is on the tokens a panel's own name carries, not on a parsed grammar: the host builds
+    those names from the same contrast specs this function is given, so a panel for factor F
+    within G = g contains F and g in its stem. A tolerant match is right here - a name that gains
+    a suffix should not silently unmatch a section and report a false gap.
+
+    `figures` is any iterable of paths or names. Returns the sections with `have` and `missing`
+    added to each.
+    """
+    names = [str(f).rsplit("/", 1)[-1] for f in figures]
+
+    def _tokens(sec):
+        out = []
+        if sec.get("factor"):
+            out.append(str(sec["factor"]))
+        for k, v in (sec.get("stratum") or {}).items():
+            out.append(str(v))
+        if sec["kind"] == "interaction" and sec.get("other"):
+            out.append(str(sec["other"]))
+        return [t for t in out if t]
+
+    out = []
+    for sec in sections:
+        toks = _tokens(sec)
+        have, missing = [], []
+        for p in sec.get("panels", []):
+            kid = p["kind"]
+            stem = _P_STEM.get(kid, kid)
+            hits = [n for n in names
+                    if stem in n and all(t in n for t in toks)
+                    and (not prefix or n.startswith(prefix))]
+            if sec["kind"] == "marginal":
+                # a marginal panel must NOT be a stratified one wearing the same factor name
+                hits = [n for n in hits if n.count("___") <= 1]
+            (have if hits else missing).append({**p, "files": sorted(hits)[:4]})
+        out.append({**sec, "have": have, "missing": missing})
+    return out
+
+
+#: The filename stem each panel kind is written under. Read from `panels.IMPLEMENTED`, which
+#: already records where every kind is drawn and under what id, so the two cannot drift.
+def _stems():
+    from . import panels as _P
+    out = {}
+    for kid, where in _P.IMPLEMENTED.items():
+        tail = where.split("—")[-1].strip() if "—" in where else where
+        tok = tail.split(",")[0].strip().split()[0].strip()
+        out[kid] = tok or kid
+    return out
+
+
+_P_STEM = _stems()
+
+
+def gap_text(sections):
+    """The specified-versus-delivered table, as text."""
+    L = ["WHAT THE RUN DELIVERS AGAINST WHAT THE DESIGN SPECIFIES", ""]
+    tot_h = tot_m = 0
+    for i, s in enumerate(sections, 1):
+        h, m = len(s.get("have") or []), len(s.get("missing") or [])
+        tot_h += h
+        tot_m += m
+        head = s["kind"].upper() + (f"  {s['factor']}" if s.get("factor") else "")
+        if s.get("stratum"):
+            head += "  [" + ", ".join(f"{k} = {v}" for k, v in s["stratum"].items()) + "]"
+        L.append(f"{i}. {head}   {h} of {h + m} specified panel(s) present")
+        for p in (s.get("missing") or []):
+            L.append(f"     MISSING  {p['kind']}: {p['establishes']}")
+    L += ["", f"{tot_h} of {tot_h + tot_m} specified panels delivered."]
+    return "\n".join(L)
