@@ -617,9 +617,6 @@ cc <- identifyOverExpressedInteractions(cc)
 cc <- computeCommunProb(cc, type = mean_type, trim = trim,
                         population.size = pop_size, nboot = nboot, seed.use = 1L)
 cc <- filterCommunication(cc, min.cells = min_cells)
-writeLines(unname(stamp), stampf)
-saveRDS(cc, rds)
-cat("saved the CellChat object for reuse:", rds, "\n")
 }
 
 df <- subsetCommunication(cc, thresh = thresh)
@@ -653,6 +650,15 @@ try_write <- function(name, expr) {
 cc <- computeCommunProbPathway(cc)
 cc <- aggregateNet(cc)
 cc <- netAnalysis_computeCentrality(cc, slot.name = "netP")
+
+# SAVED HERE, NOT EARLIER. The first version wrote the object straight after inference, before
+# the pathway probabilities, the aggregate network and the centrality were added to it. A reused
+# object was therefore missing all three, and CellChat's own comparison functions refused it:
+# "Please run `netAnalysis_computeCentrality` to compute the network centrality scores for each
+# dataset seperately". An object is worth reusing only in the state the next step needs.
+writeLines(unname(stamp), stampf)
+saveRDS(cc, rds)
+cat("saved the CellChat object for reuse:", rds, "\n")
 
 # ---------------------------------------------------------------------------------------------
 # CELLCHAT'S OWN PLOTS, DRAWN BY CELLCHAT. Until now this script wrote no figure at all - every

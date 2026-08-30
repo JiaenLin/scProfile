@@ -1,295 +1,185 @@
-> **Looking for a definition?** [REFERENCE.md](REFERENCE.md) defines every element of scProfile — concepts, commands, run-directory files, reuse, licences, figures and the exit standard.
+# What scProfile is made of
 
-# Five domains, and what each is allowed to know
+scProfile is two harnesses joined at the plugin runner.
 
-scProfile is a plugin host. Its correctness rests on the boundaries between five things, and
-every serious defect in its history has been one domain doing another's job — or, in the case
-of the fifth, no domain doing it at all.
+**Part one — the platform harness.** Takes an annotated single-cell object and a design table,
+resolves what can run, builds the environments, runs plugins, merges their outputs. Plugins are
+plug-and-run: one file each, declared, no host change needed to add one.
 
-```
-      DECLARE  ──►  BUILD  ──►  PLAN  ──►  RUN  ──►  REPORT  ──►  PAPER
-         ▲            ▲           ▲          │          │            │
-         │            │           └──────────┘          │            │  plan triggers the builder
-         │            └──────────────────────┘          │            │  a run that fails on the
-         │                                              │            │  ENVIRONMENT rebuilds and
-         └──────────────────────────────────────────────┘            │  retries, once
-         └───────────────────────────────────────────────────────────┘
-                                                    output that contradicts the DECLARATION is a
-                                                    maintainer's defect — and so is a page the
-                                                    standard refuses, and so is a claim written
-                                                    from these figures that does not survive
-```
+**Part two — the agentic figure harness.** Takes the outputs of part one and produces figures and
+a written result section. It decides what figures a design needs, prefers the wrapped tool's own
+plots, checks what was drawn, records what a person saw, and binds every written claim to the
+figures it was read off.
 
-**The last arrow back is the longest and it is the newest.** A figure set can pass the exit
-standard, have every image looked at, and still support nothing: those checks ask whether the
-page is readable and whether anyone opened it, not whether it supports what you want to say.
-`PAPER` asks the question a reader will. A claim written from the figures and then withdrawn
-under review is a defect in the DECLARATION or in the drawing, routed back exactly like a
-contradicted output — see `docs/PAPER_TEST.md`, and `docs/FIGURE_STANDARD.md` for the eleven
-rules that loop has produced so far.
-
-**The arrows back are the point.** A pipeline that only flows one way makes every downstream
-failure look like the user's problem. These edges route a failure to the layer that owns it,
-and each has a different remedy.
-
-| domain | owns | may read | may NOT |
-|---|---|---|---|
-| **the plugin** | everything about itself | nothing outside its own directory | know a project, a column, an organism |
-| **the builder** | making a declared plugin runnable | the plugin's declaration | infer anything the plugin did not declare |
-| **the planner** | deciding what runs, how, in what order | the object, the design, the plugin declarations | write results, or refuse for a build reason |
-| **the runner** | executing the plan | the plan, the built plugins | decide what should run |
-| **the reporter** | what a reader meets, and the cohort no plugin can see | every payload at once, the design, the object | compute a result, or hide one it dislikes |
-
-## 0. The reporter is a domain, and for a long time it was not
-
-It was added to this table after a report on a real cohort arrived with **191 figures, 51 of
-them distinct and 140 the same fifteen plots redrawn once per sample**, no statement anywhere of
-what the cohort was, not one panel comparing an arm of the design, and two pages carrying a
-headline their own figures refute. scProfile makes these the host's responsibility so
-that every plugin gets them without implementing them.
-and the host was not asked to.
-
-Its boundary is one line: **a plugin knows its method, the host knows the cohort.** Anything a
-plugin cannot see from inside one method belongs to the reporter; anything the reporter would
-have to guess belongs to the plugin. `docs/REPORTING.md` is the whole of it, defect by defect.
-
-Two prohibitions carry the weight:
-
-- **It may not compute a result.** A number that first exists at render time cannot be traced to
-  a file, cannot be re-derived, and belongs to no plugin's declaration. The reporter arranges,
-  compares and folds; it does not analyse.
-- **It may not hide one.** It has every payload at once, which is exactly the position from
-  which a disappointing result is easiest to quietly drop. An absence is named — a panel that
-  could not be drawn, a metric that never arrived, a unit that failed, an identifier with no
-  gene symbol. Silence and success look the same on a page.
-
-And it is held to a **standard measured on the artifact**: `scprofile standard` takes a
-directory, so it can only ever be pointed at a report that was actually written, and whatever
-writes a report measures it in the same breath. A module somebody has to think to call is the
-same as not having one. `scprofile standard` measures the rendered report itself.
+The boundary is the plugin runner. Everything before it is about getting a method to run
+correctly. Everything after it is about turning the output into something a reader can check.
 
 ---
 
-## 1. The plugin declares everything about itself
+# Part one: the platform harness
 
-A plugin is **self-describing**. The builder does not go looking; it reads. One file,
-`kernels/<name>.py`:
+## `declare.py` — the plugin contract
 
-| declares | what |
-|---|---|
-| `inject`, `provides`, `produces` | what it needs, what it offers, what it will write |
-| `cannot_show` | what a reader must not conclude, however the result looks |
-| `requires` | a REQUIREMENT, never an environment — see §1a |
-| `cores`, `memory_gb_base`, `memory_gb_per_100k`, `gpus` | what the allocator schedules on, in every dimension |
-| `per_unit`, `also_cohort` | the scope the method is meaningful at |
-| `references` | every reference it consults, each with a `tier` — downloadable, bundled in a package, or fetched at run time |
-| `config` | typed and defaulted, validated before anything runs |
-| `upstream` | what the wrapped tool's docs say, and which of its defaults are wrong here |
-| `run(ctx)`, `selftest(ctx)`, `guard(g)` | the method call, proof it works, and whether this dataset is one where the result would mean what the report says |
+Defines what a plugin declaration may contain and validates it. A plugin is a `PLUGIN` dict and a
+`run(ctx)` function in one file. `REPORT_KEYS` lists the keys the report block accepts; a key not
+listed is rejected, and `report_get()` is the only way the host reads one, so the checker and the
+reader cannot drift apart.
 
-The directory layout — `kernel.yml`, `recipe.py`, `lock.yml`, `references.yml` and the rest —
-still loads, and is what a plugin written outside Python uses. It is not the shape to start a new
-plugin in, and `scaffold` no longer writes it by default.
+## `kernels.py` — finding plugins and where their output goes
 
-**A shape that cannot express one of these silently deletes it.** The one-file shape had no guard
-at first, so converting a guarded plugin to it removed the check with no error, no log line, and
-the first dataset the guard existed to refuse was analysed and reported.
+Discovers plugin files, reads their declarations statically, and builds the command that launches
+each. Also defines the output layout: `plugin_out()`, `plugin_report()`, `run_report()`. One
+plugin, one directory, with its own figures, tables, report pages, manuscript and review ledger.
 
-**And a field the shape can express but the plugin omits is a guess made elsewhere.** The plugin
-is written once and ships prebuilt; the builder and the planner run again on every machine and
-every project. Four of the rows above were added after the host was caught guessing — memory,
-GPUs, reference tiers and cohort scope — and in each case the guess was invisible until it was
-wrong.
+## `resolve.py` and the installer — environments
 
-**Nothing in a plugin may name a project's vocabulary** — not a column, a layer, an organism or a
-sample. Those arrive at run time through `keys` and `organism`. The compiler refuses a recipe that
-hard-codes one, because a plugin that names one project's vocabulary works on one project.
+Resolves each plugin's declared requirements into an environment. Plugins with compatible
+requirements share one. An environment is stamped with the lock it was built from; a stamp that
+does not match the current lock means the environment is stale, not usable.
 
-## 1a. A plugin declares a REQUIREMENT, never an environment
+## `planner.py` — what would run, and what a result should contain
 
-This is the line between the first two layers, and it was in the wrong place.
+`plan()` reads the object and reports what each plugin needs, what it would produce, and what
+blocks it. Runs nothing.
 
-A plugin used to declare a private, fully-pinned environment and the builder built one per
-plugin. That put a **resolution decision inside the plugin, where it cannot be made**: a plugin
-cannot know what else is installed, so every plugin assumed it was alone. Four shipped plugins
-wanted the same numpy/pandas/scanpy stack and got four copies of it.
+`result_spec()` takes a design table and a plugin declaration and returns the sections a result
+should have — one per question the design supports, each with the panels that answer it. It reads
+no run directory, so a result can be specified before any compute is scheduled.
 
-```python
-"requires": {"python": ">=3.10,<3.13",
-             "packages": {"decoupler": "==1.8.0", "scanpy": ">=1.10,<1.11"},
-             "conda":    {"petsc4py": "3.20"},        # what has no wheel
-             "channels": ["conda-forge"],
-             "r":        ["owner/repo@<40-hex>"]},    # another language's packages
-```
+`delivered()` matches a specification against the figures a run produced and names what is
+missing.
 
-**Constraints, not pins, wherever the tool genuinely tolerates a range.** A pin says only *that*
-version works; claiming it where it is untrue forces an environment nobody can share, and
-`validate` warns on every bare `==`.
+## `design_panel.py` — the questions a design supports
 
-**A requirement is five things, not two.** An interpreter, language packages, channel-level
-packages that have no wheel, the channels to take them from, and — for a plugin whose method
-lives in another language — that language's packages. A requirement that could express only the
-first two forced every plugin needing the rest to declare a private lock the resolver could not
-read: it resolved such a plugin to *nothing*, reported an environment count that did not include
-it, and let the builder fall back to a private path nobody planned. Most of bioinformatics is in
-the other three fields.
+`comparisons()` enumerates every question a factorial design can be asked, from the design table
+alone:
 
-> **conda's grammar is not pip's and is not translated.** `petsc4py=3.20` is a prefix match;
-> `petsc4py==3.20` asks for a version that does not exist. Conda specs are carried through
-> unparsed and two of them are called compatible only when they are **identical**.
+- **marginal** — factor F pooled over everything else
+- **simple** — factor F within one level of another factor, one per level
+- **interaction** — whether the F response depends on G
 
-The builder then resolves every plugin's constraints together:
+A 2×2 gives 2 marginal, 4 simple, 1 interaction. Three factors give 3, 12, 3. A design cell with
+no samples is reported as a gap, not offered as an interaction. A factor that splits the samples
+identically to another is named as unanswerable-as-asked.
 
-```
-3 environment(s) will satisfy 6 plugin(s):
-  scprofile-env-3cd799b82e   shared by: decoupler, liana, pseudotime, velocity
-  scprofile-env-6adcafa2b1   shared by: cellchat
-  scprofile-env-9c7b6e9d49   shared by: scenic
-      ALONE because decoupler: python pinned to 3.11 and 3.10
-```
+## `runner.py` — running a plugin
 
-Four properties that make this safe to trust:
+Launches a plugin with its own interpreter, in its own environment, with that environment's `bin`
+on `PATH` so the plugin can reach binaries by name. Records what it ran, its memory and its exit.
 
-- **When in doubt, isolate.** A wrongly *shared* environment runs a plugin against versions
-  nobody tested it on — the failure that returns a plausible number rather than an error. A
-  wrongly *isolated* one costs disk. Those are not comparable, so anything the resolver cannot
-  **prove** compatible gets its own environment.
-- **Not clashing is not the same as being compatible.** Sharing needs a positive reason: two
-  requirements share only when they *overlap* — on the interpreter, or on a package both name.
-  Greedy first-fit without this put an R plugin that pins `r-base`, 60 conda packages and no
-  python at all into the python group, because a requirement that names nothing contradicts
-  nothing. One 6 GB environment holding two language stacks, on an absence of evidence.
-- **An isolated plugin is told why**, naming the package and the two constraints that clash —
-  and a clash is reported before a silence, because a contradiction is a fact about two
-  declarations and a silence is only a fact about this resolver's caution.
-- **The environment is named for its CONTENT**, not for a plugin. An environment called
-  `scprofile-velocity` that three plugins share is a lie the moment the second joins, and the
-  first plugin removed takes its name with it. The name covers *everything that decides what gets
-  built* — conda specs and channels included — or two different groups claim one directory and
-  the second finds the first's environment already there.
+## `_entry.py` — the shared entry point
 
-## 2. The builder makes it runnable, and does not discover
+Every plugin is launched through this, whatever its shape. It reads the input manifest, builds the
+context, calls the plugin, and writes `out.json`. Phases:
 
-`scprofile install <name>` takes a declared plugin all the way:
+- `run(ctx)` — one unit
+- `compare(ctx)` — one pair of units, for a plugin that can compare its own results
+- `selftest` — prove the environment works
+- `guard` — refuse an object the method should not be run on
 
-1. **resolves** its requirement against every other plugin's, and reports the environment it
-   lands in and who shares it;
-2. **builds that environment WHOLE**, from the merged requirement — not from the named plugin's
-   own lock. Resolution used to decide only *where* the environment goes while the plugin's
-   `lock.yml` still decided *what went into it*, so an environment shared by four was built from
-   one of them and the other three found a directory that looked finished, carried a current
-   stamp and did not contain their packages;
-3. **proves it with every member's selftest.** An environment shared by four and proved by one is
-   an environment three of them meet for the first time inside a run. A member whose selftest
-   fails does not make this a partial success: the directory's name is a claim about all of them.
+## `plugin.py` — what a plugin is given
 
-**The unit of installation is the resolved environment, not the plugin.** That is why installing
-one member costs what it costs — a shared environment is not divisible — and why a `run → build`
-repair rebuilds and re-proves every member, which the repair message says.
+`Context` for `run(ctx)`: the data, the labels, the design, the output directory, and helpers for
+emitting figures and tables. `CompareContext` for `compare(ctx)`: two finished units and where to
+write.
 
-`install --dry-run` resolves and prints exactly what would be handed to the package manager, and
-builds nothing. The resolver proves the *declared* constraints do not contradict each other; only
-a real resolve proves their transitive closure installs, and those are different claims.
+## `merge.py` — assembling the outputs
 
-**The builder is mechanical and knows no plugin by name.** If a declaration is incomplete it says
-which file is missing — it does not guess, and it does not hand the user a skeleton to finish.
+Merges per-unit results into one object and one payload, by barcode, with coverage stated. A cell
+a plugin never saw is `NaN`, not a substituted value.
 
-> **This is why `scaffold` no longer writes a `TODO`.** It used to emit a `run.py` whose body was
-> `raise SystemExit("this is a SCAFFOLD, implement the method call")`. That is a script handed to
-> the user to complete, and a plugin host whose plugins must be hand-written is a directory of
-> examples. The wrapper is now compiled; what a plugin author writes is the method call, beside
-> the declaration it belongs to.
+## Reuse: `landscape.py`, `licence.py`, `resume.py`
 
-## 3. The planner decides, and repairs rather than refuses
-
-It reads the object and the design table and gives every plugin a verdict, its settings at the
-highest capacity the project supports, and a place in the run order.
-
-**It never refuses for a build reason.** A plugin that is not built still gets its full verdict
-against the project — *"on your data this would run at full, over every sample, testing the
-`a`-by-`b` interaction"* — and the build gap is listed separately and handed to the builder. A
-plugin that is not built is not a limitation of the user's data.
-
-**It skips only what the design cannot express**: a factor with one level, or no level with two
-samples. An imbalance, a confound, even a complete confound, all run with a caveat. See
-[`RUN_PLAN.md`](RUN_PLAN.md).
-
-## 4. The runner executes
-
-Waves, subprocesses, merge by barcode, one report. It decides nothing.
-
-Three things it must do that are easy to leave undone, because each is invisible until it is not:
-
-- **the environment's own `bin` on `PATH`.** An environment is not only an interpreter; a plugin
-  whose method is in another language reaches its interpreter by name. Launching `<env>/bin/python`
-  by absolute path is not what `conda activate` does.
-- **the core share as `OMP_NUM_THREADS` and its siblings.** A plugin honours its share for what it
-  schedules; numpy's BLAS sizes its pool at import, before any plugin code runs, from whatever the
-  caller exported.
-- **at most `budget / smallest declared cores` instances at a time.** Dividing the share each
-  instance is *told* it has is a different question from how many of them run.
-
-## 5. And when something fails, it says which layer is wrong
-
-A failure has a cause in exactly one layer, and reporting them all as *"plugin X failed"* makes
-the user read a traceback and guess.
-
-| layer | means | remedy |
-|---|---|---|
-| **environment** | the pins do not resolve here, or resolved to something that no longer works | **repaired automatically**: rebuild from the lock, retry once |
-| **declaration** | the plugin's description of itself is not true of what it did | a maintainer changes the declaration or the method |
-| **method** | the call failed on this data — out of memory, out of time | often not a defect at all; an analysis that cannot be done is a result |
-| **host** | the contract was applied wrongly | a bug in scProfile, not in the plugin or the data |
-
-**A retry is never silent.** If a plugin fails and then succeeds after a rebuild, the environment
-had *drifted from its own lock* — that is a finding about this machine that the next person
-needs, not a hiccup to hide. A loop that quietly retries until something works converts a real
-defect into an intermittent one, which is the hardest kind to ever fix. And a plugin that fails
-again after a clean rebuild is explicitly **not** blamed on its environment.
-
-**An unmatched failure is not guessed at.** A wrong layer sends somebody to the wrong file, which
-costs more than saying the layer is not established.
-
-> **And a failure belonging to none of the four is the one most likely to be misfiled.** When the
-> tool's own code changes mid-run, the host refuses every instance launched afterwards — that is
-> not the plugin, its environment or its declaration, and the default reading sent the reader to
-> all three: *"no known failure signature matched … the plugin is the place to start."* Six
-> instances were reported that way in the run that proved the check works. It is classified
-> `host` now, marked not-repairable, and says outright not to debug the plugin. A diagnosis
-> naming the wrong layer is worse than none, because it is acted on.
-
-**The tool cannot change underneath a run.** A run reads its code at every subprocess launch, not
-once at the start, so a `git pull` at hour one of a three-hour run is picked up by everything
-launched after it — two versions used, one reported, and no test can catch it because both
-versions are correct alone and only the mixture is wrong. Two mechanisms: the host fingerprints
-the tool and re-checks before every instance, and the job template runs from a snapshot so the
-race cannot arise. Both, because the host check protects anyone however they launch, and the
-snapshot removes the race for anyone using the template rather than detecting it afterwards.
-
-**Drift is checked on every success**, not only on failure: what the plugin emitted against what
-its `produces` declares. It is the cheapest edge in the loop — the run has happened and the
-declaration is right there — and a declaration that has gone stale is one the next reader will
-believe.
+Finds earlier runs whose inputs match, grades what may be reused, and adopts products by hardlink.
+The reuse key covers the plugin version, the inputs, the parameters and the host modules that
+affect output. Adoption shares an inode; the check is `st_nlink`, not the tool's own claim.
 
 ---
 
-## The boundaries, stated as rules
+# Part two: the agentic figure harness
 
-1. **A plugin never learns about a project.** Keys arrive at run time.
-2. **The builder never infers.** Everything it needs is declared; a gap is named, not filled.
-3. **The planner never refuses for a build reason.** Readiness is repaired.
-4. **The runner never decides.** If it is choosing, the planner did not finish.
-5. **No domain writes another's files.** The builder writes into the plugin; the runner writes
-   into the run directory; the planner writes nothing but its plan.
+## `evidence.py` — what a comparison needs, asked of the biology
 
-Each of these was learned by breaking it. The builder inferring produced a plugin that scored from
-a layer nothing declared. The planner refusing for a build reason produced a plan telling a
-healthy cohort that seven of nine analyses were impossible. And a wrapper written by hand is how a
-forbidden keyword reached a live run.
+`NEEDS` lists what a reader needs in order to believe a difference between two groups of cells —
+which populations changed, what carries the difference, whether it is sending or receiving,
+whether it is abundance or per-cell signal, whether absence is absence or reduction, and so on.
+The registry names no method, no plugin and no drawing.
 
-## Resuming a run
+`FOR_QUESTION` maps question kinds to needs. `resolve()` decides how each need is met: the wrapped
+tool's own function first, a host panel second, unresolved third. Unresolved is an answer — it
+says the dataset cannot answer that part.
 
-A run directory is readable after the fact: `scprofile status --out <RUNDIR>` classifies every
-instance it holds and `run --resume` computes only what is outstanding. The states, why `empty`
-counts as finished, and why a plugin version change invalidates a complete unit are in
-[RESUME.md](RESUME.md).
+A plugin declares what it can supply in `report.provides_evidence`. Nothing outside the plugin
+asserts it.
+
+## `native.py` — the wrapped tool's own plots
+
+A plugin that wraps a tool inherits that tool's figures. Every one is either used or accounted
+for. The reasons are a closed set:
+
+- `not_applicable` — with evidence of what is absent
+- `superseded_by_design` — naming the replacing panel and the defect in the upstream encoding
+- `duplicate_of` — naming the function actually called
+
+`reimplemented`, `not_considered`, `dependency_missing`, `too_slow` and `not_useful` are rejected
+by name, each with the remedy. `OWES_ACCOUNTING` lists wrappers that still owe an accounting; it
+may shrink and never grow.
+
+## `panels.py` — the panel registry
+
+Every panel kind, what it establishes, what it does **not** establish, its owner (host or plugin),
+and the numbered rules it must obey. `SERVES` maps question kinds to panel kinds. `IMPLEMENTED`
+records where each kind is drawn, so the registry and the drawing code cannot drift.
+
+## `figure.py` — drawing, and what a machine can see
+
+Publication conventions: column widths, colourblind-safe palette, live vector text. `audit(fig)`
+inspects a figure before it is saved and reports text over text, text off the canvas, and a size
+channel with no key. It reads every text on the panel — annotations, tick labels, titles, axis
+labels, legends — and holds rotated decorations to matplotlib's own layout.
+
+`spread_labels()` separates labels; `resolve_overlaps()` re-solves them after the host has
+finished changing the canvas.
+
+## `compare_panel.py` and `network_panels.py` — the host's panels
+
+Contrast panels per arm pair, the interaction panel, and per-arm network panels. The population
+set of a contrast is the **intersection** across its arms, decided before any matrix is built; a
+population absent from one arm is removed and named, not drawn and masked.
+
+`write_two_scale()` writes every contrast's change per element on both scales — raw and share of
+the arm's own total — with the arm totals and whether the two agree in sign.
+
+## `report.py` — the documents
+
+Builds the index and each plugin's pages. Invokes a plugin's `compare(ctx)` once per arm pair
+where a single unit pools each side of the contrast.
+
+## `standard.py` — the exit standard
+
+Ten criteria a rendered page must meet: panel count, caption length, arms named, prose present,
+caveats present, nothing hidden, no repeats, identifiers resolved, no contradictions, an overview.
+Applied by whatever writes the report, to what it wrote.
+
+## `review.py` — what a person actually saw
+
+A note per figure, bound to that image's sha256. Redraw the figure and the review is gone, not
+old. A note must say something: empty, too short, or identical to another figure's note is
+refused.
+
+## `paper.py` — the result section
+
+`brief()` prints what to write from: the design's questions first, then the panels, then what the
+run delivered against the specification. `claim()` records a sentence with the figures it was read
+off; a claim citing nothing is refused. `review()` records a verdict — standing, narrowed or
+withdrawn. `render()` writes the section, the claims and every cited figure into one page.
+
+One manuscript per plugin: `PAPER.<plugin>.md`, `PAPER_CLAIMS.<plugin>.jsonl`,
+`report/<plugin>_paper.html`.
+
+## `tests/loop_stations.py` — the test loop
+
+Nine stations run in order against real runs: exists, landscape, licence, adopt, merge, report,
+drawing, eye, paper, outputs. The loop stops at the first blocked station and names the one thing
+to do next. The goal is the eye scan complete and the manuscript written; the earlier stations go
+green long before the output is worth having.

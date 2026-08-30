@@ -1,8 +1,18 @@
 # scProfile
 
-**Profile an annotated single-cell or single-nucleus dataset.** Cell cycle, RNA velocity,
-pseudotime, regulons, pathway and TF activity, cell–cell communication, differential abundance
-and differential expression — from one object, in one run, into one report.
+**Two harnesses joined at the plugin runner.**
+
+**A platform harness** — takes an annotated single-cell or single-nucleus object and a design
+table, resolves what can run, builds the environments, runs plugins, merges the outputs. Plugins
+are plug-and-run: one file each, declared, no host change to add one. Nine ship today: cell cycle,
+RNA velocity, pseudotime, regulons, pathway and TF activity, cell–cell communication, differential
+abundance, differential expression.
+
+**An agentic figure harness** — takes those outputs and produces the figures and the written
+result. It works out which comparisons the design supports, what evidence each needs, and how each
+is best drawn; it prefers the wrapped tool's own plots over reimplementing them; it checks what
+was drawn, records what a person saw, and binds every written claim to the figures it was read
+off.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 

@@ -35,7 +35,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scprofile import declare, manifest                                   # noqa: E402
-from scprofile.plugin import Context, Guard                               # noqa: E402
+from scprofile.plugin import CompareContext, Context, Guard                # noqa: E402
 
 
 def _has(ctx, cap, inp):
@@ -210,8 +210,6 @@ def _compare(plugin_path, spec_path):
     """
     import json as _json
 
-    from . import plugin as _plugin
-
     spec = _json.loads(Path(spec_path).read_text(encoding="utf-8"))
     mod = load(plugin_path)
     fn = getattr(mod, "compare", None)
@@ -220,7 +218,7 @@ def _compare(plugin_path, spec_path):
         return 0
     out = Path(spec["out_dir"])
     out.mkdir(parents=True, exist_ok=True)
-    ctx = _plugin.CompareContext(
+    ctx = CompareContext(
         pair=spec.get("pair") or "",
         units=spec.get("units") or {},
         out=out,
