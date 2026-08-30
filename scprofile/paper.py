@@ -357,10 +357,12 @@ def brief(out, plugin=""):
         # reported "no cohort-level panel" for a page carrying nine of them - the nine a reader
         # meets first, and the ones every claim in the section is read off.
         try:
-            placed = _json.loads((root / "report" / "panels.json")
-                                 .read_text(encoding="utf-8")).get(k, {}).get("cohort") or []
+            _pj = _json.loads((root / "report" / "panels.json")
+                              .read_text(encoding="utf-8")).get(k, {})
+            placed = _pj.get("cohort") or []
+            native = _pj.get("native") or []
         except Exception:                                                 # noqa: BLE001
-            placed = []
+            placed, native = [], []
         cohort = list(placed) + list(cohort)
         L += [f"Panels on the page a reader meets first ({len(cohort)}):" if cohort
               else "No cohort-level panel on this page; every panel is per unit. Say so, and "
@@ -374,6 +376,32 @@ def brief(out, plugin=""):
             if rest:
                 L += [f"     LIMITS: {' '.join(str(rest).split())}"]
             L += [""]
+
+        # THE WRAPPED TOOL'S OWN COMPARISON PANELS, GROUPED BY CONTRAST. These are what a
+        # subsection about a contrast is written off: the method's own function, its own
+        # statistic, its own encoding. They live on the arms page rather than the first page,
+        # and a brief that read only the first page listed none of them - so the section written
+        # from it described the host's panels and never mentioned the tool's answer.
+        if native:
+            byc = {}
+            for f_ in native:
+                byc.setdefault(str(f_.get("label") or ""), []).append(f_)
+            L += [f"### The tool's own comparison panels ({len(native)} over {len(byc)} "
+                  f"contrast(s)) — CITE THESE FOR ANY CLAIM ABOUT A CONTRAST", ""]
+            for lab in sorted(byc):
+                L += [f"  CONTRAST {lab}"]
+                for f_ in byc[lab]:
+                    cap = f_.get("caption")
+                    lead, rest = (cap if isinstance(cap, (list, tuple)) and len(cap) == 2
+                                  else (cap or "", ""))
+                    L += [f"    {f_.get('path')}",
+                          f"       SHOWS : {' '.join(str(lead).split())}"]
+                    if rest:
+                        L += [f"       LIMITS: {' '.join(str(rest).split())}"]
+                L += [""]
+        else:
+            L += ["The tool drew no comparison panel of its own in this run. Say so, and say "
+                  "which contrasts were left to the host's encodings.", ""]
     L += ["---", "Write the Results section you would submit. Then record each claim against the",
           "figures you read it off, put it to a reviewer, and record what happened:", "",
           "  scprofile paper --out <RUNDIR> --claim '...' --cites <fig>,<fig>",

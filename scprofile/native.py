@@ -157,3 +157,48 @@ def accounting_debt(specs):
                    if requires_accounting(sp) and not (sp or {}).get("native_plots"))
     unexpected = [n for n in owing if n not in OWES_ACCOUNTING]
     return owing, unexpected
+
+
+def function_for(declared, filename):
+    """Which declared upstream function drew this file, or "" - read from the declaration.
+
+    THE PLUGIN ALREADY SAYS WHERE EACH FUNCTION'S OUTPUT LANDS. `native_plots` carries, for every
+    function it uses, the file that function writes; inverting that mapping names the function
+    behind a file without the host knowing anything about the wrapped tool. A caption that says
+    which upstream function drew the panel is the difference between a figure a reader can check
+    against the tool's own documentation and a picture that appeared.
+
+    A declaration may name one file, a brace family (`native_circle_{count,weight}.png`) or a
+    placeholder (`native_contribution__<pathway>.png`). Each is turned into a pattern; the
+    LONGEST literal prefix wins, so `nativecmp_diff_heatmap_count` beats a shorter declaration
+    that also matches. A placeholder matches a name that reaches it and stops, which is what a
+    file whose suffix is filled in at run time looks like before the value is known.
+    """
+    import re
+    stem = str(filename).rsplit("/", 1)[-1]
+    stem = stem[:-4] if stem.endswith(".png") else stem
+    best, best_len = "", -1
+    for fn, rec in (declared or {}).items():
+        use = str((rec or {}).get("use") or "")
+        if not use:
+            continue
+        for tok in re.findall(r"[A-Za-z0-9_{},<>.]+", use):
+            tok = tok.strip(".,;")
+            if tok.endswith(".png"):
+                tok = tok[:-4]
+            if len(tok) < 6:
+                continue
+            variants = [tok]
+            if "{" in tok and "}" in tok:
+                head_, rest = tok.split("{", 1)
+                opts, tail = rest.split("}", 1)
+                variants = [head_ + o.strip() + tail for o in opts.split(",")]
+            for v in variants:
+                lit = v.split("<")[0]
+                if "<" in v:
+                    ok = stem == lit or stem.startswith(lit)
+                else:
+                    ok = stem == v
+                if ok and len(lit) > best_len:
+                    best, best_len = fn, len(lit)
+    return best

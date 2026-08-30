@@ -422,7 +422,7 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None):
     Driven entirely by the plugin's `unit_network` declaration, so nothing here knows what
     method produced the numbers.
     """
-    empty = {"contrast": [], "arm": [], "interaction": []}
+    empty = {"contrast": [], "arm": [], "interaction": [], "native": []}
     net = _D.report_get(spec, "unit_network")
     if not (net and design and out_dir and units):
         return empty
@@ -465,8 +465,11 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None):
     # A wrapped tool that ships differential figures should draw them; the host's panels exist for
     # the quantities it can recompute, not to re-implement a tool's own encoding. This is a no-op
     # for a plugin that declares no `compare(ctx)`, which is every plugin until it declares one.
-    _native_compare(name, spec, per, design, pairs, out_dir, units,
-                    prefix=prefix)
+    nat = _native_compare(name, spec, per, design, pairs, out_dir, units,
+                          # `native_plots` is a TOP-LEVEL plugin key, not a report key -
+                          # reading it through report_get put a key in front of the checker
+                          # that no declaration is allowed to carry there.
+                          prefix=prefix, declared=(spec or {}).get("native_plots") or {})
 
     # THE TWO-SCALE TABLE, WRITTEN EVERY RUN. A result section quotes changes per element, and
     # where the weight is normalised within each unit those changes differ - sometimes in SIGN -
@@ -498,7 +501,7 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None):
     arm = CPan.draw_arm_networks(per, design, CPan.arms_in(design, pairs), figdir, name,
                                  group_col=net.get("group"), member_col=net.get("member"),
                                  weight_scale=net.get("weight_scale", "per_object"))
-    return {"contrast": con, "arm": arm, "interaction": inter}
+    return {"contrast": con, "arm": arm, "interaction": inter, "native": nat}
 
 
 #: How many between-arm panels the plugin page itself carries. The rest are one click away.
@@ -508,10 +511,17 @@ _INLINE_ARM_FIGURES = 6
 
 
 def _arm_figs_html(name, items):
-    """<figure> blocks for a list of (fid, path, caption). One implementation, two callers."""
+    """<figure> blocks for a list of (fid, path, caption[, label[, rel]]).
+
+    A FIFTH ELEMENT IS AN EXPLICIT RELATIVE PATH. The plugin's own figures all sit in one
+    directory and could be addressed by filename; the tool's comparison panels sit one per
+    contrast under compare/<contrast>/figures/, and rebuilding their path from the filename put
+    every one of them at an address that does not exist.
+    """
     out = []
-    for fid, path, cap, *_ in items:
-        rel = f"kernels/{name}/figures/{Path(path).name}"
+    for it in items:
+        fid, path, cap = it[0], it[1], it[2]
+        rel = it[4] if len(it) > 4 and it[4] else f"kernels/{name}/figures/{Path(path).name}"
         lead, rest = cap if isinstance(cap, tuple) else (cap, "")
         out.append(f'<figure><img src="../{rel}" alt="{_e(fid)}">'
                    f'<figcaption>{_e(lead)}'
@@ -534,11 +544,13 @@ def _arm_appendix(name, content, plugin_arm_figs=()):
     # produce the same slug and neither can be turned back into the other: reconstruction
     # rendered `F | G | g1`, losing the one character that says which side is held fixed.
     # A label is cheap to carry and impossible to recover.
-    by_contrast, by_arm = {}, {}
+    by_contrast, by_arm, by_native = {}, {}, {}
     for fid, path, cap, label in content["contrast"]:
         by_contrast.setdefault(label, []).append((fid, path, cap))
     for fid, path, cap, label in content["arm"]:
         by_arm.setdefault(label, []).append((fid, path, cap))
+    for it in content.get("native") or ():
+        by_native.setdefault(it[3], []).append(it)
 
     def _figs(items):
         return _arm_figs_html(name, items)
@@ -550,8 +562,20 @@ def _arm_appendix(name, content, plugin_arm_figs=()):
          'withheld because the per-sample axis is thin. Whether an arm-level difference is '
          'consistent ACROSS samples is the separate question the design panel answers. '
          f"<a href='{_e(name)}.html'>&larr; back</a></p>"]
+    # THE TOOL'S OWN COMPARISON PANELS COME FIRST. They are the wrapped method's answer to the
+    # contrast, drawn by its own functions and using its own statistic; the host's panels below
+    # describe the same contrast in encodings this project chose. Where the two disagree the
+    # tool's is the one to quote, and putting it second invited the opposite reading.
+    if by_native:
+        b.append("<h2>Between the arms, drawn by the tool itself</h2>"
+                 "<p class='sub'>Every panel in this section is the wrapped method's own "
+                 "function, called on the two arms' fitted objects. Nothing here is "
+                 "reimplemented. Each caption names the function that drew it.</p>")
+        for label, items in by_native.items():
+            b.append(f"<h3><code>{_e(label)}</code></h3>")
+            b.append(_figs(items))
     if by_contrast:
-        b.append("<h2>Between the arms</h2>")
+        b.append("<h2>Between the arms — this project's own encodings</h2>")
         for label, items in by_contrast.items():
             b.append(f"<h3><code>{_e(label)}</code></h3>")
             b.append(_figs(items))
@@ -583,7 +607,8 @@ def _arm_appendix(name, content, plugin_arm_figs=()):
     return "".join(b)
 
 
-def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None):
+def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None,
+                    declared=None):
     """Invoke a plugin's `compare(ctx)` once per arm pair, in the plugin's own environment.
 
     The host knows the pairs and where each unit wrote; the plugin knows what its upstream can do
@@ -599,6 +624,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None)
 
     from . import kernels as _K
 
+    drawn = []
     entry = _K.SHARED_ENTRY
     kdir = Path(out_dir) / "kernels" / name
     plugin_file = None
@@ -608,7 +634,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None)
             plugin_file = Path(cand)
             break
     if plugin_file is None:
-        return
+        return drawn
     # ASK THE PLUGIN WHETHER IT HAS THE PHASE, rather than importing it here: it lives in its own
     # environment and the host's interpreter may not be able to load it at all.
     # THE PLUGIN'S OWN INTERPRETER, NOT THE HOST'S. Launching this with `sys.executable` put the
@@ -627,15 +653,15 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None)
         exe = None
     if not exe:
         print(f"  native compare: no interpreter resolved for {name}; skipped")
-        return
+        return drawn
     env = _envbin(exe)
     try:
         q = subprocess.run([str(exe), str(entry), "--phases", str(plugin_file)],
                            capture_output=True, text=True, timeout=300, env=env)
         if "compare" not in (q.stdout or ""):
-            return
+            return drawn
     except Exception:                                                     # noqa: BLE001
-        return
+        return drawn
     udir = {str(u.get("unit")): u.get("dir") for u in (units or []) if u.get("unit")}
 
     # A CONTRAST SIDE IS A SET OF SAMPLES, NOT A UNIT NAME. `arm_pairs` returns factor LEVELS -
@@ -687,11 +713,60 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None)
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
             _json.dump(spec_json, fh)
             spath = fh.name
+        cdir = kdir / "compare" / str(label)
         try:
             subprocess.run([str(exe), str(entry), "--compare", str(plugin_file), spath],
                            capture_output=False, timeout=3600, env=env)
         except Exception as e:                                            # noqa: BLE001
             print(f"  native compare {label} failed: {e}")
+            continue
+        # A FIGURE THE HOST DRAWS AND NEVER PLACES CANNOT BE CITED. These were written into
+        # compare/<contrast>/figures/ and left there - absent from the page, from panels.json,
+        # from the review ledger and therefore from every writing brief, so a manuscript could
+        # not quote the tool's own comparison even though the run had drawn it.
+        drawn += _native_panels(cdir / "figures", str(label), declared, out_dir, lo, hi)
+    return drawn
+
+
+def _native_panels(figdir, label, declared, out_dir, lo, hi):
+    """[(fid, path, (lead, rest), label, rel)] for the files one compare phase wrote.
+
+    THE CAPTION NAMES THE UPSTREAM FUNCTION, read from the plugin's own `native_plots`
+    declaration rather than from anything the host knows about the tool. A panel whose origin
+    cannot be named fails `tests/test_plot_declarations.py` before it reaches a page.
+    """
+    from . import native as _NAT
+
+    figdir = Path(figdir)
+    if not figdir.is_dir():
+        return []
+    # WHAT THE ALIGNMENT DID, carried into every caption from this contrast. A population present
+    # in one arm and absent from the other is lifted in with zero edges, so its whole difference
+    # is the other arm's value - true, and invisible unless the caption says it.
+    lifted = ""
+    tsv = figdir / "nativecmp_alignment.tsv"
+    if tsv.is_file():
+        gone = []
+        for line in tsv.read_text(encoding="utf-8").splitlines():
+            k, _, v = line.partition("\t")
+            if k.startswith("absent_from_") and v.strip():
+                gone.append(f"{v.replace('|', ', ')} (absent from {k[len('absent_from_'):]})")
+        if gone:
+            lifted = (" The two arms did not carry the same populations: " + "; ".join(gone)
+                      + ". Both objects were lifted to the union with the tool's own "
+                        "liftCellChat, so a lifted-in population carries zero edges on the side "
+                        "it was absent from and its whole difference is the other side's value.")
+    out = []
+    for f in sorted(figdir.glob("*.png")):
+        fn = _NAT.function_for(declared, f.name)
+        stem = f.stem[len("nativecmp_"):] if f.stem.startswith("nativecmp_") else f.stem
+        lead = (f"{label}: {stem.replace('_', ' ')}, drawn by "
+                + (f"the tool's own {fn}()." if fn else "the tool itself."))
+        rest = (f"{hi} relative to {lo}; the tool computes the second against the first."
+                + lifted)
+        out.append((f"NC_{label}_{stem}", str(f), (lead, rest), str(label),
+                    str(f.relative_to(Path(out_dir)))))
+    return out
 
 
 def _units_by_arm(units, design, declared, *, out_dir=None, name=""):
@@ -1522,11 +1597,17 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # payload and reported "this plugin drew no cohort-level panel" for a page carrying nine of
     # them - the nine a reader meets first. A page's contents are a fact about the run and
     # belong beside it.
-    _placed = {"cohort": [{"id": t[0], "path": str(Path(t[1]).relative_to(Path(out_dir))),
-                           "caption": t[2], "label": t[3] if len(t) > 3 else ""}
-                          for t in (locals().get("_inline") or [])
+    def _rec(t):
+        return {"id": t[0], "path": str(Path(t[1]).relative_to(Path(out_dir))),
+                "caption": t[2], "label": t[3] if len(t) > 3 else ""}
+
+    _placed = {"cohort": [_rec(t) for t in (locals().get("_inline") or [])
                           + ((locals().get("_arms") or {}).get("interaction") or [])
-                          + (locals().get("_presence_placed") or [])]}
+                          + (locals().get("_presence_placed") or [])],
+               # THE TOOL'S OWN COMPARISON PANELS, recorded separately because a writing brief
+               # must be able to tell them from the host's. They are on the arms page rather
+               # than the first page, and a brief that only read `cohort` could not cite one.
+               "native": [_rec(t) for t in ((locals().get("_arms") or {}).get("native") or [])]}
     try:
         import json as _json
         old_ = {}
@@ -1551,8 +1632,10 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
         ap += [_panel(f_, i + 1) for i, f_ in enumerate(per_unit_figs)]
         (d / f"{name}_by_sample.html").write_text(
             _page(f"{name} per sample — scProfile", "".join(ap)), encoding="utf-8")
-    _armc = locals().get("_arms") or {"contrast": [], "arm": [], "interaction": []}
-    if _armc["contrast"] or _armc["arm"] or _armc.get("interaction") or arm_figs:
+    _armc = locals().get("_arms") or {"contrast": [], "arm": [], "interaction": [],
+                                      "native": []}
+    if (_armc["contrast"] or _armc["arm"] or _armc.get("interaction")
+            or _armc.get("native") or arm_figs):
         (d / f"{name}_by_arm.html").write_text(
             _page(f"{name} — the arms — scProfile",
                   _arm_appendix(name, _armc, plugin_arm_figs=arm_figs)),
