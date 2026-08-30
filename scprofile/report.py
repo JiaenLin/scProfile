@@ -1615,7 +1615,13 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                # THE TOOL'S OWN COMPARISON PANELS, recorded separately because a writing brief
                # must be able to tell them from the host's. They are on the arms page rather
                # than the first page, and a brief that only read `cohort` could not cite one.
-               "native": [_rec(t) for t in ((locals().get("_arms") or {}).get("native") or [])]}
+               "native": [_rec(t) for t in ((locals().get("_arms") or {}).get("native") or [])],
+               # AND THE HOST'S OWN BETWEEN-ARM PANELS, for the same reason. A consumer asking
+               # which figure answers a given need gets a `host:` route as often as a `native:`
+               # one, and with these unrecorded every such need read as a gap on a page that had
+               # the figure sitting in it.
+               "contrast": [_rec(t) for t in ((locals().get("_arms") or {}).get("contrast") or [])],
+               "arm": [_rec(t) for t in ((locals().get("_arms") or {}).get("arm") or [])]}
     try:
         import json as _json
         old_ = {}

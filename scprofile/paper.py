@@ -719,6 +719,20 @@ def panel(out, *, run_key="", plugin=""):
         fn = _NAT.function_for(declared, str(f.get("path") or ""))
         if fn:
             by.setdefault((str(f.get("label") or ""), fn), []).append(f)
+    # HOST PANELS RESOLVE THROUGH THE PANEL REGISTRY. `panels.IMPLEMENTED` records where each
+    # kind is drawn, ending in the id stem the figure carries; matching on that stem is how a
+    # `host:` route finds its plate. Without this every need served by a host panel read as a
+    # gap on a page that had the figure in it.
+    from . import panels as _PN
+
+    host = list((placed.get(plugin) or {}).get("contrast") or []) + \
+        list((placed.get(plugin) or {}).get("arm") or []) + \
+        list((placed.get(plugin) or {}).get("cohort") or [])
+    stems = {}
+    for kind, where in (_PN.IMPLEMENTED or {}).items():
+        stem = str(where).split("\u2014")[-1].strip().split(",")[0].strip()
+        if stem:
+            stems[kind] = stem
 
     cmps = _cmps(des)
     H = [f"<h1>Figure panel &mdash; {_e(plugin or 'this run')}</h1>"]
@@ -738,13 +752,25 @@ def panel(out, *, run_key="", plugin=""):
         for need, route in sorted(routes.items()):
             got = None
             for r in (route or []):
-                if not str(r).startswith("native:"):
-                    continue
-                fn = str(r).split(":", 1)[1]
-                hits = by.get((label, fn)) or []
-                if hits:
-                    got = (fn, hits[0])
-                    break
+                r = str(r)
+                if r.startswith("native:"):
+                    fn = r.split(":", 1)[1]
+                    hits = by.get((label, fn)) or []
+                    if hits:
+                        got = (fn, hits[0])
+                        break
+                elif r.startswith("host:"):
+                    kind = r.split(":", 1)[1]
+                    stem = stems.get(kind)
+                    if not stem:
+                        continue
+                    # a between-arm panel must be THIS contrast's; a cohort panel has no label
+                    hits = [f for f in host
+                            if str(f.get("id") or "").startswith(stem)
+                            and (not f.get("label") or str(f.get("label")) == label)]
+                    if hits:
+                        got = (f"{kind} (drawn by scProfile)", hits[0])
+                        break
             # `NEEDS` maps a need to (question, why). It is a tuple, not a mapping - the
             # first version called .get on it and raised on the first plate.
             meta = _NEEDS.get(need) or ()

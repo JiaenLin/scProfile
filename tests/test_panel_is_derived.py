@@ -32,7 +32,8 @@ DESIGN = {"s1": {"f1": "lo", "f2": "x"}, "s2": {"f1": "lo", "f2": "y"},
 SPEC = {"report": {"provides_evidence": {
             "who_changed": ["native:fnA", "host:diff_matrix"],
             "what_carries_it": ["native:fnB"],
-            "direction": ["host:role_shift"]}},
+            "direction": ["host:role_shift"],
+            "specificity": ["host:unit_presence"]}},
         "native_plots": {"fnA": {"use": "figures/ncmp_alpha.png"},
                          "fnB": {"use": "figures/ncmp_beta.png"}}}
 
@@ -48,7 +49,15 @@ with tempfile.TemporaryDirectory() as td:
         {"id": "b", "label": "f1", "path": "kernels/kk/compare/f1/figures/ncmp_beta.png",
          "caption": ["beta shown", "beta limits"]},
         {"id": "c", "label": "f2", "path": "kernels/kk/compare/f2/figures/ncmp_alpha.png",
-         "caption": ["alpha shown", "alpha limits"]}]}}))
+         "caption": ["alpha shown", "alpha limits"]}],
+        # a HOST between-arm panel for one contrast, and a cohort panel with no label
+        "contrast": [
+        {"id": "C4_role_shift__f1", "label": "f1", "path": "kernels/kk/figures/C4_role_shift.png",
+         "caption": ["role shift shown", "role shift limits"]}],
+        "cohort": [
+        {"id": "P1_population_presence", "label": "",
+         "path": "kernels/kk/figures/P1_population_presence.png",
+         "caption": ["presence shown", "presence limits"]}]}}))
 
     f = PA.panel(out, plugin="kk", run_key="RUNKEY")
     check(f is not None, "panel() produced nothing on a design with comparisons")
@@ -66,6 +75,14 @@ with tempfile.TemporaryDirectory() as td:
         check("RUNKEY" in h, "the panel does not carry the run key")
         # A HOST-ONLY need must not silently masquerade as a native plate.
         check(h.count("<img") >= 3, f"too few plates placed: {h.count('<img')}")
+        # A HOST ROUTE MUST RESOLVE THROUGH THE PANEL REGISTRY, or every need served by a host
+        # panel reads as a gap on a page that has the figure in it.
+        check("C4_role_shift" in h,
+              "a host: route did not resolve to its panel through panels.IMPLEMENTED")
+        check("drawn by scProfile" in h,
+              "a host-drawn plate is not labelled as host-drawn")
+        check("P1_population_presence" in h,
+              "a cohort-level host panel did not resolve for a contrast that needs it")
 
     # No design, no panel - and it must say so rather than emit an empty page.
     (out / "report.json").write_text(json.dumps({"design": {}, "kernels": {}}))
