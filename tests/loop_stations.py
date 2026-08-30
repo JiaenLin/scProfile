@@ -353,7 +353,84 @@ STATIONS = (
     ("5 merge", station_merge), ("6 report", station_report),
     ("6b drawing", station_drawing),
     ("7 eye", station_eye), ("8 paper", station_paper),
+    ("9 outputs", station_outputs),
 )
+
+
+
+
+#: THE DELIVERABLES A FINISHED RUN MUST CARRY, by path relative to the run directory. A run that
+#: is missing any of these has not produced its outputs, whatever else it wrote - and a loop that
+#: reports a round as going well while the manuscript does not exist is describing the half of
+#: the work that is easy. Named rather than counted, so the message says WHICH one is absent.
+REQUIRED_OUTPUTS = (
+    ("report.json", "the machine-readable record every station reads"),
+    ("report/index.html", "the assembled report"),
+    ("FIGURE_REVIEW.jsonl", "the ledger of what was actually looked at"),
+    ("PAPER.md", "the manuscript section, written from the figures"),
+    ("report/paper.html", "the manuscript and its figure panel, rendered"),
+)
+
+
+def missing_outputs(run):
+    """Which required deliverables this run does not have. Empty means it is complete."""
+    return [(p, why) for p, why in REQUIRED_OUTPUTS if not (run / p).exists()]
+
+
+def station_outputs(runs):
+    """9. Did the newest run produce every output a finished run must carry?
+
+    LAST, AND IT GATES. Everything before it can be green while the run holds no manuscript at
+    all - which is exactly the state a round was reported as progress in. The paper is not a
+    flourish on top of the profiling layer, it is the thing the figures are for, so a run without
+    one is unfinished in the same way a run without a report would be.
+    """
+    newest = sorted(runs, key=lambda p: p.name, reverse=True)
+    for r in newest:
+        if not (r / "report.json").exists():
+            continue
+        gone = missing_outputs(r)
+        if gone:
+            return BLOCKED, (f"{r.name}: {len(gone)} required output(s) missing — "
+                             + ", ".join(p for p, _ in gone)), \
+                ("PRODUCE THESE; a run without them is not finished:\n      "
+                 + "\n      ".join(f"{p} — {why}" for p, why in gone))
+        return PASS, f"{r.name}: every required output present ({len(REQUIRED_OUTPUTS)})", ""
+    return BLOCKED, "no run has a report.json", "run something"
+
+
+def _eye_set(runs):
+    """The named scan set of the newest run that drew anything, and what has been looked at.
+
+    Computed here as well as in the station so the GOAL can be printed as a count on every
+    blocked round, including rounds blocked earlier than station 7 - the distance to the goal
+    does not depend on which station happens to be in the way.
+    """
+    from scprofile import review as RV
+    RASTER = (".png", ".jpg", ".jpeg")
+    for r in sorted(runs, key=lambda p: p.name, reverse=True):
+        figs = [f for f in RV.figures(r) if f.lower().endswith(RASTER)]
+        if not figs:
+            continue
+        kinds = {}
+        for f in figs:
+            kinds.setdefault(_kind(f), []).append(f)
+        want = set()
+        for _k, fs in kinds.items():
+            fs = sorted(fs, key=lambda p: (r / p).stat().st_size)
+            want.add(fs[0])
+            want.add(fs[-1])
+        done = {row["figure"] for row in _lines(r / RV.LEDGER)}
+        return want, want & done
+    return set(), set()
+
+
+def _eye_total(runs):
+    return len(_eye_set(runs)[0])
+
+
+def _eye_done(runs):
+    return len(_eye_set(runs)[1])
 
 
 def main():
@@ -385,6 +462,40 @@ def main():
     if first_blocked:
         print(f"THE LOOP IS BLOCKED AT {first_blocked}. Clear it, then run this again.")
         print("Every finding becomes a change in this repository, or it did not happen.")
+        # THE GOAL, RESTATED ON EVERY BLOCKED RUN, BECAUSE THE LOOP HAS BEEN ABANDONED SHORT OF
+        # IT. The stations before 7 are mechanical and they all go green long before the tool is
+        # any good - which reads like an achievement and is not one. A round that clears every
+        # machine check and looks at six panels of eighty-four has tested almost nothing: every
+        # figure defect this tool has ever had was found by opening the image while the suite
+        # was green.
+        #
+        # So the distance to the goal is printed on its own line, in the same words every time,
+        # and it is a COUNT rather than a state. "BLOCKED at 7" invites a status report; "6 of
+        # 84 looked at" does not.
+        print()
+        print(f"    THE GOAL OF THIS LOOP IS STATION 7 AT {_eye_total(runs)}/{_eye_total(runs)}, "
+              f"THEN STATION 8.")
+        print(f"    Reached so far: {_eye_done(runs)}/{_eye_total(runs)} panels looked at and "
+              f"recorded.")
+        print("    Nothing before station 7 is the goal. Clearing the machine checks is the "
+              "cheap half")
+        print("    and it goes green while the pictures are still wrong. DO NOT STOP HERE, AND "
+              "DO NOT")
+        print("    REPORT THIS AS PROGRESS: an unfinished scan is an untested tool.")
+        # AND THE DELIVERABLES, NAMED, ON EVERY BLOCKED ROUND. Station 9 checks them, but a
+        # round blocked at station 2 never reaches station 9 - and "the manuscript does not
+        # exist" is not a fact that should wait its turn behind a licence check.
+        newest = sorted(runs, key=lambda p: p.name, reverse=True)
+        for _r in newest:
+            if (_r / "report.json").exists():
+                _gone = missing_outputs(_r)
+                if _gone:
+                    print()
+                    print(f"    REQUIRED OUTPUTS STILL MISSING from {_r.name}:")
+                    for _p, _why in _gone:
+                        print(f"      {_p:24s} {_why}")
+                    print("    No round is finished while any of these is absent.")
+                break
         return 1
     print("EVERY STATION HAS EVIDENCE. Start the next round from station 1: a change upstream "
           "invalidates what is downstream, which is what the digests are for.")

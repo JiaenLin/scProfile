@@ -47,6 +47,15 @@ do next. Four rules, each paid for:
   Collect on one build, fix in one commit, rebuild, re-scan.
 - **Every finding becomes a change in this repository, or it did not happen.** A defect seen and
   not fixed is a defect found twice.
+- **THE GOAL IS THE EYE SCAN COMPLETE AND THE MANUSCRIPT WRITTEN. NOTHING ELSE IS THE GOAL.**
+  A round ends when station 7 is at N of N and station 8 has produced the draft and its figure
+  panel — not when the mechanical stations go green. Stations 1 to 6b are the cheap half: they
+  run in seconds and pass while the pictures are still wrong and while no manuscript exists.
+  A partial scan is an unfinished round and **must not be reported as progress**, however much
+  the panels it did cover turned up; and a run with no `PAPER.md` and no `report/paper.html` has
+  not produced its deliverables, whatever else it wrote. The loop prints the distance to the goal
+  as a count on every blocked round, and names every required output that is missing, because
+  both have been abandoned short of the goal while being described as going well.
 - **Move what you can from the eye to a measurement.** The eye is the slowest station and the only
   irreplaceable one. Three of the first eleven defects were mechanical — text over text, a label
   off the canvas, an unkeyed size channel — and are now measured by `emit_figure` on every panel

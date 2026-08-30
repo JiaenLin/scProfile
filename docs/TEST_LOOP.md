@@ -150,3 +150,35 @@ Two consequences worth stating plainly, because both are easy to get backwards:
   reproduce those collisions from the panels' own coordinates all came back clean, which cost
   more than the fix did. Where a defect is measured by the tool, extend the tool's measurement
   until it says where and when — a defect report a person has to re-derive is half a mechanism.
+
+## THE GOAL OF THE LOOP IS STATION 7 COMPLETE. NOTHING ELSE IS THE GOAL.
+
+**The loop has now been abandoned short of its goal twice, and both times it looked like
+progress.** This section exists because a round that clears every machine check reads like an
+achievement and is not one.
+
+The stations divide into two halves that are not comparable:
+
+- **Stations 1 to 6b are the cheap half.** They are mechanical, they run in seconds, and they go
+  green long before the tool is any good. A build can pass every one of them and still ship
+  panels whose labels name no point, whose axes hide the result, and whose blank cells mean two
+  different things.
+- **Station 7 is the loop.** Every figure defect this tool has ever had was found by opening the
+  image while the suite was green. A round that clears the machine checks and looks at six
+  panels of eighty-four has tested almost nothing.
+
+So:
+
+1. **The goal is station 7 at N of N, then station 8.** Not "station 7 started", not "the
+   blocking mechanical defects cleared". The scan is complete or the round is not finished.
+2. **A partial scan is never reported as progress.** "6 of 84 looked at" is an unfinished
+   round, and describing what those six found does not change that. The loop prints the count on
+   every blocked round for this reason.
+3. **Running out of things that are easy to fix is not a reason to stop.** It is the point at
+   which the loop starts doing what it exists for.
+4. **Only two things legitimately interrupt a scan**: a defect that makes the remaining panels
+   not worth looking at, and the end of the set. Neither is "I have enough to report".
+
+The convergence rule still applies inside the scan: look at the complete set on ONE build
+fixing nothing, then fix everything in one commit, rebuild, and re-scan. Fixing mid-scan
+invalidates the reviews already recorded, because a review is bound to its image's sha256.
