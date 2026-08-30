@@ -2861,7 +2861,7 @@ def _report(a):
     if not p.exists():
         print(f"scprofile: no {p}. Run `scprofile run` first.", file=sys.stderr)
         return REFUSE
-    print(f"wrote {report.write_all(Path(a.out), json.loads(p.read_text()))}")
+    print(f"wrote {report.write_all(Path(a.out), json.loads(p.read_text()), prefix=getattr(a, 'prefix', None))}")
     _judge(Path(a.out))
     return 0
 
@@ -3088,6 +3088,14 @@ def main(argv=None):
 
     p = sub.add_parser("report", help="[you] rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)
+    # THE PLUGIN'S ENVIRONMENT IS NEEDED TO REBUILD, not only to run. The reporter invokes a
+    # plugin's `compare(ctx)` phase in the plugin's own interpreter; without a prefix that
+    # interpreter does not resolve, the phase is skipped, and a rebuild QUIETLY DROPS every
+    # comparison figure the wrapped tool had drawn - on this cohort, 266 of them, replaced by
+    # nothing and recorded as nothing.
+    p.add_argument("--prefix", type=Path,
+                   help="the environment root the plugins were installed into. Without it a "
+                        "rebuild cannot reach a plugin's compare phase.")
     p.set_defaults(fn=_report)
 
     ck_ = sub.add_parser("check",
