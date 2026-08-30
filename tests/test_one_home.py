@@ -41,7 +41,8 @@ ck("and every documented command is registered", doc <= cmds, str(sorted(doc - c
 
 print("\nthe counts the documents claim are the counts the code has")
 SKILL = ROOT / ".claude" / "skills" / "plugin-figures" / "SKILL.md"
-WORDS = {6: "six", 11: "eleven", 13: "thirteen", 15: "fifteen", 12: "twelve", 14: "fourteen"}
+WORDS = {6: "six", 11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen",
+         15: "fifteen", 16: "sixteen", 17: "seventeen"}
 if SKILL.is_file():
     head = SKILL.read_text(encoding="utf-8").split("---")[1]
     ck("the skill's panel-kind count is right",

@@ -54,6 +54,13 @@ NEEDS = {
         "Whether the difference is concentrated in a few pairs or spread across the network",
         "A diffuse shift usually reflects a global property - depth, composition, dissociation - "
         "while a concentrated one is the kind of finding that can be followed up."),
+    "how_much_total": (
+        "How large each arm's network is in total, before any difference is attributed",
+        "A ratio between two arms says nothing about whether either is a large network or a "
+        "small one, and a difference read without the totals it is a difference between has no "
+        "denominator. It is also the quantity a reader checks a stated ratio against, and the "
+        "one a section states first - so a section that states it and shows no picture of it is "
+        "asking to be taken on trust."),
     "consistency": (
         "Whether the samples within an arm agree, or the arm rests on one animal",
         "The arm is the unit of inference and the sample is the confidence in it. Without this a "
@@ -70,11 +77,12 @@ NEEDS = {
 #: them shown separately before their difference means anything.
 FOR_QUESTION = {
     "cohort": ("consistency", "what_was_excluded", "abundance_or_intensity"),
-    "marginal": ("who_changed", "what_carries_it", "direction", "abundance_or_intensity",
-                 "presence_or_magnitude", "specificity", "consistency", "what_was_excluded"),
-    "simple": ("who_changed", "what_carries_it", "direction", "presence_or_magnitude",
-               "consistency", "what_was_excluded"),
-    "interaction": ("what_carries_it", "who_changed", "specificity",
+    "marginal": ("how_much_total", "who_changed", "what_carries_it", "direction",
+                 "abundance_or_intensity", "presence_or_magnitude", "specificity",
+                 "consistency", "what_was_excluded"),
+    "simple": ("how_much_total", "who_changed", "what_carries_it", "direction",
+               "presence_or_magnitude", "consistency", "what_was_excluded"),
+    "interaction": ("how_much_total", "what_carries_it", "who_changed", "specificity",
                     "abundance_or_intensity", "consistency", "what_was_excluded"),
 }
 

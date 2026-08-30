@@ -9,10 +9,11 @@ description: >-
   section from it and have that section survive review, in rounds - every round removes a claim,
   and what it removes is a missing figure or a wrong one. In scProfile that test is the `paper`
   command and a ledger, run after `review` and before promoting; its eight named limits are in
-  docs/PAPER_TEST.md and are printed every time it runs. Carries a PORTABLE CATALOGUE of fifteen
+  docs/PAPER_TEST.md and are printed every time it runs. Carries a PORTABLE CATALOGUE of sixteen
   network and per-unit panel kinds - matrix, diff_matrix, circle, chord, role_scatter,
   role_shift, flow_rank, flow_compare, role_heatmap, patterns, similarity, contribution,
-  interaction, unit_presence, coverage - each with what it establishes and what it does NOT,
+  interaction, unit_presence, unit_totals, coverage - each with what it establishes and what it
+  does NOT,
   plus eleven rules paid for by real defects: one scale across a grid, absence is not zero and
   not one thing, a cut must name what it removed, declare a denominator that is not what it
   looks like, a per-object scale is not comparable across objects, no panel is gated on the
@@ -260,6 +261,7 @@ picture for a test.
 | `patterns` | which populations use which groups together, and at what rank | a cell state, a cluster, or any ordering of the patterns | R1 |
 | `similarity` | which groups act between the same populations | magnitude — the similarity discards it | R3 |
 | `contribution` | how a group's total splits over the members inside it | that a member absent from a panel was tested | R1 R2 R4 |
+| `unit_totals` | how large each unit's network is - edges and total weight - so a difference between two arms is read against the size of both | that an arm bar is the SUM of its sample bars: an arm is one fit on pooled cells and the samples are separate fits, and the two differ | R5 R6 |
 | `coverage` | how far the object could see the reference, and what survived | that what survived is biology rather than what the prep retained | — |
 
 ### The six rules, each paid for

@@ -689,6 +689,97 @@ def contribution(ctx, edges, pops, group_col, member_col, *, fid="N7_contributio
 # the only one here the host can draw without any plugin output at all.
 # --------------------------------------------------------------------------------------------
 
+def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, weight="prob",
+                weight_name="weight", fid="P2_unit_totals", title=None):
+    """How much network each unit carries: edges, and total weight, per unit.
+
+    THE FIRST QUESTION ABOUT A COMPARISON AND THE LAST ONE ANSWERED. Every panel in a between-arm
+    section shows where two arms differ; none of them says how much either arm HAS, so a reader
+    meets a difference before meeting the totals it is a difference between, and cannot tell a
+    shift in the network from a bigger network.
+
+    THE SAMPLE AXIS IS CONFIDENCE, NOT A GATE (`panels.R6`). The arm is the unit of inference and
+    it is drawn whatever the arm sizes are; the samples are drawn beside it so a reader can see
+    whether the animals in an arm agree, or whether the arm rests on one of them. Neither is
+    withheld and neither is a precondition for the other.
+
+    AN ARM BAR IS NOT THE SUM OF ITS SAMPLE BARS AND MUST NOT BE READ AS ONE. Where a unit exists
+    for an arm, that unit is one fit on the arm's POOLED cells and each cell counts once; the
+    samples beside it are separate fits and summing them weights each animal equally. The two
+    differ - measured on one cohort, by a factor of 2.5 for the same arm - so the blocks are
+    separated by a rule and the caption says so. This is the same fact `compare_panel.pool`
+    exists to keep straight, drawn.
+
+    Nothing here knows what method produced the edges or what the weight means: the column names
+    and the word for the quantity come from the plugin's own `unit_network` declaration.
+    """
+    import matplotlib.pyplot as plt
+
+    per = {str(u): df for u, df in (per_unit_edges or {}).items() if df is not None}
+    if len(per) < 2:
+        return False
+    _ax = unit_axis or {}
+    _all = sorted(per)
+    _grp = [u for u in _all if _ax.get(u) == "group"]
+    units = _grp + [u for u in _all if u not in _grp]
+    n_grp = len(_grp)
+
+    n_edges, w_total = [], []
+    for u in units:
+        df = per[u]
+        n_edges.append(float(len(df)))
+        try:
+            w_total.append(float(df[weight].astype(float).sum()))
+        except (KeyError, ValueError, TypeError):
+            w_total.append(0.0)
+
+    # COLOUR BY THE FIRST DESIGN FACTOR THAT SPLITS THESE UNITS, so an arm and the samples in it
+    # read as one group. A unit no factor places - a marginal pool, a whole-cohort fit - keeps
+    # the neutral ink rather than borrowing a level it is not in.
+    fac, lev = "", {}
+    for f in sorted({k for u in units for k in ((design or {}).get(u) or {})}):
+        got = {u: str(((design or {}).get(u) or {}).get(f, "")) for u in units}
+        if len({v for v in got.values() if v}) >= 2:
+            fac, lev = f, got
+            break
+    order = sorted({v for v in lev.values() if v})
+    cyc = plt.rcParams["axes.prop_cycle"].by_key().get("color") or ["#4C72B0", "#DD8452"]
+    col = {v: cyc[i % len(cyc)] for i, v in enumerate(order)}
+    bar_c = [col.get(lev.get(u, ""), "#B0B0B0") for u in units]
+
+    y = list(range(len(units)))
+    fig, axes = plt.subplots(1, 2, figsize=(F.DOUBLE, max(2.4, 0.24 * len(units) + 1.2)),
+                             layout="constrained", sharey=True)
+    for ax, vals, lab in ((axes[0], n_edges, "edges"),
+                          (axes[1], w_total, f"total {weight_name}")):
+        ax.barh(y, vals, color=bar_c, height=0.72)
+        ax.set_xlabel(lab, fontsize=7)
+        ax.tick_params(labelsize=6)
+        if 0 < n_grp < len(units):
+            ax.axhline(n_grp - 0.5, color=F.INK, lw=1.1, zorder=5)
+    axes[0].set_yticks(y, [f"{u}*" if _ax.get(u) == "group" else u for u in units], fontsize=6)
+    axes[0].invert_yaxis()
+    if order:
+        from matplotlib.patches import Patch
+        axes[1].legend(handles=[Patch(facecolor=col[v], label=f"{fac} = {v}") for v in order],
+                       fontsize=6, frameon=False, loc="lower right")
+    fig.suptitle(title or f"How much network each unit carries", fontsize=8)
+
+    cap = (f"Edges and total {weight_name} per unit, for all {len(units)} of them: the size of "
+           f"each network before any difference between two of them is read"
+           + (f", coloured by {fac}." if fac else "."),
+           "A UNIT MARKED * IS A DESIGN ARM, one fit on its members' POOLED cells; the others "
+           "are single samples, fitted separately. An arm bar is NOT the sum of the sample bars "
+           "below it and must not be read as one - pooling weights each cell equally and summing "
+           "weights each sample equally, and on real data the two differ by a factor of about "
+           "two. The arm is the unit of inference; the samples beside it say whether the animals "
+           "in an arm agree, and a thin arm is a fact about the experiment rather than a reason "
+           "to withhold its comparison. Nothing here is a test: these are totals, with no "
+           "interval and no p-value.")
+    ctx.emit_figure(fid, fig, caption=cap)
+    return True
+
+
 def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=None,
                   sentinels=(), fid="P1_population_presence", floor=None, title=None, note=""):
     """Which populations each unit contains, against the study's whole label set.

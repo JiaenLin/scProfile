@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.18.0",
+    "version": "0.19.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -344,6 +344,11 @@ PLUGIN = {
         # than a red gate.
         "netVisual": {"use": "figures/native_hierarchy__<pathway>.png, layout='hierarchy'"},
         "netVisual_barplot": {"use": "figures/nativecmp_barplot_{count,weight}.png, per arm pair"},
+        # ABSENT FROM THIS ACCOUNTING UNTIL NOW, neither used nor skipped: the roster is built
+        # from the functions somebody listed, and an exhaustive-looking table with a hole in it
+        # reads exactly like a complete one. This is the total-interactions bar - the first
+        # figure a reader of a comparison asks for - and it had never been drawn.
+        "compareInteractions": {"use": "figures/nativecmp_compareInteractions_{count,weight}.png, per arm pair - total interactions and total strength per arm"},
         "netVisual_individual": {"use": "figures/native_individual__<ligand_receptor>.png"},
         "netVisual_hierarchy1": {"use": "the left panel of figures/native_hierarchy__<pathway>.png; it takes a net matrix and netVisual(layout='hierarchy') is the documented way in"},
         "netVisual_hierarchy2": {"use": "the right panel of figures/native_hierarchy__<pathway>.png"},
@@ -401,7 +406,14 @@ PLUGIN = {
                           "native:netAnalysis_signalingRole_heatmap", "host:role_shift"],
             "presence_or_magnitude": ["host:unit_presence"],
             "specificity": ["native:netVisual_bubble", "host:matrix"],
-            "consistency": ["host:unit_presence"],
+            # THE TOTALS, WHICH THE SECTION STATES FIRST AND HAD NO PICTURE OF.
+            # `compareInteractions` is CellChat's own bar for the two arms of this contrast;
+            # `unit_totals` puts every arm AND every sample on one axis - the same quantity at
+            # the confidence scale.
+            "how_much_total": ["native:compareInteractions", "host:unit_totals"],
+            # The samples inside an arm, on the axis their arm is on, which is what "do the
+            # animals agree" actually needs. The census answers a different half of it.
+            "consistency": ["host:unit_totals", "host:unit_presence"],
             "what_was_excluded": ["host:unit_presence"],
         },
 
@@ -3432,6 +3444,61 @@ ndev <- function(nm, expr, w = 2000, h = 1600, res = 200) {
   else { .plots$bad <- c(.plots$bad, nm); if (file.exists(path)) unlink(path) }
 }
 
+# 0. TOTAL INTERACTIONS AND TOTAL STRENGTH PER ARM - CellChat's own summary bar, and the first
+#    thing a reader of a comparison asks. Drawn on the UNMASKED object: a total is a total, and
+#    every population contributes to it including the ones with no counterpart.
+npng("compareInteractions_count",
+     compareInteractions(m, show.legend = FALSE, group = c(1, 2), measure = "count"),
+     w = 1200, h = 1500)
+npng("compareInteractions_weight",
+     compareInteractions(m, show.legend = FALSE, group = c(1, 2), measure = "weight"),
+     w = 1200, h = 1500)
+
+# ---------------------------------------------------------------------------------------------
+# A POPULATION WITH NO COUNTERPART HAS A PRESENCE, NOT A CHANGE - so it is masked AT SOURCE.
+#
+# The lift above puts both arms on the union of their cell groups, which is right: the
+# intersection would DELETE a population from the comparison. But a group lifted in carries zero
+# edges on the side it was absent from, so its "difference" is the whole of the arm that has it -
+# and on this cohort that made the two arm-specific populations the largest red column and the
+# largest blue row in every differential panel. Neither is a change. Both are a presence, drawn
+# in the ink reserved for change, at the top of the figure a reader looks at first.
+#
+# THE MASK IS ON THE MATRIX THE DIFFERENCE IS COMPUTED FROM, not on the finished picture. Painting
+# over a rendered figure fixes the panels somebody remembered and leaves the number in the object
+# for the next consumer; blanking the row and column in `@net` removes the artefact from every
+# panel computed from it at once.
+#
+# NOTHING IS REMOVED. `m` itself is untouched and carries every population - the totals above,
+# the ranked flow, the bubbles and the role panels all still see them. Only the DIFFERENTIAL
+# panels read `md`, the names are already written to nativecmp_alignment.tsv, and every caption
+# in this contrast states them. Not drawing it restores the padded value.
+#
+# Zero rather than NA: a differential panel has no ink for "undefined", and NA propagates into
+# CellChat's own colour scaling. Zero draws nothing, which is what a population with no
+# counterpart should contribute to a picture of change, and the caption says which cells those
+# are so a blank is not read as "measured and equal".
+# ---------------------------------------------------------------------------------------------
+shared <- intersect(lev_a, lev_b)
+absent <- union(only_a, only_b)
+.mask <- function(obj, pops) {
+  if (!length(pops)) return(obj)
+  for (i in seq_along(obj@net)) {
+    for (sl in c("count", "weight")) {
+      M <- obj@net[[i]][[sl]]
+      if (is.null(M) || is.null(rownames(M))) next
+      hit <- intersect(pops, rownames(M))
+      if (length(hit)) { M[hit, ] <- 0; M[, hit] <- 0 }
+      obj@net[[i]][[sl]] <- M
+    }
+  }
+  obj
+}
+md <- .mask(m, absent)
+if (length(absent))
+  cat("masked from the differential panels (no counterpart in the other arm):",
+      paste(absent, collapse = "; "), "\n")
+
 # 1. the differential interaction network - CellChat's own answer to "which pairs changed"
 # A KEY FOR THE COLOURS. CellChat draws this network with red and blue edges and NO legend
 # anywhere, so nothing on the panel says which colour is an increase or against which arm. The
@@ -3442,17 +3509,33 @@ ndev <- function(nm, expr, w = 2000, h = 1600, res = 200) {
                    col = c("#b2182b", "#2166ac"),
                    legend = c(paste("higher in", name_b), paste("higher in", name_a)),
                    title = paste(name_b, "against", name_a), title.adj = 0)
+  if (length(absent))
+    graphics::legend("bottomright", bty = "n", cex = 0.7,
+                     legend = c("no counterpart in the other arm,",
+                                "blank here:", paste(absent, collapse = ", ")))
 }
 ndev("diffInteraction_count", {
-  netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count"); .diffkey()
+  netVisual_diffInteraction(md, weight.scale = TRUE, measure = "count"); .diffkey()
 })
 ndev("diffInteraction_weight", {
-  netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight"); .diffkey()
+  netVisual_diffInteraction(md, weight.scale = TRUE, measure = "weight"); .diffkey()
 })
 
 # 2. the differential heatmap, same question in a form that reads pair by pair
-ndev("diff_heatmap_count", ComplexHeatmap::draw(netVisual_heatmap(m, measure = "count")))
-ndev("diff_heatmap_weight", ComplexHeatmap::draw(netVisual_heatmap(m, measure = "weight")))
+# THE COLOURS ARE NAMED. CellChat draws this with a diverging red-blue scale whose only legend
+# says "Relative values", so nothing on the panel said which arm red belonged to. `title.name`
+# is the tool's own argument for the line above the map; the key it does not draw goes there.
+.diffttl <- function(what)
+  paste0(what, ": ", name_b, " against ", name_a,
+         "  |  red = higher in ", name_b, ", blue = higher in ", name_a,
+         if (length(absent)) paste0("  |  blank: ", paste(absent, collapse = ", "),
+                                    " (no counterpart in the other arm)") else "")
+ndev("diff_heatmap_count", ComplexHeatmap::draw(
+  netVisual_heatmap(md, measure = "count",
+                    title.name = .diffttl("Differential number of interactions"))))
+ndev("diff_heatmap_weight", ComplexHeatmap::draw(
+  netVisual_heatmap(md, measure = "weight",
+                    title.name = .diffttl("Differential interaction strength"))))
 
 # 3. ranked information flow with BOTH arms on one axis, CellChat's own comparison mode
 # CELLCHAT'S OWN BETWEEN-ARM TEST, RUN. `do.stat = TRUE` compares the two arms' per-pair
@@ -3550,9 +3633,27 @@ for (pat in c("outgoing", "incoming")) {
 # point of this panel and also what made its axes illegible: several hundred rows of
 # ligand-receptor labels in the space of a page. `remove.isolate` drops the pairs with nothing
 # to show, the canvas is given room per row, and the x labels are rotated.
+# THE X AXIS CARRIES EVERY ORDERED PAIR OF POPULATIONS, ONCE PER ARM. On this cohort that is
+# 13 x 13 x 2 - several hundred columns of "A -> B (arm)" in the width of a page, collapsed into
+# a solid diagonal ramp of overprinted text taller than the plot itself, with not one label
+# readable. Making the canvas taller fixed the ROWS, which were never the problem.
+#
+# Two of the tool's own arguments fix it, and neither drops a pair. `angle.x = 90` sets the
+# labels vertical, so a column needs only its own pitch horizontally instead of the length of
+# its text; and the width is scaled to the number of pairs that can be drawn rather than left at
+# a page. The bound is the square of the population count, both arms, so it OVER-estimates when
+# `remove.isolate` drops pairs - which costs whitespace and never crowding.
+# The pitch is set by the LABEL HEIGHT, because a vertical label needs its own font height
+# horizontally and nothing more: 6pt at 200 dpi is about 17px, so 20px per column leaves a
+# gap and keeps the canvas to a size the device can actually render.
+.bpair <- length(group_new)^2 * 2
+.bw <- max(2800, min(8000, as.integer(20 * .bpair)))
+cat("bubble overview canvas:", .bw, "px wide for up to", .bpair, "columns\n")
 npng("bubble_comparison",
-     netVisual_bubble(m, comparison = c(1, 2), angle.x = 45, remove.isolate = TRUE),
-     w = 2800, h = 5200)
+     netVisual_bubble(m, comparison = c(1, 2), angle.x = 90, remove.isolate = TRUE,
+                      font.size = 6, font.size.title = 9,
+                      title.name = paste("every enriched pair -", name_a, "against", name_b)),
+     w = .bw, h = 5200)
 
 # AND A FOCUSED VIEW. The overview answers "is anything different anywhere"; this answers "in
 # what". It is the same function on the pathways that carry the most flow, so it is CellChat's
@@ -3566,15 +3667,16 @@ npng("bubble_comparison",
 if (length(.top)) {
   cat("focused bubble on:", paste(.top, collapse = ", "), "\n")
   npng("bubble_focused",
-       netVisual_bubble(m, comparison = c(1, 2), signaling = .top, angle.x = 45,
-                        remove.isolate = TRUE),
-       w = 2400, h = 2600)
+       netVisual_bubble(m, comparison = c(1, 2), signaling = .top, angle.x = 90,
+                        remove.isolate = TRUE, font.size = 6, font.size.title = 9,
+                        title.name = paste("the ten pathways carrying the most flow -",
+                                           name_a, "against", name_b)),
+       w = .bw, h = 2600)
 }
 
 # 8. per-population signalling changes - the one figure that names WHICH signals moved for a
 #    given population. Drawn for every population the two arms SHARE: a population absent from
 #    one arm has no change to plot, and is named above rather than passed silently.
-shared <- intersect(lev_a, lev_b)
 cat("signalingChanges over", length(shared), "shared population(s)\n")
 for (g in shared) {
   safe <- gsub("[^A-Za-z0-9]+", "_", g)
@@ -3591,10 +3693,10 @@ for (g in shared) {
 # `x.lab.rot = TRUE` because the default is FALSE and these names are long: every tick label
 # was drawn horizontally at the same place and they overprinted into one unreadable smear across
 # the bottom, with not a single population name readable off the axis. Seen by opening it.
-npng("barplot_count", netVisual_barplot(m, comparison = c(1, 2), measure = "count",
+npng("barplot_count", netVisual_barplot(md, comparison = c(1, 2), measure = "count",
                                         sources.use = seq_along(group_new), x.lab.rot = TRUE),
      w = 2200, h = 1700)
-npng("barplot_weight", netVisual_barplot(m, comparison = c(1, 2), measure = "weight",
+npng("barplot_weight", netVisual_barplot(md, comparison = c(1, 2), measure = "weight",
                                          sources.use = seq_along(group_new), x.lab.rot = TRUE),
      w = 2200, h = 1700)
 

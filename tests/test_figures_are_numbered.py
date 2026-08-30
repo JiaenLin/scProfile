@@ -55,6 +55,9 @@ SPEC = {
     "report": {
         "provides_evidence": {
             "who_changed": ["native:drawNet", "native:drawHeat", "host:diff_matrix"],
+            # A NEED SERVED ONLY BY THE HOST. `host:` routes were skipped by the composer, so a
+            # panel the host drew and the figure panel placed never reached the paper at all.
+            "how_much_total": ["host:unit_totals"],
             "what_carries_it": ["native:drawNet"],
             "direction": ["native:drawRole"],
             "presence_or_magnitude": ["host:unit_presence"],
@@ -97,14 +100,23 @@ try:
     native.append({"id": "ghost",
                    "path": f"kernels/{PLUGIN}/compare/time/figures/cmp_role_incoming.png",
                    "caption": "not on disk", "label": "time"})
+    # The host's own cohort panel, recorded the way the reporter records it: an id whose stem
+    # is the one `panels.IMPLEMENTED` names, and no contrast label, because it is about the run.
+    hrel = f"kernels/{PLUGIN}/figures/{PLUGIN}_P2_unit_totals__cohort.png"
+    (run / hrel).write_bytes(b"\x89PNG\r\n\x1a\n")
+    cohort = [{"id": "P2_unit_totals", "path": hrel, "label": "",
+               "caption": "Edges and total signal per unit, arms and samples on one axis."}]
     (run / "report" / "panels.json").write_text(
-        json.dumps({PLUGIN: {"native": native, "cohort": [], "contrast": [], "arm": []}}),
+        json.dumps({PLUGIN: {"native": native, "cohort": cohort, "contrast": [], "arm": []}}),
         encoding="utf-8")
     (run / "report.json").write_text(
         json.dumps({"design": {}, "kernels": {PLUGIN: {"spec": SPEC}}}), encoding="utf-8")
 
     idx = C.figure_index(run, PLUGIN, SPEC, {})
     check(bool(idx), "figure_index returned nothing, so no figure in any paper can be numbered")
+    check(hrel in idx,
+          "a need served only by a `host:` route is numbered by nothing, so a panel the host "
+          "drew and the figure panel placed never reaches the paper")
 
     # 1. contiguous, and every one on disk
     ns = sorted(idx.values())
@@ -140,7 +152,7 @@ try:
     for path, n in sorted(idx.items(), key=lambda kv: kv[1]):
         check(f"Figure {n}." in html, f"the page prints no legend headed 'Figure {n}.'")
     for path, n in sorted(idx.items(), key=lambda kv: kv[1]):
-        cap = next((f["caption"] for f in native if f["path"] == path), "")
+        cap = next((f["caption"] for f in native + cohort if f["path"] == path), "")
         tail = cap.split()[-1].strip(".")
         check(tail and tail in html,
               f"Figure {n}'s legend does not carry its caption - the page ends at {tail!r} "

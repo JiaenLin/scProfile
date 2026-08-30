@@ -180,7 +180,7 @@ def _weight_name(spec):
 #: The keys are sentences; the values are needs from `evidence.NEEDS`, which are questions about
 #: a comparison and know nothing about any tool. A plugin routes each need to its own function.
 SENTENCE_EVIDENCE = (
-    ("ratio", ("who_changed", "what_carries_it")),
+    ("ratio", ("how_much_total", "who_changed", "what_carries_it")),
     ("tested", ("what_carries_it", "specificity")),
     ("presence", ("presence_or_magnitude", "what_carries_it")),
     ("direction", ("direction",)),
@@ -213,17 +213,52 @@ def _native_index(run, plugin, spec):
         fn = _NAT.function_for(declared, rel)
         if fn:
             by.setdefault((str(x.get("label") or ""), fn), []).append(rel)
-    return by, dict(routes)
+    # HOST PANELS RESOLVE THE SAME WAY THEY DO IN THE PANEL. A `host:` route was simply skipped
+    # here, so a need the host answers - the census, the difference matrix, the per-unit totals -
+    # produced a plate the panel placed and the paper never carried. That is the panel and the
+    # paper resolving the same declaration differently, which is the disconnection between the
+    # two documents this project has already fixed once at the level above.
+    host = [x for grp in ("contrast", "arm", "cohort") for x in (placed.get(grp) or [])
+            if str(x.get("path") or "") and (Path(run) / str(x.get("path"))).is_file()]
+    return by, dict(routes), host
 
 
-def _figs_for(by, routes, label, needs):
-    """The plates this contrast drew for these needs, in route order, each once."""
+def _stems():
+    """{panel kind: the id stem its figures carry} - the same inversion the panel uses."""
+    from . import panels as _PN
+
+    out = {}
+    for kind, where in (_PN.IMPLEMENTED or {}).items():
+        stem = str(where).split("\u2014")[-1].strip().split(",")[0].strip()
+        if stem:
+            out[kind] = stem
+    return out
+
+
+def _figs_for(by, routes, label, needs, host=()):
+    """The plates this contrast drew for these needs, in route order, each once.
+
+    NATIVE FIRST, HOST AS THE FALLBACK WITHIN A NEED - the same rule `paper.panel` applies, so
+    the two documents choose the same plate for the same need rather than each choosing its own.
+    """
+    stems = _stems() if host else {}
     out = []
     for need in needs:
+        got = []
         for r in (routes.get(need) or []):
             r = str(r)
             if r.startswith("native:"):
-                out += by.get((label, r.split(":", 1)[1])) or []
+                got += by.get((label, r.split(":", 1)[1])) or []
+            elif r.startswith("host:") and not got:
+                stem = stems.get(r.split(":", 1)[1])
+                if not stem:
+                    continue
+                hits = [str(f.get("path")) for f in host
+                        if str(f.get("id") or "").startswith(stem)
+                        and (not f.get("label") or str(f.get("label")) == label)]
+                if hits:
+                    got.append(hits[0])
+        out += got
     seen, uniq = set(), []
     for x in out:
         if x not in seen:
@@ -260,11 +295,11 @@ def figure_index(run, plugin, spec=None, design=None):
     f = findings(run, plugin, spec)
     if not f:
         return {}
-    by, routes = _native_index(run, plugin, spec)
+    by, routes, host = _native_index(run, plugin, spec)
     idx, n = {}, 0
     for label in _order(f, design):
         for _key, needs in SENTENCE_EVIDENCE:
-            for path in _figs_for(by, routes, label, needs):
+            for path in _figs_for(by, routes, label, needs, host):
                 if path not in idx:
                     n += 1
                     idx[path] = n
@@ -302,11 +337,11 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     # THE FIGURES, NUMBERED, so the sentences can point at them. Built from the same routes the
     # panel places by, so a number in this text and the plate printed under it are the same
     # object by construction rather than by anyone keeping two lists in step.
-    by, routes = _native_index(run, plugin, spec)
+    by, routes, host = _native_index(run, plugin, spec)
     idx = figure_index(run, plugin, spec, design)
 
     def _c(label, *needs):
-        return cite(idx, _figs_for(by, routes, label, needs))
+        return cite(idx, _figs_for(by, routes, label, needs, host))
 
     kind = {c.get("label"): str(c.get("kind", "")) for c in cmps}
     quest = {c.get("label"): str(c.get("question", "")) for c in cmps}
@@ -355,7 +390,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
             L += [f"Total {W} is {_n(d['total_against'])} in **{d['against']}** against "
                   f"{_n(d['total_reference'])} in the reference arm **{d['reference']}**, over "
                   f"{d['n_elements']} elements"
-                  + _c(lab, "who_changed") + "."]
+                  + _c(lab, "how_much_total", "who_changed") + "."]
         if d["n_tested"]:
             L += [f"**{d['n_significant']} of {d['n_tested']}** elements differ significantly "
                   f"between the arms by the method's own between-arm test"
@@ -436,10 +471,10 @@ def claims(run, plugin, spec=None, design=None):
     if not f:
         return []
     W = _weight_name(spec)
-    by, routes = _native_index(run, plugin, spec)
+    by, routes, host = _native_index(run, plugin, spec)
 
     def figs_for(label, needs):
-        return _figs_for(by, routes, label, needs)
+        return _figs_for(by, routes, label, needs, host)
 
     made = []
     for label in _order(f, design):

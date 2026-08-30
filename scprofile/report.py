@@ -412,7 +412,7 @@ def _presence_block(payload_all, *, out_dir=None, name=""):
 
 
 def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
-                 controls=None):
+                 controls=None, unit_axis=None):
     """({"contrast": [...], "arm": [...]}) - every between-arm and per-arm figure, drawn.
 
     THE COHORT PAGE CARRIED ONE FIGURE while the per-sample appendix carried a hundred. On a
@@ -423,7 +423,7 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
     Driven entirely by the plugin's `unit_network` declaration, so nothing here knows what
     method produced the numbers.
     """
-    empty = {"contrast": [], "arm": [], "interaction": [], "native": []}
+    empty = {"contrast": [], "arm": [], "interaction": [], "native": [], "cohort": []}
     net = _D.report_get(spec, "unit_network")
     if not (net and design and out_dir and units):
         return empty
@@ -460,8 +460,21 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
     if len(per) < 2:
         return empty
     figdir = Path(out_dir) / "kernels" / name / "figures"
+    # HOW MUCH NETWORK EACH UNIT CARRIES, drawn ONCE for the cohort rather than per contrast.
+    # Every panel below shows where two arms differ and none of them says how much either arm
+    # HAS, so a reader met a difference before meeting the totals it is a difference between.
+    # The edge tables are already in hand here; nothing extra is read to draw it.
+    _cohort = []
+    try:
+        from . import network_panels as _NP
+        _NP.unit_totals(CPan._Shim(figdir, name, "cohort", _cohort), per,
+                        design=design, unit_axis=unit_axis or {},
+                        weight_name=str(net.get("weight_name") or "weight"))
+    except Exception:                                                     # noqa: BLE001
+        _cohort = []
     # THE DECLARED CONTROLS REACH THE CONTRASTS, or the direction falls back to a
     # recommendation the caller may have overridden on the command line.
+    empty["cohort"] = _cohort
     pairs = CPan.arm_pairs(design, controls=controls)
 
     # THE PLUGIN'S OWN COMPARISON FIGURES, ONCE PER ARM PAIR, BEFORE the host draws its versions.
@@ -504,7 +517,8 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
     arm = CPan.draw_arm_networks(per, design, CPan.arms_in(design, pairs), figdir, name,
                                  group_col=net.get("group"), member_col=net.get("member"),
                                  weight_scale=net.get("weight_scale", "per_object"))
-    return {"contrast": con, "arm": arm, "interaction": inter, "native": nat}
+    return {"contrast": con, "arm": arm, "interaction": inter, "native": nat,
+            "cohort": _cohort}
 
 
 #: How many between-arm panels the plugin page itself carries. The rest are one click away.
@@ -764,9 +778,13 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi):
             # EXPLAIN, DO NOT WARN. This read as a caution about what the panel does not
             # establish; it is a plain fact about what the arms contained, and a reader who
             # knows it can use the figure rather than distrust it.
-            lifted = (" " + "; ".join(gone) + ". Both arms were put on the same population set "
-                      "so the difference could be taken, so that population's difference is the "
-                      "value of the arm that has it.")
+            lifted = (" " + "; ".join(gone) + ". Both arms were put on the same population "
+                      "set so the difference could be taken, and in the DIFFERENTIAL panels "
+                      "that population's row and column are blank: a population with no "
+                      "counterpart in the other arm has a presence, not a change, and drawing "
+                      "the arm's own value as a difference made it the largest block in the "
+                      "figure. It is in every other panel here, and in this contrast's "
+                      "alignment file.")
     out = []
     for f in sorted(figdir.glob("*.png")):
         fn = _NAT.function_for(declared, f.name)
@@ -1456,9 +1474,19 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
         _arms = _arm_content(units, (payload_all or {}).get("design") or {}, spec,
                              prefix=prefix,
                              out_dir=out_dir, name=name,
+                             unit_axis=(payload_all or {}).get("unit_axis") or {},
                              # `payload_all`, not `payload` - the latter is not in scope here
                              # and would have raised on the first run that reached this line.
                              controls=(payload_all or {}).get("controls"))
+        # THE SIZE OF EVERY NETWORK, BEFORE ANY DIFFERENCE BETWEEN TWO OF THEM. It sits with
+        # the census because it answers the same kind of question - what the method was working
+        # with - and because a difference read without it is a difference with no denominator.
+        if _arms.get("cohort"):
+            body.append("<h2>How much network each unit carries</h2>"
+                        '<p class="sub">Edges and total weight per unit, arms and samples on '
+                        'one axis. The arm is the unit of inference; the samples beside it say '
+                        'whether the animals in an arm agree. Neither is a test.</p>')
+            body.append(_arm_figs_html(name, _arms["cohort"]))
         # THE INTERACTION FIRST, because on a factorial design it is the question and the
         # marginal effects are its summary. A marginal effect can be flat while both simple
         # effects are large and opposite, so a page that leads with the marginals leads with the
@@ -1638,6 +1666,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
 
     _placed = {"cohort": [_rec(t) for t in (locals().get("_inline") or [])
                           + ((locals().get("_arms") or {}).get("interaction") or [])
+                          + ((locals().get("_arms") or {}).get("cohort") or [])
                           + (locals().get("_presence_placed") or [])],
                # THE TOOL'S OWN COMPARISON PANELS, recorded separately because a writing brief
                # must be able to tell them from the host's. They are on the arms page rather

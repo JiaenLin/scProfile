@@ -193,6 +193,14 @@ KINDS = (
          "the same thing in a label column - nor that a present population was well sampled",
          rules=("R2_absence_split", "R4_denominator_declared", "R6_never_gated_on_sample"),
          per_contrast=False, levels=(GROUP,), cohort_only=True),
+    Kind("unit_totals", "How much network each unit carries",
+         "how large each unit's network is - edges and total weight - so a difference between "
+         "two arms is read against the size of both, and so a reader can see whether the "
+         "samples inside an arm agree",
+         "that an arm bar is the sum of its samples - it is one fit on pooled cells and they "
+         "are separate fits - nor anything tested: these are totals, with no interval",
+         rules=("R5_per_object_scale", "R6_never_gated_on_sample"),
+         per_contrast=False, levels=(GROUP, SAMPLE), cohort_only=True),
     Kind("coverage", "What the reference database offered and what survived",
          "how far the object could see the reference, and how much survived testing",
          "that what survived is biology rather than what the preparation retained",
@@ -242,6 +250,7 @@ HOST, PLUGIN = "host", "plugin"
 OWNER = {
     "interaction": (HOST, ""),
     "unit_presence": (HOST, ""),
+    "unit_totals": (HOST, ""),
     "matrix": (HOST, ""),
     "diff_matrix": (HOST, ""),
     "circle": (HOST, ""),
@@ -280,6 +289,7 @@ IMPLEMENTED = {
     "contribution": "network_panels.contribution — N7_contribution, per arm, needs "
                     "`group` and `member`",
     "unit_presence": "network_panels.unit_presence — P1_population_presence, on the cohort page",
+    "unit_totals": "network_panels.unit_totals — P2_unit_totals, on the cohort page",
     "interaction": "compare_panel.draw_interaction — C5_interaction, one per crossed pair",
 }
 
@@ -300,7 +310,7 @@ SERVES = {
     "marginal": ("diff_matrix", "flow_compare", "role_shift"),
     "simple": ("diff_matrix", "flow_compare", "role_shift"),
     "interaction": ("interaction",),
-    "cohort": ("unit_presence",),
+    "cohort": ("unit_presence", "unit_totals"),
     "per_arm": ("circle", "chord", "matrix", "role_scatter", "flow_rank",
                 "role_heatmap", "contribution"),
 }
