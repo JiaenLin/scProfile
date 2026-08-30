@@ -52,6 +52,14 @@ _run = " ".join(inv.get("run") or [])
 if "${CTRL[@]}" not in _run and "$CTRL" not in _run:
     FAILURES.append("CONTROL is never expanded into the run invocation, so a declared control "
                     "does not reach the tool and the direction falls back to a recommendation")
+# PARAMS must be built AND reach `run`, or a run meant to test another setting repeats the first
+_run2 = " ".join(inv.get("run") or [])
+if "PARAMJSON" not in _run2:
+    FAILURES.append("PARAMS is never passed to `run`, so a config override is accepted on the "
+                    "qsub line and silently ignored")
+if "PARAMS" not in (src[:src.index("set -")] if "set -" in src else src):
+    FAILURES.append("PARAMS is consumed but not documented in the header")
+
 if "CTRL+=(--control" not in src:
     FAILURES.append("the job does not build the --control array")
 # `-v` SPLITS ITS OWN VALUE ON COMMAS. A comma-separated list is torn apart by PBS before the
@@ -66,7 +74,12 @@ if "CONTROL" not in (src[:src.index("set -")] if "set -" in src else src):
 # EVERY variable the file consumes is documented in its own header, or a user cannot know it
 # exists. The header is the only place a qsub line is described.
 header = src[:src.index("set -")] if "set -" in src else src[:4000]
-for var in sorted({m.group(1) for m in re.finditer(r"\$\{(\w+):\+", flat)}):
+#: Names the script DERIVES for itself rather than accepting from the caller. They need no
+#: header entry because nobody can pass them; documenting the input that produces them is the
+#: thing that helps a reader.
+DERIVED = {"PARAMJSON"}
+
+for var in sorted({m.group(1) for m in re.finditer(r"\$\{(\w+):\+", flat)} - DERIVED):
     if var not in header:
         FAILURES.append(f"${var} is consumed but not documented in the header")
 

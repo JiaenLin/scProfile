@@ -25,6 +25,9 @@
 # own field's words - a diet, an age, a timepoint - it must be declared, because the tool ships
 # no guess about anybody's biology.
 #
+# `PARAMS=<key>=<value>[;<key>=<value>...]` overrides plugin config for this run -
+# semicolons again, and the types are resolved when the JSON is built.
+#
 # `SECTION=<file>` or `SECTION=<plugin>=<file>` carries an authored result section into the run
 # and renders it with the figures, so the writing travels with the run that produced them.
 # `NOCACHE=1` withholds the reuse cache for one run, to rule it out when a result looks wrong.
@@ -366,6 +369,38 @@ run)
   # `--control` IS REPEATABLE AND `-v` CANNOT CARRY A REPEATED FLAG, so CONTROL is a
   # comma-separated list and is expanded here. An empty array expands to nothing, which is why
   # the array form is used rather than a bare ${CONTROL:+...}.
+  # `PARAMS=<key>=<value>[;<key>=<value>...]` - the plugin config overrides for this run, as
+  # semicolon-separated pairs rather than raw JSON. `-v` splits on commas and mangles quotes, so
+  # handing it a JSON object works only for the single-key case and fails silently for the rest;
+  # pairs are converted here, where the types can be got right. Without this the variable was
+  # accepted on the qsub line and ignored, and a run intended to test another setting quietly
+  # repeated the first one.
+  PARAMJSON=""
+  if [ -n "${PARAMS:-}" ]; then
+    PARAMJSON=$($PY - "$PARAMS" <<'PYEOF'
+import json, sys
+out = {}
+for item in sys.argv[1].split(";"):
+    if not item.strip():
+        continue
+    k, _, v = item.partition("=")
+    k, v = k.strip(), v.strip()
+    if v.lower() in ("true", "false"):
+        out[k] = (v.lower() == "true")
+    else:
+        try:
+            out[k] = int(v)
+        except ValueError:
+            try:
+                out[k] = float(v)
+            except ValueError:
+                out[k] = v
+print(json.dumps(out))
+PYEOF
+)
+    echo "  params: $PARAMS  ->  $PARAMJSON"
+  fi
+
   CTRL=()
   if [ -n "${CONTROL:-}" ]; then
     # SEPARATED BY SEMICOLONS, NOT COMMAS. `-v` splits its own value on commas, so a
@@ -385,6 +420,7 @@ run)
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} ${SEARCH:+--search "$SEARCH"} \
       ${REUSE:+--reuse-from "$REUSE"} ${REUSE_GRADE:+--reuse-min-grade "$REUSE_GRADE"} \
       ${SECTION:+--section "$SECTION"} ${NOCACHE:+--no-cache} \
+      ${PARAMJSON:+--params "$PARAMJSON"} \
       "${CTRL[@]}" \
       --cores "${CORES:-${NCPUS:-4}}" --timeout "${TIMEOUT:-7200}" || echo "  run exit $?"
 
