@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.12.0",
+    "version": "0.12.1",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -589,6 +589,11 @@ mtx <- args[1]; meta_f <- args[2]; db_name <- args[3]
 min_cells <- as.integer(args[4]); trim <- as.numeric(args[5]); out <- args[6]
 mean_type <- args[7]; pop_size <- as.logical(args[8]); nboot <- as.integer(args[9])
 thresh <- as.numeric(args[10])
+# args[11], not [12]. Parsed HERE with the others because that is the only place the indices can
+# be checked against each other; read 600 lines below, it was off by one, silently fell back to
+# the instance directory, and the whole cross-run reuse did nothing while every log line looked
+# normal. An index that lives away from its siblings is an index nobody can count.
+cache_dir <- if (length(args) >= 11 && nzchar(args[11])) args[11] else ""
 
 X <- as(Matrix::readMM(mtx), "CsparseMatrix")
 meta <- read.csv(meta_f, row.names = 1, stringsAsFactors = FALSE)
@@ -613,9 +618,13 @@ dir.create(objdir, showWarnings = FALSE, recursive = TRUE)
 # run started empty and re-inferred to redraw a plot. The stamp below is what decides validity -
 # the cache directory is stable per unit and the stamp does the rest, so nothing here has to
 # hash a path.
-cache_dir <- if (length(args) >= 12 && nzchar(args[12])) args[12] else ""
 if (nzchar(cache_dir)) dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
 store <- if (nzchar(cache_dir)) cache_dir else objdir
+# SAY WHICH STORE IS IN USE. Falling back to the instance directory is correct behaviour when no
+# cache is offered and a silent disaster when one is offered and missed: the run completes, every
+# figure is right, and the inference is paid for again. It is now one line in every unit's log.
+cat("object store:", if (nzchar(cache_dir)) "cache (survives the run)" else
+    "instance only (NO cache offered; every run will re-infer)", "->", store, "\n")
 rds <- file.path(store, "cellchat.rds")
 stampf <- file.path(store, "cellchat.inference.txt")
 stamp <- paste(tools::md5sum(mtx), tools::md5sum(meta_f), db_name, mean_type, trim,
