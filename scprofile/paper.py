@@ -48,6 +48,22 @@ from pathlib import Path
 LEDGER = "PAPER_CLAIMS.jsonl"
 
 
+def _report_dir(out, plugin=""):
+    """Where this section's rendered page goes."""
+    from . import kernels as _K
+    return _K.plugin_report(out, plugin) if plugin else _K.run_report(out)
+
+
+def _root(out, plugin=""):
+    """Where this section's files live: the plugin's own directory, or the run root.
+
+    See `kernels.plugin_out`. A cohort-level synthesis (no plugin) stays at the run root, which
+    is the only thing there that is about the run rather than about one method.
+    """
+    from . import kernels as _K
+    return _K.plugin_out(out, plugin) if plugin else Path(out)
+
+
 def ledger_name(plugin=""):
     """`PAPER_CLAIMS.jsonl`, or `PAPER_CLAIMS.<plugin>.jsonl` for one plugin's claims."""
     return LEDGER if not plugin else f"PAPER_CLAIMS.{plugin}.jsonl"
@@ -99,7 +115,7 @@ def _digest(path):
 
 def read_ledger(out, plugin=""):
     """[record] in order. Append-only: later records about one claim supersede earlier ones."""
-    p = Path(out) / ledger_name(plugin)
+    p = _root(out, plugin) / ledger_name(plugin)
     if not p.is_file():
         return []
     rows = []
@@ -115,7 +131,8 @@ def read_ledger(out, plugin=""):
 
 
 def _append(out, rec):
-    with open(Path(out) / ledger_name(plugin), "a", encoding="utf-8") as fh:
+    _root(out, plugin).mkdir(parents=True, exist_ok=True)
+    with open(_root(out, plugin) / ledger_name(plugin), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(rec) + "\n")
     return rec
 
@@ -352,7 +369,7 @@ def next_step(out):
         return ("Every claim is defended and no section has been written. The ledger holds the "
                 "sentences and not the document they came from.",
                 "scprofile paper --out {out} --write section.md")
-    if not (Path(out) / "report" / page_name(plugin)).is_file():
+    if not (_report_dir(out, plugin) / page_name(plugin)).is_file():
         return ("The section is written and every claim defended. Render it into the run.",
                 "scprofile paper --out {out} --render")
     withdrawn = [c for c, st, _n, _t in rows if st == WITHDRAWN]
@@ -384,15 +401,16 @@ def write_draft(out, text, *, author="", plugin=""):
     if len(body.split()) < MIN_CLAIM_WORDS * 4:
         raise Refused(f"a result section of {len(body.split())} words is a note, not a section. "
                       f"Write what you would submit.")
-    (root / draft_name(plugin)).write_text(body, encoding="utf-8")
+    _root(out, plugin).mkdir(parents=True, exist_ok=True)
+    (_root(out, plugin) / draft_name(plugin)).write_text(body, encoding="utf-8")
     _append(out, {"kind": "draft", "words": len(body.split()), "author": str(author or ""),
                   "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
-    return root / draft_name(plugin)
+    return _root(out, plugin) / draft_name(plugin)
 
 
 def read_draft(out, plugin=""):
     """The authored section, or "" when none has been written."""
-    p = Path(out) / draft_name(plugin)
+    p = _root(out, plugin) / draft_name(plugin)
     return p.read_text(encoding="utf-8") if p.is_file() else ""
 
 
@@ -460,7 +478,7 @@ def render(out, *, run_key="", title="Result section", plugin=""):
 
     out_html.append("<h2>What this test does not cover</h2><div class='warn'><ul>"
                     + "".join(f"<li>{_e(x)}</li>" for x in NARROW) + "</ul></div>")
-    d = root / "report"
+    d = _report_dir(out, plugin)
     d.mkdir(parents=True, exist_ok=True)
     path = d / page_name(plugin)
     path.write_text(_page(f"{title} — scProfile", "".join(out_html)), encoding="utf-8")

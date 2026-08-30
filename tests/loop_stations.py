@@ -268,10 +268,10 @@ def carried_findings(runs, current):
     for r in sorted(runs, key=lambda p: p.name, reverse=True):
         if r == current:
             continue
-        led = r / "FIGURE_REVIEW.jsonl"
-        if not led.is_file():
-            continue
-        for row in _lines(led):
+        leds = [r / "FIGURE_REVIEW.jsonl"] + [r / "kernels" / _p / "FIGURE_REVIEW.jsonl"
+                                              for _p in plugins_in(r)]
+        for led in [x for x in leds if x.is_file()]:
+          for row in _lines(led):
             rel, note = row.get("figure"), str(row.get("note", "")).strip()
             if rel and note and rel not in out:
                 out[rel] = (note, r.name)
@@ -311,7 +311,12 @@ def station_eye(runs):
             fs = sorted(fs, key=lambda p: (r / p).stat().st_size)
             want.add(fs[0])
             want.add(fs[-1])
-        done = {row["figure"] for row in _lines(r / RV.LEDGER)}
+        # THE LEDGERS ARE PER PLUGIN NOW, so the scan set is checked against their union. A
+        # figure path inside a ledger is relative to the RUN root wherever it was written, which
+        # is what makes the union meaningful without rewriting anything.
+        done = set()
+        for _led in [r / RV.LEDGER] + [r / "kernels" / _p / RV.LEDGER for _p in plugins_in(r)]:
+            done |= {row["figure"] for row in _lines(_led)}
         todo = sorted(want - done)
         # KINDS AND INSTANCES ARE DIFFERENT NUMBERS AND BOTH BELONG ON THE LINE. The first
         # version reported only the named instances, so three real looks at a kind's MIDDLE
@@ -392,15 +397,40 @@ def station_paper(runs):
 REQUIRED_OUTPUTS = (
     ("report.json", "the machine-readable record every station reads"),
     ("report/index.html", "the assembled report"),
+)
+
+#: AND PER PLUGIN, because a run mounts several methods and each owes its own result. These are
+#: resolved under `kernels/<plugin>/` - see `kernels.plugin_out`.
+REQUIRED_PER_PLUGIN = (
     ("FIGURE_REVIEW.jsonl", "the ledger of what was actually looked at"),
-    ("PAPER.md", "the manuscript section, written from the figures"),
-    ("report/paper.html", "the manuscript and its figure panel, rendered"),
+    ("PAPER.{plugin}.md", "this plugin's result section, written from its figures"),
+    ("report/{plugin}_paper.html", "its manuscript and figure panel, rendered"),
 )
 
 
+def plugins_in(run):
+    """The plugins that actually produced something in this run."""
+    d = run / "kernels"
+    if not d.is_dir():
+        return []
+    return sorted(p.name for p in d.iterdir()
+                  if p.is_dir() and any(p.rglob("*.png")))
+
+
 def missing_outputs(run):
-    """Which required deliverables this run does not have. Empty means it is complete."""
-    return [(p, why) for p, why in REQUIRED_OUTPUTS if not (run / p).exists()]
+    """Which required deliverables this run does not have. Empty means it is complete.
+
+    Run-level first, then EVERY PLUGIN'S own three. A run whose report assembled but whose
+    cellchat section was never written is not finished, and saying so per plugin is the only way
+    a reader learns WHICH result is missing rather than that something is.
+    """
+    gone = [(p, why) for p, why in REQUIRED_OUTPUTS if not (run / p).exists()]
+    for plug in plugins_in(run):
+        for tmpl, why in REQUIRED_PER_PLUGIN:
+            rel = f"kernels/{plug}/" + tmpl.format(plugin=plug)
+            if not (run / rel).exists():
+                gone.append((rel, why))
+    return gone
 
 
 def station_outputs(runs):

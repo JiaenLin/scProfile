@@ -40,6 +40,20 @@ from pathlib import Path
 #: Where the ledger lives, relative to a run directory.
 LEDGER = "FIGURE_REVIEW.jsonl"
 
+
+def ledger_path(out, plugin=""):
+    """Where the looks are recorded: the plugin's own directory, or the run root.
+
+    ONE LEDGER PER PLUGIN, for the same reason there is one manuscript per plugin - the looks
+    belong with the figures they were taken on. The FIGURE PATHS INSIDE stay relative to the RUN
+    root so a path means the same thing wherever it is read, and so the loop can union the
+    ledgers of several plugins without rewriting anything.
+    """
+    from pathlib import Path as _P
+    from . import kernels as _K
+    root = _K.plugin_out(out, plugin) if plugin else _P(out)
+    return root / LEDGER
+
 #: A note below this many words is not a look, it is a keystroke.
 MIN_NOTE_WORDS = 4
 
@@ -71,9 +85,9 @@ def figures(out):
                   and "report" not in p.relative_to(root).parts[:1])
 
 
-def read_ledger(out):
+def read_ledger(out, plugin=""):
     """{relpath: latest entry}. Append-only on disk; last entry per figure wins."""
-    f = Path(out) / LEDGER
+    f = ledger_path(out, plugin)
     seen = {}
     if not f.exists():
         return seen
@@ -94,7 +108,7 @@ class Refused(Exception):
     """A note that does not evidence a look. Raised, never returned - see the module docstring."""
 
 
-def record(out, figure, note, *, reviewer=""):
+def record(out, figure, note, *, reviewer="", plugin=""):
     """Append one review. REFUSES a note that cannot have come from looking.
 
     The refusals are deliberately few and mechanical: emptiness, brevity, and being identical
@@ -118,14 +132,15 @@ def record(out, figure, note, *, reviewer=""):
     rec = {"figure": rel, "sha256": digest(path), "note": text,
            "reviewer": str(reviewer or ""), "at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                                                 time.gmtime())}
-    with open(root / LEDGER, "a", encoding="utf-8") as fh:
+    ledger_path(root, plugin).parent.mkdir(parents=True, exist_ok=True)
+    with open(ledger_path(root, plugin), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(rec) + "\n")
     return rec
 
 
-def status(out):
+def status(out, plugin=""):
     """[(relpath, state, why)] for every figure, sorted. `state` is one of the three above."""
-    led = read_ledger(out)
+    led = read_ledger(out, plugin)
     rows = []
     for rel in figures(out):
         rec = led.get(rel)
@@ -142,14 +157,14 @@ def status(out):
     return rows
 
 
-def outstanding(out):
+def outstanding(out, plugin=""):
     """Figures needing a look: never reviewed, or redrawn since."""
-    return [(r, st) for r, st, _w in status(out) if st != REVIEWED]
+    return [(r, st) for r, st, _w in status(out, plugin) if st != REVIEWED]
 
 
-def summarise(out):
+def summarise(out, plugin=""):
     """{state: count}."""
     c = {}
-    for _r, st, _w in status(out):
+    for _r, st, _w in status(out, plugin):
         c[st] = c.get(st, 0) + 1
     return c

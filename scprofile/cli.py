@@ -2696,15 +2696,15 @@ def _review(a):
             print("scprofile: --figure and --note go together", file=sys.stderr)
             return REFUSE
         try:
-            rec = RV.record(out, a.figure, a.note, reviewer=a.reviewer)
+            rec = RV.record(out, a.figure, a.note, reviewer=a.reviewer, plugin=a.plugin)
         except RV.Refused as e:
             print(f"scprofile: REFUSED - {e}", file=sys.stderr)
             return REFUSE
         print(f"recorded: {rec['figure']}  ({rec['sha256'][:12]})")
         return 0
 
-    rows = RV.status(out)
-    counts = RV.summarise(out)
+    rows = RV.status(out, a.plugin)
+    counts = RV.summarise(out, a.plugin)
     if not rows:
         print(f"{out}\n  no figures here yet.")
         return 0
@@ -3078,6 +3078,9 @@ def main(argv=None):
     rv = sub.add_parser("review",
                         help="[you] which figures have been LOOKED AT, and which have not")
     rv.add_argument("--out", required=True, type=Path, help="a run directory")
+    rv.add_argument("--plugin", default="",
+                    help="record against THIS PLUGIN'S ledger, kernels/<plugin>/"
+                         "FIGURE_REVIEW.jsonl. Figure paths stay relative to the run root")
     rv.add_argument("--figure", help="record a look at this figure (path relative to --out)")
     rv.add_argument("--note", help="what you saw. Refused if empty, too short, or copied "
                                    "from another figure's note")

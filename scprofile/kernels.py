@@ -22,6 +22,46 @@ from pathlib import Path
 #: Where kernels live, relative to the package. Overridable so a site can add its own.
 KERNEL_DIRNAME = "kernels"
 
+
+# ------------------------------------------------------------------ where a plugin's output goes
+#
+# ONE PLUGIN, ONE DIRECTORY, WITH ITS OWN LAYERS. A run mounts several methods and they answer
+# different questions on different evidence. Pooling their documents put four plugins' report
+# pages, one manuscript covering all of them and one review ledger for the whole run at the top
+# of the run directory, so nothing could be handed to a reader as "the cell-cell communication
+# result" without also handing them the rest.
+#
+#     kernels/<plugin>/
+#         figures/            cohort-level panels
+#         tables/             cohort-level tables
+#         report/             <plugin>.html, _by_arm, _by_sample, _paper
+#         PAPER.md            this plugin's result section
+#         PAPER_CLAIMS.jsonl  its claims and their verdicts
+#         FIGURE_REVIEW.jsonl what was looked at, and what was seen
+#         <unit>/             per-unit figures, tables, in.json, out.json, log
+#
+# The run root keeps what is genuinely about the RUN and not about one method: `report/index.html`
+# as the entry point, `report.json`, the merged object, and the seal.
+#
+# Figure paths inside a ledger stay relative to the RUN root, not to the plugin directory, so a
+# path means the same thing wherever it is read from and the loop can union the ledgers.
+
+
+def plugin_out(out, plugin):
+    """`<run>/kernels/<plugin>` - everything one plugin produced."""
+    return Path(out) / KERNEL_DIRNAME / str(plugin)
+
+
+def plugin_report(out, plugin):
+    """`<run>/kernels/<plugin>/report` - that plugin's own documents."""
+    return plugin_out(out, plugin) / "report"
+
+
+def run_report(out):
+    """`<run>/report` - the index, and anything about the run rather than one method."""
+    return Path(out) / "report"
+
+
 #: The shared entrypoint, as a PATH rather than a module name. A one-file plugin is run by its own
 #: interpreter, in its own pinned environment, where the host is not installed - so it cannot be
 #: reached as `-m scprofile._entry`. `_entry.py` puts the host on sys.path itself.
