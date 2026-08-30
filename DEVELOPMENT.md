@@ -47,6 +47,13 @@ do next. Four rules, each paid for:
   Collect on one build, fix in one commit, rebuild, re-scan.
 - **Every finding becomes a change in this repository, or it did not happen.** A defect seen and
   not fixed is a defect found twice.
+- **The gate is `python tests/run_all.py`, and nothing else.** It runs one subprocess per suite
+  and the exit code decides, which is what `setup/dev_cycle.pbs` step 0 has always done. An
+  ad-hoc runner that IMPORTS the suites instead reported green for a whole session: several
+  suites call `sys.exit()` at module scope, `SystemExit` inherits from `BaseException` so it
+  escaped the runner's `except`, and the runner terminated WITH CODE 0 - hiding every file
+  sorted after it and two genuine failures. **Verify a gate by making it fail**: drop a test that
+  asserts False and confirm non-zero, which is one command and would have caught this on day one.
 - **Fix the mechanism that exists; do not add one beside it.** Every rule in
   `docs/FIGURE_STANDARD.md` names the function that enforces it, and each was a change to
   something already there - the contrast population set, the sentinel mask, the paper writer, the

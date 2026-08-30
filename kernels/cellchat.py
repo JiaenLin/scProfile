@@ -292,6 +292,31 @@ PLUGIN = {
     #
     # `shows` is the whole of the reporter's knowledge. It knows no id here and never will.
     "report": {
+        # WHAT THIS PLUGIN CAN SUPPLY, PER PIECE OF EVIDENCE A COMPARISON NEEDS. The needs come
+        # from `evidence.NEEDS` and are about the biology, not about CellChat; this is CellChat's
+        # own answer to each, best route first.
+        #
+        # NATIVE IS FIRST ON PRINCIPLE. The wrapped tool's function is the statistic and the
+        # encoding its authors chose; a reimplementation is a second implementation to keep in
+        # step, and when the two disagree nothing on the page says which was read. Measured in
+        # this plugin's own environment, CellChat 2.2.0.9001: 19 of 20 functions named here
+        # resolve; only `netVisual_river` does not, and no need routes to it.
+        #
+        # `abundance_or_intensity` is deliberately ABSENT. CellChat cannot separate them - its
+        # probability rises with the number of cells expressing a ligand, so a population that
+        # doubles in abundance signals more with no per-cell change. Declaring a route would
+        # claim an answer the method does not have; leaving it unrouted makes the gap appear in
+        # every specification that asks for it, which is what a paper has to state.
+        "provides_evidence": {
+            "who_changed": ["native:netVisual_diffInteraction", "host:diff_matrix"],
+            "what_carries_it": ["native:rankNet", "host:flow_compare"],
+            "direction": ["native:netAnalysis_signalingRole_scatter", "host:role_shift"],
+            "presence_or_magnitude": ["host:unit_presence"],
+            "specificity": ["native:netVisual_bubble", "host:matrix"],
+            "consistency": ["host:unit_presence"],
+            "what_was_excluded": ["host:unit_presence"],
+        },
+
         # WHICH OF THIS PLUGIN'S PER-UNIT TABLES CARRIES A NETWORK, so the host can compare
         # ARMS without knowing anything about CellChat. The host pools the units belonging to
         # each arm and draws every contrast the design supports; declaring these columns is the

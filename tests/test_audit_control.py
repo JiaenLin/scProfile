@@ -73,16 +73,14 @@ def sound_heatmap_with_colourbar():
 def sound_rotated_tick_labels():
     """The case the control was missing, and the audit was wrong about.
 
-    Long population names on a heatmap axis, rotated 45 degrees - which is WHY they are rotated.
+    Long category names on a heatmap axis, rotated 45 degrees - which is WHY they are rotated.
     Their axis-aligned boxes overlap by construction and their rotated rectangles graze at the
     corners, and the text is perfectly legible: eighty-four panels were read one at a time and
     not one rotated tick label was reported as unreadable. The audit reported FOURTEEN on a
     single panel the moment decorations entered the check.
     """
     fig, ax = plt.subplots(figsize=(4, 3.6))
-    names = ["Adipocyte", "Working cardiomyocyte", "Endocardial", "Lymphatic endothelial",
-             "Vascular endothelial", "Lymphoid", "Macrophage", "Mesothelial", "Fibroblast",
-             "Pericyte", "Smooth muscle"]
+    names = [f"population with a fairly long name {i}" for i in range(11)]
     ax.imshow(np.random.RandomState(0).rand(len(names), len(names)))
     ax.set_xticks(range(len(names)))
     ax.set_xticklabels(names, rotation=45, ha="right", fontsize=5)

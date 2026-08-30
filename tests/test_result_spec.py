@@ -39,7 +39,7 @@ def _factorial(**levels):
 
 def test_a_two_by_two_gives_two_marginals_four_simples_and_one_interaction():
     """The seven questions a 2x2 supports, counted from the rules rather than listed."""
-    cs = comparisons(_factorial(age=["aged", "young"], diet=["HFD", "chow"]))
+    cs = comparisons(_factorial(f1=["lo", "hi"], f2=["p", "q"]))
     kinds = [c["kind"] for c in cs]
     assert kinds.count("marginal") == 2, kinds
     assert kinds.count("simple") == 4, kinds
@@ -47,7 +47,7 @@ def test_a_two_by_two_gives_two_marginals_four_simples_and_one_interaction():
 
 
 def test_a_one_factor_design_has_no_simple_effects_and_no_interaction():
-    cs = comparisons(_factorial(genotype=["wt", "ko"]))
+    cs = comparisons(_factorial(f1=["lo", "hi"]))
     kinds = [c["kind"] for c in cs]
     assert kinds == ["marginal"], kinds
 
@@ -62,7 +62,7 @@ def test_three_factors_follow_the_same_rules():
 
 
 def test_every_simple_effect_names_the_stratum_it_is_within():
-    cs = comparisons(_factorial(age=["aged", "young"], diet=["HFD", "chow"]))
+    cs = comparisons(_factorial(f1=["lo", "hi"], f2=["p", "q"]))
     for c in cs:
         if c["kind"] == "simple":
             assert c["stratum"], "a simple effect with no stratum is a marginal effect"
@@ -71,34 +71,34 @@ def test_every_simple_effect_names_the_stratum_it_is_within():
 
 def test_an_unbalanced_cell_is_not_reported_as_an_interaction():
     """A missing cell is a gap in the design, not an interaction to draw."""
-    d = _factorial(age=["aged", "young"], diet=["HFD", "chow"])
+    d = _factorial(f1=["lo", "hi"], f2=["p", "q"])
     for s, row in list(d.items()):
-        if row["age"] == "young" and row["diet"] == "chow":
+        if row["f1"] == "hi" and row["f2"] == "q":
             del d[s]
     kinds = [c["kind"] for c in comparisons(d)]
     assert "interaction" not in kinds, "an interaction was offered over an empty cell"
 
 
 def test_an_aliased_factor_is_named_as_unanswerable():
-    """Age and chemistry splitting the samples identically is one question drawn twice."""
-    d = _factorial(age=["aged", "young"], diet=["HFD", "chow"])
+    """Two factors splitting the samples identically are one question drawn twice."""
+    d = _factorial(f1=["lo", "hi"], f2=["p", "q"])
     for s, row in d.items():
-        row["chemistry"] = "V2" if row["age"] == "aged" else "V3"
+        row["batch"] = "b1" if row["f1"] == "lo" else "b2"
     cs = comparisons(d)
-    age = [c for c in cs if c["kind"] == "marginal" and c["factor"] == "age"]
-    assert age and "chemistry" in age[0]["aliased_with"], age
+    f1 = [c for c in cs if c["kind"] == "marginal" and c["factor"] == "f1"]
+    assert f1 and "batch" in f1[0]["aliased_with"], f1
 
 
 def test_the_spec_needs_no_run_directory():
     """Not one path is read. The specification exists before anything is scheduled."""
-    secs = result_spec(_factorial(age=["aged", "young"], diet=["HFD", "chow"]), _plugin())
+    secs = result_spec(_factorial(f1=["lo", "hi"], f2=["p", "q"]), _plugin())
     assert len(secs) == 8, [s["kind"] for s in secs]
     assert secs[0]["kind"] == "cohort", "the object is described before it is compared"
     assert all(s["panels"] for s in secs), "a question with no panel proposed is not specified"
 
 
 def test_every_proposed_panel_says_what_it_does_not_establish():
-    secs = result_spec(_factorial(age=["aged", "young"], diet=["HFD", "chow"]), _plugin())
+    secs = result_spec(_factorial(f1=["lo", "hi"], f2=["p", "q"]), _plugin())
     for s in secs:
         for p in s["panels"]:
             assert p["establishes"] and p["does_not_establish"], (s["kind"], p["kind"])
@@ -106,7 +106,7 @@ def test_every_proposed_panel_says_what_it_does_not_establish():
 
 def test_a_plugin_declaring_no_network_answers_no_contrast_and_says_why():
     """The plugin's own declaration decides what it can support - not a run's output."""
-    secs = result_spec(_factorial(age=["aged", "young"], diet=["HFD", "chow"]),
+    secs = result_spec(_factorial(f1=["lo", "hi"], f2=["p", "q"]),
                        {"report": {}})
     contrast = [s for s in secs if s["kind"] in ("marginal", "simple", "interaction")]
     assert contrast, "the design still poses the questions"
@@ -117,7 +117,7 @@ def test_a_plugin_declaring_no_network_answers_no_contrast_and_says_why():
 
 
 def test_the_text_form_carries_the_questions_and_the_caveats():
-    txt = spec_text(result_spec(_factorial(age=["aged", "young"], diet=["HFD", "chow"]),
+    txt = spec_text(result_spec(_factorial(f1=["lo", "hi"], f2=["p", "q"]),
                                 _plugin()))
     assert "does NOT establish" in txt
     assert "Q:" in txt

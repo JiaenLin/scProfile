@@ -652,15 +652,21 @@ def result_spec(design, plugin_spec, *, factors=None, technical=None):
                         "available": ok, "unavailable_because": why})
         return out
 
+    from . import evidence as _E
+
     sections = [{"kind": "cohort", "factor": None, "other": None, "stratum": {},
                  "arms": {}, "question": "What does this object contain, before any comparison?",
-                 "panels": _panels_for("cohort")}]
+                 "panels": _panels_for("cohort"),
+                 "evidence": _E.plan_for("cohort", spec)}]
     for c in _comparisons(design, factors=factors, technical=technical):
-        sections.append({**c, "panels": _panels_for(c["kind"])})
+        sections.append({**c, "panels": _panels_for(c["kind"]),
+                         "evidence": _E.plan_for(c["kind"], spec)})
     return sections
 
 
 def spec_text(sections):
+    from . import panels as _P
+
     """The specification as text, for a plan report or a writing brief."""
     out = ["THE RESULT THIS DESIGN AND THIS PLUGIN SPECIFY",
            "  Sections are the design's own questions. Nothing here has been run.", ""]
@@ -679,11 +685,26 @@ def spec_text(sections):
         if s.get("aliased_with"):
             out.append(f"     ALIASED with {', '.join(s['aliased_with'])} - this question cannot "
                        f"be answered as asked")
-        for p in s["panels"]:
-            mark = "  " if p["available"] else "  (unavailable) "
-            out.append(f"     -{mark}{p['kind']}: {p['establishes']}")
-            out.append(f"          does NOT establish: {p['does_not_establish']}")
-            if not p["available"]:
-                out.append(f"          {p['unavailable_because']}")
+        ev = s.get("evidence") or []
+        if ev:
+            met = [e for e in ev if e["route"] != "unresolved"]
+            out.append(f"     WHAT WOULD ANSWER THIS ({len(met)} of {len(ev)} available):")
+            for e in ev:
+                if e["route"] == "native":
+                    how = f"the tool's own {e['provider']}"
+                elif e["route"] == "host":
+                    how = f"host panel `{e['provider']}`"
+                else:
+                    how = "NOT AVAILABLE - this dataset cannot answer this part"
+                out.append(f"       . {e['what']}")
+                out.append(f"           why: {e['why']}")
+                out.append(f"           by:  {how}")
+                # AND WHAT THAT ROUTE DOES NOT ESTABLISH, beside the route that serves the need.
+                # A need can be met and still be over-read; the registry already records the
+                # limit of every host kind, and dropping it here was how the caveat fell out of
+                # the specification when the evidence design was folded in.
+                _k = _P.BY_ID.get(e["provider"]) if e["route"] == "host" else None
+                if _k is not None:
+                    out.append(f"           does NOT establish: {_k.does_not_establish}")
         out.append("")
     return "\n".join(out)
