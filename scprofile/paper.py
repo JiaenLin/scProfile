@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+import os as _os
 from pathlib import Path
 
 #: Where the ledger lives, relative to a run directory. Beside the run, so it travels with the
@@ -425,7 +426,7 @@ def render(out, *, run_key="", title="Result section", plugin=""):
     """
     root = Path(out)
     body = read_draft(out, plugin)
-    rows = status(out)
+    rows = status(out, plugin)
     if not body and not rows:
         return None
     from .report import _page, _e                                     # noqa: PLC0415
@@ -467,12 +468,14 @@ def render(out, *, run_key="", title="Result section", plugin=""):
         if figs:
             out_html.append("<h2>The figures this section is read off</h2>")
             for f in figs:
+                # RELATIVE TO WHERE THE PAGE ACTUALLY IS, computed rather than assumed. The
+                # href was hard-coded as "../" + path, which was right while every page sat in
+                # `<run>/report/`. A plugin's page now sits in `<run>/kernels/<plugin>/report/`,
+                # three levels down, and every `<img>` pointed at nothing - the section rendered
+                # with its claims, its verdicts and NO FIGURES, which is the one thing a figure
+                # panel has to have.
                 rel = Path(f)
-                try:
-                    href = str(rel.relative_to("report")) if str(rel).startswith("report/") \
-                        else "../" + str(rel)
-                except Exception:                                     # noqa: BLE001
-                    href = "../" + str(rel)
+                href = _os.path.relpath(root / rel, _report_dir(out, plugin))
                 out_html.append(f'<figure><img src="{_e(href)}" alt="{_e(rel.name)}">'
                                 f'<figcaption class="sub">{_e(rel.name)}</figcaption></figure>')
 

@@ -133,3 +133,35 @@ def test_a_plugin_section_never_touches_the_run_root():
 
     rows = P.status(d, "cellchat")
     assert rows and rows[0][1] != P.UNREVIEWED, "the review did not attach to the claim"
+
+
+def test_the_rendered_page_actually_shows_its_figures():
+    """A figure panel with no figures is the one thing it must not be.
+
+    The href was hard-coded as "../" + path, correct while every page sat in `<run>/report/`. A
+    plugin's page sits three levels down, so every `<img>` pointed at nothing and the section
+    rendered with its claims, its verdicts and no figures at all - and the page still looked
+    plausible, because the prose and the claims table were there.
+    """
+    import os
+    import re
+    import tempfile
+    from pathlib import Path
+
+    from scprofile import paper as P
+
+    d = Path(tempfile.mkdtemp())
+    figs = d / "kernels" / "cellchat" / "figures"
+    figs.mkdir(parents=True)
+    (figs / "F1.png").write_bytes(b"x" * 100)
+    rec = P.claim(d, "A claim long enough to be checkable about the figure it cites here.",
+                  ["kernels/cellchat/figures/F1.png"], plugin="cellchat")
+    P.review(d, rec["id"], "standing", "a reviewer put it and it held", plugin="cellchat")
+    P.write_draft(d, " ".join(["w"] * 400), plugin="cellchat")
+    page = P.render(d, plugin="cellchat")
+
+    srcs = re.findall(r'<img src="([^"]+)"', page.read_text())
+    assert srcs, "the page cites a figure and embeds none"
+    for s in srcs:
+        target = os.path.normpath(os.path.join(page.parent, s))
+        assert os.path.isfile(target), f"<img src={s!r}> resolves to nothing from {page.parent}"
