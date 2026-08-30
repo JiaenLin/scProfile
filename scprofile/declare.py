@@ -159,14 +159,24 @@ def report_figures(spec) -> list:
 #: `report_get`, which REFUSES a key that is not listed here, and the guard scans the whole
 #: package for those calls. A new key cannot be consumed before it is declared, and a declared
 #: key that nothing consumes is reported as dead.
-REPORT_KEYS = ("figures", "reads_with", "unit_metrics", "unit_network")
+#: `provides_evidence` and `comparison_stats` are read by the writing layer rather than by
+#: the reporter, and were unregistered - so the checker warned about them on every run as
+#: "a note to a human that reads as a setting", while the composer was in fact reading
+#: both. A key that IS read must be declared, or the warning trains a reader to ignore
+#: exactly the message that would matter for a key that is not.
+REPORT_KEYS = ("figures", "reads_with", "unit_metrics", "unit_network",
+               "provides_evidence", "comparison_stats")
 
 #: THE COLUMNS A `unit_network` NAMES. `table`, `source`, `target` and `weight` are required and
 #: are the network itself; `group` and `member` are optional and each earns further panels -
 #: `group` the flow ranking and the role heatmap, `group` with `member` the decomposition. What a
 #: plugin declares is what it gets, which is why an unrecognised key here is an ERROR and not a
 #: warning: a misspelt column name removes panels in silence.
-UNIT_NETWORK_KEYS = ("table", "source", "target", "weight", "group", "member", "weight_scale")
+UNIT_NETWORK_KEYS = ("table", "source", "target", "weight", "group", "member",
+                     "weight_scale",
+                     # what the plugin CALLS its quantity, so the host can write about
+                     # it without knowing what it is. Optional; "weight" without it.
+                     "weight_name")
 
 #: What `weight_scale` may say. `per_object` means the weight was normalised within each unit -
 #: a communication probability computed over the cells present is the usual case - so widths

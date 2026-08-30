@@ -705,6 +705,16 @@ def ensure_section(out, *, plugin="", spec=None, design=None, run_key=""):
         return None
     _root(out, plugin).mkdir(parents=True, exist_ok=True)
     existing.write_text(text, encoding="utf-8")
+    # AND THE CLAIMS, BOUND TO FIGURES. A section renders with the figures its CLAIMS cite, so
+    # composing prose alone produced a document with no pictures beside the panel that has them
+    # all. Each composed claim cites the plates the panel places for that contrast, chosen by the
+    # plugin's own declared routes, so the two documents show the same figures by construction.
+    if not read_ledger(out, plugin):
+        for sentence, cites in _C.claims(out, plugin, spec=spec, design=design):
+            try:
+                claim(out, sentence, cites, author="composed", plugin=plugin)
+            except Refused:
+                continue
     return existing
 
 

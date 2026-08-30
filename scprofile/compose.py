@@ -1,5 +1,12 @@
 """Compose the result section FROM THE RUN, so every run ships one.
 
+THE HOST DOES NOT KNOW WHAT THE QUANTITY IS CALLED. The first version of this
+module said "total interaction strength" and "cell-cell communication" - one
+wrapped tool's vocabulary, written into the host, where it would have appeared in
+the composed section of every plugin including ones that measure something else
+entirely. A plugin names its own quantity through `unit_network.weight_name`;
+without one the host says "weight", which is true of any of them.
+
 THE PANEL WAS MADE A MECHANISM AND THE WRITING WAS NOT. Figures and the panel are produced by
 the run; the section was authored by hand, which means a fresh checkout and a fresh run produce
 no section at all, and the numbers in one came from a person reading tables and typing. That is
@@ -132,6 +139,17 @@ def _lead_phrase(lead):
     return ", ".join(f"**{n}**" + (f" ({_p(v)})" if v is not None else "") for n, v in lead)
 
 
+def _weight_name(spec):
+    """What the plugin calls the quantity it measures. `weight` when it does not say.
+
+    A HOST THAT NAMES THE QUANTITY IS A HOST THAT KNOWS ONE TOOL. This is the plugin's word,
+    read from its own declaration, so the same composer serves a plugin measuring something with
+    no relation to the one it was written beside.
+    """
+    n = ((spec or {}).get("report") or {}).get("unit_network") or {}
+    return str(n.get("weight_name") or "weight")
+
+
 def section(run, plugin, spec=None, design=None, run_key=""):
     """The result section, as Markdown, composed from this run's tables.
 
@@ -152,7 +170,8 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         for a in (c.get("aliased_with") or []):
             alias.setdefault(str(c.get("factor")), set()).add(str(a))
 
-    L = [f"# Cell–cell communication across the design",
+    W = _weight_name(spec)
+    L = [f"# What this run measured across the design",
          "",
          f"Composed from run `{run_key or Path(run).name}`. Every number below is read from a "
          f"table in that run and the table is named where it is used; every difference is "
@@ -169,7 +188,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         L += [f"## {quest.get(lab) or lab}", ""]
         if d["ratio"]:
             L += [f"Measured against **{d['reference']}**, the **{d['against']}** arm carries "
-                  f"**{_n(d['ratio'])}x** the total interaction strength "
+                  f"**{_n(d['ratio'])}x** the total {W} "
                   f"({_n(d['total_against'])} against {_n(d['total_reference'])}), over "
                   f"{d['n_elements']} elements."]
         if d["n_tested"]:
@@ -203,3 +222,86 @@ def section(run, plugin, spec=None, design=None, run_key=""):
           "interpret: an author who wants to say what the measurements mean edits this and "
           "passes it back with `--section`, and that version replaces this one.", ""]
     return "\n".join(L)
+
+
+def claims(run, plugin, spec=None, design=None):
+    """[(sentence, [figure paths])] - the composed findings, each bound to its figures.
+
+    THE SECTION MUST CARRY THE SAME FIGURES AS THE PANEL. A section is rendered with the figures
+    its CLAIMS cite, so prose alone renders a document with no pictures - which is what composing
+    only text produced. The claims are made here, from the same measured facts as the sentences,
+    and cite the same plates the panel places for that contrast, chosen by the plugin's own
+    declared routes.
+
+    Every sentence is a statement of what was measured. None interprets, and none is written
+    where the measurement behind it is missing.
+    """
+    import json as _json
+
+    f = findings(run, plugin, spec)
+    if not f:
+        return []
+    W = _weight_name(spec)
+    routes = ((spec or {}).get("report") or {}).get("provides_evidence") or {}
+    declared = (spec or {}).get("native_plots") or {}
+    try:
+        placed = _json.loads((Path(run) / "report" / "panels.json")
+                             .read_text(encoding="utf-8")).get(plugin) or {}
+        native = placed.get("native") or []
+    except Exception:                                                     # noqa: BLE001
+        native = []
+    from . import native as _NAT
+
+    by = {}
+    for x in native:
+        fn = _NAT.function_for(declared, str(x.get("path") or ""))
+        if fn:
+            by.setdefault((str(x.get("label") or ""), fn), []).append(str(x.get("path")))
+
+    def figs_for(label, needs):
+        out = []
+        for need in needs:
+            for r in (routes.get(need) or []):
+                r = str(r)
+                if r.startswith("native:"):
+                    out += by.get((label, r.split(":", 1)[1])) or []
+        seen, uniq = set(), []
+        for x in out:
+            if x not in seen:
+                seen.add(x)
+                uniq.append(x)
+        return uniq
+
+    made = []
+    for label, d in sorted(f.items()):
+        if d["ratio"]:
+            cites = figs_for(label, ("who_changed", "what_carries_it"))
+            if cites:
+                made.append((
+                    f"In the contrast {label}, the {d['against']} arm carries "
+                    f"{_n(d['ratio'])} times the total {W} of the reference arm "
+                    f"{d['reference']}, {_n(d['total_against'])} against "
+                    f"{_n(d['total_reference'])}, over {d['n_elements']} elements.", cites))
+        if d["n_tested"] and d["leading"]:
+            cites = figs_for(label, ("what_carries_it", "specificity"))
+            if cites:
+                names = ", ".join(n for n, _v in d["leading"])
+                made.append((
+                    f"In the contrast {label}, {d['n_significant']} of {d['n_tested']} elements "
+                    f"differ significantly between the arms by the method's own between-arm "
+                    f"test, led by {names}.", cites))
+        if d["only_against"] or d["only_reference"]:
+            cites = figs_for(label, ("presence_or_magnitude", "what_carries_it"))
+            if cites:
+                made.append((
+                    f"In the contrast {label}, {len(d['only_against'])} element(s) are detected "
+                    f"in {d['against']} and not in {d['reference']}, and "
+                    f"{len(d['only_reference'])} the other way.", cites))
+        if d["n_tested"]:
+            cites = figs_for(label, ("direction",))
+            if cites:
+                made.append((
+                    f"In the contrast {label}, each population's outgoing and incoming {W} is "
+                    f"measured against the reference arm "
+                    f"{d['reference']}.", cites))
+    return made

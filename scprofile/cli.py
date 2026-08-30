@@ -1264,6 +1264,12 @@ def _run(a):
                "input_read_by_kernels": (str(readable.get("converted"))
                                          if readable.get("converted") else None),
                "object": str(op) if op else None}
+    # THE CONTROLS GO IN BEFORE report.json IS WRITTEN. They were set after it, so the file that
+    # every rebuild reads carried no controls at all - and `scprofile report` on an existing run
+    # fell back to alphabetical order and drew every contrast against the wrong reference, while
+    # the run that produced it had used the right one. Two directions for one run, depending on
+    # which command last touched it.
+    payload["controls"] = _controls_from(a)
     (out / "report.json").write_text(json.dumps(payload, indent=1, default=str), encoding="utf-8")
     # THE RUN SAYS WHAT IT THINKS OF ITS OWN OUTPUT, for whatever run comes next. Provenance
     # alone cannot tell a good result from a bad one - a unit that completed and produced
@@ -1279,9 +1285,6 @@ def _run(a):
     # whose layout section omitted the run's primary deliverable while section 3 of the same file
     # linked the reader into it, with a file count short by 1 + 1 + n_kernels. Inspecting too
     # early is the same failure as describing what was intended; it just fails the other way.
-    # THE DECLARED CONTROLS TRAVEL WITH THE RUN, so the direction of every contrast is a
-    # recorded property of it rather than a flag someone typed once.
-    payload["controls"] = _controls_from(a)
     _announce_controls(payload)
     idx = report.write_all(out, payload, prefix=getattr(a, 'prefix', None))
     print(f"      {idx}")

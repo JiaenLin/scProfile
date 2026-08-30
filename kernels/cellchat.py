@@ -406,6 +406,10 @@ PLUGIN = {
         # read fine and did nothing.
         "unit_network": {"table": "tables/ccc_edges.csv", "source": "source",
                          "target": "target", "weight": "prob", "group": "pathway_name",
+                         # WHAT THIS PLUGIN CALLS ITS QUANTITY, so the host can write about it
+                         # without knowing what the host is writing about. Without this the
+                         # composer said "weight", which is true and says nothing.
+                         "weight_name": "interaction strength",
                          # `member` is what a group DECOMPOSES INTO, and declaring it is what
                          # earns the contribution panel. The column is already in this table.
                          "member": "interaction_name"},
