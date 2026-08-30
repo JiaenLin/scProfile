@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.10.0",
+    "version": "0.10.1",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -550,15 +550,26 @@ try_write("pathway_prob", {
 })
 
 # centrality per pathway and population, CellChat's own netAnalysis_computeCentrality
+# NOT EVERY MEASURE IS A NAMED VECTOR OF THE SAME LENGTH. The first version assumed it was and
+# died on "arguments imply differing number of rows: 1, 0, 8" - a centrality slot can hold an
+# empty measure, and one empty entry took the whole table with it. Each measure is now built
+# alone and the empty ones are dropped, so a pathway missing one measure still contributes the
+# rest.
 try_write("centrality", {
   cen <- cc@netP$centr
-  do.call(rbind, lapply(names(cen), function(pw) {
+  rows <- list()
+  for (pw in names(cen)) {
     m <- cen[[pw]]
-    do.call(rbind, lapply(names(m), function(meas) {
+    for (meas in names(m)) {
       v <- m[[meas]]
-      data.frame(pathway = pw, measure = meas, population = names(v), value = as.numeric(v))
-    }))
-  }))
+      if (is.null(v) || length(v) == 0L || is.null(names(v))) next
+      rows[[length(rows) + 1L]] <- data.frame(
+        pathway = pw, measure = meas, population = names(v),
+        value = as.numeric(v), stringsAsFactors = FALSE)
+    }
+  }
+  if (length(rows) == 0L) stop("no centrality measure had a named value")
+  do.call(rbind, rows)
 })
 
 # ranked information flow, CellChat's own rankNet (return.data, nothing drawn)
@@ -568,9 +579,15 @@ try_write("rank_net", {
 })
 
 # network similarity and its embedding, CellChat's own computeNetSimilarity + netEmbedding
+# THE EMBEDDING IS TRIED THROUGH THE PYTHON UMAP THIS ENVIRONMENT ALREADY HAS, not through an
+# R package it does not. `netEmbedding(umap.method = "uwot")` failed with "there is no package
+# called uwot", and adding one would re-resolve an environment shared by seven plugins - which
+# this project has already paid for once, turning one blocked plugin into seven. `umap-learn` is
+# the reticulate route to the umap the host stack ships. If that is unavailable too the block
+# fails alone and F10 remains the declared reimplementation it already is.
 try_write("net_embedding", {
   cc2 <- computeNetSimilarity(cc, type = "functional")
-  cc2 <- netEmbedding(cc2, type = "functional", umap.method = "uwot")
+  cc2 <- netEmbedding(cc2, type = "functional", umap.method = "umap-learn")
   e <- cc2@netP$similarity$functional$dr[["single"]]
   data.frame(pathway = rownames(e), dim1 = e[, 1], dim2 = e[, 2])
 })
