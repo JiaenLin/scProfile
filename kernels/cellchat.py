@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.17.1",
+    "version": "0.18.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -377,6 +377,15 @@ PLUGIN = {
         # doubles in abundance signals more with no per-cell change. Declaring a route would
         # claim an answer the method does not have; leaving it unrouted makes the gap appear in
         # every specification that asks for it, which is what a paper has to state.
+        # WHERE THIS PLUGIN'S OWN BETWEEN-ARM STATISTIC LIVES. The host does not know what test a
+        # wrapped tool runs, where it writes it, or what its columns are called, and must not
+        # guess - a composed result that quoted a p-value the host had inferred would be the
+        # invented statistic this project forbids. A plugin that ships no between-arm test omits
+        # this and its results are reported without significance rather than with a substitute.
+        "comparison_stats": {"table": "tables/rank_net_comparison.csv",
+                             "element": "name", "pvalue": "pvalues",
+                             "test": "unpaired Wilcoxon between the two arms, via rankNet"},
+
         "provides_evidence": {
             "who_changed": ["native:netVisual_diffInteraction", "host:diff_matrix"],
             "what_carries_it": ["native:rankNet", "host:flow_compare"],

@@ -1834,6 +1834,17 @@ def write_index(out_dir, payload):
     try:
         from . import paper as _PA
         for _pl in sorted(payload.get("kernels") or {}):
+            # A SECTION FOR EVERY RUN, composed from this run's tables where none was authored.
+            # An authored one is never overwritten.
+            _sec = _PA.ensure_section(
+                out_dir, plugin=_pl, design=(payload or {}).get("design") or {},
+                spec=((payload.get("kernels") or {}).get(_pl) or {}).get("spec"),
+                run_key=Path(out_dir).name)
+            if _sec:
+                print(f"      {_sec}  (composed from this run's tables)")
+            _pap = _PA.render(out_dir, plugin=_pl, run_key=Path(out_dir).name)
+            if _pap:
+                print(f"      {_pap}")
             _pan = _PA.panel(out_dir, plugin=_pl, run_key=Path(out_dir).name)
             if _pan:
                 print(f"      {_pan}")

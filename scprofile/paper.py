@@ -683,6 +683,31 @@ NARROW = (
 )
 
 
+def ensure_section(out, *, plugin="", spec=None, design=None, run_key=""):
+    """Compose a section from this run's tables if none has been authored. Returns the path.
+
+    EVERY RUN SHIPS A SECTION. The panel was made a mechanism and the writing was not, so a fresh
+    checkout and a fresh run produced figures and no document - and the numbers in the documents
+    that did exist had been read off tables by a person and typed, which is the failure this
+    project names elsewhere applied to the manuscript itself.
+
+    An AUTHORED section always wins and is never overwritten: this only fills the gap. What the
+    run guarantees is that a section exists, that every number in it is traceable to a table in
+    the same run, and that it cannot silently disagree with the panel beside it.
+    """
+    from . import compose as _C
+
+    existing = _root(out, plugin) / draft_name(plugin)
+    if existing.is_file() and existing.read_text(encoding="utf-8").strip():
+        return None
+    text = _C.section(out, plugin, spec=spec, design=design, run_key=run_key)
+    if not text.strip():
+        return None
+    _root(out, plugin).mkdir(parents=True, exist_ok=True)
+    existing.write_text(text, encoding="utf-8")
+    return existing
+
+
 def panel_name(plugin=""):
     """`report/panel.html`, or `report/<plugin>_panel.html`. Beside the section, as a sibling."""
     return "panel.html" if not plugin else f"{plugin}_panel.html"
