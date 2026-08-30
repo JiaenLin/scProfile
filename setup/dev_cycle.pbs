@@ -18,6 +18,18 @@
 # accepted on the qsub line and silently dropped - a run asked for a forced label column and
 # profiled the default one, with nothing in its output saying so.
 #
+# `FORCE=1` is passed to `install` as `--force`, which REBUILDS an environment that already
+# resolves. One environment is shared by several plugins, so a rebuild is not a local act:
+# forcing one has already cost seven plugins their environment for four builds. Use it when
+# a build is known broken, not to be sure.
+#
+# `REUSE=<dir of run directories>` is passed to `run` as `--reuse-from`, and `REUSE_GRADE` as
+# `--reuse-min-grade`. WITHOUT THIS NO RUN SUBMITTED BY THIS SCRIPT COULD EVER ADOPT ANYTHING:
+# the host has had `--reuse-from` throughout and this file never passed it, so every run
+# recomputed every instance while the adopt machinery sat unreachable behind a flag nobody sent.
+# It goes on `run` only - `plan` does not adopt, and a flag that reaches one and not the other is
+# how a run came to profile a different label column from the one it planned.
+#
 # `ALL=1` runs every discovered plugin instead of `KERNELS`. `SEARCH=<dir>` is handed to both
 # `plan` and `run` as `--search`, for inputs that are not in the object - the two must be given
 # the same leads or the plan can name a directory the run never looks in.
@@ -345,6 +357,7 @@ run)
       ${DES:+--design "$DES"} ${ORGANISM:+--organism "$ORGANISM"} \
       ${ASSAY:+--assay "$ASSAY"} ${LABEL:+--label-key "$LABEL"} "${SEL[@]}" \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} ${SEARCH:+--search "$SEARCH"} \
+      ${REUSE:+--reuse-from "$REUSE"} ${REUSE_GRADE:+--reuse-min-grade "$REUSE_GRADE"} \
       --cores "${CORES:-${NCPUS:-4}}" --timeout "${TIMEOUT:-7200}" || echo "  run exit $?"
 
   say "5. WHAT LANDED"
