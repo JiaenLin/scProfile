@@ -812,10 +812,13 @@ if (!is.na(pw)) {
 # index, not a cell state.
 for (pat in c("outgoing", "incoming")) {
   ndev(paste0("patterns_", pat), {
-    ccp <- identifyCommunicationPatterns(cc, pattern = pat, k = 3)
+    # THE PATHWAY AXIS NEEDS ROOM. At the default height about forty pathway labels were drawn
+    # into the same span and overprinted into an illegible block; the heatmap body also sat
+    # small in the middle of a large canvas. `height` is CellChat's own argument for the body.
+    ccp <- identifyCommunicationPatterns(cc, pattern = pat, k = 3, width = 5, height = 16)
     assign(paste0("ccp_", pat), ccp, envir = globalenv())
     NULL
-  }, w = 1800, h = 2000)
+  }, w = 2000, h = 3000)
   ccp <- tryCatch(get(paste0("ccp_", pat), envir = globalenv()), error = function(e) NULL)
   if (!is.null(ccp)) {
     npng(paste0("river_", pat), netAnalysis_river(ccp, pattern = pat), w = 2400, h = 1800)
