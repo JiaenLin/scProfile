@@ -1279,6 +1279,10 @@ def _run(a):
     # whose layout section omitted the run's primary deliverable while section 3 of the same file
     # linked the reader into it, with a file count short by 1 + 1 + n_kernels. Inspecting too
     # early is the same failure as describing what was intended; it just fails the other way.
+    # THE DECLARED CONTROLS TRAVEL WITH THE RUN, so the direction of every contrast is a
+    # recorded property of it rather than a flag someone typed once.
+    payload["controls"] = _controls_from(a)
+    _announce_controls(payload)
     idx = report.write_all(out, payload, prefix=getattr(a, 'prefix', None))
     print(f"      {idx}")
     _judge(out)
@@ -2870,6 +2874,34 @@ def _standard(a):
 
 
 
+
+def _controls_from(a):
+    """{factor: level} from repeated `--control factor=level`. Empty when none was given."""
+    out = {}
+    for item in (getattr(a, "control", None) or []):
+        f, _, lv = str(item).partition("=")
+        if f.strip() and lv.strip():
+            out[f.strip()] = lv.strip()
+    return out
+
+
+def _announce_controls(payload):
+    """Print the reference chosen for each factor and why. A direction chosen in silence is the
+    defect this replaces; one chosen by convention and announced is not."""
+    try:
+        from .compare_panel import control_basis
+        des = payload.get("design") or {}
+        if not des:
+            return
+        basis = control_basis(des, controls=payload.get("controls"))
+        if not basis:
+            return
+        print("  contrast direction - the reference level of each factor:")
+        for f, (lv, why) in sorted(basis.items()):
+            print(f"      {f}: everything is measured against {lv!r}  ({why})")
+    except Exception as e:                                                # noqa: BLE001
+        print(f"  contrast direction not resolved: {e}")
+
 def _carry_section(a, out, payload):
     """Take the authored section into this run and render it, if one was handed in.
 
@@ -3130,6 +3162,14 @@ def main(argv=None):
     # run in a directory looked incomplete. Handing it in makes the writing travel with the run
     # that produced the figures - and if the numbers moved, the claims go stale and the page
     # says NOT CURRENT, which is the mechanism that already exists.
+    # WHICH LEVEL IS THE CONTROL. A contrast has a direction and something has to choose it;
+    # before this nothing did, so the reference was alphabetical. The tool recommends one from a
+    # vocabulary of experimental ROLE - control, vehicle, wildtype, baseline - and a study whose
+    # control is named in its own field's words declares it here, which is better than being
+    # guessed at.
+    r.add_argument("--control", action="append", metavar="FACTOR=LEVEL",
+                   help="the control level of a factor, e.g. --control diet=chow. Repeatable. "
+                        "Without it the tool recommends one and says on what basis.")
     r.add_argument("--section", type=Path,
                    help="a written result section (Markdown) to carry into this run and render "
                         "with its figures. One per plugin: `--section cellchat=path.md`, or a "

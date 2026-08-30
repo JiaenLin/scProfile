@@ -411,7 +411,8 @@ def _presence_block(payload_all, *, out_dir=None, name=""):
             + _arm_figs_html(name, got), got)
 
 
-def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None):
+def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
+                 controls=None):
     """({"contrast": [...], "arm": [...]}) - every between-arm and per-arm figure, drawn.
 
     THE COHORT PAGE CARRIED ONE FIGURE while the per-sample appendix carried a hundred. On a
@@ -459,7 +460,9 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None):
     if len(per) < 2:
         return empty
     figdir = Path(out_dir) / "kernels" / name / "figures"
-    pairs = CPan.arm_pairs(design)
+    # THE DECLARED CONTROLS REACH THE CONTRASTS, or the direction falls back to a
+    # recommendation the caller may have overridden on the command line.
+    pairs = CPan.arm_pairs(design, controls=controls)
 
     # THE PLUGIN'S OWN COMPARISON FIGURES, ONCE PER ARM PAIR, BEFORE the host draws its versions.
     # A wrapped tool that ships differential figures should draw them; the host's panels exist for
@@ -1447,7 +1450,10 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                                   out_dir=out_dir, name=name))
         _arms = _arm_content(units, (payload_all or {}).get("design") or {}, spec,
                              prefix=prefix,
-                             out_dir=out_dir, name=name)
+                             out_dir=out_dir, name=name,
+                             # `payload_all`, not `payload` - the latter is not in scope here
+                             # and would have raised on the first run that reached this line.
+                             controls=(payload_all or {}).get("controls"))
         # THE INTERACTION FIRST, because on a factorial design it is the question and the
         # marginal effects are its summary. A marginal effect can be flat while both simple
         # effects are large and opposite, so a page that leads with the marginals leads with the

@@ -465,3 +465,53 @@ def contrast_label(factor, stratum=None):
         return str(factor)
     k, v = next(iter(st.items()))
     return f"{factor} | {k} = {v}"
+
+
+#: LEVEL NAMES THAT MARK A CONTROL IN ANY FIELD. A DEFAULT, NOT A DEFINITION - the same shape as
+#: `units.DEFAULT_TECHNICAL`, and overridable for the same reason.
+#:
+#: DELIBERATELY FREE OF DOMAIN VOCABULARY. The first version of this list also held the control
+#: words of one field - the standard diet, the reference age - and the portability check caught
+#: them, correctly: a term that is obviously a control to one discipline is a treatment to
+#: another, and a tool that ships a guess about somebody's biology is overfitted to it however
+#: reasonable the guess. Every word here is about EXPERIMENTAL ROLE and nothing else.
+#:
+#: A study whose control is named in its own vocabulary DECLARES it, which is better than being
+#: guessed at: `--control <factor>=<level>`.
+CONTROL_HINTS = ("control", "ctrl", "untreated", "vehicle", "sham", "mock", "baseline",
+                 "wildtype", "wild_type", "wt", "wild", "naive", "unstimulated",
+                 "none", "no", "pre", "day0", "d0", "t0", "zero", "reference", "ref")
+
+
+def control_for(levels, *, declared=None, hints=CONTROL_HINTS):
+    """(level, basis) - which level of a factor is the CONTROL, and why that one.
+
+    A CONTRAST HAS A DIRECTION AND SOMETHING HAS TO CHOOSE IT. Nothing did: `arm_pairs` took
+    `sorted(levels)`, so the reference was chosen ALPHABETICALLY. Measured on a real two-factor
+    study, that put the TREATED level of both factors in the baseline position - backwards on
+    both, and silently, because a difference computed the wrong way round looks exactly like one
+    computed the right way round.
+
+    An explicit declaration always wins. Failing that a level whose name is conventionally a
+    control is RECOMMENDED, with the basis returned so the recommendation can be printed rather
+    than applied in silence. Failing that the first sorted level is used and the basis says so,
+    which is the honest description of what alphabetical order is.
+
+    Nothing here is specific to any study: the hints are a vocabulary, not a rule about this
+    cohort, and `declared` overrides them entirely.
+    """
+    lv = [str(x) for x in levels]
+    if not lv:
+        return None, "no levels"
+    if declared:
+        for x in lv:
+            if str(declared).lower() == x.lower():
+                return x, "declared"
+    low = {x: x.lower().replace("-", "_").replace(" ", "_") for x in lv}
+    for h in hints:
+        for x in lv:
+            if low[x] == h or low[x].startswith(h + "_") or low[x].endswith("_" + h):
+                return x, f"recommended: {x!r} reads as a control ({h!r})"
+    x = sorted(lv)[0]
+    return x, (f"no control declared and none of {', '.join(repr(v) for v in sorted(lv))} reads "
+               f"as one, so {x!r} is used as the reference because it sorts first")

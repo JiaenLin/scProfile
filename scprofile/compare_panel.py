@@ -75,7 +75,7 @@ def matrices(edges, pops, weight="prob"):
     return c, w
 
 
-def arm_pairs(design, factors=None, technical=None):
+def arm_pairs(design, factors=None, technical=None, controls=None):
     """[(label, factor, from_level, to_level, from_filter, to_filter)] - every contrast.
 
     The same six a 2x2 supports: each factor marginally, and each factor held at every level of
@@ -91,11 +91,17 @@ def arm_pairs(design, factors=None, technical=None):
     facs = [f for f in sorted(levels)
             if len(levels[f]) == 2 and f.lower() not in tech]
     facs = [f for f in (factors or facs) if f in levels and len(levels[f]) == 2]
-    from .design_panel import contrast_label as _label
+    from .design_panel import contrast_label as _label, control_for as _control
 
     out = []
     for f in facs:
-        a, b = sorted(levels[f])
+        # THE CONTROL IS THE REFERENCE, and the difference is computed against it. This took
+        # `sorted(levels[f])`, so the reference was alphabetical. Measured on a real two-factor
+        # study, that put the TREATED level of both factors in the baseline position - backwards
+        # on both, and invisibly, because a difference computed the wrong way round looks exactly
+        # like one computed the right way: same figure, same colours, opposite meaning.
+        a, _basis = _control(levels[f], declared=(controls or {}).get(f))
+        b = next(x for x in sorted(levels[f]) if x != a)
         out.append((_label(f), f, a, b, {f: a}, {f: b}))
         for h in facs:
             if h == f:
@@ -104,6 +110,25 @@ def arm_pairs(design, factors=None, technical=None):
                 out.append((_label(f, {h: lv}), f, a, b,
                             {f: a, h: lv}, {f: b, h: lv}))
     return out
+
+
+def control_basis(design, factors=None, technical=None, controls=None):
+    """{factor: (control level, why)} - the reference chosen for each factor, and on what basis.
+
+    Returned so a caller can PRINT the recommendation. A direction chosen silently is the defect
+    this replaces; a direction chosen by convention and announced is not.
+    """
+    from .design_panel import control_for as _control
+    from .units import DEFAULT_TECHNICAL
+
+    tech = {t.lower() for t in (technical if technical is not None else DEFAULT_TECHNICAL)}
+    levels = {}
+    for row in design.values():
+        for f, v in (row or {}).items():
+            levels.setdefault(str(f), set()).add(str(v))
+    facs = [f for f in sorted(levels) if len(levels[f]) == 2 and f.lower() not in tech]
+    facs = [f for f in (factors or facs) if f in levels and len(levels[f]) == 2]
+    return {f: _control(levels[f], declared=(controls or {}).get(f)) for f in facs}
 
 
 def _members(design, filt):
