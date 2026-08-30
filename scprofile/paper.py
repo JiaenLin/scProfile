@@ -50,9 +50,19 @@ LEDGER = "PAPER_CLAIMS.jsonl"
 
 
 def _report_dir(out, plugin=""):
-    """Where this section's rendered page goes."""
+    """`<run>/report` - BESIDE the plugin's other pages, whichever plugin it is about.
+
+    THE PAGE MUST LAND WHERE ITS SIBLINGS ARE. `page_name` says the file is called
+    `<plugin>_paper.html` so it sorts beside `<plugin>.html`, `<plugin>_by_arm.html` and
+    `<plugin>_by_sample.html` - and this returned `<run>/kernels/<plugin>/report`, where none of
+    those three is. The reason given for the NAME was defeated by the DIRECTORY, the run index
+    could not link the section, and a reader following the report would never meet it.
+
+    The section's SOURCES - its draft and its claims ledger - do stay in the plugin's own
+    directory, which is `_root`. Source beside the method, rendered page beside the other pages.
+    """
     from . import kernels as _K
-    return _K.plugin_report(out, plugin) if plugin else _K.run_report(out)
+    return _K.run_report(out)
 
 
 def _root(out, plugin=""):

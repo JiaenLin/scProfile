@@ -1553,6 +1553,14 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     else:
         body.append(_figure_section(figs_all, spec))
     _links = []
+    # THE WRITTEN SECTION, IF ONE EXISTS. It is rendered separately, by `paper --render`, and
+    # nothing linked it: a reader following the report met every panel and never the section
+    # written off them. Linked only when the file is there, so a run with no section says
+    # nothing rather than offering a dead link.
+    if (Path(out_dir) / "report" / f"{name}_paper.html").is_file():
+        _links.append(f"<a href=\"{_e(name)}_paper.html\">the written result section</a> "
+                      f"&mdash; the claims made off these panels, each bound to the figures it "
+                      f"was read from, with what a reviewer said about it")
     if arm_figs:
         _links.append(f"<a href=\"{_e(name)}_by_arm.html\">{len(arm_figs)} per-arm panels</a> "
                       f"&mdash; the same plots, once per arm of the design, each drawn from that "
