@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.11.1",
+    "version": "0.11.2",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -684,6 +684,7 @@ cat("saved the CellChat object for reuse:", rds, "\n")
 # reader can tell at a glance which encoding they are looking at.
 figdir <- file.path(dirname(dirname(out)), "figures")
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
+.plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
 npng <- function(name, expr, w = 1800, h = 1500, res = 200) {
   path <- file.path(figdir, paste0("native_", name, ".png"))
   ok <- tryCatch({
@@ -692,8 +693,9 @@ npng <- function(name, expr, w = 1800, h = 1500, res = 200) {
     print(expr)
     TRUE
   }, error = function(e) { cat("native plot", name, "FAILED:", conditionMessage(e), "\n"); FALSE })
-  if (ok && file.exists(path)) cat("native plot", name, "written\n")
-  else if (file.exists(path)) unlink(path)
+  if (ok && file.exists(path)) { .plots$ok <- .plots$ok + 1L
+                                 cat("native plot", name, "written\n") }
+  else { .plots$bad <- c(.plots$bad, name); if (file.exists(path)) unlink(path) }
 }
 # Some CellChat functions DRAW rather than return - a base-graphics network, a ComplexHeatmap
 # object, a function whose value is NULL. `print` on those prints nothing or errors, so this
@@ -706,8 +708,9 @@ ndev <- function(name, expr, w = 1800, h = 1500, res = 200) {
     force(expr)
     TRUE
   }, error = function(e) { cat("native plot", name, "FAILED:", conditionMessage(e), "\n"); FALSE })
-  if (ok && file.exists(path)) cat("native plot", name, "written\n")
-  else if (file.exists(path)) unlink(path)
+  if (ok && file.exists(path)) { .plots$ok <- .plots$ok + 1L
+                                 cat("native plot", name, "written\n") }
+  else { .plots$bad <- c(.plots$bad, name); if (file.exists(path)) unlink(path) }
 }
 
 groups <- levels(cc@idents)
@@ -760,8 +763,28 @@ if (!is.na(pw)) {
   # way in. Receivers are the first half of the populations, senders the rest, which is the
   # split the layout requires and not a claim about who signals to whom.
   vr <- seq_len(max(1, floor(ngrp / 2)))
-  ndev(paste0("hierarchy__", pw),
-       netVisual(cc, signaling = pw, layout = "hierarchy", vertex.receiver = vr))
+  # `netVisual` OPENS AND CLOSES ITS OWN DEVICE and writes its own file, named after the
+  # pathway, into the working directory. Wrapping it in a device of ours fails with "unable to
+  # start device 'png'", which reads like a graphics problem and is not one. So it is called
+  # with out.format = "png" from inside the figures directory and its file is renamed, which is
+  # also what reaches netVisual_hierarchy1 and netVisual_hierarchy2 - the two functions that
+  # actually draw the two halves of this panel.
+  local({
+    owd <- setwd(figdir); on.exit(setwd(owd), add = TRUE)
+    ok <- tryCatch({
+      netVisual(cc, signaling = pw, layout = "hierarchy", vertex.receiver = vr,
+                out.format = "png")
+      TRUE
+    }, error = function(e) {
+      cat("native plot hierarchy FAILED:", conditionMessage(e), "\n"); FALSE })
+    made <- list.files(".", pattern = "_hierarchy.*\\.png$")
+    if (ok && length(made)) {
+      file.rename(made[1], paste0("native_hierarchy__", pw, ".png"))
+      .plots$ok <- .plots$ok + 1L
+      cat("native plot hierarchy written\n")
+      if (length(made) > 1) unlink(made[-1])
+    } else .plots$bad <- c(.plots$bad, "hierarchy")
+  })
 
   # one named ligand-receptor pair inside that pathway, rather than the pathway aggregate
   lr <- tryCatch(extractEnrichedLR(cc, signaling = pw, geneLR.return = FALSE),
@@ -869,6 +892,14 @@ try_write("net_embedding", {
   e <- cc2@netP$similarity$functional$dr[["single"]]
   data.frame(pathway = rownames(e), dim1 = e[, 1], dim2 = e[, 2])
 })
+
+# THE TALLY, LAST. A plot that fails prints one line near the START of a long run, and a caller
+# that keeps only the tail loses it - which is how four upstream functions came to fail on every
+# unit of a whole run with no file, no log line and no non-zero exit. A count at the end cannot
+# fall off the front, and a caller that shows any tail at all shows this.
+cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
+    if (length(.plots$bad)) paste0("(", paste(.plots$bad, collapse = ", "), ")") else "", "\n")
+
 '''
 
 
@@ -2607,6 +2638,35 @@ def _fig_similarity(ctx, pre):
     return True
 
 
+
+def _log_r(ctx, proc, name):
+    """Keep ALL of a subprocess's output on disk, and surface every failure line.
+
+    `splitlines()[-8:]` discarded everything but the tail. The plot loop reports each failure as
+    it happens, near the START of a long run, so every one of those lines fell off the front:
+    four upstream plot functions failed on every unit of a whole run and NOTHING said so - no
+    file, no log line, no non-zero exit. The absence was found by counting figure kinds.
+
+    A tail is a reasonable thing to show. Discarding the rest is not, so the full output is
+    written beside the unit and the failure lines are pulled out by name.
+    """
+    out = (proc.stdout or "")
+    err = (proc.stderr or "")
+    path = ctx.out / name
+    try:
+        path.write_text(out + ("\n----- stderr -----\n" + err if err.strip() else ""),
+                        encoding="utf-8")
+    except Exception:                                                     # noqa: BLE001
+        path = None
+    fails = [ln for ln in out.splitlines() if "FAILED" in ln]
+    for ln in fails:
+        ctx.log(f"  R: {ln}")
+    for ln in out.splitlines()[-8:]:
+        if ln not in fails:
+            ctx.log(f"  R: {ln}")
+    ctx.log(f"  R output: {len(out.splitlines())} line(s), {len(fails)} failure(s)"
+            + (f", full text in {path.name}" if path else " (could not be written)"))
+
 def run(ctx):
     import subprocess
     import numpy as np
@@ -2717,8 +2777,7 @@ def run(ctx):
     ctx.log(f"  type={C['type']} trim={C['trim']} population.size={C['population_size']} "
             f"nboot={C['nboot']} thresh={C['thresh']} min.cells={C['min_cells']}")
     proc = subprocess.run(argv, capture_output=True, text=True)
-    for line in (proc.stdout or "").splitlines()[-8:]:
-        ctx.log(f"  R: {line}")
+    _log_r(ctx, proc, "cellchat_R.log")
     if proc.returncode != 0 or not edges_f.exists():
         tail = (proc.stderr or "").strip().splitlines()[-6:]
         return ctx.refuse("cell-cell communication",
@@ -3149,6 +3208,7 @@ object.list <- list(a, b); names(object.list) <- c(name_a, name_b)
 m <- mergeCellChat(object.list, add.names = c(name_a, name_b))
 cat("merged:", name_a, "and", name_b, "\n")
 
+.plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
 npng <- function(nm, expr, w = 2000, h = 1600, res = 200) {
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
   ok <- tryCatch({
@@ -3156,7 +3216,8 @@ npng <- function(nm, expr, w = 2000, h = 1600, res = 200) {
     on.exit(grDevices::dev.off(), add = TRUE)
     print(expr); TRUE
   }, error = function(e) { cat("native compare", nm, "FAILED:", conditionMessage(e), "\n"); FALSE })
-  if (ok) cat("native compare", nm, "written\n") else if (file.exists(path)) unlink(path)
+  if (ok) { .plots$ok <- .plots$ok + 1L; cat("native compare", nm, "written\n") }
+  else { .plots$bad <- c(.plots$bad, nm); if (file.exists(path)) unlink(path) }
 }
 # Some CellChat functions DRAW rather than return - a base-graphics circle, a ComplexHeatmap
 # object that must be `draw`n. `print` on those either errors or prints nothing, so a second
@@ -3168,7 +3229,8 @@ ndev <- function(nm, expr, w = 2000, h = 1600, res = 200) {
     on.exit(grDevices::dev.off(), add = TRUE)
     force(expr); TRUE
   }, error = function(e) { cat("native compare", nm, "FAILED:", conditionMessage(e), "\n"); FALSE })
-  if (ok) cat("native compare", nm, "written\n") else if (file.exists(path)) unlink(path)
+  if (ok) { .plots$ok <- .plots$ok + 1L; cat("native compare", nm, "written\n") }
+  else { .plots$bad <- c(.plots$bad, nm); if (file.exists(path)) unlink(path) }
 }
 
 # 1. the differential interaction network - CellChat's own answer to "which pairs changed"
@@ -3301,6 +3363,14 @@ for (pw in head(paths, 6)) {
                               title.name = paste(pw, names(object.list)[i])),
          w = 1800, h = 1800)
 }
+
+# THE TALLY, LAST. A plot that fails prints one line near the START of a long run, and a caller
+# that keeps only the tail loses it - which is how four upstream functions came to fail on every
+# unit of a whole run with no file, no log line and no non-zero exit. A count at the end cannot
+# fall off the front, and a caller that shows any tail at all shows this.
+cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
+    if (length(.plots$bad)) paste0("(", paste(.plots$bad, collapse = ", "), ")") else "", "\n")
+
 """
 
 
