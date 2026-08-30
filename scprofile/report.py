@@ -1576,6 +1576,18 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
         _links.append(f"<a href=\"{_e(name)}_paper.html\">the written result section</a> "
                       f"&mdash; the claims made off these panels, each bound to the figures it "
                       f"was read from, with what a reviewer said about it")
+    else:
+        # AN ABSENCE THAT NEEDS EXPLAINING IS A DEFECT. A run with figures and no written section
+        # looks broken to anyone who opens it, and there is no way to tell from the page whether
+        # the section is missing, failed, or was never meant to be here. A section is AUTHORED
+        # and enters a run through `--section`; saying so turns a silence into a fact.
+        _links.append(f"<b>No written result section in this run.</b> The figures and the panel "
+                      f"are produced by the run; a section is written by a person and carried in "
+                      f"with <code>run --section &lt;file&gt;</code>, or added afterwards with "
+                      f"<code>scprofile paper --out &lt;run&gt; --plugin {_e(name)} "
+                      f"--write &lt;file&gt;</code>. Where a section exists for this analysis it "
+                      f"is in the run whose figures it cites, because its citations are paths "
+                      f"inside that run.")
     if arm_figs:
         _links.append(f"<a href=\"{_e(name)}_by_arm.html\">{len(arm_figs)} per-arm panels</a> "
                       f"&mdash; the same plots, once per arm of the design, each drawn from that "

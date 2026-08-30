@@ -23,6 +23,11 @@ if "_carry_section(" not in cli or cli.count("_carry_section(") < 2:
     FAILURES.append("--section is declared but the run never acts on it")
 if "PA.panel(" not in rep and "_PA.panel(" not in rep:
     FAILURES.append("a run does not write the figure panel, which needs no author")
+# AN ABSENCE THAT NEEDS EXPLAINING IS A DEFECT. A run with figures and no section looks broken
+# to anyone who opens it, with no way to tell missing from failed from never-intended.
+if "No written result section in this run" not in rep:
+    FAILURES.append("a run without a written section says nothing about it, so the absence "
+                    "reads as a fault rather than a fact")
 # claims must NOT be carried: they are bound to figures by digest, and figures are redrawn
 m = re.search(r"def _carry_section\(.*?\n(?=\ndef )", cli, re.S)
 if m and re.search(r"--claim|_PA\.claim\(", m.group(0)):
