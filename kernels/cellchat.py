@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.15.0",
+    "version": "0.16.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -608,6 +608,7 @@ thresh <- as.numeric(args[10])
 cache_dir <- if (length(args) >= 11 && nzchar(args[11])) args[11] else ""
 
 X <- as(Matrix::readMM(mtx), "CsparseMatrix")
+mark("read the matrix")
 meta <- read.csv(meta_f, row.names = 1, stringsAsFactors = FALSE)
 rownames(X) <- read.csv(paste0(mtx, ".genes"), header = FALSE)[[1]]
 colnames(X) <- rownames(meta)
@@ -660,6 +661,7 @@ cc <- computeCommunProb(cc, type = mean_type, trim = trim,
 cc <- filterCommunication(cc, min.cells = min_cells)
 }
 
+mark("inference or cache load")
 df <- subsetCommunication(cc, thresh = thresh)
 write.csv(df, out, row.names = FALSE)
 cat("edges:", nrow(df), "\n")
@@ -742,6 +744,17 @@ if (!identical(normalizePath(store, mustWork = FALSE),
 figdir <- file.path(dirname(dirname(out)), "figures")
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 .plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
+# A PHASE CLOCK. Twice now the cost of a round has been diagnosed by assumption and been wrong:
+# first the inference was assumed dominant and was not, then the matrix write was, and it turned
+# out to take one to five seconds. Guessing where a run spends its time is what makes every
+# round of development expensive, so the run measures itself and says so.
+.clock <- new.env(); .clock$t0 <- proc.time()[["elapsed"]]; .clock$marks <- list()
+mark <- function(what) {
+  now <- proc.time()[["elapsed"]]
+  .clock$marks[[what]] <- now - .clock$t0
+  .clock$t0 <- now
+  invisible(NULL)
+}
 npng <- function(name, expr, w = 1800, h = 1500, res = 200) {
   path <- file.path(figdir, paste0("native_", name, ".png"))
   ok <- tryCatch({
@@ -770,6 +783,7 @@ ndev <- function(name, expr, w = 1800, h = 1500, res = 200) {
   else { .plots$bad <- c(.plots$bad, name); if (file.exists(path)) unlink(path) }
 }
 
+mark("downstream quantities")
 groups <- levels(cc@idents)
 ngrp <- length(groups)
 
@@ -956,8 +970,11 @@ try_write("net_embedding", {
 # that keeps only the tail loses it - which is how four upstream functions came to fail on every
 # unit of a whole run with no file, no log line and no non-zero exit. A count at the end cannot
 # fall off the front, and a caller that shows any tail at all shows this.
+mark("drawing")
 cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
     if (length(.plots$bad)) paste0("(", paste(.plots$bad, collapse = ", "), ")") else "", "\n")
+cat("PHASE SECONDS:",
+    paste(sprintf("%s=%.0f", names(.clock$marks), unlist(.clock$marks)), collapse = " "), "\n")
 
 '''
 
@@ -3342,9 +3359,20 @@ stopifnot(identical(levels(a@idents), levels(b@idents)))
 # are recorded on every figure this writes rather than left to the reader.
 object.list <- list(a, b); names(object.list) <- c(name_a, name_b)
 m <- mergeCellChat(object.list, add.names = c(name_a, name_b))
+mark("align and merge")
 cat("merged:", name_a, "and", name_b, "\n")
 
 .plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
+# THE SAME PHASE CLOCK AS THE RUN BLOCK. Without it the tally line below, which is shared, would
+# reference an object this script never defined - and the compare phase would fail on its last
+# line after doing all its work.
+.clock <- new.env(); .clock$t0 <- proc.time()[["elapsed"]]; .clock$marks <- list()
+mark <- function(what) {
+  now <- proc.time()[["elapsed"]]
+  .clock$marks[[what]] <- now - .clock$t0
+  .clock$t0 <- now
+  invisible(NULL)
+}
 npng <- function(nm, expr, w = 2000, h = 1600, res = 200) {
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
   ok <- tryCatch({
@@ -3527,8 +3555,11 @@ for (pw in head(paths, 6)) {
 # that keeps only the tail loses it - which is how four upstream functions came to fail on every
 # unit of a whole run with no file, no log line and no non-zero exit. A count at the end cannot
 # fall off the front, and a caller that shows any tail at all shows this.
+mark("drawing")
 cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
     if (length(.plots$bad)) paste0("(", paste(.plots$bad, collapse = ", "), ")") else "", "\n")
+cat("PHASE SECONDS:",
+    paste(sprintf("%s=%.0f", names(.clock$marks), unlist(.clock$marks)), collapse = " "), "\n")
 
 """
 
