@@ -337,6 +337,8 @@ PLUGIN = {
         "netVisual": {"skip": "owed"},
         "netVisual_barplot": {"skip": "owed"},
         "netVisual_individual": {"skip": "owed"},
+        "netVisual_hierarchy1": {"skip": "owed"},
+        "netVisual_hierarchy2": {"skip": "owed"},
         "netVisual_chord_cell": {"skip": "owed"},
         "netVisual_diffInteraction": {"use": "figures/nativecmp_diffInteraction_{count,weight}.png, per arm pair"},
         "netVisual_embedding": {"skip": "owed"},
@@ -2825,6 +2827,67 @@ def run(ctx):
 
 
 # ----------------------------------------------------------------------------------- selftest
+
+#: The R that lists what CellChat actually exports, so the accounting is checked against the
+#: package rather than against memory. This inventory was first taken by hand, over SSH, and the
+#: numbers went into a declaration - which is the same defect as quoting a hand-computed figure
+#: in a manuscript: nobody else can reproduce it and nothing notices when it drifts.
+_R_INVENTORY = r"""
+suppressMessages(library(CellChat))
+ex <- sort(getNamespaceExports("CellChat"))
+plotting <- grep("^(netVisual|netAnalysis|plot|show|StackedVln)", ex, value = TRUE)
+cat(paste(plotting, collapse = "\n"), "\n")
+"""
+
+
+def plot_inventory():
+    """The plotting functions CellChat exports here, measured. [] when R cannot be reached.
+
+    MEASURED, NOT DECLARED. `native_plots` is this plugin's account of what it does with each of
+    them, and an account is only worth anything against a real list - if CellChat adds a function
+    or renames one, the accounting must go stale loudly rather than quietly stay complete.
+    """
+    import subprocess
+    import tempfile
+
+    with tempfile.NamedTemporaryFile("w", suffix=".R", delete=False) as fh:
+        fh.write(_R_INVENTORY)
+        path = fh.name
+    try:
+        p = subprocess.run(["Rscript", path], capture_output=True, text=True, timeout=600)
+    except Exception:                                                     # noqa: BLE001
+        return []
+    if p.returncode != 0:
+        return []
+    # NO UNDERSCORE FILTER. An earlier version kept only names containing "_", which silently
+    # dropped netVisual, StackedVlnPlot, plotGeneExpression and showDatabaseCategory - and the
+    # accounting then reported four DECLARED functions as ones CellChat does not export, when the
+    # package exports all four and the filter had hidden them. A check with a filter in it is a
+    # check on the filter too.
+    return [l.strip() for l in p.stdout.splitlines() if l.strip()]
+
+
+def check_plot_accounting():
+    """Compare the DECLARED accounting against the package. Returns a list of problems.
+
+    Run from `selftest`, where R is present. On a machine without R the inventory comes back
+    empty and this says so rather than passing.
+    """
+    inv = plot_inventory()
+    if not inv:
+        return ["could not read CellChat's exports; the plot accounting is unverified here"]
+    declared = PLUGIN.get("native_plots") or {}
+    missing = [f for f in inv if f not in declared]
+    stale = [f for f in declared if f not in inv]
+    out = []
+    if missing:
+        out.append(f"{len(missing)} exported plot(s) absent from native_plots: "
+                   f"{', '.join(sorted(missing)[:8])}")
+    if stale:
+        out.append(f"{len(stale)} declared plot(s) CellChat does not export: "
+                   f"{', '.join(sorted(stale)[:8])}")
+    return out
+
 
 def selftest(ctx):
     """Prove R, CellChat, its database and the bridge — not just that the package imports.
