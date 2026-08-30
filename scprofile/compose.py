@@ -355,6 +355,14 @@ def section(run, plugin, spec=None, design=None, run_key=""):
 
     # THE SUMMARY FIRST. A reader should not have to assemble the shape of the result from six
     # subsections; the run knows which contrast is largest and can say so.
+    def _cell(x):
+        # A CONTRAST LABEL CONTAINS A PIPE - `age | diet = chow` is how a simple effect is named
+        # in this design and in every other - and a pipe is the column separator. Unescaped, the
+        # four conditional rows carried six cells against a five-column header, so the table a
+        # reader meets first rendered with its contrast names split in half. Escaped the standard
+        # way; `_md` unescapes when it splits.
+        return str(x).replace("|", "\\|")
+
     if ranked:
         big, small = f[ranked[0]], f[ranked[-1]]
         L += [f"Across {len(order)} comparison(s) the design supports, the largest difference in "
@@ -368,7 +376,8 @@ def section(run, plugin, spec=None, design=None, run_key=""):
             d = f[l]
             lead = d["leading"][0][0] if d["leading"] else "—"
             sig = f"{d['n_significant']} of {d['n_tested']}" if d["n_tested"] else "not tested"
-            L += [f"| {l} | {d['reference']} | {_n(d['ratio'])}x | {sig} | {lead} |"]
+            L += [f"| {_cell(l)} | {_cell(d['reference'])} | {_n(d['ratio'])}x | {sig} "
+                  f"| {_cell(lead)} |"]
         L += [""]
     if alias:
         L += ["; ".join(f"In this design **{k}** varies together with {', '.join(sorted(v))} "

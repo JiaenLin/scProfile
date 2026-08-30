@@ -689,8 +689,8 @@ def contribution(ctx, edges, pops, group_col, member_col, *, fid="N7_contributio
 # the only one here the host can draw without any plugin output at all.
 # --------------------------------------------------------------------------------------------
 
-def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, weight="prob",
-                weight_name="weight", fid="P2_unit_totals", title=None):
+def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, unit_members=None,
+                weight="prob", weight_name="weight", fid="P2_unit_totals", title=None):
     """How much network each unit carries: edges, and total weight, per unit.
 
     THE FIRST QUESTION ABOUT A COMPARISON AND THE LAST ONE ANSWERED. Every panel in a between-arm
@@ -736,9 +736,27 @@ def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, weight="pro
     # COLOUR BY THE FIRST DESIGN FACTOR THAT SPLITS THESE UNITS, so an arm and the samples in it
     # read as one group. A unit no factor places - a marginal pool, a whole-cohort fit - keeps
     # the neutral ink rather than borrowing a level it is not in.
+    des = dict(design or {})
+
+    def _level(u, f):
+        """This unit's level of `f`: its own row, or the one its members all share.
+
+        A POOLED ARM HAS NO DESIGN ROW - the table is keyed by sample - so `aged` and `young`
+        both fell to the neutral ink and the arm block could not be read by colour at all. An
+        arm's level is the level of its members, and only when they AGREE: a pool spanning two
+        levels of a factor genuinely has none, and stays neutral.
+        """
+        own = str((des.get(u) or {}).get(f, ""))
+        if own:
+            return own
+        mem = [str(x) for x in ((unit_members or {}).get(u) or ())]
+        lv = {str((des.get(x) or {}).get(f, "")) for x in mem}
+        lv.discard("")
+        return next(iter(lv)) if len(lv) == 1 else ""
+
     fac, lev = "", {}
-    for f in sorted({k for u in units for k in ((design or {}).get(u) or {})}):
-        got = {u: str(((design or {}).get(u) or {}).get(f, "")) for u in units}
+    for f in sorted({k for row in des.values() for k in (row or {})}):
+        got = {u: _level(u, f) for u in units}
         if len({v for v in got.values() if v}) >= 2:
             fac, lev = f, got
             break

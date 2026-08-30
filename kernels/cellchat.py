@@ -3449,10 +3449,10 @@ ndev <- function(nm, expr, w = 2000, h = 1600, res = 200) {
 #    every population contributes to it including the ones with no counterpart.
 npng("compareInteractions_count",
      compareInteractions(m, show.legend = FALSE, group = c(1, 2), measure = "count"),
-     w = 1200, h = 1500)
+     w = 1500, h = 1100)
 npng("compareInteractions_weight",
      compareInteractions(m, show.legend = FALSE, group = c(1, 2), measure = "weight"),
-     w = 1200, h = 1500)
+     w = 1500, h = 1100)
 
 # ---------------------------------------------------------------------------------------------
 # A POPULATION WITH NO COUNTERPART HAS A PRESENCE, NOT A CHANGE - so it is masked AT SOURCE.
@@ -3527,15 +3527,15 @@ ndev("diffInteraction_weight", {
 # is the tool's own argument for the line above the map; the key it does not draw goes there.
 .diffttl <- function(what)
   paste0(what, ": ", name_b, " against ", name_a,
-         "  |  red = higher in ", name_b, ", blue = higher in ", name_a,
-         if (length(absent)) paste0("  |  blank: ", paste(absent, collapse = ", "),
-                                    " (no counterpart in the other arm)") else "")
+         "  |  red = higher in ", name_b, ", blue = higher in ", name_a)
 ndev("diff_heatmap_count", ComplexHeatmap::draw(
   netVisual_heatmap(md, measure = "count",
-                    title.name = .diffttl("Differential number of interactions"))))
+                    title.name = .diffttl("Differential number of interactions"))),
+  w = 2400, h = 1800)
 ndev("diff_heatmap_weight", ComplexHeatmap::draw(
   netVisual_heatmap(md, measure = "weight",
-                    title.name = .diffttl("Differential interaction strength"))))
+                    title.name = .diffttl("Differential interaction strength"))),
+  w = 2400, h = 1800)
 
 # 3. ranked information flow with BOTH arms on one axis, CellChat's own comparison mode
 # CELLCHAT'S OWN BETWEEN-ARM TEST, RUN. `do.stat = TRUE` compares the two arms' per-pair

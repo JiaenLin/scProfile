@@ -677,7 +677,12 @@ def _md(text):
     def _flush_table():
         if not rows:
             return
-        head, body = rows[0], [r for r in rows[1:] if not set(r) <= set("-: |")]
+        # THE SEPARATOR ROW IS NOT DATA. `set(r)` is a set of CELLS, so it was compared
+        # against a set of CHARACTERS and never matched: `{"---"} <= {"-", ":", " ", "|"}` is
+        # false, so every table in every composed section carried a row of `---` under its
+        # header. Test the characters of each cell, which is what was meant.
+        head, body = rows[0], [r for r in rows[1:]
+                               if not all(c and set(c) <= set("-: ") for c in r)]
         out.append('<div class="wrap"><table><tr>'
                    + "".join(f"<th>{_inline(c)}</th>" for c in head) + "</tr>"
                    + "".join("<tr>" + "".join(f"<td>{_inline(c)}</td>" for c in r) + "</tr>"
@@ -697,7 +702,11 @@ def _md(text):
             if para:
                 out.append("<p>" + _inline(" ".join(para)) + "</p>")
                 para = []
-            rows.append([c.strip() for c in st.strip("|").split("|")])
+            # SPLIT ON AN UNESCAPED PIPE ONLY. A cell may legitimately contain one - a
+            # contrast conditioned on a second factor is named `age | diet = chow` - and
+            # splitting on every pipe tore those rows into more cells than the header has.
+            rows.append([c.strip().replace("\\|", "|")
+                         for c in _re.split(r"(?<!\\)\|", st.strip("|"))])
             continue
         _flush_table()
         if not st:

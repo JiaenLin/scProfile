@@ -412,7 +412,7 @@ def _presence_block(payload_all, *, out_dir=None, name=""):
 
 
 def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
-                 controls=None, unit_axis=None):
+                 controls=None, unit_axis=None, unit_members=None):
     """({"contrast": [...], "arm": [...]}) - every between-arm and per-arm figure, drawn.
 
     THE COHORT PAGE CARRIED ONE FIGURE while the per-sample appendix carried a hundred. On a
@@ -469,6 +469,7 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
         from . import network_panels as _NP
         _NP.unit_totals(CPan._Shim(figdir, name, "cohort", _cohort), per,
                         design=design, unit_axis=unit_axis or {},
+                        unit_members=unit_members or {},
                         weight_name=str(net.get("weight_name") or "weight"))
     except Exception:                                                     # noqa: BLE001
         _cohort = []
@@ -1475,6 +1476,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                              prefix=prefix,
                              out_dir=out_dir, name=name,
                              unit_axis=(payload_all or {}).get("unit_axis") or {},
+                             unit_members=(payload_all or {}).get("unit_members") or {},
                              # `payload_all`, not `payload` - the latter is not in scope here
                              # and would have raised on the first run that reached this line.
                              controls=(payload_all or {}).get("controls"))

@@ -66,6 +66,25 @@ if "difference of two differences" not in sec:
     FAILURES.append("the interaction is reported without saying the method provides no test "
                     "for it")
 
+# 5. THE SUMMARY TABLE MUST SURVIVE THE RENDERER. Two defects, both visible in the first table
+#    a reader of the paper meets, and both invisible to every check that existed:
+#      - a contrast conditioned on a second factor is named `age | diet = chow`, and the pipe is
+#        the column separator, so those rows carried six cells against a five-column header;
+#      - the `|---|---|` separator was compared as a set of CELLS against a set of CHARACTERS,
+#        which never matches, so a row of `---` was rendered as data under every header.
+from scprofile.paper import _md as _MD                                    # noqa: E402
+
+_t = _MD("| comparison | reference |\n|---|---|\n| age \\| diet = chow | young |")
+check(_t.count("<tr>") == 2,
+      f"the rendered table has {_t.count('<tr>')} row(s) for a header and one row of data - "
+      f"the markdown separator is being rendered as data")
+check("<td>age | diet = chow</td>" in _t,
+      "a contrast label containing a pipe is split across two cells, so the row has more cells "
+      "than the header has columns")
+check("_cell(" in src,
+      "the composer does not escape a pipe inside a table cell, so any contrast conditioned on "
+      "a second factor breaks the row it is on")
+
 if FAILURES:
     print("FAIL")
     for f in FAILURES:
