@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.12.1",
+    "version": "0.13.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -352,7 +352,7 @@ PLUGIN = {
         "netAnalysis_diff_signalingRole_scatter": {"use": "figures/nativecmp_diff_signalingRole.png, per arm pair"},
         "netAnalysis_signalingChanges_scatter": {"use": "figures/nativecmp_signalingChanges__<population>.png"},
         "plotGeneExpression": {"use": "figures/native_geneExpression__<pathway>.png"},
-        "StackedVlnPlot": {"use": "figures/native_stackedVln__<pathway>.png"},
+        "StackedVlnPlot": {"skip": "duplicate_of", "same_as": "plotGeneExpression"},
     },
 
     "report": {
@@ -584,6 +584,12 @@ _R_RUN = r'''
 if (file.exists(.envpy)) Sys.setenv(RETICULATE_PYTHON = .envpy)
 
 suppressMessages({library(CellChat); library(Matrix)})
+# `netAnalysis_river` needs ggalluvial ATTACHED, not merely installed: it names
+# ggalluvial's stats and fails with "Can't find stat called 'stratum'". CellChat says so
+# itself in a message that was being discarded. The first attempt at this fix was written
+# into the COMPARE block, whose header reads differently, so it never reached the script
+# that draws the river - the tally is what showed it.
+suppressMessages(try(library(ggalluvial), silent = TRUE))
 args <- commandArgs(trailingOnly = TRUE)
 mtx <- args[1]; meta_f <- args[2]; db_name <- args[3]
 min_cells <- as.integer(args[4]); trim <- as.numeric(args[5]); out <- args[6]
@@ -799,22 +805,21 @@ if (!is.na(pw)) {
   # with out.format = "png" from inside the figures directory and its file is renamed, which is
   # also what reaches netVisual_hierarchy1 and netVisual_hierarchy2 - the two functions that
   # actually draw the two halves of this panel.
-  local({
-    owd <- setwd(figdir); on.exit(setwd(owd), add = TRUE)
-    ok <- tryCatch({
-      netVisual(cc, signaling = pw, layout = "hierarchy", vertex.receiver = vr,
-                out.format = "png")
-      TRUE
-    }, error = function(e) {
-      cat("native plot hierarchy FAILED:", conditionMessage(e), "\n"); FALSE })
-    made <- list.files(".", pattern = "_hierarchy.*\\.png$")
-    if (ok && length(made)) {
-      file.rename(made[1], paste0("native_hierarchy__", pw, ".png"))
-      .plots$ok <- .plots$ok + 1L
-      cat("native plot hierarchy written\n")
-      if (length(made) > 1) unlink(made[-1])
-    } else .plots$bad <- c(.plots$bad, "hierarchy")
-  })
+  # `netVisual_hierarchy1` and `netVisual_hierarchy2` take a NET MATRIX and draw into the
+  # current device, which is what this script already provides. Going through `netVisual` was
+  # the mistake: that function opens and closes its OWN device, sized from the pathway's
+  # ligand-receptor count, and failed with "unable to start device 'png'" on every unit whose
+  # leading pathway was LAMININ or COLLAGEN - 11 of 18 - while writing its files into the
+  # working directory. These two are the functions the accounting names, so calling them
+  # directly is also the more honest route.
+  ndev(paste0("hierarchy__", pw), {
+    graphics::par(mfrow = c(1, 2), xpd = TRUE)
+    netVisual_hierarchy1(cc@netP$prob[, , pw], vertex.receiver = vr,
+                         title.name = paste(pw, "- receivers on the left"))
+    netVisual_hierarchy2(cc@netP$prob[, , pw],
+                         vertex.receiver = setdiff(seq_len(ngrp), vr),
+                         title.name = paste(pw, "- the rest"))
+  }, w = 2800, h = 1500)
 
   # one named ligand-receptor pair inside that pathway, rather than the pathway aggregate
   lr <- tryCatch(extractEnrichedLR(cc, signaling = pw, geneLR.return = FALSE),
@@ -828,11 +833,11 @@ if (!is.na(pw)) {
   # the expression of that pathway's own genes, CellChat's own violin wrappers
   npng(paste0("geneExpression__", pw), plotGeneExpression(cc, signaling = pw),
        w = 2000, h = 2200)
-  gl <- tryCatch(extractEnrichedLR(cc, signaling = pw, geneLR.return = TRUE)$geneLR,
-                 error = function(e) NULL)
-  if (!is.null(gl) && length(gl) > 0)
-    npng(paste0("stackedVln__", pw), StackedVlnPlot(cc, features = head(unique(gl), 6)),
-         w = 1800, h = 2200)
+  # `StackedVlnPlot` is NOT called here, and that is the accounting rather than an omission:
+  # it takes a Seurat object, and `plotGeneExpression` above is the CellChat entry point that
+  # builds one and calls it - measured in CellChat's own source, `gg <- StackedVlnPlot(w10x, ...)`.
+  # Calling it on a CellChat object fails with "no applicable method for 'Idents'", which is
+  # what it did on all eighteen units. Declared `duplicate_of` plotGeneExpression.
 }
 
 # COMMUNICATION PATTERNS. `k` IS FIXED AT 3 AND IS NOT CHOSEN FROM THE DATA. CellChat asks the
