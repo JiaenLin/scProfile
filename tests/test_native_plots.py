@@ -71,3 +71,45 @@ if __name__ == "__main__":
                 bad += 1
                 print(f"  FAIL {name}: {str(e)[:160]}")
     sys.exit(1 if bad else 0)
+
+
+def _all_specs():
+    import importlib.util
+    from pathlib import Path
+    out = {}
+    for f in sorted((Path(__file__).resolve().parents[1] / "kernels").glob("*.py")):
+        sp = importlib.util.spec_from_file_location(f.stem, f)
+        m = importlib.util.module_from_spec(sp)
+        try:
+            sp.loader.exec_module(m)
+        except Exception:                                                 # noqa: BLE001
+            continue
+        out[f.stem] = getattr(m, "PLUGIN", {})
+    return out
+
+
+def test_a_plugin_that_wraps_a_tool_owes_an_accounting():
+    assert N.requires_accounting({"wraps": {"tool": "SomeTool"}})
+    assert not N.requires_accounting({})
+
+
+def test_the_debt_is_a_RATCHET_and_may_only_shrink():
+    """A new wrapper arriving with no accounting is a regression; the named ones are known debt.
+
+    This is what locks the practice. Without it, 'list the tool's plots and use them' is advice,
+    and advice is followed until somebody is in a hurry.
+    """
+    owing, unexpected = N.accounting_debt(_all_specs())
+    assert not unexpected, (
+        "a plugin wraps a tool and does not account for its plots, and is not on the known-debt "
+        f"list: {unexpected}. Either declare native_plots for it, or - if the debt is genuinely "
+        "being taken on - add it to OWES_ACCOUNTING with that decision recorded.")
+    stale = [n for n in N.OWES_ACCOUNTING if n not in owing]
+    assert not stale, (
+        f"these paid their debt but are still listed as owing it: {stale}. Remove them from "
+        "OWES_ACCOUNTING so the ratchet keeps its meaning.")
+
+
+def test_the_plugin_that_paid_is_no_longer_on_the_list():
+    assert "cellchat" not in N.OWES_ACCOUNTING, (
+        "cellchat declares native_plots; leaving it on the debt list makes the list a decoration")

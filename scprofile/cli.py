@@ -1412,6 +1412,14 @@ def _validate(a):
         # unexplained gap between what a tool draws and what a wrapper uses is exactly the
         # difference between wrapping a method and re-inventing a worse one.
         _np = (k.spec or {}).get("native_plots") or {}
+        if not _np:
+            from . import native as _NAT0
+            if _NAT0.requires_accounting(k.spec):
+                _tool = ((k.spec or {}).get("wraps") or {}).get("tool")
+                print(f"  upstream plots: NO ACCOUNTING. This plugin wraps {_tool} and inherits "
+                      f"its figures; every one is used or accounted for, or the wrapper is "
+                      f"re-inventing a worse version of something that already ships. See "
+                      f"scprofile/native.py for the three reasons one may go unused.")
         if _np:
             from . import native as _NAT
             _u, _sk, _pr = _NAT.account(sorted(_np), _np)

@@ -126,3 +126,34 @@ def report(inventory, declared):
     for fn, why in p:
         L.append(f"  PROBLEM      {fn}  {why}")
     return "\n".join(L)
+
+
+#: PLUGINS THAT WRAP A TOOL AND DO NOT YET ACCOUNT FOR ITS PLOTS. A ratchet, not an excuse: the
+#: list may SHRINK and never grow, so the practice is locked without pretending the debt is paid.
+#: Every name here is a wrapper whose upstream ships figures nobody has looked at, and the first
+#: one to be worked on will show what that is worth - cellchat went from 1 of 30 used to 14, and
+#: four of the fourteen answer a design comparison directly.
+OWES_ACCOUNTING = (
+    "abundance", "cellcycle", "de", "decoupler", "liana", "pseudotime", "scenic", "velocity",
+)
+
+
+def requires_accounting(spec):
+    """True when a plugin wraps an upstream tool and therefore owes an account of its plots.
+
+    A plugin that wraps nothing draws only what it invented, and there is no inventory to be
+    measured against. Everything else inherits its upstream's figures whether it uses them or not.
+    """
+    return bool(((spec or {}).get("wraps") or {}).get("tool"))
+
+
+def accounting_debt(specs):
+    """(owing, unexpected) - wrappers with no `native_plots`, and any not on the ratchet list.
+
+    `specs` is {plugin_name: spec}. `unexpected` is what makes this a ratchet: a NEW wrapper
+    arriving without an accounting is a regression, while the named ones are known debt.
+    """
+    owing = sorted(n for n, sp in (specs or {}).items()
+                   if requires_accounting(sp) and not (sp or {}).get("native_plots"))
+    unexpected = [n for n in owing if n not in OWES_ACCOUNTING]
+    return owing, unexpected

@@ -224,3 +224,34 @@ already uses, so the four pages of one plugin sort together.
 `scprofile/panels.py` is the registry: every kind, what it establishes, what it does NOT, its
 owner (host or plugin), and the numbered rules R1–R11. A new panel is a registry entry, and the
 loop checks drawing against that registry rather than against a list somebody keeps in their head.
+
+## 6. List the tool's own plots, and use them
+
+**A wrapper inherits the figures of the tool it wraps.** Every one is either used, or accounted
+for with a reason the mechanism accepts — otherwise the wrapper is re-inventing a worse version
+of something that already ships, and nobody finds out because nobody counted.
+
+The practice, in order:
+
+1. **List them.** Not from memory — from the package, in the plugin's own environment. CellChat
+   exports 30 plotting functions; the hand-taken list was wrong in two ways at once, and the
+   check that reads `getNamespaceExports` found both.
+2. **Use them.** This is the default and it needs no justification. `{"use": "<where it lands>"}`.
+3. **Account for the rest**, from a closed vocabulary in `scprofile/native.py`:
+   `not_applicable` with evidence, `superseded_by_design` naming the replacing panel *and* the
+   defect it corrects, or `duplicate_of` naming the function actually called.
+
+**Three answers are rejected by name**, because they are the ones that get given:
+`reimplemented` (the instruction is to use the tool's plot), `not_considered` (an omission
+wearing the clothes of a reason), and `dependency_missing` (a package one install away is not a
+design decision). Each rejection carries the remedy.
+
+**What this was worth, measured.** Asked how many of CellChat's 30 plotting functions the plugin
+used, the answer was **one** — and only for its numbers; the R script contained no `ggsave`,
+`png()` or `pdf()` call at all. After the accounting it is **14**, and four of those answer a
+design comparison directly. The gap was never a decision; it was never counted.
+
+**It is a ratchet.** `native.OWES_ACCOUNTING` names the wrappers that still owe one. The list may
+shrink and never grow: a new wrapper arriving without an accounting fails the suite, while the
+named debt stays visible. Without that, this section is advice, and advice is followed until
+somebody is in a hurry.

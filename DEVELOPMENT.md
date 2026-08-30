@@ -54,6 +54,12 @@ do next. Four rules, each paid for:
   escaped the runner's `except`, and the runner terminated WITH CODE 0 - hiding every file
   sorted after it and two genuine failures. **Verify a gate by making it fail**: drop a test that
   asserts False and confirm non-zero, which is one command and would have caught this on day one.
+- **A wrapper uses the wrapped tool's own plots.** List them from the package, use them, and
+  account for every one you do not - from the closed vocabulary in `scprofile/native.py`, which
+  rejects "reimplemented", "not considered" and "dependency missing" by name. A reimplementation
+  is legitimate only as `superseded_by_design`, naming the panel that replaces it AND the defect
+  in the upstream encoding it corrects. `native.OWES_ACCOUNTING` is a ratchet over the wrappers
+  that still owe one: it may shrink, never grow. See `docs/FIGURE_STANDARD.md` §6.
 - **Fix the mechanism that exists; do not add one beside it.** Every rule in
   `docs/FIGURE_STANDARD.md` names the function that enforces it, and each was a change to
   something already there - the contrast population set, the sentinel mask, the paper writer, the
