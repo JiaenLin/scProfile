@@ -1405,6 +1405,23 @@ def _validate(a):
         f = V.validate_plugin(k) + V.validate_references(
             k, dest=a.references, organism=a.organism, deep=a.deep)
         errs += V.report(k, f)
+        # THE UPSTREAM'S OWN PLOTS, ACCOUNTED FOR. A plugin that wraps a tool inherits its
+        # figures; `scprofile.native` holds the closed vocabulary of reasons one may go unused,
+        # and rejects "reimplemented", "not considered" and "dependency missing" by name. This
+        # prints the accounting and counts anything unaccounted as an error, because an
+        # unexplained gap between what a tool draws and what a wrapper uses is exactly the
+        # difference between wrapping a method and re-inventing a worse one.
+        _np = (k.spec or {}).get("native_plots") or {}
+        if _np:
+            from . import native as _NAT
+            _u, _sk, _pr = _NAT.account(sorted(_np), _np)
+            print(f"  upstream plots: {len(_u)} used, {len(_sk)} validly skipped, "
+                  f"{len(_pr)} unaccounted")
+            for _fn, _why in _pr[:6]:
+                print(f"    {_fn}: {_why[:150]}")
+            if len(_pr) > 6:
+                print(f"    ... and {len(_pr) - 6} more")
+            errs += len(_pr)
     print()
     if errs:
         print(f"{errs} error(s). Each is a defect that would produce a plausible wrong answer "
