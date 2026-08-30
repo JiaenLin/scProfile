@@ -172,7 +172,13 @@ PLUGIN = {
     # numbers rather than a second implementation of them. Marked optional because each is
     # written by its own guarded block: one failing quantity costs its table, not the instance,
     # and an instance that produced edges but no centrality is still worth keeping.
+    # THE SAVED OBJECT IS AN OUTPUT, so the reuse layer can carry it between runs. Without this
+    # the object is written and then invisible to `adopt`: every new run directory starts empty,
+    # the guard finds no object, and the inference is paid again - which is the exact cost this
+    # was built to remove. Declaring it is what makes the saving worth anything across runs.
     "produces": ["tables/ccc_edges.csv",
+                 "[optional] objects/cellchat.rds",
+                 "[optional] objects/cellchat.inference.txt",
                  "[optional] tables/cellchat_pathway_prob.csv",
                  "[optional] tables/cellchat_centrality.csv",
                  "[optional] tables/cellchat_rank_net.csv",
