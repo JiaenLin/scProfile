@@ -44,6 +44,16 @@ for f in sorted((ROOT / "kernels").glob("*.py")):
         FAILURES.append(f"{n}: no producer/format version in the cache key, so a cache written "
                         f"by older code is served to newer code")
 
+    # 6. THE CACHE PATH MUST BE SCOPED BY THE INFERENCE PARAMETERS. The stamp inside already
+    #    refuses an object built under different settings, so this is not correctness - but two
+    #    runs comparing two settings would share one path and overwrite each other on every
+    #    unit, so the cache thrashes to nothing in exactly the comparison it is wanted for.
+    import re as _re
+    m = _re.search(r"ctx\.cache\(\s*[\"']objects[\"']([^)]*)\)", src)
+    if m and not m.group(1).strip().strip(","):
+        FAILURES.append(f"{n}: the object cache is keyed on the unit alone, so two runs at "
+                        f"different inference settings overwrite each other")
+
     # 2/3. publication must be by rename, and the marker last
     if "ctx.cache(" in src:
         if "os.replace" not in src and "_os.replace" not in src:

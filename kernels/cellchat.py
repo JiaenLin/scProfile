@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.17.0",
+    "version": "0.17.1",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -2923,7 +2923,15 @@ def run(ctx):
     edges_f = ctx.out / "tables" / "ccc_edges.csv"
     # A DIRECTORY THAT OUTLIVES THE RUN, for the fitted object. Without it every new run began
     # with an empty instance directory and paid for the whole inference again to redraw a plot.
-    cache = ctx.cache("objects")
+    #
+    # SCOPED BY THE INFERENCE PARAMETERS, not by the unit alone. The stamp inside already refuses
+    # an object built under different settings, so this was never a correctness problem - but two
+    # runs comparing two settings would share one path and overwrite each other's object on every
+    # unit, so the cache would thrash to nothing in exactly the comparison it is most wanted for.
+    _pkey = _hl.sha1("|".join(str(C[k]) for k in sorted(
+        ("type", "trim", "population_size", "nboot", "thresh", "min_cells"))).encode()
+    ).hexdigest()[:10]
+    cache = ctx.cache("objects", _pkey)
     argv = [rscript, str(script), str(mtx), str(meta), db,
             str(C["min_cells"]), str(C["trim"]), str(edges_f),
             str(C["type"]), "TRUE" if C["population_size"] else "FALSE",
