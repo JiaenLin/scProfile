@@ -346,8 +346,24 @@ def brief(out, plugin=""):
                      for k in (pay.get("kernels") or {}).values()
                      for f in (k.get("figures") or [])]
             L += [_gt(_dl(_spec, _figs)), ""]
-            L += ["WRITE ONE SUBSECTION PER QUESTION ABOVE, in that order. A question with no "
-                  "panel is a gap to report, not a section to skip.", ""]
+            # THE SAME LABELS THE PANEL USES, so a section and a panel section are one thing
+            # seen twice. The panel is built from `design_panel.comparisons` and the written
+            # section was built from whatever headings its author chose, so the two agreed on
+            # nothing but the run they came from and a reader had to re-derive the mapping.
+            from .compare_panel import control_basis as _cb
+            from .design_panel import comparisons as _cm
+
+            _ctrl = _cb(des, controls=pay.get("controls"))
+            if _ctrl:
+                L += ["THE REFERENCE OF EACH CONTRAST - everything is measured against these:"]
+                L += [f"  {f}: against {lv!r}   ({why})" for f, (lv, why) in sorted(_ctrl.items())]
+                L += [""]
+            L += ["USE THESE HEADINGS, VERBATIM, IN THIS ORDER. They are the panel's section "
+                  "names, so a reader moving between the two documents lands in the same place:"]
+            for _c in _cm(des):
+                L += [f"  {_c.get('kind', '').upper():12s} {_c.get('label', '')}"
+                      f"   -- {_c.get('question', '')}"]
+            L += ["", "A question with no panel is a gap to report, not a section to skip.", ""]
         except Exception as _e:                                           # noqa: BLE001
             L += [f"(the design's questions could not be enumerated: {_e})", ""]
 
