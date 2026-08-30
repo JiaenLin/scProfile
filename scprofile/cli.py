@@ -2878,20 +2878,24 @@ def _cache(a):
     if not cache.is_dir():
         print(f"no cache under {cache}")
         return 0
-    # APPARENT size and SHARED size are different numbers here, because the instance keeps a
-    # hard link to the same bytes. Reporting only the first would treble what the cache appears
-    # to cost.
-    seen, apparent, shared = set(), 0, 0
+    # THE NUMBER THAT DECIDES ANYTHING IS WHAT CLEARING WOULD FREE, and it is not the size of
+    # the directory. A run holds a HARD LINK to most of these bytes, so deleting the cache frees
+    # nothing for those files - the run still references them. The first version of this report
+    # printed the sum of file sizes as though it were the cost, which double-counts every shared
+    # file and would have provoked exactly the wrong decision; `du` on the same directory said
+    # half of it. Three numbers, each meaning one thing.
+    seen, unique, freed = set(), 0, 0
     rows = {}
     for f in cache.rglob("*"):
         if not f.is_file():
             continue
         st = f.stat()
-        apparent += st.st_size
         if st.st_ino not in seen:
             seen.add(st.st_ino)
-            if st.st_nlink > 1:
-                shared += st.st_size
+            unique += st.st_size
+            # nlink == 1 means only the cache references it, so clearing genuinely frees it.
+            if st.st_nlink == 1:
+                freed += st.st_size
         who = f.relative_to(cache).parts
         key = "/".join(who[:2]) if len(who) > 1 else who[0]
         r = rows.setdefault(key, [0, 0, 0.0])
@@ -2899,8 +2903,9 @@ def _cache(a):
         r[1] += st.st_size
         r[2] = max(r[2], st.st_mtime)
     print(f"cache: {cache}")
-    print(f"  {len(rows)} entr(y/ies), {apparent / 1e9:,.1f} GB apparent, "
-          f"{shared / 1e9:,.1f} GB of it shared with run directories by hard link")
+    print(f"  {len(rows)} entr(y/ies), {unique / 1e9:,.1f} GB on disk, of which "
+          f"{freed / 1e9:,.1f} GB would actually be freed by clearing it - the rest is "
+          f"hard-linked into run directories that still reference it")
     now = _t.time()
     for k in sorted(rows, key=lambda x: -rows[x][1])[:12]:
         n, sz, mt = rows[k]
