@@ -343,7 +343,7 @@ run)
   say "4. RUN"
   $PY -m scprofile.cli run --h5ad "$OBJ" --out "$OUT" \
       ${DES:+--design "$DES"} ${ORGANISM:+--organism "$ORGANISM"} \
-      ${ASSAY:+--assay "$ASSAY"} "${SEL[@]}" \
+      ${ASSAY:+--assay "$ASSAY"} ${LABEL:+--label-key "$LABEL"} "${SEL[@]}" \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} ${SEARCH:+--search "$SEARCH"} \
       --cores "${CORES:-${NCPUS:-4}}" --timeout "${TIMEOUT:-7200}" || echo "  run exit $?"
 
@@ -391,7 +391,7 @@ PYEOF
   say "3. RUN, AND WATCH THE LOOP CLOSE"
   $PY -m scprofile.cli run --h5ad "$OBJ" --out "$OUT" \
       ${DES:+--design "$DES"} ${ORGANISM:+--organism "$ORGANISM"} \
-      ${ASSAY:+--assay "$ASSAY"} --kernel "$KERNELS" \
+      ${ASSAY:+--assay "$ASSAY"} ${LABEL:+--label-key "$LABEL"} --kernel "$KERNELS" \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
       --cores "${NCPUS:-4}" --timeout "${TIMEOUT:-7200}" || echo "  run exit $?"
 

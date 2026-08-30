@@ -83,12 +83,22 @@ def test_every_documented_variable_is_actually_threaded():
 def test_the_label_option_reaches_both_plan_and_run():
     """The plan and the run must be given the SAME object description.
 
-    If only one of them gets the label column, the plan describes a different grouping from the
-    one that executes, and the audit that compares them is comparing two objects.
+    COUNTING OCCURRENCES IS NOT ENOUGH, and this test learned that the hard way: it asserted
+    `count("--label-key") >= 2` and passed with three occurrences, ALL of them on `plan`
+    invocations and none on `cli run`. A run then profiled the default annotation column while
+    every check said the option was threaded. A check that can be satisfied without the thing
+    it is checking for is worse than no check.
+
+    So each invocation is found by name and inspected for the flag.
     """
+    import re
     src = _src()
-    assert src.count("--label-key") >= 2, (
-        "the label column reaches fewer than two invocations; plan and run must agree")
+    for sub in ("plan", "run"):
+        calls = re.findall(r"scprofile\.cli " + sub + r"\b(.*?)(?:\|\||\n\n)", src, re.S)
+        assert calls, f"no `scprofile.cli {sub}` invocation found in the template"
+        assert all("--label-key" in c for c in calls), (
+            f"a `cli {sub}` invocation does not pass --label-key, so plan and run would be "
+            f"given different object descriptions: {len(calls)} call(s) checked")
 
 
 if __name__ == "__main__":
