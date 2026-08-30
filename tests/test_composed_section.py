@@ -49,6 +49,23 @@ check("COMPOSED_MARK" in pap,
 check("startswith(_C.COMPOSED_MARK)" in pap,
       "the composed/authored distinction is not actually applied when deciding to rebuild")
 
+# 4. THE SECTION MUST LEAD WITH FINDINGS, NOT WITH THE DESIGN'S QUESTIONS. A section whose
+#    headings are questions reads as a questionnaire; one whose headings are answers reads as a
+#    result, and a reader who reads only the headings knows what was found.
+sec = src[src.index("def section("):src.index("def claims(")]
+if "## {head}" not in sec or "head = (f\"{d['against']} carries" not in sec:
+    FAILURES.append("the section's headings are not generated from the measurement, so they "
+                    "cannot be findings and can drift from the text beneath them")
+if "the largest difference in" not in sec:
+    FAILURES.append("the section does not open with the shape of the result, so a reader must "
+                    "assemble it from the subsections")
+if "| comparison | reference |" not in sec:
+    FAILURES.append("the section carries no summary table across comparisons")
+# and the interaction must be arithmetic, explicitly not a test
+if "difference of two differences" not in sec:
+    FAILURES.append("the interaction is reported without saying the method provides no test "
+                    "for it")
+
 if FAILURES:
     print("FAIL")
     for f in FAILURES:

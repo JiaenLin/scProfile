@@ -172,14 +172,21 @@ def _weight_name(spec):
 def section(run, plugin, spec=None, design=None, run_key=""):
     """The result section, as Markdown, composed from this run's tables.
 
-    ONE SUBSECTION PER COMPARISON THE DESIGN SUPPORTS, in the design's own order and under the
-    panel's own labels, so the two documents cannot disagree about what was compared.
+    IT LEADS WITH FINDINGS, NOT WITH APPARATUS. A section whose headings are the design's
+    questions reads as a questionnaire; one whose headings are its answers reads as a result, and
+    a reader who reads only the headings knows what was found. The heading is generated from the
+    measurement, so it cannot disagree with the paragraph under it.
+
+    Nothing here knows any biology. It says which contrast is largest, which elements moved most,
+    what the method's own test said, and where every number came from. Saying what the movement
+    MEANS is an author's job, and an authored section replaces this one.
     """
     from .design_panel import comparisons as _cmps
 
     f = findings(run, plugin, spec)
     if not f:
         return ""
+    W = _weight_name(spec)
     cmps = _cmps(design or {}) if design else []
     order = [c.get("label") for c in cmps if c.get("label") in f] or sorted(f)
     kind = {c.get("label"): str(c.get("kind", "")) for c in cmps}
@@ -189,58 +196,98 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         for a in (c.get("aliased_with") or []):
             alias.setdefault(str(c.get("factor")), set()).add(str(a))
 
-    W = _weight_name(spec)
-    L = [COMPOSED_MARK,
-         f"# What this run measured across the design",
-         "",
-         f"Composed from run `{run_key or Path(run).name}`. Every number below is read from a "
-         f"table in that run and the table is named where it is used; every difference is "
-         f"measured against the contrast's reference arm.",
-         ""]
+    ranked = sorted((l for l in order if f[l]["ratio"]), key=lambda l: -f[l]["ratio"])
+    L = [COMPOSED_MARK, "", "# What this run measured across the design", ""]
+
+    # THE SUMMARY FIRST. A reader should not have to assemble the shape of the result from six
+    # subsections; the run knows which contrast is largest and can say so.
+    if ranked:
+        big, small = f[ranked[0]], f[ranked[-1]]
+        L += [f"Across {len(order)} comparison(s) the design supports, the largest difference in "
+              f"total {W} is **{ranked[0]}** at **{_n(big['ratio'])}x**, and the smallest is "
+              f"**{ranked[-1]}** at **{_n(small['ratio'])}x**. Every difference below is measured "
+              f"against that contrast's reference arm, and every number is read from a table in "
+              f"run `{run_key or Path(run).name}`.", ""]
+        L += [f"| comparison | reference | {W} | elements differing | leading element |",
+              "|---|---|---|---|---|"]
+        for l in ranked:
+            d = f[l]
+            lead = d["leading"][0][0] if d["leading"] else "—"
+            sig = f"{d['n_significant']} of {d['n_tested']}" if d["n_tested"] else "not tested"
+            L += [f"| {l} | {d['reference']} | {_n(d['ratio'])}x | {sig} | {lead} |"]
+        L += [""]
     if alias:
-        L += ["; ".join(f"In this design **{k}** varies together with "
-                        f"{', '.join(sorted(v))} across all samples, so a difference along "
-                        f"{k} is a difference along both" for k, v in sorted(alias.items()))
-              + ".", ""]
+        L += ["; ".join(f"In this design **{k}** varies together with {', '.join(sorted(v))} "
+                        f"across all samples, so a difference along {k} is a difference along "
+                        f"both" for k, v in sorted(alias.items())) + ".", ""]
 
     for lab in order:
         d = f[lab]
-        L += [f"## {quest.get(lab) or lab}", ""]
+        # THE HEADING IS THE FINDING, generated from the measurement so the two cannot diverge.
         if d["ratio"]:
-            L += [f"Measured against **{d['reference']}**, the **{d['against']}** arm carries "
-                  f"**{_n(d['ratio'])}x** the total {W} "
-                  f"({_n(d['total_against'])} against {_n(d['total_reference'])}), over "
+            head = (f"{d['against']} carries {_n(d['ratio'])}x the {W} of {d['reference']}"
+                    + (f", in {lab}" if kind.get(lab) not in ("marginal", "") else ""))
+        else:
+            head = lab
+        L += [f"## {head}", ""]
+        if quest.get(lab):
+            L += [f"*{quest[lab]}*", ""]
+        if d["ratio"]:
+            L += [f"Total {W} is {_n(d['total_against'])} in **{d['against']}** against "
+                  f"{_n(d['total_reference'])} in the reference arm **{d['reference']}**, over "
                   f"{d['n_elements']} elements."]
         if d["n_tested"]:
-            L += [f"**{d['n_significant']} of {d['n_tested']}** differ significantly between the "
-                  f"arms by the method's own between-arm test."]
+            L += [f"**{d['n_significant']} of {d['n_tested']}** elements differ significantly "
+                  f"between the arms by the method's own between-arm test."]
         if d["leading"]:
-            L += [f"Leading the difference: {_lead_phrase(d['leading'])}."]
+            L += [f"The largest changes are {_lead_phrase(d['leading'])}."]
         if d["only_against"]:
             L += [f"**{len(d['only_against'])}** element(s) are detected in "
                   f"**{d['against']}** and not in {d['reference']}"
                   + (f" — {', '.join(d['only_against'])}"
                      if len(d["only_against"]) <= 12 else "")
-                  + (f"; **{len(d['only_reference'])}** the other way" if d["only_reference"]
-                     else ", and none the other way") + "."]
+                  + (f"; **{len(d['only_reference'])}** the other way." if d["only_reference"]
+                     else ", and none the other way.")]
         elif d["only_reference"]:
-            L += [f"**{len(d['only_reference'])}** element(s) are detected in "
-                  f"{d['reference']} and not in {d['against']}, and none the other way."]
+            L += [f"**{len(d['only_reference'])}** element(s) are detected in {d['reference']} "
+                  f"and not in {d['against']}, and none the other way."]
         if d["disagree"]:
             L += [f"{d['disagree']} of {d['n_elements']} elements move in opposite directions on "
-                  f"the raw and share scales, because the two arms differ in total strength; "
-                  f"both are in `{d['source_table']}`."]
+                  f"the raw and share scales, because the arms differ in total {W}; both scales "
+                  f"are in the table below."]
         L += ["", f"*Source: `{d['source_table']}`"
-                  + (f", significance from `{d['source_stats']}` per contrast" if d["source_stats"]
-                     else "")
-                  + f". Reference arm from {d['from_source'] or 'the run'}.*", ""]
+                  + (f"; significance from `{d['source_stats']}` in this contrast's directory"
+                     if d["source_stats"] else "")
+                  + f". Reference arm is {d['from_source'] or 'the run'}.*", ""]
+
+    # THE INTERACTION, where the design supports one: a difference of two differences, computed
+    # from the simple effects the run already measured. Reported as arithmetic and NOT as a test,
+    # because the method provides none for it.
+    simple = [c for c in cmps if str(c.get("kind")) == "simple" and c.get("label") in f]
+    byfac = {}
+    for c in simple:
+        byfac.setdefault(str(c.get("factor")), []).append(c.get("label"))
+    inter = [(fac, ls) for fac, ls in byfac.items() if len(ls) == 2]
+    if inter:
+        L += ["## Whether one factor's effect depends on the other", ""]
+        for fac, ls in sorted(inter):
+            a, b = f[ls[0]], f[ls[1]]
+            if not (a["ratio"] and b["ratio"]):
+                continue
+            la, lb = math.log2(a["ratio"]), math.log2(b["ratio"])
+            L += [f"The effect of **{fac}** is {_n(a['ratio'])}x in `{ls[0]}` and "
+                  f"{_n(b['ratio'])}x in `{ls[1]}` — log2 {la:+.2f} against {lb:+.2f}, a "
+                  f"difference of {la - lb:+.2f}."]
+        L += ["", "*This is arithmetic on the simple effects above. The method provides no test "
+                  "for a difference of two differences, so no significance is attached to it and "
+                  "none should be read into it.*", ""]
 
     L += ["## How this section was produced", "",
-          "It is composed by the tool from this run's own tables, so it exists for every run and "
-          "its numbers cannot drift from the figures beside it. It states what was measured, in "
-          "the design's order, under the same labels the figure panel uses. It does not "
-          "interpret: an author who wants to say what the measurements mean edits this and "
-          "passes it back with `--section`, and that version replaces this one.", ""]
+          "Composed by the tool from this run's own tables, so it exists for every run and its "
+          "numbers cannot drift from the figures beside it. It states what was measured, in the "
+          "design's order, under the same labels the figure panel uses. It does not interpret: "
+          "an author who wants to say what the measurements mean edits this and passes it back "
+          "with `--section`, and that version replaces this one and is never overwritten.", ""]
     return "\n".join(L)
 
 
