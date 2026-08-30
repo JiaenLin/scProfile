@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.11.0",
+    "version": "0.11.1",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -573,6 +573,16 @@ cat("database:", nrow(d), "interactions,",
 #: STEP TWO: the scoring. Every argument that changes the meaning of the answer is passed on the
 #: command line rather than inherited from a signature, so the run's own log records it.
 _R_RUN = r'''
+# RETICULATE MUST USE THE PYTHON OF THE ENVIRONMENT R ITSELF LIVES IN.
+# Left alone, reticulate provisions its own interpreter in a uv cache that has none of the
+# packages this environment was built with, and every netEmbedding call failed with "Cannot find
+# UMAP, please install through pip" while umap-learn 0.5.12 sat installed two directories away.
+# That took out five plot functions at once and looked exactly like a missing dependency.
+# `Sys.which("python")` is NOT good enough - it depends on PATH and returned /bin/python when
+# measured. R.home() is where R actually is, so the environment is its parent.
+.envpy <- file.path(dirname(dirname(R.home())), "bin", "python")
+if (file.exists(.envpy)) Sys.setenv(RETICULATE_PYTHON = .envpy)
+
 suppressMessages({library(CellChat); library(Matrix)})
 args <- commandArgs(trailingOnly = TRUE)
 mtx <- args[1]; meta_f <- args[2]; db_name <- args[3]
@@ -3071,6 +3081,16 @@ cat("OK\n")
 #: and every comparison panel in the section was a reimplementation. This runs once per arm pair,
 #: on the objects the two units already saved, so it costs no inference at all.
 _R_COMPARE = r"""
+# RETICULATE MUST USE THE PYTHON OF THE ENVIRONMENT R ITSELF LIVES IN.
+# Left alone, reticulate provisions its own interpreter in a uv cache that has none of the
+# packages this environment was built with, and every netEmbedding call failed with "Cannot find
+# UMAP, please install through pip" while umap-learn 0.5.12 sat installed two directories away.
+# That took out five plot functions at once and looked exactly like a missing dependency.
+# `Sys.which("python")` is NOT good enough - it depends on PATH and returned /bin/python when
+# measured. R.home() is where R actually is, so the environment is its parent.
+.envpy <- file.path(dirname(dirname(R.home())), "bin", "python")
+if (file.exists(.envpy)) Sys.setenv(RETICULATE_PYTHON = .envpy)
+
 suppressMessages({library(CellChat); library(patchwork); library(ComplexHeatmap)})
 args <- commandArgs(trailingOnly = TRUE)
 rds_a <- args[1]; rds_b <- args[2]; name_a <- args[3]; name_b <- args[4]; figdir <- args[5]
@@ -3174,7 +3194,13 @@ npng("signalingRole_scatter_pair", {
   gg <- Filter(Negate(is.null), role)
   if (!length(gg)) stop("neither object returned a role scatter")
   lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)
+  # THE SIZE LEGEND MUST BE SHARED TOO. With shared axes but per-panel size scales the two panels
+  # read as comparable and are not: measured on one pair, the left legend ran to 500 and the
+  # right to 150, so an identical dot meant three times the count on one side. Found by opening
+  # the figure - no metric reports it.
+  smax <- max(unlist(lapply(gg, function(g) g$data$Count)), na.rm = TRUE)
   for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +
+    ggplot2::scale_size_continuous(limits = c(0, smax)) +
     ggplot2::ggtitle(names(role)[i])
   patchwork::wrap_plots(plots = gg)
 }, w = 2600, h = 1400)
@@ -3190,13 +3216,13 @@ npng("diff_signalingRole", {
 #    maximum over both - the same rule as the shared axis above and for the same reason.
 for (pat in c("outgoing", "incoming")) {
   ndev(paste0("signalingRole_heatmap_", pat), {
-    mx <- max(unlist(lapply(object.list, function(o) {
-      cs <- o@netP$centr
-      max(sapply(cs, function(x) if (pat == "outgoing") sum(x$outdeg) else sum(x$indeg)))
-    })), na.rm = TRUE)
+    # BOTH HEATMAPS OVER THE SAME PATHWAY SET, or ComplexHeatmap refuses to draw them side by
+    # side: "`nrow` of all heatmaps ... should be the same". The two arms rarely detect the same
+    # pathways - measured here, 48 and 41 with a union of 49 - so this is the normal case.
+    allp <- union(object.list[[1]]@netP$pathways, object.list[[2]]@netP$pathways)
     hs <- lapply(seq_along(object.list), function(i)
-      netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = pat,
-                                        title = names(object.list)[i], width = 6, height = 12))
+      netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = pat, signaling = allp,
+                                        title = names(object.list)[i], width = 6, height = 14))
     ComplexHeatmap::draw(hs[[1]] + hs[[2]], ht_gap = grid::unit(0.5, "cm"))
   }, w = 2600, h = 2200)
 }
@@ -3220,10 +3246,14 @@ for (g in shared) {
 
 # 8b. the differential as BARS - CellChat's own comparison bar plot, which reads per source or
 #     target where the network panel reads per pair.
-npng("barplot_count", netVisual_barplot(m, comparison = c(1, 2), measure = "count"),
-     w = 1800, h = 1600)
-npng("barplot_weight", netVisual_barplot(m, comparison = c(1, 2), measure = "weight"),
-     w = 1800, h = 1600)
+# `sources.use` is REQUIRED, and not as a subset. CellChat builds `df.net` only inside
+# `if (!is.null(sources.use) | !is.null(targets.use))` and then reads it unconditionally, so with
+# both NULL the function always fails with "object 'df.net' not found". Passing every source is
+# the no-subset case and the only way to reach the plot at all.
+npng("barplot_count", netVisual_barplot(m, comparison = c(1, 2), measure = "count",
+                                        sources.use = seq_along(group_new)), w = 1800, h = 1600)
+npng("barplot_weight", netVisual_barplot(m, comparison = c(1, 2), measure = "weight",
+                                         sources.use = seq_along(group_new)), w = 1800, h = 1600)
 
 # 9. the pathway manifold across BOTH arms - CellChat's own joint embedding, which places every
 #    pathway from both objects in one space and ranks how far each moved.
@@ -3260,12 +3290,16 @@ for (pw in head(paths, 6)) {
                           edge.weight.max = wmax,
                           signaling.name = paste(pw, names(object.list)[i]))
   }, w = 2800, h = 1500)
-  ndev(paste0("chord_cell__", safe), {
-    graphics::par(mfrow = c(1, 2), xpd = TRUE)
-    for (i in seq_along(object.list))
-      netVisual_chord_cell(object.list[[i]], signaling = pw,
-                           title.name = paste(pw, names(object.list)[i]))
-  }, w = 2800, h = 1500)
+  # ONE CHORD PER FILE. circlize draws into a whole device and does not share one with
+  # `par(mfrow)`; two in one device failed every time with "not enough space for cells at track
+  # index 2". Thirteen long labels also need the gaps and label size set rather than left at
+  # defaults tuned for short names.
+  for (i in seq_along(object.list))
+    ndev(paste0("chord_cell__", safe, "__", gsub("[^A-Za-z0-9]+", "_", names(object.list)[i])),
+         netVisual_chord_cell(object.list[[i]], signaling = pw, lab.cex = 0.45,
+                              small.gap = 1, big.gap = 8,
+                              title.name = paste(pw, names(object.list)[i])),
+         w = 1800, h = 1800)
 }
 """
 

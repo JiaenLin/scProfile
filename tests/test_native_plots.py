@@ -153,3 +153,44 @@ if _bad:
         print("  -", b)
     raise SystemExit(1)
 print("ok: every compare block aligns its objects before merging, and asserts it")
+
+
+# ---------------------------------------------------------------------------------------------
+# AN R SCRIPT THAT BRIDGES TO PYTHON MUST PIN THE INTERPRETER, and pin it from R.home().
+#
+# reticulate, left alone, provisions its own interpreter in a uv cache. That interpreter has none
+# of the packages the plugin's environment was built with, so a call that needs one fails with a
+# message telling you to install a package that IS ALREADY INSTALLED - measured here as "Cannot
+# find UMAP, please install through pip" with umap-learn 0.5.12 two directories away. It took out
+# five plot functions at once and read exactly like a missing dependency.
+#
+# `Sys.which("python")` does not fix it: it depends on PATH and returned /bin/python when
+# measured. R.home() is where R actually is, so the environment is its parent, and that holds
+# however the script was launched.
+def _check_python_bridge_is_pinned():
+    import re
+    from pathlib import Path as _P
+    bad = []
+    for f in sorted((_P(__file__).resolve().parent.parent / "kernels").glob("*.py")):
+        src = f.read_text()
+        for m in re.finditer(r'_R_[A-Z]+\s*=\s*r?(?:"""|\'\'\')(.*?)(?:"""|\'\'\')', src, re.S):
+            body = m.group(1)
+            uses_python = re.search(r"reticulate|umap\.method|py_install|import_from_path", body)
+            if not uses_python:
+                continue
+            if "RETICULATE_PYTHON" not in body:
+                bad.append(f"{f.name}: an R block reaches Python but never pins "
+                           f"RETICULATE_PYTHON")
+            elif "R.home()" not in body:
+                bad.append(f"{f.name}: RETICULATE_PYTHON is set from something other than "
+                           f"R.home(); PATH-based lookups resolve to the system python")
+    return bad
+
+
+_bad2 = _check_python_bridge_is_pinned()
+if _bad2:
+    print("FAIL")
+    for b in _bad2:
+        print("  -", b)
+    raise SystemExit(1)
+print("ok: every R block that reaches Python pins its interpreter from R.home()")
