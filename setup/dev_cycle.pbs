@@ -12,6 +12,12 @@
 #           INSTALL=decoupler,KERNELS=decoupler,silhouette,ORGANISM=mouse,ASSAY=nucleus \
 #        setup/dev_cycle.pbs
 #
+# `LABEL=<obs column>` chooses which annotation to profile, passed through as `--label-key`.
+# It reaches `plan` and `run` alike, because the two must be given the same object description or
+# the plan describes a different grouping from the one that runs. WITHOUT THIS the variable was
+# accepted on the qsub line and silently dropped - a run asked for a forced label column and
+# profiled the default one, with nothing in its output saying so.
+#
 # `ALL=1` runs every discovered plugin instead of `KERNELS`. `SEARCH=<dir>` is handed to both
 # `plan` and `run` as `--search`, for inputs that are not in the object - the two must be given
 # the same leads or the plan can name a directory the run never looks in.
@@ -278,6 +284,7 @@ plan)
   say "PLAN, AUDITED, WITH ITS REPORT — over EVERY plugin"
   $PY -m scprofile.cli plan --h5ad "$OBJ" ${DES:+--design "$DES"} \
       ${ORGANISM:+--organism "$ORGANISM"} ${ASSAY:+--assay "$ASSAY"} \
+      ${LABEL:+--label-key "$LABEL"} \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} ${SEARCH:+--search "$SEARCH"} \
       --audit --report "$OUT" || echo "  plan exit $?"
   ;;
@@ -318,6 +325,7 @@ run)
   say "3. PLAN, AUDITED, WITH ITS REPORT — over EVERY plugin"
   $PY -m scprofile.cli plan --h5ad "$OBJ" ${DES:+--design "$DES"} \
       ${ORGANISM:+--organism "$ORGANISM"} ${ASSAY:+--assay "$ASSAY"} \
+      ${LABEL:+--label-key "$LABEL"} \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} ${SEARCH:+--search "$SEARCH"} \
       --audit --report "$OUT" || echo "  plan exit $?"
 
@@ -326,6 +334,7 @@ run)
   # plan could not be audited at all. No --report here: the artifact is the full plan above.
   $PY -m scprofile.cli plan --h5ad "$OBJ" ${DES:+--design "$DES"} \
       ${ORGANISM:+--organism "$ORGANISM"} ${ASSAY:+--assay "$ASSAY"} \
+      ${LABEL:+--label-key "$LABEL"} \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} \
       --kernel "${KERNELS:-$(ls "$TOOL/kernels" | head -1 | sed 's/\.py$//')}" --audit 2>&1 \
       | grep -E "AUDIT|checked:|error\(s\)|ERROR|WARN" \

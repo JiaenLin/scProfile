@@ -60,6 +60,37 @@ def test_the_two_disagree_only_in_the_safe_direction():
         "zero status would be sealed as complete")
 
 
+def test_every_documented_variable_is_actually_threaded():
+    """A `-v` variable the header documents must reach the command, or it is silently dropped.
+
+    `LABEL=cell_type_forced` was accepted on the qsub line and never passed on, so a run asked
+    for a forced annotation column and profiled the default one, with nothing in its output
+    saying so. A variable that is documented and unused is worse than one that is absent: the
+    absent one fails loudly at the shell.
+    """
+    import re
+    src = _src()
+    head = src[:src.index('case "${PHASE}" in')]
+    body = src[src.index('case "${PHASE}" in'):]
+    documented = set(re.findall(r"^# `([A-Z][A-Z0-9_]{2,})[=`]", head, re.M))
+    documented |= set(re.findall(r"^#\s+`([A-Z][A-Z0-9_]{2,})=", head, re.M))
+    missing = sorted(v for v in documented if v not in body)
+    assert not missing, (
+        "documented in the header and never used in the body, so it is accepted and dropped: "
+        f"{missing}")
+
+
+def test_the_label_option_reaches_both_plan_and_run():
+    """The plan and the run must be given the SAME object description.
+
+    If only one of them gets the label column, the plan describes a different grouping from the
+    one that executes, and the audit that compares them is comparing two objects.
+    """
+    src = _src()
+    assert src.count("--label-key") >= 2, (
+        "the label column reaches fewer than two invocations; plan and run must agree")
+
+
 if __name__ == "__main__":
     import sys
     bad = 0
