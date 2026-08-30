@@ -1,18 +1,45 @@
 # scProfile
 
-**Two harnesses joined at the plugin runner.**
+**A design-aware agentic research discovery workflow for single-cell data.**
 
-**A platform harness** — takes an annotated single-cell or single-nucleus object and a design
-table, resolves what can run, builds the environments, runs plugins, merges the outputs. Plugins
-are plug-and-run: one file each, declared, no host change to add one. Nine ship today: cell cycle,
-RNA velocity, pseudotime, regulons, pathway and TF activity, cell–cell communication, differential
-abundance, differential expression.
+Point it at an annotated single-cell or single-nucleus object and the experiment's design. It
+works out what that experiment can ask, runs the methods that can answer, draws the figures, and
+writes the result section with every claim bound to the figure it was read off.
+
+## The design is the spine
+
+One design table is the only place the experiment is described, and everything downstream is
+derived from it. That is what
+"design-aware" means here, and it is what joins the two halves below into one workflow:
+
+| the design decides | what it produces |
+|---|---|
+| what a method is fitted to | units: one per design arm, one per level of each factor, one per sample |
+| which questions the experiment supports | every marginal, simple and interaction comparison, enumerated |
+| what each question needs to be answered | the evidence, stated as biology before any method is named |
+| which figure answers it | the wrapped tool's own plot first, the host's own only where none exists |
+| what the written result contains | one section per comparison, in the order the design gives them |
+
+Nothing in that chain is configured per project. A three-factor design produces more comparisons,
+more units and more sections from the same code.
+
+## The two halves
+
+**A platform harness** — takes the object and the design, resolves what can run, builds the
+environments, runs plugins, merges the outputs. Plugins are plug-and-run: one file each,
+declared, no host change to add one. Nine ship today: cell cycle, RNA velocity, pseudotime,
+regulons, pathway and TF activity, cell–cell communication, differential abundance, differential
+expression.
 
 **An agentic figure harness** — takes those outputs and produces the figures and the written
-result. It works out which comparisons the design supports, what evidence each needs, and how each
-is best drawn; it prefers the wrapped tool's own plots over reimplementing them; it checks what
-was drawn, records what a person saw, and binds every written claim to the figures it was read
-off.
+result. It enumerates the comparisons, states what evidence each needs, prefers the wrapped
+tool's own plots over reimplementing them, checks what was drawn, records what a person saw, and
+binds every written claim to the figures it was read off. It refuses rather than guesses: a
+question with no panel is reported as a gap, and a claim with no figure behind it is not written.
+
+The boundary between the two is the plugin runner. Everything before it is about getting a method
+to run correctly; everything after it is about turning the output into something a reader can
+check.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 

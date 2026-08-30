@@ -1,6 +1,14 @@
 # What scProfile is made of
 
-scProfile is two harnesses joined at the plugin runner.
+scProfile is a **design-aware agentic research discovery workflow for single-cell data**: it takes
+an annotated object and a design, and returns figures and a written result section in which every
+claim is bound to a figure.
+
+It is built in two halves that meet at the plugin runner. They are one workflow rather than two
+tools because **the design table is the only place the experiment is described, and every stage is derived
+from it** — the units a
+method is fitted to, the comparisons that exist, the evidence each needs, the figure that answers
+it, and the sections of the result.
 
 **Part one — the platform harness.** Takes an annotated single-cell object and a design table,
 resolves what can run, builds the environments, runs plugins, merges their outputs. Plugins are

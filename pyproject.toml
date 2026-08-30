@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "scprofile"
 dynamic = ["version"]
-description = "Comprehensive profiling of an annotated single-cell or single-nucleus dataset"
+description = "A design-aware agentic research discovery workflow for single-cell data"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
