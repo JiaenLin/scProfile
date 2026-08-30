@@ -130,7 +130,7 @@ def read_ledger(out, plugin=""):
     return rows
 
 
-def _append(out, rec):
+def _append(out, rec, plugin=""):
     _root(out, plugin).mkdir(parents=True, exist_ok=True)
     with open(_root(out, plugin) / ledger_name(plugin), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(rec) + "\n")
@@ -161,10 +161,10 @@ def claim(out, text, cites, *, author="", plugin=""):
     return _append(out, {"kind": "claim", "id": cid, "text": words,
                          "cites": {c: _digest(root / c) for c in cites},
                          "author": str(author or ""),
-                         "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+                         "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, plugin)
 
 
-def review(out, cid, verdict, why, *, reviewer="", replaces=""):
+def review(out, cid, verdict, why, *, reviewer="", replaces="", plugin=""):
     """Record what a review round did to one claim.
 
     THE VERDICT THAT MATTERS IS `withdrawn`. A loop that only ever confirms is a loop nobody
@@ -182,7 +182,7 @@ def review(out, cid, verdict, why, *, reviewer="", replaces=""):
         raise Refused(f"no claim {cid!r} in this run. Record the claim before reviewing it.")
     return _append(out, {"kind": "review", "id": cid, "verdict": verdict, "why": text,
                          "reviewer": str(reviewer or ""), "replaces": str(replaces or ""),
-                         "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+                         "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, plugin)
 
 
 def status(out, plugin=""):
@@ -342,7 +342,7 @@ def brief(out):
     return "\n".join(L)
 
 
-def next_step(out):
+def next_step(out, plugin=""):
     """(headline, command) - what to do next, always with something runnable.
 
     A STATUS THAT DOES NOT SAY WHAT TO DO NEXT IS A REPORT SOMEBODY HAS TO INTERPRET. Every
@@ -404,7 +404,7 @@ def write_draft(out, text, *, author="", plugin=""):
     _root(out, plugin).mkdir(parents=True, exist_ok=True)
     (_root(out, plugin) / draft_name(plugin)).write_text(body, encoding="utf-8")
     _append(out, {"kind": "draft", "words": len(body.split()), "author": str(author or ""),
-                  "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+                  "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, plugin)
     return _root(out, plugin) / draft_name(plugin)
 
 

@@ -99,3 +99,37 @@ ck("and there is a document to point at", _doc.is_file(), str(_doc))
 
 print("\n" + ("the paper test holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
+
+
+def test_a_plugin_section_never_touches_the_run_root():
+    """One manuscript per plugin means its ledger, draft and page live under the plugin.
+
+    Threading a `plugin` argument through by hand left three `_append` call sites unthreaded, so
+    a claim was written to the RUN ROOT ledger while `review` read the plugin's - and the review
+    then refused a claim that had just been recorded. The failure was silent until an end-to-end
+    call, because each function worked and only their pairing was wrong.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from scprofile import paper as P
+
+    d = Path(tempfile.mkdtemp())
+    figs = d / "kernels" / "cellchat" / "figures"
+    figs.mkdir(parents=True)
+    (figs / "F1.png").write_bytes(b"x" * 100)
+
+    rec = P.claim(d, "A claim long enough to be checkable about the figure it cites.",
+                  ["kernels/cellchat/figures/F1.png"], plugin="cellchat")
+    P.review(d, rec["id"], "standing", "a reviewer put it and it held", plugin="cellchat")
+    P.write_draft(d, " ".join(["w"] * 400), plugin="cellchat")
+
+    plug = d / "kernels" / "cellchat"
+    assert (plug / "PAPER_CLAIMS.cellchat.jsonl").is_file(), "the claim did not reach the plugin"
+    assert (plug / "PAPER.cellchat.md").is_file(), "the draft did not reach the plugin"
+    assert not (d / "PAPER_CLAIMS.jsonl").exists(), (
+        "a per-plugin claim was written to the run root, where its own review cannot find it")
+    assert not (d / "PAPER.md").exists(), "a per-plugin draft was written to the run root"
+
+    rows = P.status(d, "cellchat")
+    assert rows and rows[0][1] != P.UNREVIEWED, "the review did not attach to the claim"
