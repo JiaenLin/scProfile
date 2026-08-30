@@ -20,7 +20,8 @@ JOB = ROOT / "setup" / "dev_cycle.pbs"
 #: variable -> the scprofile subcommands it MUST reach. A variable for `run` alone that also
 #: reached `plan` would be as wrong as the reverse; both are stated.
 WANT = {"LABEL": {"plan", "run"}, "REUSE": {"run"}, "REUSE_GRADE": {"run"},
-        "SEARCH": {"plan", "run"}, "DES": {"plan", "run"}}
+        "SEARCH": {"plan", "run"}, "DES": {"plan", "run"},
+        "SECTION": {"run"}, "NOCACHE": {"run"}}
 
 FAILURES = []
 src = JOB.read_text()
@@ -44,6 +45,17 @@ for var, subs in WANT.items():
     for sub, bodies in inv.items():
         if sub not in subs and any(f"${{{var}:+" in b for b in bodies):
             FAILURES.append(f"${var} reaches `{sub}`, which is not one of {sorted(subs)}")
+
+# CONTROL is expanded into an array rather than a ${VAR:+...} because --control repeats, so it
+# is checked separately: the array must be built and it must reach `run`.
+_run = " ".join(inv.get("run") or [])
+if "${CTRL[@]}" not in _run and "$CTRL" not in _run:
+    FAILURES.append("CONTROL is never expanded into the run invocation, so a declared control "
+                    "does not reach the tool and the direction falls back to a recommendation")
+if "CTRL+=(--control" not in src:
+    FAILURES.append("the job does not build the --control array")
+if "CONTROL" not in (src[:src.index("set -")] if "set -" in src else src):
+    FAILURES.append("CONTROL is consumed but not documented in the header")
 
 # EVERY variable the file consumes is documented in its own header, or a user cannot know it
 # exists. The header is the only place a qsub line is described.

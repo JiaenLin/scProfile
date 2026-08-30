@@ -18,6 +18,16 @@
 # accepted on the qsub line and silently dropped - a run asked for a forced label column and
 # profiled the default one, with nothing in its output saying so.
 #
+# `CONTROL=<factor>=<level>[,<factor>=<level>...]` declares which level of each factor is the
+# CONTROL, so every contrast is measured against it. Without it the tool recommends one from a
+# vocabulary of experimental role and prints the basis; where a study's control is named in its
+# own field's words - a diet, an age, a timepoint - it must be declared, because the tool ships
+# no guess about anybody's biology.
+#
+# `SECTION=<file>` or `SECTION=<plugin>=<file>` carries an authored result section into the run
+# and renders it with the figures, so the writing travels with the run that produced them.
+# `NOCACHE=1` withholds the reuse cache for one run, to rule it out when a result looks wrong.
+#
 # `FORCE=1` is passed to `install` as `--force`, which REBUILDS an environment that already
 # resolves. One environment is shared by several plugins, so a rebuild is not a local act:
 # forcing one has already cost seven plugins their environment for four builds. Use it when
@@ -352,12 +362,25 @@ run)
       | grep -E "AUDIT|checked:|error\(s\)|ERROR|WARN" \
       || echo "  plan(restricted) exit $?"
 
+  # `--control` IS REPEATABLE AND `-v` CANNOT CARRY A REPEATED FLAG, so CONTROL is a
+  # comma-separated list and is expanded here. An empty array expands to nothing, which is why
+  # the array form is used rather than a bare ${CONTROL:+...}.
+  CTRL=()
+  if [ -n "${CONTROL:-}" ]; then
+    _old_ifs="$IFS"; IFS=','
+    for _c in $CONTROL; do [ -n "$_c" ] && CTRL+=(--control "$_c"); done
+    IFS="$_old_ifs"
+    echo "  controls declared: ${CONTROL}"
+  fi
+
   say "4. RUN"
   $PY -m scprofile.cli run --h5ad "$OBJ" --out "$OUT" \
       ${DES:+--design "$DES"} ${ORGANISM:+--organism "$ORGANISM"} \
       ${ASSAY:+--assay "$ASSAY"} ${LABEL:+--label-key "$LABEL"} "${SEL[@]}" \
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} ${SEARCH:+--search "$SEARCH"} \
       ${REUSE:+--reuse-from "$REUSE"} ${REUSE_GRADE:+--reuse-min-grade "$REUSE_GRADE"} \
+      ${SECTION:+--section "$SECTION"} ${NOCACHE:+--no-cache} \
+      "${CTRL[@]}" \
       --cores "${CORES:-${NCPUS:-4}}" --timeout "${TIMEOUT:-7200}" || echo "  run exit $?"
 
   say "5. WHAT LANDED"
