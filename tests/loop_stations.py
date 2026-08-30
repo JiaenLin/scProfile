@@ -347,18 +347,6 @@ def station_paper(runs):
                               "like when nobody pushed")
 
 
-STATIONS = (
-    ("1 exists", station_exists), ("2 landscape", station_landscape),
-    ("3 licence", station_licence), ("4 adopt", station_adopt),
-    ("5 merge", station_merge), ("6 report", station_report),
-    ("6b drawing", station_drawing),
-    ("7 eye", station_eye), ("8 paper", station_paper),
-    ("9 outputs", station_outputs),
-)
-
-
-
-
 #: THE DELIVERABLES A FINISHED RUN MUST CARRY, by path relative to the run directory. A run that
 #: is missing any of these has not produced its outputs, whatever else it wrote - and a loop that
 #: reports a round as going well while the manuscript does not exist is describing the half of
@@ -397,6 +385,19 @@ def station_outputs(runs):
                  + "\n      ".join(f"{p} — {why}" for p, why in gone))
         return PASS, f"{r.name}: every required output present ({len(REQUIRED_OUTPUTS)})", ""
     return BLOCKED, "no run has a report.json", "run something"
+
+
+
+STATIONS = (
+    ("1 exists", station_exists), ("2 landscape", station_landscape),
+    ("3 licence", station_licence), ("4 adopt", station_adopt),
+    ("5 merge", station_merge), ("6 report", station_report),
+    ("6b drawing", station_drawing),
+    ("7 eye", station_eye), ("8 paper", station_paper),
+    ("9 outputs", station_outputs),
+)
+
+
 
 
 def _eye_set(runs):
