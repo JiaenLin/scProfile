@@ -47,6 +47,10 @@ do next. Four rules, each paid for:
   Collect on one build, fix in one commit, rebuild, re-scan.
 - **Every finding becomes a change in this repository, or it did not happen.** A defect seen and
   not fixed is a defect found twice.
+- **The loop's own weaknesses are written down, in `docs/TEST_LOOP.md`, and they are part of it.**
+  Four are fixed and named with the failure that exposed them; four are open. A loop that
+  presents itself as sound is the same defect as a gate that fires on correct behaviour — both
+  ask to be believed rather than checked. Read that section before trusting a green run.
 - **THE GOAL IS THE EYE SCAN COMPLETE AND THE MANUSCRIPT WRITTEN. NOTHING ELSE IS THE GOAL.**
   A round ends when station 7 is at N of N and station 8 has produced the draft and its figure
   panel — not when the mechanical stations go green. Stations 1 to 6b are the cheap half: they

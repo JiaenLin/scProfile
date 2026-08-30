@@ -808,12 +808,66 @@ def audit(fig):
             return None
 
     # ---- text on text -------------------------------------------------------------------
-    texts, fig_level = [], set()
+    # EVERY TEXT ON THE PANEL, NOT ONLY THE ONES A PLUGIN DREW. This collected `ax.texts` and
+    # `fig.texts` - annotations and explicit `text()` calls - and nothing else, so it never saw
+    # tick labels, axis titles, axis labels or legend entries. That is most of the text on a
+    # scientific figure, and it is where the misses were: an eye scan of 84 panels found five
+    # text collisions this check had passed, and ALL FIVE were of that kind - two axis titles
+    # running together, two subplot titles overprinting, and three sets of tick labels merged
+    # into an unreadable run.
+    #
+    # A check that spares the eye is only worth what it covers. Covering a third of the text on
+    # a panel and reporting silence is worse than not running, because the silence is read as a
+    # result.
+    #
+    # Texts inside ONE legend are excluded from each other: matplotlib lays a legend out and its
+    # entries cannot collide, so comparing them is pure false positive.
+    def _own_legend(t):
+        a = t
+        for _ in range(6):
+            a = getattr(a, "_legend", None) or getattr(a, "get_parent", lambda: None)() \
+                or getattr(a, "axes", None)
+            if a is None:
+                return None
+            if a.__class__.__name__ == "Legend":
+                return id(a)
+        return None
+
+    texts, fig_level, legend_of, decoration = [], set(), {}, set()
+
+    def _take(t, *, in_legend=None, decor=False):
+        if not (t.get_visible() and str(t.get_text()).strip()):
+            return
+        if float(t.get_fontsize() or 0) < _AUDIT_MIN_PT:
+            return
+        texts.append((t, _bb(t)))
+        if in_legend is not None:
+            legend_of[id(t)] = in_legend
+        if decor:
+            # A DECORATION LIVES IN THE MARGIN ON PURPOSE. Tick labels, axis labels, titles and
+            # legends sit outside the axes by design and `bbox_inches="tight"` grows the canvas
+            # to hold them, so measuring them against the canvas reports every correct panel as
+            # broken - which is what happened the moment they were added: eight off-canvas
+            # findings on a three-bar test figure. They join the OVERLAP check, which is what
+            # they were added for, and not the clipping check.
+            decoration.add(id(t))
+
     for ax in fig.get_axes():
         for t in ax.texts:
-            if t.get_visible() and str(t.get_text()).strip() \
-                    and float(t.get_fontsize() or 0) >= _AUDIT_MIN_PT:
-                texts.append((t, _bb(t)))
+            _take(t)
+        _take(ax.title, decor=True)
+        _take(ax.xaxis.label, decor=True)
+        _take(ax.yaxis.label, decor=True)
+        for t in list(ax.get_xticklabels()) + list(ax.get_yticklabels()):
+            _take(t, decor=True)
+        for lg in ([ax.get_legend()] if ax.get_legend() else []):
+            for t in lg.get_texts():
+                _take(t, in_legend=id(lg), decor=True)
+            _take(lg.get_title(), in_legend=id(lg), decor=True)
+    for lg in getattr(fig, "legends", []):
+        for t in lg.get_texts():
+            _take(t, in_legend=id(lg), decor=True)
+        _take(lg.get_title(), in_legend=id(lg), decor=True)
     for t in fig.texts:
         if t.get_visible() and str(t.get_text()).strip() \
                 and float(t.get_fontsize() or 0) >= _AUDIT_MIN_PT:
@@ -828,7 +882,25 @@ def audit(fig):
             if w <= 0 or h <= 0:
                 continue
             small = min(a.width * a.height, b.width * b.height) or 1.0
-            if (w * h) / small >= _AUDIT_OVERLAP:
+            ta, tb = texts[i][0], texts[j][0]
+            if legend_of.get(id(ta)) is not None \
+                    and legend_of.get(id(ta)) == legend_of.get(id(tb)):
+                continue            # one legend lays its own entries out; they cannot collide
+            # TWO TEXTS ON ONE BASELINE HAVE NO TOLERANCE. The 20% area rule is right for
+            # annotations, which are placed independently and can overlap slightly at their
+            # corners without becoming unreadable. It is wrong for two tick labels or two
+            # titles: those sit on a shared baseline, so ANY horizontal overlap is glyphs
+            # touching, and the result reads as one run of characters - `0.00.20.40.60.81.0`
+            # was passed by the area rule at 12%, and is the least readable thing in the run
+            # it came from.
+            #
+            # Measured on the real case: '0.0' spans 19.1 to 40.9 px and '0.2' spans 38.3 to
+            # 60.1, an overlap of 2.6 px, which is 12% of the smaller box and 100% of what a
+            # reader needs to tell two numbers apart.
+            _same_baseline = (id(ta) in decoration and id(tb) in decoration
+                              and abs((a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2) <= 1.5
+                              and w > 0.5)
+            if _same_baseline or (w * h) / small >= _AUDIT_OVERLAP:
                 # WHERE, AND BY HOW MUCH - see the note on `off_canvas` below. A pair of
                 # names with no position sent three separate attempts to rebuild the panel
                 # from its own coordinates, all of which came back clean while the real panel
@@ -854,7 +926,7 @@ def audit(fig):
     # in a way tight bbox will not rescue.
     fw, fh = fig.canvas.get_width_height()
     for t, b in texts:
-        if id(t) in fig_level or not t.get_clip_on():
+        if id(t) in fig_level or id(t) in decoration or not t.get_clip_on():
             continue
         # WHERE, AND BY HOW MUCH. A report that says only THAT a label is off the canvas sends
         # the reader to rebuild the panel from its own coordinates to find out where it went -

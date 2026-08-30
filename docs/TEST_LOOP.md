@@ -1,17 +1,55 @@
 # The test loop
 
-**A tool is not tested by its own suite. It is tested by putting a project's real runs through
-every element in order, and refusing to advance past a station that has produced no evidence.**
+**What it is.** Nine stations run in order against a project's real run directories. Each asks
+one question, answers it from evidence on disk, and either passes or blocks. The loop stops at
+the first block and names the one thing to do next. `python tests/loop_stations.py --runs <dir>`.
 
-The suite proves a function returns. This proves the chain works on runs somebody actually made,
-in the state they are actually in — some sealed, some not, some carded, some not — which is the
-state a tool meets and a fixture never reproduces.
+**What it is for.** The suite proves a function returns. It cannot prove the chain works on runs
+somebody actually made, in the state they are actually in. Every figure defect this tool has ever
+had was found by opening an image while the suite was green.
 
-Run it with `python tests/loop_stations.py --runs <dir> --round N`. It reports each station,
-names the evidence missing, and prints the one thing to do next. **It does not do the looking or
-the writing** — nothing can — but it will not let the loop advance without them.
+## The nine stations
 
----
+| # | Station | The question it asks | Answered from |
+|---|---|---|---|
+| 1 | `exists` | Did anything actually run, and what died? | instance directories on disk |
+| 2 | `landscape` | Does the reuse layer see what is reusable? | licence records across runs |
+| 3 | `licence` | Is reuse GRADED, or waved through? | refused / retrospective / provisional / full |
+| 4 | `adopt` | Was an adopted product really shared, or copied? | `st_nlink` on the product files |
+| 5 | `merge` | Does a run record what it took from elsewhere? | the run's own merge record |
+| 6 | `report` | Did the documents assemble? | rendered reports |
+| 6b | `drawing` | What can a MACHINE see wrong in the panels? | the per-figure audit in `report.json` |
+| 7 | `eye` | Are the pictures right? | a recorded look per figure, bound to its sha256 |
+| 8 | `paper` | Can a result be WRITTEN from these figures, and survive review? | claims, citations and verdicts |
+| 9 | `outputs` | Did the run produce every deliverable? | the five required files |
+
+### Station 8, in full, because it is the one that decides whether any of this was worth doing
+
+The first seven stations ask whether the machinery worked. **Station 8 asks whether the output is
+worth having**, and it is the only station that can fail on a run where everything ran perfectly.
+
+It works like this. `paper --brief` prints what the run holds ready to write from: the design, the
+arms, the populations that cannot carry a comparison, the upstream constraint that binds any
+claim, and every panel a reader meets first with the caption it carries. You write a result
+section from that — and each sentence you would put in a paper is registered as a **claim** with
+`--claim`, citing the figures it was read off with `--cites`. A claim citing nothing is refused.
+Then the claim is put to review with `--round`, and the verdict is one of three: `standing`,
+`narrowed`, or `withdrawn`.
+
+Three properties make it a test rather than a writing exercise:
+
+- **A claim is bound to the sha256 of every figure it cites.** Redraw a cited figure and the
+  claim goes stale, because the sentence was read off a picture that no longer exists.
+- **`withdrawn` is the verdict that teaches.** A loop where nothing is ever withdrawn has not
+  been pushed on, and the station says so on its own output line rather than leaving it to be
+  noticed.
+- **Missing figures surface here and nowhere else.** Nothing in stations 1 to 7 can tell you a
+  panel that should exist does not. It becomes visible when somebody tries to write the sentence
+  that needs it and finds nothing to cite.
+
+The station's output is `PAPER.md` and `report/paper.html` inside the run — the section, the
+claims, their verdicts, and every cited figure inline — so the writing travels with the figures
+it was read off and carries the same run key.
 
 ## The stations, in order
 
@@ -182,3 +220,83 @@ So:
 The convergence rule still applies inside the scan: look at the complete set on ONE build
 fixing nothing, then fix everything in one commit, rebuild, and re-scan. Fixing mid-scan
 invalidates the reviews already recorded, because a review is bound to its image's sha256.
+
+## Where this loop is weak
+
+Every entry below is a failure that happened, not a risk that might. Four are fixed; the rest are
+open and named, because a known weakness is worth more than a clean-looking list.
+
+### FIXED — the audit could see only a third of the text on a panel
+
+It collected `ax.texts` and `fig.texts` — annotations and explicit `text()` calls — and nothing
+else. **Tick labels, axis titles, axis labels and legend entries were invisible to it.** An eye
+scan of 84 panels found five text collisions the audit had passed, and all five were of exactly
+that kind. A check that covers a third of a panel and reports silence is worse than no check,
+because the silence is read as a result.
+
+Two things had to change together. The collection now takes every text on the figure; and
+**decorations are held to a different tolerance from annotations**, because they are different
+kinds of object. An annotation may overlap another slightly at a corner and stay readable, which
+is what the 20%-of-the-smaller-box rule is for. Two tick labels sit on a shared baseline, so any
+overlap at all is glyphs touching: `0.00.20.40.60.81.0` was passed at 12% overlap and is the least
+readable thing in the run it came from. Decorations also do *not* join the off-canvas check — they
+live in the margin by design and `bbox_inches="tight"` grows the canvas to hold them; adding them
+to it reported eight failures on a three-bar test figure.
+
+### FIXED — nothing measured how often the loop condemns a correct panel
+
+The audit had been wrong in both directions — it reported 14 correctly keyed panels as unkeyed,
+and it passed five collisions — and neither error rate was measured. `tests/test_audit_control.py`
+is a negative control with **both halves**: five panels built to be sound that it must be silent
+on, and four broken in one named way each that it must catch. Both halves are load-bearing.
+With only the broken half, a check can be made to catch everything by lowering a threshold, which
+is how a gate becomes noise; with only the sound half it can be made to catch nothing, which is
+how a gate becomes decoration.
+
+### FIXED — the driver that judges every round was itself unjudged
+
+`loop_stations.py` named a station defined further down the file and raised `NameError` at import,
+so it reported **nothing at all** — which looks like the loop was not run rather than like the
+loop failed. It shipped because the gate runs `tests/test_*.py` and the driver is not one, and
+because the check run against it was `ast.parse`, which parses without executing and cannot see an
+undefined name. `tests/test_loop_driver.py` now imports it and asserts every named station is
+callable.
+
+### FIXED — a clean run was mistaken for a clean build
+
+The same commit drew the same panels from the same data twice, producing five collisions once and
+none the next, neither run adopting anything. Station 6b now clears a **commit**, not a run.
+
+### OPEN — a host change resets the entire eye scan
+
+A review is bound to its image's sha256, which is right: a redrawn panel has not been looked at.
+But a change in the *host* redraws every panel of every plugin, so one line in `figure.py` costs
+all 84 recorded looks. Measured across five rounds, the eye station went 0 → 3 → 5 → 8 → 0 while
+real defects were being found. The convergence rule — scan the whole set on one build, fix in one
+commit, rebuild, re-scan — is a discipline working around this, not a solution. **What would fix
+it:** carry the *findings* forward across a redraw, so a re-scan starts from what was last seen on
+that kind rather than from nothing.
+
+### OPEN — no claim has ever been withdrawn
+
+Twelve claims, two narrowed, none withdrawn. Station 8 prints this on its own line, which is
+better than hiding it, but printing a weakness is not testing for one. **What would fix it:** a
+station that requires at least one claim to have survived a deliberate falsification attempt,
+scoring the pressure applied rather than counting the rounds.
+
+### OPEN — the loop does not ask whether a figure is COMPREHENSIBLE
+
+A correct claim read off an unreadable panel passes every station. Legibility is checked
+mechanically only for collisions and clipping; nothing asks whether the encoding can be decoded.
+
+### OPEN — stations 1 to 6 have never failed
+
+They are structural guards against regression, and they were green on every round of this loop
+while real defects existed. Six green rows read as progress and are not. **They should be
+reported as a block, not as six items**, so the eye goes to 6b onward.
+
+### OPEN — one design shape, one assay
+
+The loop has been run against a 2×2 with one library per animal, on single-nucleus mouse heart.
+One factor, three factors, no design at all, time-course and nested designs are all untested, as
+is any assay but this one.
