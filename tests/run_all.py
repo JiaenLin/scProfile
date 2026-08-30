@@ -31,8 +31,18 @@ def run(pattern=None, python=None):
     bad = []
     for path in sorted(glob.glob(pat)):
         p = subprocess.run([py, path], capture_output=True, text=True, env=env, cwd=ROOT)
+        out = (p.stdout + p.stderr).strip()
         if p.returncode != 0:
-            bad.append((os.path.basename(path), (p.stdout + p.stderr).strip()))
+            bad.append((os.path.basename(path), out))
+        elif not out:
+            # A SUITE THAT RUNS NOTHING EXITS 0, which is indistinguishable from a suite that
+            # passed. Found with a canary that asserted False and was reported green: it had no
+            # runner, so executing the file merely defined a function. Silence is the signature -
+            # every real suite here prints what it checked.
+            bad.append((os.path.basename(path),
+                        "the suite produced NO OUTPUT and exited 0. It probably defines tests "
+                        "and never runs them - a file with neither a __main__ block nor "
+                        "module-level calls is not a suite, it is a library."))
     return bad, sorted(glob.glob(pat))
 
 
