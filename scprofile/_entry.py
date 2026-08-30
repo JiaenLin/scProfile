@@ -378,6 +378,7 @@ def main(argv):
                   # may also need to REPRODUCE it - the cohort-scope fits do - and only Guard
                   # could see it.
                   constraint=inp.get("constraint") or "",
+                  cache_dir=inp.get("cache_dir"),
                   # The upstream chain, so a plugin needing a file that is NOT in the object can
                   # ask the host to go and find it (`ctx.source_layers`). Harvested from `uns`,
                   # which is dropped from this copy of the object on purpose.

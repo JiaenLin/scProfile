@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.11.3",
+    "version": "0.12.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -608,8 +608,16 @@ colnames(X) <- rownames(meta)
 # point: changing a plot must not invalidate an inference.
 objdir <- file.path(dirname(dirname(out)), "objects")
 dir.create(objdir, showWarnings = FALSE, recursive = TRUE)
-rds <- file.path(objdir, "cellchat.rds")
-stampf <- file.path(objdir, "cellchat.inference.txt")
+# THE CACHE IS WHERE THE OBJECT LIVES; the instance keeps a HARD LINK to it, so the run stays
+# self-contained and there is one copy on disk. Saving only inside the instance meant every new
+# run started empty and re-inferred to redraw a plot. The stamp below is what decides validity -
+# the cache directory is stable per unit and the stamp does the rest, so nothing here has to
+# hash a path.
+cache_dir <- if (length(args) >= 12 && nzchar(args[12])) args[12] else ""
+if (nzchar(cache_dir)) dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
+store <- if (nzchar(cache_dir)) cache_dir else objdir
+rds <- file.path(store, "cellchat.rds")
+stampf <- file.path(store, "cellchat.inference.txt")
 stamp <- paste(tools::md5sum(mtx), tools::md5sum(meta_f), db_name, mean_type, trim,
                pop_size, nboot, thresh, min_cells, sep = "|")
 
@@ -671,6 +679,19 @@ cc <- netAnalysis_computeCentrality(cc, slot.name = "netP")
 writeLines(unname(stamp), stampf)
 saveRDS(cc, rds)
 cat("saved the CellChat object for reuse:", rds, "\n")
+# AND THE RUN KEEPS ITS OWN HANDLE ON IT. `produces` declares objects/cellchat.rds, so the
+# instance must carry one; a hard link is the same bytes and the same inode, so the run is
+# self-contained without a second copy. Falls back to a copy where the cache is on another
+# filesystem, and to nothing at all where neither works - the cache is still the object.
+if (!identical(normalizePath(store, mustWork = FALSE),
+               normalizePath(objdir, mustWork = FALSE))) {
+  link <- file.path(objdir, "cellchat.rds")
+  if (file.exists(link)) unlink(link)
+  ok <- suppressWarnings(file.link(rds, link))
+  if (!isTRUE(ok)) ok <- suppressWarnings(file.copy(rds, link))
+  file.copy(stampf, file.path(objdir, "cellchat.inference.txt"), overwrite = TRUE)
+  cat("instance handle:", if (isTRUE(ok)) "hard link" else "unavailable", "\n")
+}
 
 # ---------------------------------------------------------------------------------------------
 # CELLCHAT'S OWN PLOTS, DRAWN BY CELLCHAT. Until now this script wrote no figure at all - every
@@ -2772,10 +2793,13 @@ def run(ctx):
     script = ctx.out / "cellchat.R"
     script.write_text(_R_RUN, encoding="utf-8")
     edges_f = ctx.out / "tables" / "ccc_edges.csv"
+    # A DIRECTORY THAT OUTLIVES THE RUN, for the fitted object. Without it every new run began
+    # with an empty instance directory and paid for the whole inference again to redraw a plot.
+    cache = ctx.cache("objects")
     argv = [rscript, str(script), str(mtx), str(meta), db,
             str(C["min_cells"]), str(C["trim"]), str(edges_f),
             str(C["type"]), "TRUE" if C["population_size"] else "FALSE",
-            str(C["nboot"]), str(C["thresh"])]
+            str(C["nboot"]), str(C["thresh"]), str(cache or "")]
     ctx.log(f"handing {A.n_obs:,} cells x {A.n_vars:,} genes to {db} via {rscript}")
     ctx.log(f"  type={C['type']} trim={C['trim']} population.size={C['population_size']} "
             f"nboot={C['nboot']} thresh={C['thresh']} min.cells={C['min_cells']}")

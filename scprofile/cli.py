@@ -672,7 +672,12 @@ def _run(a):
             resources={"cores": cores, **({"memory_gb": round(float(mem_gb), 2)}
                                           if mem_gb else {})},
             unit=unit, unit_members=unit_members.get(str(unit)),
-            constraint=constraint)
+            constraint=constraint,
+            # BESIDE THE RUNS, NOT INSIDE ONE. A run directory is sealed and a cache is
+            # disposable; putting one in the other makes the run un-sealable or the cache
+            # un-disposable. `_cache` sits next to the run directories, is scoped per plugin and
+            # unit, and deleting it costs time and nothing else.
+            cache_dir=Path(a.out).resolve().parent / "_cache" / name / str(unit or "_"))
         return kout
 
     for wi, wave in enumerate(waves, 1):

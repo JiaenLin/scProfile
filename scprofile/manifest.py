@@ -80,7 +80,7 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
                 references=None, reference_specs=None, params=None, upstream=None,
                 upstream_units=None, sentinels=DEFAULT_SENTINELS,
                 provenance=None, resources=None, unit=None, unit_members=None,
-                constraint="",
+                constraint="", cache_dir=None,
                 contract=CONTRACT_VERSION):
     """Write `in.json`. Every path is made ABSOLUTE first.
 
@@ -125,6 +125,13 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
         # would have refused was silently permissive. Third field in this contract with that
         # shape, after the reference specs and the core budget.
         "constraint": str(constraint or ""),
+        # A DIRECTORY THAT SURVIVES THE RUN, for a plugin to keep an expensive intermediate in.
+        # The instance directory does not survive: a plugin that saved its fitted object there
+        # found an empty directory on every new run, so a change to a PLOT paid for the whole
+        # inference again - measured at 2m41s and 7.5 GB per unit, eighteen units, to redraw a
+        # figure. The host only says WHERE; what to keep and under what key is the plugin's, and
+        # a plugin that needs none ignores it.
+        "cache_dir": str(Path(cache_dir).resolve()) if cache_dir else None,
         "references": {k: str(Path(v).resolve()) for k, v in (references or {}).items()},
         # THE DECLARATIONS BEHIND THOSE PATHS, so a plugin can ask for one BY ROLE. Without them
         # `ctx.reference_for_role` has nothing to search and returns None for every role, for

@@ -182,12 +182,13 @@ class Context:
     def __init__(self, adata, *, keys, out, cores=1, memory_gb=None, unit=None,
                  unit_members=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
-                 sentinels=(), provenance=None, constraint="",
+                 sentinels=(), provenance=None, constraint="", cache_dir=None,
                  config=None, log=print):
         self.adata = adata
         #: {role: actual name in THIS object}. `ctx.keys["label"]`, never a literal column.
         self.keys = dict(keys or {})
         self.out = Path(out)
+        self._cache_dir = Path(cache_dir) if cache_dir else None
         #: THE ALLOCATED SHARE. `os.cpu_count()` in a plugin starts the node's worth of threads
         #: per plugin, and four concurrent plugins then start four times the node.
         self.cores = int(cores or 1)
@@ -797,6 +798,31 @@ class Context:
         """A side-car whose result does not fit the merged object."""
         self._objects[name] = Path(path)
         return path
+
+    def cache(self, *parts, create=True):
+        """A directory that SURVIVES THE RUN, for an expensive intermediate. None if unavailable.
+
+        The instance directory does not survive: a plugin that saved its fitted object there
+        found an empty directory on every new run, so a change to a PLOT paid for the whole
+        inference again. This is the one place that outlives a run, and it is scoped by whatever
+        `parts` the plugin passes - usually its name and its unit.
+
+        THE HOST ONLY SAYS WHERE. What to keep, under what key, and when the key is still valid
+        are the plugin's own decisions, because only the plugin knows what determines its result.
+        A plugin that keeps nothing ignores this entirely.
+
+        The cache is DISPOSABLE by definition: deleting it must cost time and nothing else. A
+        plugin that cannot rebuild what it put here has put the wrong thing here.
+        """
+        if self._cache_dir is None:
+            return None
+        d = self._cache_dir.joinpath(*[str(x) for x in parts if str(x)])
+        if create:
+            try:
+                d.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                return None
+        return d
 
     def refuse(self, what, why):
         """Stop, and say what is missing. NOT an exception: a refusal is a result, and the host
