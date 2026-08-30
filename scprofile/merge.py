@@ -549,8 +549,32 @@ def fold_payloads(payloads, failed=None):
                      "layers": slots["layers"], "objects": slots["objects"],
                      "tables": tabs, "figures": figs, "caveats": cav, "absent": absent,
                      "contradictions": contra,
-                     "units": units, "failed_units": gone, "per_unit": multi}
+                     "units": units, "failed_units": gone, "per_unit": multi,
+                     # WHAT THE PLUGIN DECLARED, RECORDED BESIDE WHAT IT PRODUCED. The payload
+                     # held only outputs, so anything a consumer needed from the DECLARATION was
+                     # invisible after the run: the writing brief asked what evidence this
+                     # plugin can supply, got nothing, and printed "this dataset cannot answer
+                     # this part" against every need on every comparison - for a plugin that
+                     # supplies most of them. Recording it here also makes it provenance: what
+                     # the plugin claimed AT RUN TIME, not what its current source says.
+                     "spec": _declaration_of(name)}
     return out
+
+
+def _declaration_of(name):
+    """The plugin's own declaration, or {} - never raising, because a report must still render.
+
+    Read at merge time from the same discovery the runner used, so the recorded declaration is
+    the one that ran.
+    """
+    try:
+        from . import kernels as _K
+        k = (_K.discover() or {}).get(name)
+        # `discover` returns FileKernel objects, not the raw declaration; the declaration is on
+        # `.spec`. Treating one as a mapping raises, and the payload would silently lose it.
+        return dict(getattr(k, "spec", None) or (k if isinstance(k, dict) else {}) or {})
+    except Exception:                                                     # noqa: BLE001
+        return {}
 
 
 def _uns_safe(node, where="uns['scprofile']"):

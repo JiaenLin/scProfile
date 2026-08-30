@@ -247,12 +247,25 @@ DRAFT = "PAPER.md"
 def _plugin_spec_of(pay, plugin=""):
     """The declaration of the plugin being written about, out of report.json."""
     ks = (pay.get("kernels") or {})
+    got = {}
     if plugin and plugin in ks:
-        return ks[plugin].get("spec") or ks[plugin] or {}
-    if len(ks) == 1:
+        got = ks[plugin].get("spec") or ks[plugin] or {}
+    elif len(ks) == 1:
         only = next(iter(ks.values()))
-        return only.get("spec") or only or {}
-    return {}
+        got = only.get("spec") or only or {}
+    # A RUN WRITTEN BEFORE THE DECLARATION WAS RECORDED still has to be writable from. Falling
+    # back to discovery keeps older runs usable; it is second because the recorded copy is the
+    # one that actually ran, and the source on disk may have moved since.
+    if not (got.get("report") or {}).get("provides_evidence"):
+        try:
+            from . import kernels as _K
+            live = (_K.discover() or {}).get(plugin or (next(iter(ks), "") if ks else ""))
+            live = getattr(live, "spec", None) or (live if isinstance(live, dict) else None)
+            if live:
+                return dict(live)
+        except Exception:                                                 # noqa: BLE001
+            pass
+    return got
 
 
 def brief(out, plugin=""):
