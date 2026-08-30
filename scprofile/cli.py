@@ -2677,6 +2677,14 @@ def _paper(a):
             print("scprofile: nothing to render - no section and no claims.", file=sys.stderr)
             return REFUSE
         print(f"wrote {path}")
+        # THE PANEL IS RENDERED WITH THE SECTION, not on a separate command nobody would run.
+        # They are one deliverable: the section is the argument and the panel is what it was
+        # read off, and a section shipped without its panel is what a reader cannot check.
+        pan = PA.panel(out, plugin=a.plugin, run_key=out.name)
+        if pan:
+            print(f"wrote {pan}")
+        else:
+            print("  no figure panel: this run has no design, so no comparison to build one on")
         return 0
 
     if a.round:
@@ -3155,8 +3163,10 @@ def main(argv=None):
                     help="take an authored result section INTO the run as PAPER.md, so it has a "
                          "run key and travels with the figures it was read off")
     pa.add_argument("--render", action="store_true",
-                    help="write report/paper.html: the section, the claims and their verdicts, "
-                         "and every figure they cite, inline")
+                    help="write report/<plugin>_paper.html - the section, the claims and their "
+                         "verdicts, and every figure they cite - and report/<plugin>_panel.html, "
+                         "the figure panel: one plate per piece of evidence each comparison "
+                         "needs, derived from the routes the plugin declares")
     pa.add_argument("--strict", action="store_true",
                     help="exit non-zero while any claim is undefended or has gone stale")
     pa.set_defaults(fn=_paper)

@@ -91,15 +91,17 @@ def arm_pairs(design, factors=None, technical=None):
     facs = [f for f in sorted(levels)
             if len(levels[f]) == 2 and f.lower() not in tech]
     facs = [f for f in (factors or facs) if f in levels and len(levels[f]) == 2]
+    from .design_panel import contrast_label as _label
+
     out = []
     for f in facs:
         a, b = sorted(levels[f])
-        out.append((f, f, a, b, {f: a}, {f: b}))
+        out.append((_label(f), f, a, b, {f: a}, {f: b}))
         for h in facs:
             if h == f:
                 continue
             for lv in sorted(levels[h]):
-                out.append((f"{f} | {h} = {lv}", f, a, b,
+                out.append((_label(f, {h: lv}), f, a, b,
                             {f: a, h: lv}, {f: b, h: lv}))
     return out
 

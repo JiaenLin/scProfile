@@ -249,6 +249,9 @@ def comparisons(design, factors=None, technical=None):
 
     def _entry(kind, factor, lv, stratum, question, other=None):
         return {"kind": kind, "factor": factor, "other": other, "stratum": dict(stratum or {}),
+                # THE NAME THE RUN WRITES THIS CONTRAST UNDER, so a consumer can find the
+                # figures drawn for it. See `contrast_label`.
+                "label": contrast_label(factor, stratum),
                 "arms": {k: len(v) for k, v in lv.items()},
                 "samples": lv,
                 "aliased_with": list(alias.get(factor) or []),
@@ -447,3 +450,18 @@ def draw(per_sample, design, path, *, cells=None, width=None):
     fig.savefig(path, dpi=_dpi if isinstance(_dpi, (int, float)) else 400)
     plt.close(fig)
     return len(con)
+
+
+def contrast_label(factor, stratum=None):
+    """The name of one contrast: `F`, or `F | G = g` when held at a level of another factor.
+
+    ONE FUNCTION NAMES A CONTRAST. `arm_pairs` built this string for the directories it writes
+    and `comparisons` did not build it at all, so the panel could not match a comparison to the
+    figures drawn for it - it looked them up by a name nothing had produced, found none, and
+    reported every need as a gap. A name used by two consumers is derived once.
+    """
+    st = dict(stratum or {})
+    if not st:
+        return str(factor)
+    k, v = next(iter(st.items()))
+    return f"{factor} | {k} = {v}"

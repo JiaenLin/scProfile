@@ -665,3 +665,117 @@ NARROW = (
     "run against ONE design shape and ONE method so far - one factor, three factors, no design "
     "at all, and time-course or nested designs are untested",
 )
+
+
+def panel_name(plugin=""):
+    """`report/panel.html`, or `report/<plugin>_panel.html`. Beside the section, as a sibling."""
+    return "panel.html" if not plugin else f"{plugin}_panel.html"
+
+
+def panel(out, *, run_key="", plugin=""):
+    """Write `report/<plugin>_panel.html`: ONE PLATE PER EVIDENCE NEED, PER COMPARISON.
+
+    THE FIGURE PANEL IS A DELIVERABLE AND IT WAS NOT BEING PRODUCED. The run writes an arms page
+    carrying every between-arm figure it drew - on this cohort, 426 of them - which is an
+    appendix, not a panel. A panel is the subset a reader is asked to look at, and until now the
+    only way to get one was to pick figures by hand into a document with no run key. That is a
+    draft by this project's own rule, whatever it looks like.
+
+    So the selection is DERIVED, not curated. For every comparison the design supports, and every
+    piece of evidence that comparison needs, the plugin's `provides_evidence` names the route -
+    `native:<function>` or `host:<panel kind>` - and the plate is the figure in THAT contrast
+    which that function drew, matched through `native.function_for`, the same inversion the
+    captions use. A need with no route is printed as a gap rather than skipped.
+
+    Nothing here is specific to a method or a project: a three-factor design gives more
+    comparisons and therefore more plates, from the same code.
+    """
+    import json as _json
+
+    root = Path(out)
+    try:
+        pay = _json.loads((root / "report.json").read_text(encoding="utf-8"))
+    except Exception:                                                     # noqa: BLE001
+        return None
+    des = pay.get("design") or {}
+    if not des:
+        return None
+    from . import native as _NAT
+    from .design_panel import comparisons as _cmps
+    from .evidence import NEEDS as _NEEDS
+    from .report import _e, _page                                         # noqa: PLC0415
+
+    spec = _plugin_spec_of(pay, plugin)
+    routes = ((spec.get("report") or {}).get("provides_evidence") or {})
+    declared = (spec.get("native_plots") or {})
+    try:
+        placed = _json.loads((root / "report" / "panels.json").read_text(encoding="utf-8"))
+        native = (placed.get(plugin) or {}).get("native") or []
+    except Exception:                                                     # noqa: BLE001
+        native = []
+    # index the run's native panels by (contrast label, the function that drew them)
+    by = {}
+    for f in native:
+        fn = _NAT.function_for(declared, str(f.get("path") or ""))
+        if fn:
+            by.setdefault((str(f.get("label") or ""), fn), []).append(f)
+
+    cmps = _cmps(des)
+    H = [f"<h1>Figure panel &mdash; {_e(plugin or 'this run')}</h1>"]
+    if run_key:
+        H.append(f'<p class="sub">Every plate below is in run <code>{_e(run_key)}</code>. '
+                 f'The selection is derived: one plate per piece of evidence each comparison '
+                 f'needs, chosen by the route the plugin declares for that need, not by hand. '
+                 f'The full set of between-arm figures is on the arms page.</p>')
+    n_plate, n_gap = 0, 0
+    for c in cmps:
+        label = c.get("label") or c.get("question") or ""
+        H.append(f'<h2>{_e(str(c.get("kind", "")).upper())} &mdash; {_e(label)}</h2>')
+        H.append(f'<p class="sub">{_e(str(c.get("question") or ""))}'
+                 + (f' <b>Aliased with {_e(", ".join(c.get("aliased_with") or []))}, so this '
+                    f'question cannot be answered as asked.</b>'
+                    if c.get("aliased_with") else "") + '</p>')
+        for need, route in sorted(routes.items()):
+            got = None
+            for r in (route or []):
+                if not str(r).startswith("native:"):
+                    continue
+                fn = str(r).split(":", 1)[1]
+                hits = by.get((label, fn)) or []
+                if hits:
+                    got = (fn, hits[0])
+                    break
+            # `NEEDS` maps a need to (question, why). It is a tuple, not a mapping - the
+            # first version called .get on it and raised on the first plate.
+            meta = _NEEDS.get(need) or ()
+            title = str(meta[0]) if meta else str(need)
+            why = str(meta[1]) if len(meta) > 1 else ""
+            if not got:
+                n_gap += 1
+                H.append(f'<div class="bad"><b>{_e(title)}</b> &mdash; no plate. '
+                         f'The route declared for this need drew nothing in this contrast.'
+                         + (f' <span class="sub">{_e(why)}</span>' if why else "")
+                         + '</div>')
+                continue
+            fn, f = got
+            n_plate += 1
+            cap = f.get("caption")
+            lead, rest = (cap if isinstance(cap, (list, tuple)) and len(cap) == 2
+                          else (cap or "", ""))
+            rel = "../" + str(f.get("path") or "")
+            H.append(f'<figure><figcaption class="lead"><b>{_e(title)}</b> '
+                     f'&mdash; <code>{_e(fn)}</code></figcaption>'
+                     f'<img src="{_e(rel)}" alt="{_e(title)}">'
+                     f'<figcaption>{_e(str(lead))}'
+                     + (f'<details><summary class="sub">what it does not establish</summary>'
+                        f'{_e(str(rest))}</details>' if rest else "")
+                     + '</figcaption></figure>')
+    H.insert(1, f'<p class="sub"><b>{n_plate}</b> plate(s) over <b>{len(cmps)}</b> comparison(s)'
+                + (f', and <b>{n_gap}</b> need(s) with no plate' if n_gap else '') + '.</p>')
+    H.append(f'<p class="sub"><a href="{_e(page_name(plugin))}">the written section</a> '
+             f'&middot; <a href="index.html">the run index</a></p>')
+    d = _report_dir(out, plugin)
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / panel_name(plugin)
+    f.write_text(_page(f"{plugin} figure panel — scProfile", "".join(H)), encoding="utf-8")
+    return f
