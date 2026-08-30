@@ -605,10 +605,48 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units):
     except Exception:                                                     # noqa: BLE001
         return
     udir = {str(u.get("unit")): u.get("dir") for u in (units or []) if u.get("unit")}
+
+    # A CONTRAST SIDE IS A SET OF SAMPLES, NOT A UNIT NAME. `arm_pairs` returns factor LEVELS -
+    # `aged` against `young` - and the first version looked those up in a dict keyed by unit,
+    # so nothing ever matched and the phase silently drew nothing on a whole run.
+    #
+    # The rule that does work is general: a side is the set of samples matching its filter, and
+    # it can be compared NATIVELY only where some unit pools exactly that set - which is what a
+    # design arm is. The four simple effects each map onto two existing arm units; the marginal
+    # effects do not, because no single object covers `aged` pooled over diet. That is reported
+    # rather than skipped, because "the tool's own differential cannot be drawn for this
+    # comparison" is a fact about the run, not an omission.
+    # AN ARM'S MEMBERSHIP COMES FROM `units.group_label`, which is the function that NAMED the
+    # arm in the first place. Deriving it here a second way would be two answers to one question,
+    # and the second would be wrong the moment the naming changed.
+    from .units import biological_factors as _biofac, group_label as _glabel
+
+    _facs = _biofac(design)
+    members = {}
+    for smp, row in design.items():
+        lab = _glabel(row, _facs)
+        if lab:
+            members.setdefault(lab, set()).add(str(smp))
+    members = {k: frozenset(v) for k, v in members.items() if k in udir}
+
+    def _side(filt):
+        want = frozenset(s for s, row in design.items()
+                         if all(str((row or {}).get(k)) == str(v) for k, v in (filt or {}).items()))
+        for uid, mem in members.items():
+            if mem == want:
+                return uid
+        return None
+
     for sp in pairs:
         label, _factor, lo, hi = sp[0], sp[1], sp[2], sp[3]
-        if lo not in per or hi not in per:
+        f_lo = sp[4] if len(sp) > 4 else None
+        f_hi = sp[5] if len(sp) > 5 else None
+        u_lo, u_hi = _side(f_lo), _side(f_hi)
+        if not (u_lo and u_hi):
+            print(f"  native compare {label}: no single unit pools each side "
+                  f"({lo} / {hi}); the tool's differential needs one object per side")
             continue
+        lo, hi = u_lo, u_hi
         d_lo, d_hi = udir.get(lo), udir.get(hi)
         if not (d_lo and d_hi):
             continue
