@@ -2861,6 +2861,67 @@ def _standard(a):
     return 0 if ok else 1
 
 
+
+def _cache(a):
+    """Report the reuse cache, and clear it on request.
+
+    A CACHE WITH NO SIZE AND NO OFF SWITCH IS A LIABILITY. This one reached 5 GB unremarked,
+    with no way to see what was in it or to remove it except by knowing where it lives. It is
+    disposable by construction - everything in it is rebuildable and rebuilding is the only cost
+    of deleting it - which is exactly why it needs a stated size rather than silent growth.
+    """
+    import shutil
+    import time as _t
+
+    root = Path(a.out).resolve()
+    cache = root / "_cache" if (root / "_cache").is_dir() else root.parent / "_cache"
+    if not cache.is_dir():
+        print(f"no cache under {cache}")
+        return 0
+    # APPARENT size and SHARED size are different numbers here, because the instance keeps a
+    # hard link to the same bytes. Reporting only the first would treble what the cache appears
+    # to cost.
+    seen, apparent, shared = set(), 0, 0
+    rows = {}
+    for f in cache.rglob("*"):
+        if not f.is_file():
+            continue
+        st = f.stat()
+        apparent += st.st_size
+        if st.st_ino not in seen:
+            seen.add(st.st_ino)
+            if st.st_nlink > 1:
+                shared += st.st_size
+        who = f.relative_to(cache).parts
+        key = "/".join(who[:2]) if len(who) > 1 else who[0]
+        r = rows.setdefault(key, [0, 0, 0.0])
+        r[0] += 1
+        r[1] += st.st_size
+        r[2] = max(r[2], st.st_mtime)
+    print(f"cache: {cache}")
+    print(f"  {len(rows)} entr(y/ies), {apparent / 1e9:,.1f} GB apparent, "
+          f"{shared / 1e9:,.1f} GB of it shared with run directories by hard link")
+    now = _t.time()
+    for k in sorted(rows, key=lambda x: -rows[x][1])[:12]:
+        n, sz, mt = rows[k]
+        print(f"  {k:34s} {n:3d} file(s)  {sz / 1e9:6,.2f} GB  "
+              f"last touched {(now - mt) / 86400:,.1f} d ago")
+    if not a.clear:
+        print("  --clear removes it. Everything here is rebuildable; the only cost is rebuilding.")
+        return 0
+    cut = now - (a.older_than or 0) * 86400 if a.older_than else None
+    gone = 0
+    for d in sorted(cache.glob("*/*")):
+        if not d.is_dir():
+            continue
+        if cut is not None and max((f.stat().st_mtime for f in d.rglob("*") if f.is_file()),
+                                   default=0) >= cut:
+            continue
+        shutil.rmtree(d, ignore_errors=True)
+        gone += 1
+    print(f"  cleared {gone} entr(y/ies)")
+    return 0
+
 def _report(a):
     from . import report
     p = Path(a.out) / "report.json"
@@ -3097,6 +3158,17 @@ def main(argv=None):
     sc_.add_argument("--dir", type=Path, default=Path("kernels"),
                      help="where --new writes the file")
     sc_.set_defaults(fn=_scaffold)
+
+    ca = sub.add_parser("cache",
+                        help="[you] what the reuse cache holds, and how to clear it")
+    ca.add_argument("--out", required=True, type=Path,
+                    help="a run directory, or the directory the runs sit in")
+    ca.add_argument("--clear", action="store_true",
+                    help="delete it. Safe by construction: everything in it is rebuildable, "
+                         "and rebuilding is the only thing this costs.")
+    ca.add_argument("--older-than", type=int, metavar="DAYS",
+                    help="with --clear, keep entries touched within this many days")
+    ca.set_defaults(fn=_cache)
 
     p = sub.add_parser("report", help="[you] rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)

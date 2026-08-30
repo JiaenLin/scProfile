@@ -32,6 +32,7 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | `scprofile doctor` | Reports which environments exist, which plugins resolve to them, and what is missing. |
 | `scprofile run` | Plans, runs the plugins, merges results into one object, writes the report and the run card. |
 | `scprofile report` | Re-renders the documents from an existing run's `report.json`. Draws no new analysis. |
+| `scprofile cache` | Reports what the reuse cache holds — apparent size, and how much of it is shared with run directories by hard link — and clears it. Everything in it is rebuildable, so the only cost of clearing is rebuilding. |
 | `scprofile standard` | Measures a rendered report against the exit standard. |
 | `scprofile status` | For one run directory: which instances are finished and which are outstanding. |
 | `scprofile landscape` | Across many run directories: what earlier runs hold, and what a new run would still have to compute. |
