@@ -70,8 +70,30 @@ def sound_heatmap_with_colourbar():
     return fig
 
 
+def sound_rotated_tick_labels():
+    """The case the control was missing, and the audit was wrong about.
+
+    Long population names on a heatmap axis, rotated 45 degrees - which is WHY they are rotated.
+    Their axis-aligned boxes overlap by construction and their rotated rectangles graze at the
+    corners, and the text is perfectly legible: eighty-four panels were read one at a time and
+    not one rotated tick label was reported as unreadable. The audit reported FOURTEEN on a
+    single panel the moment decorations entered the check.
+    """
+    fig, ax = plt.subplots(figsize=(4, 3.6))
+    names = ["Adipocyte", "Working cardiomyocyte", "Endocardial", "Lymphatic endothelial",
+             "Vascular endothelial", "Lymphoid", "Macrophage", "Mesothelial", "Fibroblast",
+             "Pericyte", "Smooth muscle"]
+    ax.imshow(np.random.RandomState(0).rand(len(names), len(names)))
+    ax.set_xticks(range(len(names)))
+    ax.set_xticklabels(names, rotation=45, ha="right", fontsize=5)
+    ax.set_yticks(range(len(names)))
+    ax.set_yticklabels(names, fontsize=5)
+    return fig
+
+
 SOUND = (sound_plain, sound_scatter_with_size_key, sound_labelled_points,
-         sound_many_ticks_with_room, sound_heatmap_with_colourbar)
+         sound_many_ticks_with_room, sound_heatmap_with_colourbar,
+         sound_rotated_tick_labels)
 
 
 # --------------------------------------------------------------- broken panels

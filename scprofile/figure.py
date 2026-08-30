@@ -897,6 +897,25 @@ def audit(fig):
             # Measured on the real case: '0.0' spans 19.1 to 40.9 px and '0.2' spans 38.3 to
             # 60.1, an overlap of 2.6 px, which is 12% of the smaller box and 100% of what a
             # reader needs to tell two numbers apart.
+            # A ROTATED DECORATION IS EXCLUDED, and this is a limit rather than a nicety.
+            # `get_window_extent` returns an AXIS-ALIGNED box, so two tick labels rotated 45
+            # degrees along one axis have boxes that overlap by construction - which is WHY they
+            # are rotated - and their rotated rectangles still graze at the corners. Measured on
+            # a real run the moment decorations entered this check: one heatmap reported
+            # FOURTEEN collisions among its own x tick labels.
+            #
+            # The ground truth is the eye. Eighty-four panels were read one at a time and not one
+            # rotated tick label was reported as unreadable; the five collisions that scan DID
+            # find were all unrotated - two axis titles, two subplot titles, three sets of
+            # horizontal tick labels. So rotated decorations are left to matplotlib's own layout.
+            #
+            # WHAT THIS LOSES: a genuine collision between two rotated labels is not caught, and
+            # only the eye will find it. That is a smaller loss than fourteen false findings on
+            # one panel, which is how a gate stops being read.
+            if (getattr(ta, "get_rotation", lambda: 0)() or 0) % 180 != 0 \
+                    or (getattr(tb, "get_rotation", lambda: 0)() or 0) % 180 != 0:
+                if id(ta) in decoration or id(tb) in decoration:
+                    continue
             _same_baseline = (id(ta) in decoration and id(tb) in decoration
                               and abs((a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2) <= 1.5
                               and w > 0.5)
