@@ -83,8 +83,21 @@ def resolve(design, *, sample_key=None, samples=None, technical=DEFAULT_TECHNICA
     groups = {g: sorted(v) for g, v in sorted(groups.items())
               if len(v) >= int(min_per_group)}
 
+    # THE MARGINAL LEVELS ARE UNITS TOO. Without them the group axis covers the simple effects
+    # and leaves every marginal effect with no object on either side.
+    marg = marginal_groups(design, factors, samples)
+    marg = {g: v for g, v in marg.items()
+            if g not in groups and len(v) >= int(min_per_group)}
+
     if prefer in ("group", "both") and len(groups) > 1:
-        plan.append({"kind": "group", "units": groups, "factors": factors})
+        allg = dict(groups)
+        allg.update(marg)
+        plan.append({"kind": "group", "units": allg, "factors": factors})
+        if marg:
+            why.append(f"group: {len(marg)} marginal unit(s) as well "
+                       f"({', '.join(sorted(marg))}) - each pools one level of one factor over "
+                       f"the others, which is the side a marginal contrast needs and the "
+                       f"crossing does not provide")
         why.append(f"group: {len(groups)} arm(s) over {', '.join(factors)} "
                    f"({'; '.join(f'{g} n={len(v)}' for g, v in groups.items())})")
     elif prefer in ("group", "both"):
@@ -106,3 +119,72 @@ def resolve(design, *, sample_key=None, samples=None, technical=DEFAULT_TECHNICA
         why.append("NO UNIT AXIS: the plugin runs once over everything. That is a fact about "
                    "the design, not a failure - and it is not a reason to withhold a figure.")
     return plan, why
+
+
+def marginal_groups(design, factors, samples=None):
+    """{label: [samples]} - one pooled unit per LEVEL of each factor, not per CELL of the crossing.
+
+    THE UNIT AXIS MUST COVER EVERY SIDE OF EVERY COMPARISON THE DESIGN ENUMERATES, and the
+    crossing alone does not. With two factors the crossing gives four arms, and those four are
+    the two sides of each SIMPLE effect. The MARGINAL effect - one factor pooled over the other -
+    has no arm: no single unit holds every sample at one level of one factor. A tool whose
+    differential takes two fitted objects therefore has nothing to take, and the marginal
+    question goes undrawn while the design plainly asks it.
+
+    This adds those units. For factors F and G it returns one unit per level of F (pooled over
+    G) and one per level of G, which is exactly what a marginal contrast needs on each side.
+
+    Naming: the level alone, because that is what the contrast calls it. Where a level name
+    would collide - with another factor's level, or with a crossing label - it becomes
+    `factor=level`, so a unit name is never ambiguous about what it pools.
+
+    Returns {} when fewer than two factors vary, because then the crossing IS the level set and
+    these units would be duplicates of it.
+    """
+    factors = list(factors or ())
+    if len(factors) < 2:
+        return {}
+    samples = list(samples if samples is not None else design)
+    crossing = set()
+    for s in samples:
+        lab = group_label(design.get(s), factors)
+        if lab:
+            crossing.add(lab)
+
+    seen = {}
+    for f in factors:
+        for s in samples:
+            v = (design.get(s) or {}).get(f)
+            if v is None or str(v) == "":
+                continue
+            seen.setdefault(str(v), set()).add(f)
+
+    out = {}
+    for f in factors:
+        for s in samples:
+            v = (design.get(s) or {}).get(f)
+            if v is None or str(v) == "":
+                continue
+            v = str(v)
+            label = v if (len(seen.get(v, ())) == 1 and v not in crossing) else f"{f}={v}"
+            out.setdefault(label, set()).add(s)
+    return {k: sorted(v) for k, v in sorted(out.items())}
+
+
+def membership(design, *, technical=DEFAULT_TECHNICAL, sample_key=None, samples=None):
+    """{unit: frozenset(samples)} for every GROUP-axis unit, crossing and marginal alike.
+
+    ONE FUNCTION NAMES A UNIT AND ONE REPORTS WHAT IT HOLDS. A caller that needs to know which
+    samples a unit pools - to match a contrast side to an object, say - asks here rather than
+    re-deriving it, because two derivations of one fact disagree the moment either changes.
+    """
+    samples = list(samples if samples is not None else design)
+    factors = biological_factors(design, technical=technical, sample_key=sample_key)
+    out = {}
+    for s in samples:
+        lab = group_label(design.get(s), factors) if factors else None
+        if lab:
+            out.setdefault(lab, set()).add(str(s))
+    for lab, mem in marginal_groups(design, factors, samples).items():
+        out.setdefault(lab, set()).update(str(m) for m in mem)
+    return {k: frozenset(v) for k, v in sorted(out.items())}

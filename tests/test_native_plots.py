@@ -113,3 +113,43 @@ def test_the_debt_is_a_RATCHET_and_may_only_shrink():
 def test_the_plugin_that_paid_is_no_longer_on_the_list():
     assert "cellchat" not in N.OWES_ACCOUNTING, (
         "cellchat declares native_plots; leaving it on the debt list makes the list a decoration")
+
+
+# ---------------------------------------------------------------------------------------------
+# THE MERGE MUST BE PRECEDED BY AN ALIGNMENT, and this is checked in the source because the
+# failure it guards is INVISIBLE at runtime.
+#
+# A tool that subtracts two per-arm matrices by position gives three outcomes when the arms
+# carry different groups: an error, a silently misaligned figure, or a correct one - and the
+# middle one was observed on two of four contrasts in a real run, comparing one population
+# against a different one with nothing on the page to say so. A test that only ran the code
+# would have seen a PNG appear and passed.
+def _check_alignment_precedes_merge():
+    import re
+    from pathlib import Path as _P
+    bad = []
+    for f in sorted((_P(__file__).resolve().parent.parent / "kernels").glob("*.py")):
+        src = f.read_text()
+        for m in re.finditer(r'_R_COMPARE\s*=\s*r?"""(.*?)"""', src, re.S):
+            body = m.group(1)
+            merge = re.search(r"^\s*\w+\s*<-\s*merge\w*\(", body, re.M)
+            if not merge:
+                continue
+            # COMMENTS STRIPPED FIRST. The first version of this check searched the raw text
+            # and was satisfied by the word "align" in a comment banner - a prose gate wearing a
+            # code gate's clothes, which is the exact failure mode it exists to catch.
+            head = "\n".join(re.sub(r"#.*$", "", ln) for ln in body[:merge.start()].split("\n"))
+            if not re.search(r"\b(lift\w*|union|intersect)\s*\(", head):
+                bad.append(f"{f.name}: merges two objects with no alignment before it")
+            if "identical(levels" not in body and "stopifnot" not in body:
+                bad.append(f"{f.name}: nothing asserts the two objects agree after alignment")
+    return bad
+
+
+_bad = _check_alignment_precedes_merge()
+if _bad:
+    print("FAIL")
+    for b in _bad:
+        print("  -", b)
+    raise SystemExit(1)
+print("ok: every compare block aligns its objects before merging, and asserts it")

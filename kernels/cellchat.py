@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.10.1",
+    "version": "0.11.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -313,6 +313,8 @@ PLUGIN = {
         "netAnalysis_signalingRole_scatter": {"use": "figures/native_signalingRole_scatter.png"},
         "netAnalysis_signalingRole_heatmap": {"use": "figures/native_signalingRole_heatmap_out.png and _in.png"},
         "netVisual_bubble": {"use": "figures/native_bubble.png"},
+        "identifyCommunicationPatterns": {"use": "figures/native_patterns_{outgoing,incoming}.png"},
+        "rankSimilarity": {"use": "figures/nativecmp_rankSimilarity_functional.png, per arm pair"},
         "showDatabaseCategory": {"use": "figures/native_database_category.png"},
         "netVisual_aggregate": {"use": "figures/native_aggregate_circle__<pathway>.png"},
         "netVisual_chord_gene": {"use": "figures/native_chord_gene__<pathway>.png"},
@@ -327,30 +329,29 @@ PLUGIN = {
         "netVisual_chord_cell_internal": {
             "skip": "duplicate_of", "same_as": "netVisual_chord_cell"},
 
-        # OWED. `owed` is NOT a valid reason and `validate` reports every one of these,
-        # deliberately: writing a false reason to make a gate green is worse than a red
-        # gate. Four of them are pointed straight at a design comparison and are the next
-        # to be wired - netVisual_diffInteraction, netAnalysis_diff_signalingRole_scatter,
-        # netAnalysis_signalingChanges_scatter and netVisual_chord_cell all need TWO
-        # merged objects (mergeCellChat), which this plugin runs one unit at a time and
-        # does not yet assemble.
-        "netVisual": {"skip": "owed"},
-        "netVisual_barplot": {"skip": "owed"},
-        "netVisual_individual": {"skip": "owed"},
-        "netVisual_hierarchy1": {"skip": "owed"},
-        "netVisual_hierarchy2": {"skip": "owed"},
-        "netVisual_chord_cell": {"skip": "owed"},
+        # WIRED IN 0.11.0, THE COMPARISON HALF INCLUDED. These were all marked `owed` while the
+        # plugin ran one unit at a time and assembled no merged object. It now has a `compare`
+        # phase, so the functions that need two objects have two, and the single-object ones
+        # that were never reached are reached. `owed` is not a valid reason and `validate`
+        # reports every remaining one: writing a false reason to make a gate green is worse
+        # than a red gate.
+        "netVisual": {"use": "figures/native_hierarchy__<pathway>.png, layout='hierarchy'"},
+        "netVisual_barplot": {"use": "figures/nativecmp_barplot_{count,weight}.png, per arm pair"},
+        "netVisual_individual": {"use": "figures/native_individual__<ligand_receptor>.png"},
+        "netVisual_hierarchy1": {"use": "the left panel of figures/native_hierarchy__<pathway>.png; it takes a net matrix and netVisual(layout='hierarchy') is the documented way in"},
+        "netVisual_hierarchy2": {"use": "the right panel of figures/native_hierarchy__<pathway>.png"},
+        "netVisual_chord_cell": {"use": "figures/nativecmp_chord_cell__<pathway>.png, both arms on one page"},
         "netVisual_diffInteraction": {"use": "figures/nativecmp_diffInteraction_{count,weight}.png, per arm pair"},
-        "netVisual_embedding": {"skip": "owed"},
-        "netVisual_embeddingZoomIn": {"skip": "owed"},
-        "netVisual_embeddingPairwise": {"skip": "owed"},
-        "netVisual_embeddingPairwiseZoomIn": {"skip": "owed"},
-        "netAnalysis_dot": {"skip": "owed"},
-        "netAnalysis_river": {"skip": "owed"},
+        "netVisual_embedding": {"use": "figures/native_embedding_functional.png"},
+        "netVisual_embeddingZoomIn": {"use": "figures/native_embeddingZoomIn_functional.png"},
+        "netVisual_embeddingPairwise": {"use": "figures/nativecmp_embeddingPairwise_functional.png"},
+        "netVisual_embeddingPairwiseZoomIn": {"use": "figures/nativecmp_embeddingPairwiseZoomIn_functional.png"},
+        "netAnalysis_dot": {"use": "figures/native_dot_{outgoing,incoming}.png; k=3 patterns, fixed"},
+        "netAnalysis_river": {"use": "figures/native_river_{outgoing,incoming}.png; k=3, fixed"},
         "netAnalysis_diff_signalingRole_scatter": {"use": "figures/nativecmp_diff_signalingRole.png, per arm pair"},
         "netAnalysis_signalingChanges_scatter": {"use": "figures/nativecmp_signalingChanges__<population>.png"},
-        "plotGeneExpression": {"skip": "owed"},
-        "StackedVlnPlot": {"skip": "owed"},
+        "plotGeneExpression": {"use": "figures/native_geneExpression__<pathway>.png"},
+        "StackedVlnPlot": {"use": "figures/native_stackedVln__<pathway>.png"},
     },
 
     "report": {
@@ -683,6 +684,20 @@ npng <- function(name, expr, w = 1800, h = 1500, res = 200) {
   if (ok && file.exists(path)) cat("native plot", name, "written\n")
   else if (file.exists(path)) unlink(path)
 }
+# Some CellChat functions DRAW rather than return - a base-graphics network, a ComplexHeatmap
+# object, a function whose value is NULL. `print` on those prints nothing or errors, so this
+# second wrapper evaluates for the side effect instead.
+ndev <- function(name, expr, w = 1800, h = 1500, res = 200) {
+  path <- file.path(figdir, paste0("native_", name, ".png"))
+  ok <- tryCatch({
+    grDevices::png(path, width = w, height = h, res = res)
+    on.exit(grDevices::dev.off(), add = TRUE)
+    force(expr)
+    TRUE
+  }, error = function(e) { cat("native plot", name, "FAILED:", conditionMessage(e), "\n"); FALSE })
+  if (ok && file.exists(path)) cat("native plot", name, "written\n")
+  else if (file.exists(path)) unlink(path)
+}
 
 groups <- levels(cc@idents)
 ngrp <- length(groups)
@@ -724,6 +739,68 @@ if (!is.na(pw)) {
   npng(paste0("signalingRole_network__", pw),
        netAnalysis_signalingRole_network(cc, signaling = pw, width = 12, height = 4,
                                          font.size = 10))
+}
+
+# The single-object functions that were owed. Each is CellChat's own, each guarded, and each
+# writes its own file - a failure here costs one panel and is printed with its reason.
+if (!is.na(pw)) {
+  # the hierarchy layout, which is what `netVisual_hierarchy1` and `_hierarchy2` draw: they take
+  # a net matrix rather than the object, and `netVisual(layout = "hierarchy")` is the documented
+  # way in. Receivers are the first half of the populations, senders the rest, which is the
+  # split the layout requires and not a claim about who signals to whom.
+  vr <- seq_len(max(1, floor(ngrp / 2)))
+  ndev(paste0("hierarchy__", pw),
+       netVisual(cc, signaling = pw, layout = "hierarchy", vertex.receiver = vr))
+
+  # one named ligand-receptor pair inside that pathway, rather than the pathway aggregate
+  lr <- tryCatch(extractEnrichedLR(cc, signaling = pw, geneLR.return = FALSE),
+                 error = function(e) NULL)
+  if (!is.null(lr) && nrow(lr) > 0) {
+    cat("native individual LR pair:", as.character(lr[1, 1]), "\n")
+    ndev(paste0("individual__", gsub("[^A-Za-z0-9]+", "_", as.character(lr[1, 1]))),
+         netVisual_individual(cc, signaling = pw, pairLR.use = lr[1, ], layout = "circle"))
+  }
+
+  # the expression of that pathway's own genes, CellChat's own violin wrappers
+  npng(paste0("geneExpression__", pw), plotGeneExpression(cc, signaling = pw),
+       w = 2000, h = 2200)
+  gl <- tryCatch(extractEnrichedLR(cc, signaling = pw, geneLR.return = TRUE)$geneLR,
+                 error = function(e) NULL)
+  if (!is.null(gl) && length(gl) > 0)
+    npng(paste0("stackedVln__", pw), StackedVlnPlot(cc, features = head(unique(gl), 6)),
+         w = 1800, h = 2200)
+}
+
+# COMMUNICATION PATTERNS. `k` IS FIXED AT 3 AND IS NOT CHOSEN FROM THE DATA. CellChat asks the
+# user for the number of patterns and offers `selectK` to inform the choice; picking k per unit
+# would make the pattern index mean a different thing in every unit and nothing on the page
+# would say so. Three, everywhere, so the panels are comparable - and the pattern index is an
+# index, not a cell state.
+for (pat in c("outgoing", "incoming")) {
+  ndev(paste0("patterns_", pat), {
+    ccp <- identifyCommunicationPatterns(cc, pattern = pat, k = 3)
+    assign(paste0("ccp_", pat), ccp, envir = globalenv())
+    NULL
+  }, w = 1800, h = 2000)
+  ccp <- tryCatch(get(paste0("ccp_", pat), envir = globalenv()), error = function(e) NULL)
+  if (!is.null(ccp)) {
+    npng(paste0("river_", pat), netAnalysis_river(ccp, pattern = pat), w = 2400, h = 1800)
+    npng(paste0("dot_", pat), netAnalysis_dot(ccp, pattern = pat), w = 1800, h = 1600)
+  }
+}
+
+# the pathway manifold for this unit alone, CellChat's own embedding plot. The table below
+# computes the same embedding for its coordinates; this draws CellChat's own picture of it.
+emb_ok <- tryCatch({
+  ccE <- computeNetSimilarity(cc, type = "functional")
+  ccE <- netEmbedding(ccE, type = "functional", umap.method = "umap-learn")
+  ccE <- netClustering(ccE, type = "functional", do.parallel = FALSE)
+  assign("ccE", ccE, envir = globalenv()); TRUE
+}, error = function(e) { cat("net embedding FAILED:", conditionMessage(e), "\n"); FALSE })
+if (emb_ok) {
+  npng("embedding_functional", netVisual_embedding(ccE, type = "functional", label.size = 3.5))
+  npng("embeddingZoomIn_functional",
+       netVisual_embeddingZoomIn(ccE, type = "functional", nCol = 2), w = 2400, h = 2000)
 }
 
 # pathway x (sender, receiver) probability, CellChat's own computeCommunProbPathway
@@ -2993,16 +3070,62 @@ cat("OK\n")
 #: and every comparison panel in the section was a reimplementation. This runs once per arm pair,
 #: on the objects the two units already saved, so it costs no inference at all.
 _R_COMPARE = r"""
-suppressMessages({library(CellChat); library(patchwork)})
+suppressMessages({library(CellChat); library(patchwork); library(ComplexHeatmap)})
 args <- commandArgs(trailingOnly = TRUE)
 rds_a <- args[1]; rds_b <- args[2]; name_a <- args[3]; name_b <- args[4]; figdir <- args[5]
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 
 a <- readRDS(rds_a); b <- readRDS(rds_b)
-# The merged object is what every differential function here takes. Order matters: CellChat's
-# differentials are computed as the SECOND relative to the FIRST, so the names are recorded on
-# every figure this writes rather than left to the reader.
-m <- mergeCellChat(list(a, b), add.names = c(name_a, name_b))
+
+# ---------------------------------------------------------------------------------------------
+# ALIGN THE TWO OBJECTS BEFORE MERGING. THIS IS NOT A DETAIL; WITHOUT IT THE FIGURES ARE WRONG
+# AND DO NOT SAY SO.
+#
+# CellChat's differentials subtract one arm's matrix from the other BY POSITION. Two arms
+# inferred separately need not carry the same cell groups: a population present in one and
+# absent from the other shifts every row below it. When the two matrices happen to be the same
+# SIZE the subtraction succeeds and silently compares one population against a different one;
+# when the sizes differ it fails with "non-conformable arrays". Both were observed on the same
+# run - two contrasts erroring and two producing quietly misaligned figures, which is the worse
+# outcome because nothing reports it.
+#
+# `liftCellChat` is CellChat's own function for this. Both objects are lifted to the UNION of
+# their cell groups, not the intersection: the intersection would DELETE a population from the
+# comparison, and a population present in one arm and absent from the other is a result, not a
+# nuisance. A lifted-in group carries zero edges on the side it was absent from, so its
+# difference is that arm's whole value - which is true, and is why the lifted names are printed
+# and written to a file the caption can quote.
+#
+# Centrality is recomputed AFTER lifting. It is stored per cell group, so the values carried in
+# from before the lift describe a different group set.
+# ---------------------------------------------------------------------------------------------
+lev_a <- levels(a@idents); lev_b <- levels(b@idents)
+group_new <- union(lev_a, lev_b)
+only_a <- setdiff(lev_a, lev_b); only_b <- setdiff(lev_b, lev_a)
+cat("populations:", length(lev_a), "in", name_a, "|", length(lev_b), "in", name_b,
+    "| union", length(group_new), "\n")
+if (length(only_a)) cat("absent from", name_b, ":", paste(only_a, collapse = "; "), "\n")
+if (length(only_b)) cat("absent from", name_a, ":", paste(only_b, collapse = "; "), "\n")
+writeLines(c(paste0("union\t", paste(group_new, collapse = "|")),
+             paste0("absent_from_", name_b, "\t", paste(only_a, collapse = "|")),
+             paste0("absent_from_", name_a, "\t", paste(only_b, collapse = "|"))),
+           file.path(figdir, "nativecmp_alignment.tsv"))
+
+if (length(only_a) || length(only_b)) {
+  a <- liftCellChat(a, group.new = group_new)
+  b <- liftCellChat(b, group.new = group_new)
+  a <- netAnalysis_computeCentrality(a, slot.name = "netP")
+  b <- netAnalysis_computeCentrality(b, slot.name = "netP")
+  cat("lifted both objects to the union and recomputed centrality\n")
+} else {
+  cat("both objects already carry the same cell groups; no lift needed\n")
+}
+stopifnot(identical(levels(a@idents), levels(b@idents)))
+
+# Order matters: CellChat's differentials are the SECOND relative to the FIRST, so both names
+# are recorded on every figure this writes rather than left to the reader.
+object.list <- list(a, b); names(object.list) <- c(name_a, name_b)
+m <- mergeCellChat(object.list, add.names = c(name_a, name_b))
 cat("merged:", name_a, "and", name_b, "\n")
 
 npng <- function(nm, expr, w = 2000, h = 1600, res = 200) {
@@ -3014,14 +3137,26 @@ npng <- function(nm, expr, w = 2000, h = 1600, res = 200) {
   }, error = function(e) { cat("native compare", nm, "FAILED:", conditionMessage(e), "\n"); FALSE })
   if (ok) cat("native compare", nm, "written\n") else if (file.exists(path)) unlink(path)
 }
+# Some CellChat functions DRAW rather than return - a base-graphics circle, a ComplexHeatmap
+# object that must be `draw`n. `print` on those either errors or prints nothing, so a second
+# wrapper evaluates for its side effect instead of printing.
+ndev <- function(nm, expr, w = 2000, h = 1600, res = 200) {
+  path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
+  ok <- tryCatch({
+    grDevices::png(path, width = w, height = h, res = res)
+    on.exit(grDevices::dev.off(), add = TRUE)
+    force(expr); TRUE
+  }, error = function(e) { cat("native compare", nm, "FAILED:", conditionMessage(e), "\n"); FALSE })
+  if (ok) cat("native compare", nm, "written\n") else if (file.exists(path)) unlink(path)
+}
 
 # 1. the differential interaction network - CellChat's own answer to "which pairs changed"
-npng("diffInteraction_count", netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count"))
-npng("diffInteraction_weight", netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight"))
+ndev("diffInteraction_count", netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count"))
+ndev("diffInteraction_weight", netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight"))
 
 # 2. the differential heatmap, same question in a form that reads pair by pair
-npng("diff_heatmap_count", netVisual_heatmap(m, measure = "count"))
-npng("diff_heatmap_weight", netVisual_heatmap(m, measure = "weight"))
+ndev("diff_heatmap_count", ComplexHeatmap::draw(netVisual_heatmap(m, measure = "count")))
+ndev("diff_heatmap_weight", ComplexHeatmap::draw(netVisual_heatmap(m, measure = "weight")))
 
 # 3. ranked information flow with BOTH arms on one axis, CellChat's own comparison mode
 npng("rankNet_stacked", rankNet(m, mode = "comparison", stacked = TRUE, do.stat = FALSE),
@@ -3029,20 +3164,107 @@ npng("rankNet_stacked", rankNet(m, mode = "comparison", stacked = TRUE, do.stat 
 npng("rankNet_unstacked", rankNet(m, mode = "comparison", stacked = FALSE, do.stat = FALSE),
      w = 1600, h = 2000)
 
-# 4. how each population's signalling ROLE moves between the two arms
+# 4. the two arms' role space side by side, on ONE shared range so the panels are comparable.
+#    CellChat's own comparison vignette draws it exactly this way: the per-object function,
+#    twice, with a common axis limit computed over both.
+role <- lapply(object.list, function(o)
+  tryCatch(netAnalysis_signalingRole_scatter(o), error = function(e) NULL))
+npng("signalingRole_scatter_pair", {
+  gg <- Filter(Negate(is.null), role)
+  if (!length(gg)) stop("neither object returned a role scatter")
+  lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)
+  for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +
+    ggplot2::ggtitle(names(role)[i])
+  patchwork::wrap_plots(plots = gg)
+}, w = 2600, h = 1400)
+
+# 5. how each population's signalling ROLE moves between the two arms, in one panel
 npng("diff_signalingRole", {
   gg <- tryCatch(netAnalysis_diff_signalingRole_scatter(m), error = function(e) NULL)
   if (is.null(gg)) stop("netAnalysis_diff_signalingRole_scatter returned nothing")
   gg
 })
 
-# 5. per-population signalling changes - the one figure that names WHICH signals moved for a
-#    given population, which is the question a reader asks immediately after seeing the network
-groups <- intersect(levels(a@idents), levels(b@idents))
-for (g in head(groups, 4)) {
+# 6. outgoing and incoming role heatmaps, one per arm, drawn together with a SHARED colour
+#    maximum over both - the same rule as the shared axis above and for the same reason.
+for (pat in c("outgoing", "incoming")) {
+  ndev(paste0("signalingRole_heatmap_", pat), {
+    mx <- max(unlist(lapply(object.list, function(o) {
+      cs <- o@netP$centr
+      max(sapply(cs, function(x) if (pat == "outgoing") sum(x$outdeg) else sum(x$indeg)))
+    })), na.rm = TRUE)
+    hs <- lapply(seq_along(object.list), function(i)
+      netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = pat,
+                                        title = names(object.list)[i], width = 6, height = 12))
+    ComplexHeatmap::draw(hs[[1]] + hs[[2]], ht_gap = grid::unit(0.5, "cm"))
+  }, w = 2600, h = 2200)
+}
+
+# 7. the ligand-receptor pairs themselves, both arms on one bubble plot. CellChat's own
+#    comparison mode for the question "which specific pairs differ".
+npng("bubble_comparison",
+     netVisual_bubble(m, comparison = c(1, 2), angle.x = 45, remove.isolate = FALSE),
+     w = 2600, h = 2600)
+
+# 8. per-population signalling changes - the one figure that names WHICH signals moved for a
+#    given population. Drawn for every population the two arms SHARE: a population absent from
+#    one arm has no change to plot, and is named above rather than passed silently.
+shared <- intersect(lev_a, lev_b)
+cat("signalingChanges over", length(shared), "shared population(s)\n")
+for (g in shared) {
   safe <- gsub("[^A-Za-z0-9]+", "_", g)
   npng(paste0("signalingChanges__", safe),
        netAnalysis_signalingChanges_scatter(m, idents.use = g))
+}
+
+# 8b. the differential as BARS - CellChat's own comparison bar plot, which reads per source or
+#     target where the network panel reads per pair.
+npng("barplot_count", netVisual_barplot(m, comparison = c(1, 2), measure = "count"),
+     w = 1800, h = 1600)
+npng("barplot_weight", netVisual_barplot(m, comparison = c(1, 2), measure = "weight"),
+     w = 1800, h = 1600)
+
+# 9. the pathway manifold across BOTH arms - CellChat's own joint embedding, which places every
+#    pathway from both objects in one space and ranks how far each moved.
+sim_ok <- tryCatch({
+  m <- computeNetSimilarityPairwise(m, type = "functional")
+  # `umap-learn`, not `uwot`: this environment has the Python umap and no uwot, and the
+  # per-unit block already learned that the hard way.
+  m <- netEmbedding(m, type = "functional", umap.method = "umap-learn")
+  m <- netClustering(m, type = "functional", do.parallel = FALSE)
+  TRUE
+}, error = function(e) { cat("pairwise similarity FAILED:", conditionMessage(e), "\n"); FALSE })
+if (sim_ok) {
+  npng("embeddingPairwise_functional",
+       netVisual_embeddingPairwise(m, type = "functional", label.size = 3.5))
+  npng("rankSimilarity_functional", rankSimilarity(m, type = "functional"), w = 1600, h = 2000)
+  npng("embeddingPairwiseZoomIn_functional",
+       netVisual_embeddingPairwiseZoomIn(m, type = "functional", nCol = 2),
+       w = 2600, h = 2200)
+}
+
+# 10. the top shared pathways drawn as networks and as chords, ONE PER ARM WITH A SHARED EDGE
+#     MAXIMUM. Per-object functions used in comparison, which is how CellChat's own vignette
+#     uses them; the shared maximum is what makes two panels mean the same thing.
+paths <- intersect(a@netP$pathways, b@netP$pathways)
+cat("shared pathways:", length(paths), "\n")
+for (pw in head(paths, 6)) {
+  safe <- gsub("[^A-Za-z0-9]+", "_", pw)
+  wmax <- tryCatch(max(sapply(object.list, function(o)
+    max(o@netP$prob[, , pw], na.rm = TRUE))), error = function(e) NA)
+  ndev(paste0("aggregate_circle__", safe), {
+    graphics::par(mfrow = c(1, 2), xpd = TRUE)
+    for (i in seq_along(object.list))
+      netVisual_aggregate(object.list[[i]], signaling = pw, layout = "circle",
+                          edge.weight.max = wmax,
+                          signaling.name = paste(pw, names(object.list)[i]))
+  }, w = 2800, h = 1500)
+  ndev(paste0("chord_cell__", safe), {
+    graphics::par(mfrow = c(1, 2), xpd = TRUE)
+    for (i in seq_along(object.list))
+      netVisual_chord_cell(object.list[[i]], signaling = pw,
+                           title.name = paste(pw, names(object.list)[i]))
+  }, w = 2800, h = 1500)
 }
 """
 

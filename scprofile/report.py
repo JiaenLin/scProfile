@@ -648,18 +648,13 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None)
     # effects do not, because no single object covers `aged` pooled over diet. That is reported
     # rather than skipped, because "the tool's own differential cannot be drawn for this
     # comparison" is a fact about the run, not an omission.
-    # AN ARM'S MEMBERSHIP COMES FROM `units.group_label`, which is the function that NAMED the
-    # arm in the first place. Deriving it here a second way would be two answers to one question,
-    # and the second would be wrong the moment the naming changed.
-    from .units import biological_factors as _biofac, group_label as _glabel
+    # MEMBERSHIP COMES FROM `units.membership`, the function that also NAMES the units. Deriving
+    # it here a second way would be two answers to one question, and the second would be wrong
+    # the moment the naming changed - which is what happened when the marginal units were added
+    # and this copy still knew only about the crossing.
+    from .units import membership as _membership
 
-    _facs = _biofac(design)
-    members = {}
-    for smp, row in design.items():
-        lab = _glabel(row, _facs)
-        if lab:
-            members.setdefault(lab, set()).add(str(smp))
-    members = {k: frozenset(v) for k, v in members.items() if k in udir}
+    members = {k: v for k, v in _membership(design).items() if k in udir}
 
     def _side(filt):
         want = frozenset(s for s, row in design.items()
