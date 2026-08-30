@@ -165,3 +165,44 @@ def test_the_rendered_page_actually_shows_its_figures():
     for s in srcs:
         target = os.path.normpath(os.path.join(page.parent, s))
         assert os.path.isfile(target), f"<img src={s!r}> resolves to nothing from {page.parent}"
+
+
+def test_every_cli_paper_call_passes_the_plugin():
+    """Threading an argument by hand leaves a site, and the site it left was `review`.
+
+    Six claims were recorded into a plugin's ledger and then every attempt to review one was
+    refused as "no claim in this run", because `--round` called PA.review without the plugin and
+    read the run-root ledger instead. Each function was correct; one call site was not.
+
+    An AST scan inside paper.py cannot see this - the omission is in the CALLER. So the check is
+    on the caller.
+    """
+    import re
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "scprofile" / "cli.py").read_text()
+    body = src[src.index("def _paper(a):"):]
+    body = body[:body.index("\ndef ", 10)]
+
+    # every PA.<fn>( call in the paper handler that takes a plugin must pass one
+    takes_plugin = ("claim", "review", "status", "summarise", "outstanding",
+                    "read_ledger", "read_draft", "write_draft", "render", "next_step")
+    missing = []
+    for m in re.finditer(r"PA\.(\w+)\(", body):
+        fn = m.group(1)
+        if fn not in takes_plugin:
+            continue
+        depth, k = 0, m.end() - 1
+        while k < len(body):
+            if body[k] == "(":
+                depth += 1
+            elif body[k] == ")":
+                depth -= 1
+                if depth == 0:
+                    break
+            k += 1
+        call = body[m.start():k + 1]
+        if "plugin" not in call and "a.plugin" not in call:
+            missing.append(f"{fn}: {call[:70]}")
+    assert not missing, ("a paper call in the CLI does not pass the plugin, so it reads the "
+                         f"run-root ledger instead of the plugin's: {missing}")

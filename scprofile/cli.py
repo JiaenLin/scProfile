@@ -2649,7 +2649,8 @@ def _paper(a):
             print("scprofile: --round needs --verdict and --why", file=sys.stderr)
             return REFUSE
         try:
-            rec = PA.review(out, a.round, a.verdict, a.why, reviewer=a.reviewer)
+            rec = PA.review(out, a.round, a.verdict, a.why, reviewer=a.reviewer,
+                            plugin=a.plugin)
         except PA.Refused as e:
             print(f"scprofile: REFUSED - {e}", file=sys.stderr)
             return REFUSE
