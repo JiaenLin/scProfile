@@ -1283,6 +1283,10 @@ def _run(a):
     print(f"      {idx}")
     _judge(out)
     _write_readme(out, payload)
+    # EVERY RUN RECORDS WHAT IT DELIVERED, and says so if it delivered less than the run before.
+    # This is the one place that sees the finished output of a real run; a baseline recorded
+    # only when someone remembers to type a command is a baseline nobody can be held to.
+    _record_capacity(out)
     return 0
 
 
@@ -2862,6 +2866,83 @@ def _standard(a):
 
 
 
+
+
+def _record_capacity(out):
+    """Record what this run delivered, and say so if it is less than the run before it.
+
+    WRITTEN BY EVERY RUN, not by a command someone remembers to type. A baseline nobody records
+    is a baseline nobody can be held to, and the regressions this guards against are exactly the
+    ones nobody noticed at the time.
+    """
+    try:
+        from . import capacity as _C
+        now = _C.measure(out)
+        _C.write(out)
+        peers = sorted((d for d in Path(out).resolve().parent.iterdir()
+                        if d.is_dir() and d != Path(out).resolve() and (d / _C.NAME).is_file()),
+                       key=lambda d: d.name, reverse=True)
+        if not peers:
+            print(f"  capacity recorded: {now.get('figures', 0):,} figure(s), "
+                  f"{now.get('plots_failed', 0)} plot failure(s). First baseline.")
+            return
+        reg = _C.regressions(now, _C.read(peers[0]))
+        head = (f"  capacity: {now.get('figures', 0):,} figure(s), "
+                f"{now.get('plots_written', 0):,} plot(s) drawn, "
+                f"{now.get('plots_failed', 0)} failed")
+        if not reg:
+            print(head + f" - no regression against {peers[0].name}")
+            return
+        print(head + f" - {len(reg)} REGRESSION(S) against {peers[0].name}:")
+        for k, b, n, _v in reg:
+            print(f"      {k}: {b:,} -> {n:,}")
+    except Exception as e:                                                # noqa: BLE001
+        print(f"  capacity not recorded: {e}")
+
+def _capacity(a):
+    """What a run delivered, held against another run.
+
+    THE SUITES CANNOT CATCH THIS. Every one of them passes while a run produces half the figures
+    it produced yesterday: they check that the code is well-formed, and capacity is a property of
+    the OUTPUT. Both of the worst defects in this stage were exactly that shape - four plot
+    functions failing on every unit with no file and no non-zero exit, and a rebuild that dropped
+    266 comparison figures and printed the same success line. Neither failed a test.
+    """
+    from . import capacity as _C
+
+    run = Path(a.out).resolve()
+    now = _C.measure(run)
+    _C.write(run)
+    other = a.against
+    if other is None:
+        peers = sorted((d for d in run.parent.iterdir()
+                        if d.is_dir() and d != run and (d / _C.NAME).is_file()),
+                       key=lambda d: d.name, reverse=True)
+        other = peers[0] if peers else None
+    print(f"capacity of {run.name}")
+    for k in sorted(now):
+        print(f"  {k:18s} {now[k]:>8,d}")
+    if other is None:
+        print("\n  no other run to hold this against; this one is now the baseline.")
+        return 0
+    before = _C.read(other)
+    rows = _C.compare(now, before)
+    reg = [r for r in rows if r[3] == "REGRESSION"]
+    gain = [r for r in rows if r[3] == "gain"]
+    print(f"\nagainst {Path(other).name}")
+    for k, b, n, v in reg + gain:
+        arrow = "->"
+        print(f"  {'REGRESSION' if v == 'REGRESSION' else 'gain      '}  {k:18s} "
+              f"{b:>8,d} {arrow} {n:>8,d}")
+    if not reg and not gain:
+        print("  identical")
+    if reg:
+        print(f"\n  {len(reg)} REGRESSION(S). This run delivered less than {Path(other).name}. "
+              f"That is not necessarily wrong - but it was not noticed before this existed.")
+        if a.strict:
+            return REFUSE
+    return 0
+
 def _cache(a):
     """Report the reuse cache, and clear it on request.
 
@@ -2934,6 +3015,7 @@ def _report(a):
         print(f"scprofile: no {p}. Run `scprofile run` first.", file=sys.stderr)
         return REFUSE
     print(f"wrote {report.write_all(Path(a.out), json.loads(p.read_text()), prefix=getattr(a, 'prefix', None))}")
+    _record_capacity(Path(a.out))
     _judge(Path(a.out))
     return 0
 
@@ -3163,6 +3245,17 @@ def main(argv=None):
     sc_.add_argument("--dir", type=Path, default=Path("kernels"),
                      help="where --new writes the file")
     sc_.set_defaults(fn=_scaffold)
+
+    cp_ = sub.add_parser("capacity",
+                         help="[you] what a run delivered, and whether it delivered less than "
+                              "another run")
+    cp_.add_argument("--out", required=True, type=Path, help="the run to measure")
+    cp_.add_argument("--against", type=Path,
+                     help="another run to hold it against. Without this, the newest run beside "
+                          "it that has a recorded capacity.")
+    cp_.add_argument("--strict", action="store_true",
+                     help="exit non-zero if this run delivered less than the other")
+    cp_.set_defaults(fn=_capacity)
 
     ca = sub.add_parser("cache",
                         help="[you] what the reuse cache holds, and how to clear it")

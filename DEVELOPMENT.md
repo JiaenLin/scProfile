@@ -1,3 +1,5 @@
+> **Every change to this tool follows [the development contract](docs/DEVELOPMENT_CONTRACT.md):** it lands in this repository as mechanism or plugin content, it does not reduce what the tool delivers, and it is the smallest change that fixes the defect.
+
 # Development guideline
 
 *Enforced by `.claude/hooks/dev_guideline.py`, which DENIES rather than reminds: tool code written outside the package, scProfile material written to a scratchpad, ad-hoc scProfile code run from a shell heredoc, a commit while any suite or `scprofile check` is red, and figure code committed while `check --deep` is red. The TEST LOOP below is how the tool is exercised against real runs; `docs/TEST_LOOP.md` is its design. What it cannot enforce is whether anyone LOOKED at a figure — `scprofile review` records that, and the count is printed on every figure-code commit.*
