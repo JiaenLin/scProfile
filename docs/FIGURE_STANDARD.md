@@ -178,3 +178,49 @@ Three corollaries that come up every time:
 - **It cannot tell you whether the biology is right.** The best outcome of a full pass is a
   section that is honest and modest, and the next step after that is usually an orthogonal
   measurement rather than another figure.
+
+## Five rules for a comparison panel
+
+Each names the mechanism that already enforces it. None of them is a new subsystem: where a rule
+needed code, it changed an existing function.
+
+### 1. A cell that cannot hold a comparison is not drawn where comparisons are read
+
+The population set of a contrast is the **intersection** across its arms, decided in
+`compare_panel.contrast_populations()` before any matrix is built, and the edges are filtered to
+it. What is removed is returned BY NAME with the arm that lacked it, and the caption states it.
+
+This replaced masking in the plot. The union was drawn first with absent rows and columns hatched
+— honest, and still wrong: on a real cohort it put two full rows and two full columns of hatch
+through the middle of a 13×13 matrix, 48 of 169 cells, breaking every real block in half. Removal
+belongs at source; the *fact* of removal belongs in the caption. Locked by
+`tests/test_contrast_populations.py`, which also asserts no `hatch=` survives in the contrast code.
+
+### 2. The label column and the sentinels are a run decision, and sentinels are already held out
+
+`EXCLUDED` and `UNRESOLVED` are `manifest.DEFAULT_SENTINELS`; `ctx.live_mask()` keeps them out of
+every grouping, so no plugin has to remember. Which label column to profile is `--label`, and a
+forced or resolved column is the one to pass when the unresolved fraction carries no information.
+Nothing new is needed for this — the mechanism exists and the decision is at the invocation.
+
+### 3. Use the wrapped tool's own plot and its own statistic
+
+Step zero of the `plugin-figures` skill, and it is a rule about *where the effort goes*, not about
+quality: resolve what the tool would draw, establish whether it is reachable, and then choose
+NATIVE, deliberate reimplementation, or transcription under constraint. A reimplementation is
+legitimate and must be declared as a departure with the defect it corrects named. The statistic is
+never invented: `upstream.defaults_changed` and `cannot_show` are where that is recorded.
+
+### 4. One manuscript per plugin, never one per run
+
+A run mounts several methods answering different questions on different evidence; one section
+covering all of them reads as a survey of the tooling, and its figure panel is a gallery.
+`paper --plugin <name>` writes `PAPER.<name>.md`, `PAPER_CLAIMS.<name>.jsonl` and
+`report/<name>_paper.html` — the last matching the `<plugin>_by_arm.html` convention `report.py`
+already uses, so the four pages of one plugin sort together.
+
+### 5. The panel kinds and their rules are declared, not re-derived
+
+`scprofile/panels.py` is the registry: every kind, what it establishes, what it does NOT, its
+owner (host or plugin), and the numbered rules R1–R11. A new panel is a registry entry, and the
+loop checks drawing against that registry rather than against a list somebody keeps in their head.

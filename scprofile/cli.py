@@ -2607,7 +2607,7 @@ def _paper(a):
 
     if a.claim:
         try:
-            rec = PA.claim(out, a.claim, _split(a.cites or ""), author=a.author)
+            rec = PA.claim(out, a.claim, _split(a.cites or ""), author=a.author, plugin=a.plugin)
         except PA.Refused as e:
             print(f"scprofile: REFUSED - {e}", file=sys.stderr)
             return REFUSE
@@ -2627,7 +2627,8 @@ def _paper(a):
             print(f"scprofile: no such file: {src}", file=sys.stderr)
             return REFUSE
         try:
-            dst = PA.write_draft(out, src.read_text(encoding="utf-8"), author=a.author)
+            dst = PA.write_draft(out, src.read_text(encoding="utf-8"), author=a.author,
+                              plugin=a.plugin)
         except PA.Refused as e:
             print(f"scprofile: REFUSED - {e}", file=sys.stderr)
             return REFUSE
@@ -2636,7 +2637,7 @@ def _paper(a):
         return 0
 
     if a.render:
-        path = PA.render(out, run_key=out.name)
+        path = PA.render(out, plugin=a.plugin, run_key=out.name)
         if path is None:
             print("scprofile: nothing to render - no section and no claims.", file=sys.stderr)
             return REFUSE
@@ -2656,15 +2657,15 @@ def _paper(a):
         return 0
 
     print(f"{out}")
-    print(PA.summarise(out))
-    todo = PA.outstanding(out)
+    print(PA.summarise(out, a.plugin))
+    todo = PA.outstanding(out, a.plugin)
     if todo:
         print(f"\n  {len(todo)} claim(s) not defended:")
         for cid, st in todo:
             print(f"    {cid}  {st}")
     # ALWAYS SAY WHAT TO DO NEXT. A status nobody can act on is a report to interpret, and this
     # command drives a loop rather than describing a state.
-    head, cmd = PA.next_step(out)
+    head, cmd = PA.next_step(out, a.plugin)
     print(f"\n  NEXT: {head}")
     if cmd:
         print(f"    {cmd.format(out=out)}")
@@ -3097,6 +3098,13 @@ def main(argv=None):
     pa.add_argument("--verdict", choices=("standing", "narrowed", "withdrawn"),
                     help="what the round did to the claim. `withdrawn` is the one that teaches")
     pa.add_argument("--why", help="what the reviewer put to it, and what happened")
+    pa.add_argument("--plugin", default="",
+                    help="write THIS PLUGIN'S section, claims and page - PAPER.<plugin>.md, "
+                         "PAPER_CLAIMS.<plugin>.jsonl and report/<plugin>_paper.html. A run "
+                         "mounts several methods answering different questions on different "
+                         "evidence, and one section covering all of them reads as a survey of "
+                         "the tooling rather than as a result. Omit only for a deliberate "
+                         "cohort-level synthesis")
     pa.add_argument("--author", default="", help="who wrote the claim")
     pa.add_argument("--reviewer", default="", help="who reviewed it")
     pa.add_argument("--brief", action="store_true",

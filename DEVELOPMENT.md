@@ -47,6 +47,11 @@ do next. Four rules, each paid for:
   Collect on one build, fix in one commit, rebuild, re-scan.
 - **Every finding becomes a change in this repository, or it did not happen.** A defect seen and
   not fixed is a defect found twice.
+- **Fix the mechanism that exists; do not add one beside it.** Every rule in
+  `docs/FIGURE_STANDARD.md` names the function that enforces it, and each was a change to
+  something already there - the contrast population set, the sentinel mask, the paper writer, the
+  panel registry. A second mechanism doing the first one's job is how a codebase acquires two
+  answers to one question, and the loop then reports on whichever it happens to read.
 - **The loop's own weaknesses are written down, in `docs/TEST_LOOP.md`, and they are part of it.**
   Four are fixed and named with the failure that exposed them; four are open. A loop that
   presents itself as sound is the same defect as a gate that fires on correct behaviour — both

@@ -169,7 +169,21 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
         return []
     _seen_lo = set(e_lo["source"].astype(str)) | set(e_lo["target"].astype(str))
     _seen_hi = set(e_hi["source"].astype(str)) | set(e_hi["target"].astype(str))
-    pops = sorted(_seen_lo | _seen_hi)
+    # THE INTERSECTION, DECIDED HERE, BEFORE ANY MATRIX IS BUILT. See `contrast_populations`.
+    # A population with cells in one arm and none in the other cannot hold a difference, so it is
+    # removed from the comparison at SOURCE rather than drawn and then masked in the plot.
+    pops = sorted(_seen_lo & _seen_hi)
+    one_arm = sorted((_seen_lo | _seen_hi) - (_seen_lo & _seen_hi))
+
+    def _drop_short(names):
+        """Short labels for populations that are NOT on the axis, so `short` cannot index them."""
+        m = F.short_labels(list(names))
+        return [m.get(n, n) for n in names]
+
+    if len(pops) < 2:
+        return []                # nothing the two arms share: there is no contrast to draw
+    e_lo = e_lo[e_lo["source"].astype(str).isin(pops) & e_lo["target"].astype(str).isin(pops)]
+    e_hi = e_hi[e_hi["source"].astype(str).isin(pops) & e_hi["target"].astype(str).isin(pops)]
     c_lo, w_lo = matrices(e_lo, pops, weight)
     c_hi, w_hi = matrices(e_hi, pops, weight)
     rel = str(weight_scale or "per_object") != "absolute"
@@ -211,23 +225,19 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
     _csent = confound_sentence(_conf, str(fac))
 
     # ---- 1. differential interactions, sender x receiver -------------------------------------
-    # A DIFFERENCE OF PRESENCE IS NOT A DIFFERENCE OF MAGNITUDE, AND IT DOMINATED THE PANEL.
-    # `pops` is the UNION of both arms, so a population with cells in one arm and none in the
-    # other contributed its entire count as a "change" - the largest number on the figure, in
-    # the strongest colour, for a population that was never scored on one side. Measured on a
-    # real cohort: the four heaviest columns of the diet panel were populations missing from one
-    # arm outright, and the panel read as a large, specific, directional effect.
+    # A DIFFERENCE OF PRESENCE IS NOT A DIFFERENCE OF MAGNITUDE, AND IT IS NO LONGER DRAWN AT ALL.
     #
-    # They are NOT dropped - a dropped row is invisible and a reader cannot tell it was ever
-    # there. They are taken off the colour scale, hatched, and named, the way `panels.R2` asks.
-    only_lo = {p for p in pops if p in _seen_lo and p not in _seen_hi}
-    only_hi = {p for p in pops if p in _seen_hi and p not in _seen_lo}
-    one_arm = sorted(only_lo | only_hi)
-    _ix = {p: i for i, p in enumerate(pops)}
-    unscored = np.zeros((len(pops), len(pops)), dtype=bool)
-    for p in one_arm:
-        unscored[_ix[p], :] = True
-        unscored[:, _ix[p]] = True
+    # This was first fixed by keeping the union and HATCHING the rows and columns that could not
+    # hold a difference, so that a reader could see they were absent. That was honest and it was
+    # still the wrong panel: on a real cohort it put two full rows and two full columns of hatch
+    # through the middle of a 13x13 matrix - 48 of 169 cells, 28% of the figure - carrying no
+    # comparison, and breaking every real block in half. A cell that cannot hold a difference
+    # should not occupy the space where differences are read.
+    #
+    # So the removal happens at SOURCE, above: `pops` is the intersection and the edges are
+    # filtered to it. What is kept is the FACT of the removal - `one_arm` names every population
+    # taken out and the caption says so - because a removal is only cheap when the thing removed
+    # is named. That is this project's standing rule and it is the half that must not be lost.
 
     for what, A, B, unit in (("count", c_lo, c_hi, "significant interactions"),
                              ("strength", w_lo, w_hi, _wunit)):
@@ -235,21 +245,13 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
         if not np.any(D):
             continue
         fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.92), layout="constrained")
-        Dm = np.where(unscored, np.nan, D)
-        m = float(np.nanmax(np.abs(Dm))) if np.isfinite(Dm).any() else 0.0
+        # NO MASK, BECAUSE THERE IS NOTHING LEFT TO MASK. Every cell on this panel holds a
+        # difference between two arms that both contain the pair; the populations that did not
+        # are gone from `pops` before the matrix was built.
+        m = float(np.nanmax(np.abs(D))) if np.isfinite(D).any() else 0.0
         m = m or 1.0
         cmap = plt.get_cmap("RdBu_r").copy()
-        cmap.set_bad("#F2F2F2")
-        im = ax.imshow(Dm, cmap=cmap, vmin=-m, vmax=m)
-        if unscored.any():
-            ax.imshow(np.where(unscored, 1.0, np.nan), cmap="gray", vmin=0, vmax=1,
-                      alpha=0.0)
-            for i in range(len(pops)):
-                for j in range(len(pops)):
-                    if unscored[i, j]:
-                        ax.add_patch(plt.Rectangle((j - .5, i - .5), 1, 1, fill=False,
-                                                   hatch="////", lw=0.0,
-                                                   edgecolor="#B0B0B0", zorder=2))
+        im = ax.imshow(D, cmap=cmap, vmin=-m, vmax=m)
         ax.set_xticks(range(len(pops)))
         ax.set_xticklabels(short, rotation=45, ha="right", fontsize=5)
         ax.set_yticks(range(len(pops)))
@@ -265,14 +267,14 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
         _save(fig, f"C1_diff_{what}",
               (f"Change in {unit} from {lo_lv} to {hi_lv}, per sender-receiver pair, cells "
                f"pooled within each arm. {arm_n}."
-               + (f" Hatched cells are NOT a difference." if one_arm else ""),
+               + (f" {len(one_arm)} population(s) removed." if one_arm else ""),
                _csent
-               + (f"HATCHED AND OFF THE SCALE: every pair involving "
-                f"{', '.join(short[_ix[p]] for p in one_arm)}, which "
+               + (f"REMOVED FROM THIS COMPARISON, not masked in it: "
+                f"{', '.join(_drop_short(one_arm))}, which "
                 f"{'has' if len(one_arm) == 1 else 'have'} cells in only one of these two arms. "
-                f"A difference there is a difference of PRESENCE, not of magnitude, and drawn on "
-                f"this scale it would be the largest number on the panel for a population that "
-                f"was never scored on one side. " if one_arm else "Every population has cells in "
+                f"A difference there would be a difference of PRESENCE, not of magnitude, so the "
+                f"population is taken out before the matrix is built and every cell drawn here "
+                f"holds a real comparison. " if one_arm else "Every population has cells in "
                 "both arms, so no pair is a comparison of presence. ")
                + f"Cells are pooled within each arm before inference, so this is a group-level "
                  f"comparison and needs no single sample to support one. Blue is lower in "
@@ -344,24 +346,22 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
         # full position - for a population that was never scored on one side. Same defect as the
         # difference matrix, in the one encoding where it looks most like a finding: a long
         # arrow reads as a large, directional change.
+        # EVERY POPULATION HERE HAS BOTH ENDS. The hollow ring that used to mark a one-armed
+        # population is gone with the population itself - it is removed at source now, so there
+        # is no half-drawn state left to encode and no legend entry needed for one.
         for k, p in enumerate(pops):
-            _one = p in one_arm
-            ax.plot([o_lo[k]], [i_lo[k]], "o", ms=3.4,
-                    color="none" if _one else cmap[p],
-                    mec="#B0B0B0" if _one else "white", mew=.6, zorder=2)
-            ax.plot([o_hi[k]], [i_hi[k]], "o", ms=5.6,
-                    color="none" if _one else cmap[p],
-                    mec="#B0B0B0" if _one else F.INK, mew=.6, zorder=2)
+            ax.plot([o_lo[k]], [i_lo[k]], "o", ms=3.4, color=cmap[p],
+                    mec="white", mew=.6, zorder=2)
+            ax.plot([o_hi[k]], [i_hi[k]], "o", ms=5.6, color=cmap[p],
+                    mec=F.INK, mew=.6, zorder=2)
         for k, p in enumerate(pops):
-            if p in one_arm:
-                continue                # no arrow: there is no pair of positions to join
             ax.annotate("", xy=(o_hi[k], i_hi[k]), xytext=(o_lo[k], i_lo[k]),
                         arrowprops=dict(arrowstyle="-|>,head_width=.22,head_length=.42",
                                         lw=0.9, color=cmap[p], shrinkA=2, shrinkB=5,
                                         alpha=.95), zorder=3)
         # ALREADY ON SHARES where the weight is per-object: o_lo/i_lo are read off w_lo, which
         # was normalised above, so an arrow is a change in the population's SHARE of its arm.
-        _live = [k for k, p in enumerate(pops) if p not in one_arm]
+        _live = list(range(len(pops)))
         lim = (float(max(max(o_lo[_live], default=0), max(o_hi[_live], default=0),
                          max(i_lo[_live], default=0), max(i_hi[_live], default=0)))
                * 1.12) or 1.0
@@ -394,12 +394,12 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
         _save(fig, "C4_role_shift",
               (f"How each population's signalling role moves from {lo_lv} to {hi_lv}. "
                f"{arm_n}."
-               + (" Hollow rings have no arrow." if one_arm else ""),
+               + (f" {len(one_arm)} population(s) removed." if one_arm else ""),
                _csent
-               + (f"NO ARROW IS DRAWN for {', '.join(short[_ix[p]] for p in one_arm)}: absent from "
+               + (f"REMOVED FROM THIS COMPARISON: {', '.join(_drop_short(one_arm))} - absent from "
                 f"one of these arms, so one end of the arrow would be the origin and its length "
-                f"would be a presence, not a shift. Hollow rings mark where they sit in the arm "
-                f"that has them. " if one_arm else "")
+                f"would be a presence, not a shift. They are taken out before the axes are "
+                f"computed, so nothing on this panel is half-drawn. " if one_arm else "")
                + _wnote.strip() + " "
                + (f"Axes are therefore each population's SHARE of its arm, and an arrow is a "
                   f"change in the BALANCE between populations rather than in the arm's total. "
@@ -470,6 +470,39 @@ def arms_in(design, pairs):
     return out
 
 
+def contrast_populations(pooled):
+    """The populations a contrast may be drawn on, and the ones removed from it BY NAME.
+
+    THE SET IS THE INTERSECTION, NOT THE UNION, AND IT IS DECIDED HERE RATHER THAN IN THE PLOT.
+
+    The union was drawn first, with the arms' missing populations hatched so a reader could see
+    they were absent. That is honest and it is still the wrong panel: on a real cohort it put two
+    fully hatched rows and two fully hatched columns into a 13x13 matrix - 48 of 169 cells, 28% of
+    the panel - carrying no comparison at all, and it put them THROUGH the middle of the grid so
+    every real block was broken in half. A cell that cannot hold a difference should not be drawn
+    where a difference goes.
+
+    The invariant the union existed to protect is kept: this is still ONE population set shared by
+    every arm of the contrast, so two matrices side by side are indexed identically and a reader
+    comparing cell to cell is comparing the same pair. An intersection is a shared axis too.
+
+    What is NOT lost is the fact of the removal. A population dropped here is returned by name
+    with the arms that lacked it, so the caller states it in the caption and the record - which is
+    this project's standing rule: removal is cheap only when the thing removed is named.
+    """
+    per_arm = {}
+    for label, e in pooled.items():
+        per_arm[label] = (set(e["source"].astype(str)) | set(e["target"].astype(str)))
+    if not per_arm:
+        return [], {}
+    keep = set.intersection(*per_arm.values())
+    everywhere = set().union(*per_arm.values())
+    dropped = {}
+    for p in sorted(everywhere - keep):
+        dropped[p] = sorted(label for label, seen in per_arm.items() if p not in seen)
+    return sorted(keep), dropped
+
+
 def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edges=1,
                      group_col=None, member_col=None, weight_scale="per_object"):
     """The single-network kinds for each arm, pooled. Returns [(fid, path, caption)].
@@ -501,8 +534,7 @@ def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edge
         e = pool(per_unit_edges, _members(design, filt))
         if e is not None and len(e) >= min_edges:
             pooled[label] = e
-    pops = sorted({str(x) for e in pooled.values()
-                   for x in set(e["source"].astype(str)) | set(e["target"].astype(str))})
+    pops, dropped = contrast_populations(pooled)
 
     # THE GRID MAXIMUM, COMPUTED BEFORE ANY PANEL IS DRAWN (panels.R1). Each arm was scaled to
     # its own maximum, so four arms of a factorial design drawn side by side all showed their

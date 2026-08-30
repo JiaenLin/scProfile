@@ -36,7 +36,38 @@ from pathlib import Path
 
 #: Where the ledger lives, relative to a run directory. Beside the run, so it travels with the
 #: run key and cannot be confused with claims made about some other render.
+#: ONE MANUSCRIPT PER PLUGIN, NEVER ONE FOR THE RUN. A profiling run mounts several methods and
+#: they answer different questions on different evidence; a single section covering all of them
+#: reads as a survey of the tooling rather than as a result, and its figure panel is a gallery.
+#: A reader wants the cell-cell communication result, or the differential expression result - not
+#: both interleaved. `paper` therefore takes a plugin and writes that plugin's own section, its
+#: own claims ledger and its own rendered page, each carrying the plugin in its name.
+#:
+#: The un-suffixed names are kept as the COHORT-level section, for a run with one plugin or for a
+#: synthesis somebody writes deliberately, and are never produced by accident.
 LEDGER = "PAPER_CLAIMS.jsonl"
+
+
+def ledger_name(plugin=""):
+    """`PAPER_CLAIMS.jsonl`, or `PAPER_CLAIMS.<plugin>.jsonl` for one plugin's claims."""
+    return LEDGER if not plugin else f"PAPER_CLAIMS.{plugin}.jsonl"
+
+
+def draft_name(plugin=""):
+    """`PAPER.md`, or `PAPER.<plugin>.md`."""
+    return DRAFT if not plugin else f"PAPER.{plugin}.md"
+
+
+def page_name(plugin=""):
+    """`report/paper.html`, or `report/<plugin>_paper.html`.
+
+    THE PLUGIN COMES FIRST, because that is the convention `report.py` already uses for every
+    other per-plugin page it writes - `cellchat.html`, `cellchat_by_arm.html`,
+    `cellchat_by_sample.html`. A page called `paper_cellchat.html` would sort away from its three
+    siblings in a directory listing and read as a different kind of thing, which it is not.
+    Matching an existing convention is worth more than a name chosen fresh.
+    """
+    return "paper.html" if not plugin else f"{plugin}_paper.html"
 
 #: A claim shorter than this is a label, not a claim. "Diet matters" asserts nothing checkable.
 MIN_CLAIM_WORDS = 8
@@ -66,9 +97,9 @@ def _digest(path):
     return h.hexdigest()
 
 
-def read_ledger(out):
+def read_ledger(out, plugin=""):
     """[record] in order. Append-only: later records about one claim supersede earlier ones."""
-    p = Path(out) / LEDGER
+    p = Path(out) / ledger_name(plugin)
     if not p.is_file():
         return []
     rows = []
@@ -84,12 +115,12 @@ def read_ledger(out):
 
 
 def _append(out, rec):
-    with open(Path(out) / LEDGER, "a", encoding="utf-8") as fh:
+    with open(Path(out) / ledger_name(plugin), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(rec) + "\n")
     return rec
 
 
-def claim(out, text, cites, *, author=""):
+def claim(out, text, cites, *, author="", plugin=""):
     """Record one claim and the figures it was read off. Returns the record.
 
     `cites` are paths relative to the run directory. A claim citing NOTHING is refused: the
@@ -129,7 +160,7 @@ def review(out, cid, verdict, why, *, reviewer="", replaces=""):
         raise Refused(f"a verdict of {len(text.split())} word(s) does not say what was examined. "
                       f"Say what the reviewer put to it and what happened, in at least "
                       f"{MIN_WHY_WORDS} words.")
-    known = {r["id"] for r in read_ledger(out) if r.get("kind") == "claim"}
+    known = {r["id"] for r in read_ledger(out, plugin) if r.get("kind") == "claim"}
     if cid not in known:
         raise Refused(f"no claim {cid!r} in this run. Record the claim before reviewing it.")
     return _append(out, {"kind": "review", "id": cid, "verdict": verdict, "why": text,
@@ -137,7 +168,7 @@ def review(out, cid, verdict, why, *, reviewer="", replaces=""):
                          "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
 
 
-def status(out):
+def status(out, plugin=""):
     """[(id, state, rounds, text)] for every claim, newest verdict winning.
 
     A claim whose cited figures have changed is STALE whatever its last verdict was: the review
@@ -145,7 +176,7 @@ def status(out):
     """
     root = Path(out)
     claims, rounds = {}, {}
-    for r in read_ledger(out):
+    for r in read_ledger(out, plugin):
         if r.get("kind") == "claim":
             claims[r["id"]] = r
         elif r.get("kind") == "review":
@@ -165,12 +196,13 @@ def status(out):
     return sorted(rows, key=lambda r: (r[1], r[0]))
 
 
-def outstanding(out):
+def outstanding(out, plugin=""):
     """Claims that have not been defended: never reviewed, or cited a figure that has changed."""
-    return [(cid, st) for cid, st, _n, _t in status(out) if st in (UNREVIEWED, STALE)]
+    return [(cid, st) for cid, st, _n, _t in status(out, plugin)
+            if st in (UNREVIEWED, STALE)]
 
 
-def summarise(out):
+def summarise(out, plugin=""):
     """One line per claim plus a tally. Printed by `scprofile paper` and by `check --out`."""
     rows = status(out)
     if not rows:
@@ -299,8 +331,8 @@ def next_step(out):
     A STATUS THAT DOES NOT SAY WHAT TO DO NEXT IS A REPORT SOMEBODY HAS TO INTERPRET. Every
     other gate in this tool names its own remedy; this one drives a loop, so it names the step.
     """
-    rows = status(out)
-    have_draft = bool(read_draft(out))
+    rows = status(out, plugin)
+    have_draft = bool(read_draft(out, plugin))
     if not rows:
         return ("Nothing has been written from these figures yet. Start by reading the brief.",
                 "scprofile paper --out {out} --brief")
@@ -320,7 +352,7 @@ def next_step(out):
         return ("Every claim is defended and no section has been written. The ledger holds the "
                 "sentences and not the document they came from.",
                 "scprofile paper --out {out} --write section.md")
-    if not (Path(out) / "report" / "paper.html").is_file():
+    if not (Path(out) / "report" / page_name(plugin)).is_file():
         return ("The section is written and every claim defended. Render it into the run.",
                 "scprofile paper --out {out} --render")
     withdrawn = [c for c, st, _n, _t in rows if st == WITHDRAWN]
@@ -332,7 +364,7 @@ def next_step(out):
             "")
 
 
-def write_draft(out, text, *, author=""):
+def write_draft(out, text, *, author="", plugin=""):
     """Store the authored result section IN THE RUN, and return where it went.
 
     WHY THIS IS A RUN OUTPUT AND NOT A SCRATCH FILE. The rule this tool applies to figures - a
@@ -352,19 +384,19 @@ def write_draft(out, text, *, author=""):
     if len(body.split()) < MIN_CLAIM_WORDS * 4:
         raise Refused(f"a result section of {len(body.split())} words is a note, not a section. "
                       f"Write what you would submit.")
-    (root / DRAFT).write_text(body, encoding="utf-8")
+    (root / draft_name(plugin)).write_text(body, encoding="utf-8")
     _append(out, {"kind": "draft", "words": len(body.split()), "author": str(author or ""),
                   "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
-    return root / DRAFT
+    return root / draft_name(plugin)
 
 
-def read_draft(out):
+def read_draft(out, plugin=""):
     """The authored section, or "" when none has been written."""
-    p = Path(out) / DRAFT
+    p = Path(out) / draft_name(plugin)
     return p.read_text(encoding="utf-8") if p.is_file() else ""
 
 
-def render(out, *, run_key="", title="Result section"):
+def render(out, *, run_key="", title="Result section", plugin=""):
     """Write `report/paper.html`: the authored section, the claims, and every figure they cite.
 
     ASSEMBLED FROM THE RUN, so it cannot describe figures that are not there. Every claim's
@@ -374,7 +406,7 @@ def render(out, *, run_key="", title="Result section"):
     remembered.
     """
     root = Path(out)
-    body = read_draft(out)
+    body = read_draft(out, plugin)
     rows = status(out)
     if not body and not rows:
         return None
@@ -401,7 +433,7 @@ def render(out, *, run_key="", title="Result section"):
         out_html.append("<h2>The claims, and what review did to them</h2>")
         out_html.append('<div class="wrap"><table><tr><th>claim</th><th>state</th>'
                         '<th>rounds</th><th>cites</th></tr>')
-        cites = {r["id"]: r.get("cites") or {} for r in read_ledger(out)
+        cites = {r["id"]: r.get("cites") or {} for r in read_ledger(out, plugin)
                  if r.get("kind") == "claim"}
         for cid, st, n, txt in rows:
             names = ", ".join(Path(f).name for f in sorted(cites.get(cid, {})))
@@ -430,7 +462,7 @@ def render(out, *, run_key="", title="Result section"):
                     + "".join(f"<li>{_e(x)}</li>" for x in NARROW) + "</ul></div>")
     d = root / "report"
     d.mkdir(parents=True, exist_ok=True)
-    path = d / "paper.html"
+    path = d / page_name(plugin)
     path.write_text(_page(f"{title} — scProfile", "".join(out_html)), encoding="utf-8")
     return path
 
