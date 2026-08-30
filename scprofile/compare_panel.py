@@ -25,14 +25,37 @@ from __future__ import annotations
 from . import figure as F
 
 
-def pool(per_unit_edges, members):
-    """One arm's edge list: the concatenation of its members'. Group level, by construction."""
+from .units import membership as _membership          # noqa: E402
+
+
+def pool(per_unit_edges, members, *, unit_members=None):
+    """(edges, source) for one side of a contrast, PREFERRING THE ARM'S OWN FIT.
+
+    THE HOST'S TABLE AND THE TOOL'S FIGURE WERE DESCRIBING DIFFERENT OBJECTS UNDER THE SAME
+    WORDS. This concatenated the per-SAMPLE edge lists, so "total interaction strength" in the
+    table was a sum over animals, while the tool's comparison figures beside it were drawn from
+    the arm's own fit on POOLED cells. Measured on one cohort the two differed by a factor of
+    2.5 - 57.5 against 23.3 for the same arm - and both appeared on the same page.
+
+    They are different quantities, not one right and one wrong: a sum over animals weights each
+    animal's network equally, and a pooled fit weights each CELL equally. But a reader cannot
+    compare a number from one against a figure from the other, so where a unit exists whose
+    members are exactly this side, its own edge list is used, and the source is returned so the
+    table can say which it was.
+
+    `unit_members` is {unit: set(samples)}, from `units.membership`.
+    """
     import pandas as pd
 
+    want = frozenset(str(m) for m in members)
+    for u, mem in (unit_members or {}).items():
+        if frozenset(str(x) for x in mem) == want and u in per_unit_edges:
+            return per_unit_edges[u], f"unit '{u}' (one fit on the pooled cells)"
     frames = [per_unit_edges[u] for u in members if u in per_unit_edges]
     if not frames:
-        return None
-    return pd.concat(frames, ignore_index=True)
+        return None, "no data"
+    return (pd.concat(frames, ignore_index=True),
+            f"{len(frames)} sample(s) summed (no unit pools this side)")
 
 
 def matrices(edges, pops, weight="prob"):
@@ -164,7 +187,9 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
 
     label, fac, lo_lv, hi_lv, lo_f, hi_f = spec
     lo_m, hi_m = _members(design, lo_f), _members(design, hi_f)
-    e_lo, e_hi = pool(per_unit_edges, lo_m), pool(per_unit_edges, hi_m)
+    _um = _membership(design)
+    e_lo, _ = pool(per_unit_edges, lo_m, unit_members=_um)
+    e_hi, _ = pool(per_unit_edges, hi_m, unit_members=_um)
     if e_lo is None or e_hi is None or len(e_lo) < min_edges or len(e_hi) < min_edges:
         return []
     _seen_lo = set(e_lo["source"].astype(str)) | set(e_lo["target"].astype(str))
@@ -531,7 +556,8 @@ def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edge
     # are on one ruler, which for a per-object normalisation they are not.
     pooled = {}
     for label, filt in sorted(arms.items()):
-        e = pool(per_unit_edges, _members(design, filt))
+        e, _ = pool(per_unit_edges, _members(design, filt),
+                    unit_members=_membership(design))
         if e is not None and len(e) >= min_edges:
             pooled[label] = e
     pops, dropped = contrast_populations(pooled)
@@ -640,7 +666,8 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     cell = {}
     for a in (a0, a1):
         for b in (b0, b1):
-            e = pool(per_unit_edges, _members(design, {fa: a, fb: b}))
+            e, _ = pool(per_unit_edges, _members(design, {fa: a, fb: b}),
+                        unit_members=_membership(design))
             if e is None or len(e) < min_edges:
                 return []
             cell[(a, b)] = e
@@ -836,12 +863,13 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob"):
     """
     import pandas as pd
 
+    _um = _membership(design)
     rows = []
     for sp in pairs:
         label, factor, lo_lv, hi_lv = sp[0], sp[1], sp[2], sp[3]
         lo_f, hi_f = (sp[4] if len(sp) > 4 else None), (sp[5] if len(sp) > 5 else None)
-        e_lo = pool(per, _members(design, lo_f))
-        e_hi = pool(per, _members(design, hi_f))
+        e_lo, src_lo = pool(per, _members(design, lo_f), unit_members=_um)
+        e_hi, src_hi = pool(per, _members(design, hi_f), unit_members=_um)
         if e_lo is None or e_hi is None:
             continue
         gcol = group_col or "group"
@@ -860,6 +888,10 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob"):
                 "raw_from": ra, "raw_to": rb, "raw_delta": d_raw,
                 "share_from": sa, "share_to": sb, "share_delta_pp": d_share,
                 "total_from": tot_a, "total_to": tot_b,
+                # WHICH OBJECT EACH SIDE CAME FROM. A number whose provenance is not on the row
+                # cannot be compared against a figure, and this table sits beside figures drawn
+                # from the arm's own fit.
+                "from_source": src_lo, "to_source": src_hi,
                 "scales_agree": bool(d_raw * d_share > 0) if d_raw and d_share else None,
             })
     return rows
