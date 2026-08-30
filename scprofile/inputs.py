@@ -859,3 +859,86 @@ def drop_inestimable(obs, terms):
             continue
         kept.append(t)
     return kept, dropped
+
+
+def derive_design(obs, sample_key, *, exclude=()):
+    """({sample: {factor: level}}, factors) derived from the object's own per-cell metadata.
+
+    A DESIGN TABLE THAT IS NOT PASSED IS NOT THE SAME AS A DESIGN THAT DOES NOT EXIST. The
+    factors a study is about often arrive as a separate table, which is why `read_design` exists
+    and why it is preferred whenever one is given. But an object frequently already carries them
+    - a column per animal-level variable, repeated on every cell of that animal - and when it
+    does, a run launched without `--design` silently degrades: no arm is resolvable, no contrast
+    is drawn, and the run completes with a per-sample appendix and no comparison at all. That
+    happened here, on a cohort whose object carried the study's two factors and its batch.
+
+    A FACTOR IS A COLUMN THAT IS CONSTANT WITHIN EVERY SAMPLE. That is the definition of
+    sample-level metadata and it needs no naming convention, so nothing here pattern-matches a
+    column name or a sample name.
+
+    Three things are excluded, each for a stated reason rather than by taste:
+      - a column with one level over the samples: it defines no contrast
+      - a column with as many levels as there are samples: it IS the sample under another name
+      - a continuous column: a per-sample mean is a measurement, not a design factor
+
+    The result is always REPORTED as derived, with the columns named, because a design nobody
+    passed is a design nobody has checked.
+    """
+    ex = {str(e) for e in (exclude or ())} | {str(sample_key)}
+    smp = [str(v) for v in obs[sample_key]]
+    n_samples = len(set(smp))
+    table, factors = {s: {} for s in sorted(set(smp))}, []
+    for col in list(obs.columns):
+        if str(col) in ex:
+            continue
+        ser = obs[col]
+        kind = getattr(getattr(ser, "dtype", None), "kind", "O")
+        if kind in ("f", "c", "m", "M"):
+            continue                       # continuous or time-like: not a design factor
+        vals = {}
+        constant = True
+        for s, v in zip(smp, (str(x) for x in ser)):
+            if s in vals and vals[s] != v:
+                constant = False
+                break
+            vals.setdefault(s, v)
+        if not constant:
+            continue
+        levels = set(vals.values())
+        if len(levels) < 2 or len(levels) >= n_samples:
+            continue
+        factors.append(str(col))
+        for s, v in vals.items():
+            table[s][str(col)] = v
+    return table, factors
+
+
+def design_or_derive(path, adata=None, sample_key=None, samples=None, *, quiet=False):
+    """(table, key, factors, source) - the design table if one was given, else the object's own.
+
+    ONE PLACE DECIDES WHERE THE DESIGN COMES FROM. Six call sites each wrote `if --design was
+    passed, read it`, so every one of them degraded identically and silently when it was not:
+    no arms, no contrasts, a run that completes and compares nothing. Deriving is not a
+    substitute for a design table - a table can carry factors the object has never heard of -
+    but a run whose object already holds the factors should not behave as though it has none.
+
+    `source` is "table", "object" or "none" and is printed wherever the design is reported. A
+    derived design must be visible as derived.
+    """
+    if path:
+        tab, key, factors = read_design(path, samples)
+        return tab, key, factors, "table"
+    if adata is not None and sample_key:
+        try:
+            tab, factors = derive_design(adata.obs, sample_key)
+        except Exception as e:                                            # noqa: BLE001
+            if not quiet:
+                print(f"  design could not be derived from the object: {e}")
+            return {}, sample_key, [], "none"
+        if factors:
+            if not quiet:
+                print(f"  design table                DERIVED FROM THE OBJECT - no --design was "
+                      f"given, and {len(factors)} column(s) are constant within every sample: "
+                      f"{', '.join(factors)}. Pass --design to use a table instead.")
+            return tab, sample_key, factors, "object"
+    return {}, sample_key, [], "none"

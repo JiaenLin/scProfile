@@ -453,11 +453,11 @@ def _run(a):
     # final unit list; that is cheap and keeps the later call unchanged. Reading it there only
     # would be circular - the unit axis needs the design, and that call needs the units.
     _axis_design = {}
-    if getattr(a, "design", None):
-        try:
-            _axis_design, _adk, _adf = inputs.read_design(a.design, samples)
-        except Exception as _e:                                              # noqa: BLE001
-            print(f"  units: design not readable for axis resolution ({_e}); sample axis only")
+    try:
+        _axis_design, _adk, _adf, _adsrc = inputs.design_or_derive(
+            getattr(a, "design", None), A, sample_key, samples)
+    except Exception as _e:                                                  # noqa: BLE001
+        print(f"  units: design not readable for axis resolution ({_e}); sample axis only")
     _plan_axes, _why_axes = _UN.resolve(_axis_design or {}, sample_key=sample_key,
                                         samples=samples,
                                         prefer=getattr(a, "unit_by", "both") or "both")
@@ -531,17 +531,21 @@ def _run(a):
     # design is the ordinary case for a cohort that has none, and it is what the smoke test
     # exercises.
     _dtab = None
-    if a.design:
-        try:
-            # SAMPLES, NOT UNITS. A design table has one row per SAMPLE; a unit may now be
-            # a design arm, and passing the unit list made four arm labels look like
-            # samples missing from the table - "design table unreadable" on a table that
-            # was perfectly readable.
-            _dtab, _dkey, _dfactors = inputs.read_design(a.design, samples or [])
+    try:
+        # SAMPLES, NOT UNITS. A design table has one row per SAMPLE; a unit may now be
+        # a design arm, and passing the unit list made four arm labels look like
+        # samples missing from the table - "design table unreadable" on a table that
+        # was perfectly readable.
+        _dtab, _dkey, _dfactors, _dsrc = inputs.design_or_derive(
+            a.design, A, sample_key, samples or [], quiet=True)
+        if _dfactors:
             _run_facts = _PL.design_facts(_dtab, _dfactors, sample_key, units or [])
-        except Exception as e:
-            print(f"  WARNING: design table unreadable, so the plan's decisions cannot be made "
-                  f"or delivered: {e}")
+            if _dsrc == "object":
+                print(f"  design DERIVED FROM THE OBJECT: {', '.join(_dfactors)} "
+                      f"(no --design was given)")
+    except Exception as e:
+        print(f"  WARNING: design table unreadable, so the plan's decisions cannot be made "
+              f"or delivered: {e}")
     _decisions_said = set()
 
     def _params_for(name):
@@ -1133,7 +1137,8 @@ def _run(a):
     _by_arm = {}
     if _run_facts.get("has_design") and sample_key:
         try:
-            _dt, _dk, _df = inputs.read_design(a.design, samples or [])
+            _dt, _dk, _df, _ = inputs.design_or_derive(a.design, A, sample_key,
+                                                       samples or [], quiet=True)
             for _n, _slots in sorted(merged_slots.items()):
                 _cols = list((_slots or {}).get("obs") or [])
                 # AND ITS ARRAYS. A plugin whose per-cell output is a matrix has no obs column,
@@ -1657,13 +1662,20 @@ def _plan(a):
                 print(f"      {wrapped}")
         print("      a plugin whose claim this forbids must refuse and name the alternative")
     design_levels = {}
-    if a.design:
+    if True:
         try:
             samples_in_obj = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
                               if keys["sample"][0] else [])
-            tab, key, factors = inputs.read_design(a.design, samples_in_obj)
-            print(f"  design table                {a.design} - key {key!r}, "
-                  f"factors {', '.join(factors)}")
+            tab, key, factors, _src = inputs.design_or_derive(
+                a.design, A, keys["sample"][0], samples_in_obj, quiet=True)
+            if not factors:
+                raise inputs.Refuse("no design table given, and no column in the object is "
+                                    "constant within every sample")
+            print(f"  design table                "
+                  + (f"{a.design} - key {key!r}, " if _src == "table"
+                     else "DERIVED FROM THE OBJECT (no --design given) - key "
+                          f"{key!r}, ")
+                  + f"factors {', '.join(factors)}")
             if keys["sample"][0]:
                 samples = sorted(set(A.obs[keys["sample"][0]].astype(str)))
                 missing = [s for s in samples if s not in tab]
@@ -1680,11 +1692,9 @@ def _plan(a):
                           + ("   <- BELOW 3 PER GROUP: compositional and pseudobulk tests refuse"
                              if small else ""))
         except Exception as e:                                            # noqa: BLE001
-            print(f"  design table                REFUSED - {e}")
+            print(f"  design table                NOT AVAILABLE - {e}. Any plugin testing "
+                  f"across a design will refuse; pass --design.")
             ok_all = False
-    else:
-        print("  design table                NOT GIVEN - any plugin testing across a design "
-              "will refuse")
 
     # ---- per plugin ---------------------------------------------------------------------------
     print("\nplugins")
@@ -1778,11 +1788,11 @@ def _plan(a):
     samples = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
                if keys["sample"][0] else [])
     dtab, dfactors = None, []
-    if a.design:
-        try:
-            dtab, _dkey, dfactors = inputs.read_design(a.design, samples)
-        except Exception:                                                 # noqa: BLE001
-            dtab, dfactors = None, []          # already reported above, as a refusal
+    try:
+        dtab, _dkey, dfactors, _dsrc = inputs.design_or_derive(
+            a.design, A, keys["sample"][0], samples, quiet=True)
+    except Exception:                                                     # noqa: BLE001
+        dtab, dfactors = None, []              # already reported above, as a refusal
     # THE PLAN SCHEDULES WHAT THE RUN WILL RUN. `plan` resolved units as samples while `run`
     # resolved them from the design, so a plan promised ten instances and the run did fourteen.
     # A preview that disagrees with the action is the defect this project has already fixed
