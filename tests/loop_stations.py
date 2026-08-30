@@ -249,6 +249,35 @@ def _kind(fig):
     return re.sub(r"^[a-z0-9]+_(?=[A-Z]|[CNPF]\d)", "", stem)
 
 
+def carried_findings(runs, current):
+    """What was last SEEN on each figure path, in earlier runs of this project.
+
+    A review is bound to its image's sha256, which is right - a redrawn panel has not been looked
+    at. But a change in the HOST redraws every panel of every plugin, so one line in `figure.py`
+    costs every recorded look, and the eye station went 0 -> 3 -> 5 -> 8 -> 0 across five rounds
+    while real defects were being found. The discipline of scanning a whole set on one build works
+    around that; it does not remove it.
+
+    So the looks are not carried - they are gone, correctly - but the FINDINGS are. A re-scan
+    starts from what was last written about that panel rather than from nothing, which is the
+    difference between re-reading 84 panels and re-checking 84 known findings.
+
+    Returns {relpath: (note, run_name)}, newest first, for paths not reviewed in `current`.
+    """
+    out = {}
+    for r in sorted(runs, key=lambda p: p.name, reverse=True):
+        if r == current:
+            continue
+        led = r / "FIGURE_REVIEW.jsonl"
+        if not led.is_file():
+            continue
+        for row in _lines(led):
+            rel, note = row.get("figure"), str(row.get("note", "")).strip()
+            if rel and note and rel not in out:
+                out[rel] = (note, r.name)
+    return out
+
+
 def station_eye(runs):
     """7. Are the pictures right? A ledger entry per figure in the scan set.
 
@@ -298,8 +327,17 @@ def station_eye(runs):
     head = (f"{r.name}: {seenk}/{nk} kind(s) have a recorded look, "
             f"{want - len(todo)}/{want} of the named scan set ({allf} figures in the run)")
     if todo:
+        # WHAT WAS LAST SEEN ON THIS PANEL, beside the name of the panel to open. A redraw
+        # correctly destroys the review; it should not also destroy the knowledge.
+        _carried = carried_findings(runs, r)
+        _lines_out = []
+        for _f in todo[:8]:
+            _lines_out.append(_f)
+            _prev = _carried.get(_f)
+            if _prev:
+                _lines_out.append(f"    last seen ({_prev[1][:24]}): {_prev[0][:150]}")
         return BLOCKED, head, \
-            f"OPEN THESE AND RECORD WHAT YOU SEE:\n      " + "\n      ".join(todo[:8]) \
+            f"OPEN THESE AND RECORD WHAT YOU SEE:\n      " + "\n      ".join(_lines_out) \
             + (f"\n      ... and {len(todo) - 8} more" if len(todo) > 8 else "") \
             + ("\n      (a look at another instance of a kind counts toward the KIND, not "
                "toward the named largest and smallest, which are the two that break layouts)"

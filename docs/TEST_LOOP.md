@@ -267,15 +267,18 @@ callable.
 The same commit drew the same panels from the same data twice, producing five collisions once and
 none the next, neither run adopting anything. Station 6b now clears a **commit**, not a run.
 
-### OPEN — a host change resets the entire eye scan
+### PARTLY FIXED — a host change resets the entire eye scan
 
 A review is bound to its image's sha256, which is right: a redrawn panel has not been looked at.
 But a change in the *host* redraws every panel of every plugin, so one line in `figure.py` costs
 all 84 recorded looks. Measured across five rounds, the eye station went 0 → 3 → 5 → 8 → 0 while
 real defects were being found. The convergence rule — scan the whole set on one build, fix in one
-commit, rebuild, re-scan — is a discipline working around this, not a solution. **What would fix
-it:** carry the *findings* forward across a redraw, so a re-scan starts from what was last seen on
-that kind rather than from nothing.
+commit, rebuild, re-scan — is a discipline working around this, not a solution. **Half of this is now fixed:** the looks are still
+destroyed, correctly, but the FINDINGS are carried. `carried_findings()` reads the ledgers of
+earlier runs and the eye station prints, beside each panel to open, what was last written about
+that path and which run it came from. That is the difference between re-reading 84 panels and
+re-checking 84 known findings. The other half — that a look is still required — is not a defect
+and will not be fixed: a redrawn panel has not been looked at.
 
 ### OPEN — no claim has ever been withdrawn
 

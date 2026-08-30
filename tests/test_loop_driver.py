@@ -44,6 +44,60 @@ def test_required_outputs_names_the_manuscript():
     assert "report/paper.html" in paths
 
 
+def test_findings_are_carried_across_runs():
+    """A redraw destroys the review. It must not also destroy what was written.
+
+    Built as a real pair of run directories, because the thing under test is reading one run's
+    ledger while scanning another.
+    """
+    import json
+    import tempfile
+    from pathlib import Path
+
+    L = importlib.import_module("tests.loop_stations")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        old = root / "20260101T000000Z__scprofile-aaaaaaa__stage"
+        new = root / "20260102T000000Z__scprofile-bbbbbbb__stage"
+        for d in (old, new):
+            (d / "kernels" / "k" / "figures").mkdir(parents=True)
+            (d / "kernels" / "k" / "figures" / "F1.png").write_bytes(b"x")
+        rel = "kernels/k/figures/F1.png"
+        (old / "FIGURE_REVIEW.jsonl").write_text(
+            json.dumps({"figure": rel, "note": "the legend covers the third bar"}) + "\n")
+
+        got = L.carried_findings([old, new], new)
+        assert rel in got, "nothing was carried from the earlier run"
+        assert "legend covers" in got[rel][0], f"the wrong note was carried: {got[rel]}"
+        assert got[rel][1] == old.name, "the carried finding does not name the run it came from"
+
+        # and a run must not carry from ITSELF, which would make a look look done
+        assert L.carried_findings([old], old) == {}, "a run carried its own ledger forward"
+
+
+def test_the_newest_earlier_finding_wins():
+    import json
+    import tempfile
+    from pathlib import Path
+
+    L = importlib.import_module("tests.loop_stations")
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(td)
+        rel = "kernels/k/figures/F1.png"
+        runs = []
+        for stamp, note in (("20260101T000000Z", "older finding"),
+                            ("20260102T000000Z", "newer finding")):
+            d = root / f"{stamp}__scprofile-x__stage"
+            (d / "kernels" / "k" / "figures").mkdir(parents=True)
+            (d / "FIGURE_REVIEW.jsonl").write_text(
+                json.dumps({"figure": rel, "note": note}) + "\n")
+            runs.append(d)
+        cur = root / "20260103T000000Z__scprofile-y__stage"
+        cur.mkdir()
+        got = L.carried_findings(runs + [cur], cur)
+        assert got[rel][0] == "newer finding", f"an older finding won: {got[rel]}"
+
+
 if __name__ == "__main__":
     import sys
     bad = 0
