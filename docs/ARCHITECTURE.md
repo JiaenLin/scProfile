@@ -112,6 +112,34 @@ says the dataset cannot answer that part.
 A plugin declares what it can supply in `report.provides_evidence`. Nothing outside the plugin
 asserts it.
 
+## `units.py` — what one run of a plugin is computed over
+
+A unit is a set of cells the plugin is fitted to. There are two axes and both are produced:
+
+- **group** — cells pooled by design arm. This is the axis the design was built to compare.
+- **sample** — one unit per sample. An addition, never a gate: no group panel is withheld
+  because an arm holds few samples.
+
+The group axis carries two kinds of unit:
+
+- **crossing** — one per combination of the biological factors (`old_ctl`, `old_trt`, …). These
+  are the two sides of every simple effect.
+- **marginal** — one per level of each factor, pooled over the others (`old`, `ctl`, …). These
+  are the two sides of every marginal effect. Without them a marginal comparison has a question
+  and no object, and any tool whose differential takes two fitted objects has nothing to take.
+
+A factor is biological if it varies, is not the sample column, and is not named as technical by
+the caller. `membership()` returns the samples behind every group unit and is the only place
+that mapping is computed.
+
+## `inputs.derive_design` — the design when no table is passed
+
+A design table is preferred and always wins, because it can carry factors the object has never
+heard of. When none is passed, the factors are read out of the object: **a factor is a column
+constant within every sample.** Columns that vary within a sample, that are continuous, that
+have one level, or that have one level per sample are refused, each for that stated reason. A
+derived design is reported as derived, with its columns named.
+
 ## `native.py` — the wrapped tool's own plots
 
 A plugin that wraps a tool inherits that tool's figures. Every one is either used or accounted
@@ -124,6 +152,17 @@ for. The reasons are a closed set:
 `reimplemented`, `not_considered`, `dependency_missing`, `too_slow` and `not_useful` are rejected
 by name, each with the remedy. `OWES_ACCOUNTING` lists wrappers that still owe an accounting; it
 may shrink and never grow.
+
+`function_for(declared, filename)` inverts the declaration: given a file, it names the upstream
+function that drew it. Two things use it. A panel's caption says which function drew it, so a
+reader can check the panel against the tool's own documentation. And
+`tests/test_plot_declarations.py` walks every plot call in a plugin's embedded script and
+requires a declared function to claim each one — so the accounting and the code cannot drift, and
+a function cannot be marked used while drawing nothing.
+
+**The practice this enforces: list every plot function the wrapped tool exports, use all of them,
+and account for each exception from the closed set above.** A skip is a claim about the data or
+about a duplicate, never about effort or convenience.
 
 ## `panels.py` — the panel registry
 
@@ -149,6 +188,24 @@ population absent from one arm is removed and named, not drawn and masked.
 
 `write_two_scale()` writes every contrast's change per element on both scales — raw and share of
 the arm's own total — with the arm totals and whether the two agree in sign.
+
+## The compare phase — the tool's own differentials
+
+A plugin may declare `compare(ctx)`. The host runs it once per contrast, in the plugin's own
+environment, handing over the two units' output directories and nothing else. The plugin decides
+what its upstream can do with two fitted objects.
+
+Two rules the host enforces around it:
+
+- **The panels are placed.** They go on the arms page in their own section, above the host's own
+  encodings, and are recorded in `panels.json` under `native` so the writing brief lists them.
+  A figure that is drawn and not placed cannot be cited and is not delivered.
+- **The two objects must be aligned before they are merged.** A differential that subtracts two
+  per-arm matrices does so by position; two arms fitted separately need not carry the same
+  groups. Where they do not, the subtraction either errors or silently compares one group against
+  a different one. The plugin aligns using the wrapped tool's own function and asserts the two
+  agree afterwards; `tests/test_native_plots.py` checks the alignment is a call and not a
+  comment.
 
 ## `report.py` — the documents
 
