@@ -70,7 +70,7 @@ therefore a statement about that unit alone.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.11.2",
+    "version": "0.11.3",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -3282,9 +3282,27 @@ for (pat in c("outgoing", "incoming")) {
     # side: "`nrow` of all heatmaps ... should be the same". The two arms rarely detect the same
     # pathways - measured here, 48 and 41 with a union of 49 - so this is the normal case.
     allp <- union(object.list[[1]]@netP$pathways, object.list[[2]]@netP$pathways)
+    # THE MARGINAL BARS NEED A SHARED LIMIT, not only the rows. With the rows aligned and the
+    # bars left to themselves the top axes ran 0-4 against 0-2 and the side axes 0-15 against
+    # 0-1.5 - a tenfold difference - so a bar of equal length meant ten times as much on one
+    # side of the same figure. `ylim.top` and `ylim.right` are CellChat's own arguments for it.
+    # Computed from the same centrality the panels draw, over both objects.
+    .cen <- function(o, how) {
+      cs <- o@netP$centr
+      m <- sapply(names(cs), function(k) {
+        v <- if (pat == "outgoing") cs[[k]]$outdeg else cs[[k]]$indeg
+        if (is.null(v) || !length(v)) rep(0, nlevels(o@idents)) else as.numeric(v)
+      })
+      if (!length(m)) return(0)
+      m <- matrix(unlist(m), ncol = length(cs))
+      if (how == "top") max(colSums(m), na.rm = TRUE) else max(rowSums(m), na.rm = TRUE)
+    }
+    yt <- max(sapply(object.list, .cen, how = "top"), na.rm = TRUE)
+    yr <- max(sapply(object.list, .cen, how = "right"), na.rm = TRUE)
     hs <- lapply(seq_along(object.list), function(i)
       netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = pat, signaling = allp,
-                                        title = names(object.list)[i], width = 6, height = 14))
+                                        title = names(object.list)[i], width = 6, height = 14,
+                                        ylim.top = c(0, yt), ylim.right = c(0, yr)))
     ComplexHeatmap::draw(hs[[1]] + hs[[2]], ht_gap = grid::unit(0.5, "cm"))
   }, w = 2600, h = 2200)
 }
@@ -3312,10 +3330,15 @@ for (g in shared) {
 # `if (!is.null(sources.use) | !is.null(targets.use))` and then reads it unconditionally, so with
 # both NULL the function always fails with "object 'df.net' not found". Passing every source is
 # the no-subset case and the only way to reach the plot at all.
+# `x.lab.rot = TRUE` because the default is FALSE and these names are long: every tick label
+# was drawn horizontally at the same place and they overprinted into one unreadable smear across
+# the bottom, with not a single population name readable off the axis. Seen by opening it.
 npng("barplot_count", netVisual_barplot(m, comparison = c(1, 2), measure = "count",
-                                        sources.use = seq_along(group_new)), w = 1800, h = 1600)
+                                        sources.use = seq_along(group_new), x.lab.rot = TRUE),
+     w = 2200, h = 1700)
 npng("barplot_weight", netVisual_barplot(m, comparison = c(1, 2), measure = "weight",
-                                         sources.use = seq_along(group_new)), w = 1800, h = 1600)
+                                         sources.use = seq_along(group_new), x.lab.rot = TRUE),
+     w = 2200, h = 1700)
 
 # 9. the pathway manifold across BOTH arms - CellChat's own joint embedding, which places every
 #    pathway from both objects in one space and ranks how far each moved.
