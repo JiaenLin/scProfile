@@ -812,3 +812,71 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
               "not comparable and a raw difference between them would mostly report which arm "
               "is smallest." if rel else ""))
     return [(f"C5_interaction__{slug}", path, cap, f"{fa} × {fb}")]
+
+
+def two_scale_table(per, design, pairs, *, group_col=None, weight="prob"):
+    """Every contrast's change per element, on BOTH scales, with whether the two agree.
+
+    THE NUMBERS A RESULT SECTION QUOTES MUST COME FROM A FILE THE TOOL WROTE. These were computed
+    by hand, in an ad-hoc script, and went straight into a manuscript's claims - which is exactly
+    the thing this project's evidence rule forbids, because a number nobody can open is a number
+    nobody can check.
+
+    WHY BOTH SCALES. Where a method normalises within each object - the usual case for a
+    communication probability - an element's SHARE of its arm and its RAW value answer different
+    questions, and they can disagree in sign. Measured on a real cohort: five of six leading
+    elements reversed direction between the two, because the arm totals differed 3.8-fold and a
+    collapsing total makes whatever shrinks least appear to rise. A section that quotes one scale
+    without the other is reporting an artefact of the denominator half the time.
+
+    So the table carries both and marks the agreement. Nothing here decides which is right - that
+    is the reader's - it only makes the disagreement impossible to miss.
+
+    Returns a list of dicts, one per (contrast, element).
+    """
+    import pandas as pd
+
+    rows = []
+    for sp in pairs:
+        label, factor, lo_lv, hi_lv = sp[0], sp[1], sp[2], sp[3]
+        lo_f, hi_f = (sp[4] if len(sp) > 4 else None), (sp[5] if len(sp) > 5 else None)
+        e_lo = pool(per, _members(design, lo_f))
+        e_hi = pool(per, _members(design, hi_f))
+        if e_lo is None or e_hi is None:
+            continue
+        gcol = group_col or "group"
+        if gcol not in e_lo.columns or gcol not in e_hi.columns:
+            continue
+        a = e_lo.groupby(gcol)[weight].sum()
+        b = e_hi.groupby(gcol)[weight].sum()
+        tot_a, tot_b = float(a.sum()) or 1.0, float(b.sum()) or 1.0
+        for g in sorted(set(a.index) | set(b.index)):
+            ra, rb = float(a.get(g, 0.0)), float(b.get(g, 0.0))
+            sa, sb = 100.0 * ra / tot_a, 100.0 * rb / tot_b
+            d_raw, d_share = rb - ra, sb - sa
+            rows.append({
+                "contrast": label, "factor": factor, "from": lo_lv, "to": hi_lv,
+                "element": g,
+                "raw_from": ra, "raw_to": rb, "raw_delta": d_raw,
+                "share_from": sa, "share_to": sb, "share_delta_pp": d_share,
+                "total_from": tot_a, "total_to": tot_b,
+                "scales_agree": bool(d_raw * d_share > 0) if d_raw and d_share else None,
+            })
+    return rows
+
+
+def write_two_scale(per, design, pairs, out_path, *, group_col=None, weight="prob"):
+    """Write `two_scale_table` as a CSV. Returns the path, or None when there is nothing to say."""
+    import csv
+    from pathlib import Path
+
+    rows = two_scale_table(per, design, pairs, group_col=group_col, weight=weight)
+    if not rows:
+        return None
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(out_path, "w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
+    return out_path

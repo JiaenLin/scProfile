@@ -468,6 +468,20 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None):
     _native_compare(name, spec, per, design, pairs, out_dir, units,
                     prefix=prefix)
 
+    # THE TWO-SCALE TABLE, WRITTEN EVERY RUN. A result section quotes changes per element, and
+    # where the weight is normalised within each unit those changes differ - sometimes in SIGN -
+    # between an element's share of its arm and its raw value. Both belong in a file the reader
+    # can open, next to the panels drawn from them.
+    try:
+        _t = CPan.write_two_scale(
+            per, design, pairs,
+            Path(out_dir) / "kernels" / name / "tables" / f"{name}_two_scale.csv",
+            group_col=net.get("group"), weight="prob")
+        if _t:
+            print(f"  wrote {_t.name}: every contrast on both scales")
+    except Exception as _e:                                               # noqa: BLE001
+        print(f"  two-scale table not written: {_e}")
+
     con = []
     for sp in pairs:
         con += CPan.draw_contrast(per, design, sp, figdir, name, group_col=net.get("group"),
