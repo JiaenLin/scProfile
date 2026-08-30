@@ -68,9 +68,15 @@ may describe none of them; the host fans it out and this file sees one unit. Eve
 therefore a statement about that unit alone.
 """
 
+#: BUMPED WHENEVER THE MATRIX FILES ARE WRITTEN DIFFERENTLY - a different orientation, a
+#: different gene set, another column in the label file. It is part of the matrix cache key
+#: because a cache written by older code would otherwise be served to newer code that expects
+#: something else, and the files would look perfectly valid while meaning something different.
+_MATRIX_FORMAT = "mtx-genes-x-cells-v1"
+
 PLUGIN = {
     "api": 1,
-    "version": "0.14.0",
+    "version": "0.15.0",
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
@@ -691,8 +697,23 @@ cc <- netAnalysis_computeCentrality(cc, slot.name = "netP")
 # object was therefore missing all three, and CellChat's own comparison functions refused it:
 # "Please run `netAnalysis_computeCentrality` to compute the network centrality scores for each
 # dataset seperately". An object is worth reusing only in the state the next step needs.
-writeLines(unname(stamp), stampf)
-saveRDS(cc, rds)
+# PUBLISH BY RENAME, AND THE STAMP LAST.
+# Two hazards, both real. `saveRDS` opens the target path for writing, and an earlier run's
+# instance holds a HARD LINK to that path - so writing it in place changes the bytes inside an
+# already-sealed run directory. A rename installs a NEW inode and every earlier run keeps
+# exactly what it had. And the stamp is what declares the object valid, so writing it FIRST -
+# which is what this did - leaves a job killed in between advertising an object it never
+# finished writing.
+rds_tmp <- paste0(rds, ".tmp", Sys.getpid())
+saveRDS(cc, rds_tmp)
+if (!file.rename(rds_tmp, rds)) {
+  file.copy(rds_tmp, rds, overwrite = TRUE); unlink(rds_tmp)
+}
+stamp_tmp <- paste0(stampf, ".tmp", Sys.getpid())
+writeLines(unname(stamp), stamp_tmp)
+if (!file.rename(stamp_tmp, stampf)) {
+  file.copy(stamp_tmp, stampf, overwrite = TRUE); unlink(stamp_tmp)
+}
 cat("saved the CellChat object for reuse:", rds, "\n")
 # AND THE RUN KEEPS ITS OWN HANDLE ON IT. `produces` declares objects/cellchat.rds, so the
 # instance must carry one; a hard link is the same bytes and the same inode, so the run is
@@ -2807,14 +2828,27 @@ def run(ctx):
 
     mtx = ctx.out / "cellchat_expr.mtx"
     meta = ctx.out / "cellchat_meta.csv"
-    # THE KEY IS THE CELL SET AND THE GENE SET, not a path. Two runs of the same object give the
-    # same barcodes in the same order; a different unit, a different label column or a rebuilt
-    # object gives different ones. Hashing the names is cheap and does not depend on where the
-    # file happens to live, which a path-based key would.
+    # THE KEY COVERS THE VALUES, NOT ONLY THE NAMES. The first version hashed the barcodes and
+    # the gene names and the label COLUMN NAME - which says nothing about what is in them. An
+    # object re-normalised, switched to another layer, or RE-ANNOTATED under the same column
+    # name has the same barcodes and the same genes, so that key matched and a stale matrix and
+    # a stale label file would have been served. That is a wrong answer, not a slow one, and it
+    # is the failure a cache has to be built against.
+    #
+    # Hashing the sparse buffers costs about a second on this data and is far cheaper than
+    # rewriting 1.4 GB of text. `_MATRIX_FORMAT` is bumped whenever this function changes HOW it
+    # writes the files, because otherwise a cache written by older code is served to newer code
+    # that expects something else.
+    _Xk = Xc.tocsr()
     _key = "|".join((
-        str(ctx.unit or ""), str(ctx.keys.get("label", "")), str(A.n_obs), str(A.n_vars),
+        _MATRIX_FORMAT, str(ctx.unit or ""), str(ctx.keys.get("label", "")),
+        str(A.n_obs), str(A.n_vars),
+        _hl.sha1(np.ascontiguousarray(_Xk.data)).hexdigest(),
+        _hl.sha1(np.ascontiguousarray(_Xk.indices)).hexdigest(),
+        _hl.sha1(np.ascontiguousarray(_Xk.indptr)).hexdigest(),
         _hl.sha1("\n".join(map(str, A.obs_names)).encode()).hexdigest(),
-        _hl.sha1("\n".join(map(str, var_names)).encode()).hexdigest()))
+        _hl.sha1("\n".join(map(str, var_names)).encode()).hexdigest(),
+        _hl.sha1("\n".join(A.obs[ctx.keys["label"]].astype(str)).encode()).hexdigest()))
     _mc = ctx.cache("matrix")
     _hit = False
     if _mc is not None:
@@ -2844,13 +2878,24 @@ def run(ctx):
                 f"{mtx.stat().st_size / 1e6:,.0f} MB")
         if _mc is not None:
             try:
+                # PUBLISH BY RENAME, NEVER BY OVERWRITE. An instance holds a HARD LINK to the
+                # cached file; writing that path in place would change the bytes inside an
+                # already-sealed run directory. A rename installs a NEW inode, so every earlier
+                # run keeps exactly what it had - and a reader can never see a half-written
+                # file, which two runs of the same unit at once would otherwise produce.
                 for _src, _dst in ((mtx, _mc / "expr.mtx"),
                                    (_P(str(mtx) + ".genes"), _mc / "expr.mtx.genes"),
                                    (meta, _mc / "meta.csv")):
-                    if _dst.exists():
-                        _dst.unlink()
-                    _os.link(_src, _dst)
-                (_mc / "key.txt").write_text(_key, encoding="utf-8")
+                    _tmp = _dst.with_suffix(_dst.suffix + f".tmp{_os.getpid()}")
+                    if _tmp.exists():
+                        _tmp.unlink()
+                    _os.link(_src, _tmp)
+                    _os.replace(_tmp, _dst)
+                # THE KEY IS WRITTEN LAST. It is what says the payload is valid, so writing it
+                # first leaves a job killed in between advertising files it never finished.
+                _kt = _mc / f"key.txt.tmp{_os.getpid()}"
+                _kt.write_text(_key, encoding="utf-8")
+                _os.replace(_kt, _mc / "key.txt")
             except OSError as _e:
                 ctx.log(f"  matrix store: not cached ({_e})")
 

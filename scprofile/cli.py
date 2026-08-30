@@ -677,7 +677,8 @@ def _run(a):
             # disposable; putting one in the other makes the run un-sealable or the cache
             # un-disposable. `_cache` sits next to the run directories, is scoped per plugin and
             # unit, and deleting it costs time and nothing else.
-            cache_dir=Path(a.out).resolve().parent / "_cache" / name / str(unit or "_"))
+            cache_dir=(None if getattr(a, "no_cache", False) else
+                       Path(a.out).resolve().parent / "_cache" / name / str(unit or "_")))
         return kout
 
     for wi, wave in enumerate(waves, 1):
@@ -2930,6 +2931,12 @@ def main(argv=None):
     f.set_defaults(fn=_fetch)
 
     r = sub.add_parser("run", help="[you] run kernels, merge results, write the report")
+    # THE LEVER. A cache with no way to switch it off is a cache you have to trust; the first
+    # thing anyone needs when a result looks wrong is to rule it out in one run. Off means the
+    # host offers no directory at all, so every plugin recomputes and says so.
+    r.add_argument("--no-cache", action="store_true",
+                   help="offer no cache directory, so every plugin recomputes from the object. "
+                        "Use it to rule the cache out when a result looks wrong.")
     r.add_argument("--reuse-from", type=Path,
                    help="a directory of earlier run directories. A licensed instance whose "
                         "reuse key matches is HARDLINKED into this run instead of recomputed.")
