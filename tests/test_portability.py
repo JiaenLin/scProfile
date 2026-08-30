@@ -1087,7 +1087,17 @@ _ALLSRC.update({f"smoke/{k}": v for k, v in _SMOKE.items()})
 # the instance attributes — `ctx.log`, `ctx.headline`, `ctx.status` — so a check built on it
 # alone reports every plugin in the tree as calling APIs that do not exist. A guard whose first
 # run is all false positives is a guard that gets deleted.
+# THE CONTRACT HAS TWO CONTEXTS NOW. `run(ctx)` is given a Context and `compare(ctx)` a
+# CompareContext - the phase that lets a plugin draw its wrapped tool's own DIFFERENTIAL figures,
+# which need two of its finished units rather than one. Both are part of the plugin contract, so
+# an attribute is legitimate if it exists on either; checking only Context reported every
+# compare-phase attribute as undeclared.
 _ctx_api = {n for n in dir(_Ctx) if not n.startswith("__")}
+try:
+    from scprofile.plugin import CompareContext as _CmpCtx
+    _ctx_api |= {n for n in dir(_CmpCtx) if not n.startswith("__")}
+except Exception:                                                         # noqa: BLE001
+    pass
 for _nd in _ast.walk(_ast.parse(pathlib.Path(_Ctx.__module__.replace(".", "/") + ".py").read_text()
                                 if False else
                                 (Path(__file__).resolve().parents[1] / "scprofile"

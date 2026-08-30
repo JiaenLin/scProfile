@@ -915,3 +915,52 @@ class Context:
             self.log(f"  metric {name!r} is NaN; not recorded")
             return
         self._metrics[str(name)] = v
+
+
+class CompareContext:
+    """What a plugin's `compare(ctx)` is given: two of its own finished units, and where to write.
+
+    THE PHASE THAT WAS MISSING. `run(ctx)` sees one unit, so every comparison the design supports
+    had to be assembled by the HOST from per-unit tables. That is right for a quantity the host
+    can recompute and wrong for a differential figure the wrapped tool already ships - and a tool
+    like CellChat has several, each needing two of its own objects merged. There was nowhere to
+    call them from, so they were not called, and every comparison figure in the section was a
+    reimplementation of one.
+
+    Nothing here describes the object or the design: the expensive work is done and its outputs
+    are on disk. A plugin gets the two units' names, their output directories, and its own
+    figures/tables directory for the pair.
+    """
+
+    def __init__(self, *, pair, units, out, config=None, log=print):
+        #: A label for this comparison, e.g. `age__aged__young`. Used in filenames.
+        self.pair = str(pair)
+        #: {unit_name: Path} - the two finished units, in the order the contrast names them.
+        self.units = {str(k): Path(v) for k, v in dict(units or {}).items()}
+        #: Where this comparison's outputs go.
+        self.out = Path(out)
+        self.config = dict(config or {})
+        self.log = log
+
+    @property
+    def names(self):
+        """The two unit names, in declaration order."""
+        return list(self.units)
+
+    def dir_of(self, unit):
+        """That unit's output directory."""
+        return self.units[str(unit)]
+
+    def figures(self):
+        """The directory this comparison's figures go in, created."""
+        d = self.out / "figures"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def tables(self):
+        d = self.out / "tables"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def __repr__(self):
+        return f"<CompareContext {self.pair} {self.names}>"

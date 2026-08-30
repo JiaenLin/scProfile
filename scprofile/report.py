@@ -460,6 +460,13 @@ def _arm_content(units, design, spec, *, out_dir=None, name=""):
         return empty
     figdir = Path(out_dir) / "kernels" / name / "figures"
     pairs = CPan.arm_pairs(design)
+
+    # THE PLUGIN'S OWN COMPARISON FIGURES, ONCE PER ARM PAIR, BEFORE the host draws its versions.
+    # A wrapped tool that ships differential figures should draw them; the host's panels exist for
+    # the quantities it can recompute, not to re-implement a tool's own encoding. This is a no-op
+    # for a plugin that declares no `compare(ctx)`, which is every plugin until it declares one.
+    _native_compare(name, spec, per, design, pairs, out_dir, units)
+
     con = []
     for sp in pairs:
         con += CPan.draw_contrast(per, design, sp, figdir, name, group_col=net.get("group"),
@@ -559,6 +566,67 @@ def _arm_appendix(name, content, plugin_arm_figs=()):
                 n += 1
                 b.append(_panel(f, n))
     return "".join(b)
+
+
+def _native_compare(name, spec, per, design, pairs, out_dir, units):
+    """Invoke a plugin's `compare(ctx)` once per arm pair, in the plugin's own environment.
+
+    The host knows the pairs and where each unit wrote; the plugin knows what its upstream can do
+    with two of them. Neither piece of knowledge belongs on the other side, which is why this
+    hands over paths and nothing else.
+
+    Failures are logged and never raised: a comparison figure that will not draw must not take
+    the report down with it.
+    """
+    import json as _json
+    import subprocess
+    import tempfile
+
+    from . import kernels as _K
+
+    entry = _K.SHARED_ENTRY
+    kdir = Path(out_dir) / "kernels" / name
+    plugin_file = None
+    for cand in (kdir / f"{name}.py", Path(_K.__file__).resolve().parent.parent
+                 / _K.KERNEL_DIRNAME / f"{name}.py"):
+        if Path(cand).is_file():
+            plugin_file = Path(cand)
+            break
+    if plugin_file is None:
+        return
+    # ASK THE PLUGIN WHETHER IT HAS THE PHASE, rather than importing it here: it lives in its own
+    # environment and the host's interpreter may not be able to load it at all.
+    import sys as _sys
+    try:
+        q = subprocess.run([_sys.executable, str(entry), "--phases", str(plugin_file)],
+                           capture_output=True, text=True, timeout=120)
+        if "compare" not in (q.stdout or ""):
+            return
+    except Exception:                                                     # noqa: BLE001
+        return
+    udir = {str(u.get("unit")): u.get("dir") for u in (units or []) if u.get("unit")}
+    for sp in pairs:
+        label, _factor, lo, hi = sp[0], sp[1], sp[2], sp[3]
+        if lo not in per or hi not in per:
+            continue
+        d_lo, d_hi = udir.get(lo), udir.get(hi)
+        if not (d_lo and d_hi):
+            continue
+        base = Path(out_dir)
+        spec_json = {
+            "pair": str(label),
+            "units": {lo: str((base / d_lo) if not Path(d_lo).is_absolute() else Path(d_lo)),
+                      hi: str((base / d_hi) if not Path(d_hi).is_absolute() else Path(d_hi))},
+            "out_dir": str(kdir / "compare" / str(label)),
+        }
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+            _json.dump(spec_json, fh)
+            spath = fh.name
+        try:
+            subprocess.run([_sys.executable, str(entry), "--compare", str(plugin_file), spath],
+                           capture_output=False, timeout=3600)
+        except Exception as e:                                            # noqa: BLE001
+            print(f"  native compare {label} failed: {e}")
 
 
 def _units_by_arm(units, design, declared, *, out_dir=None, name=""):

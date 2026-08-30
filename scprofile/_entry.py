@@ -200,11 +200,63 @@ def guard(plugin_path, payload, log=print):
     return 0
 
 
+def _compare(plugin_path, spec_path):
+    """Run a plugin's `compare(ctx)` over one pair of units.
+
+    `spec_path` is a small JSON the host writes: the two units, their output directories, the
+    directory to write into, and the pair's own label. Everything the plugin needs to compare two
+    of its own results, and nothing about the object - the expensive work is already done and its
+    outputs are on disk.
+    """
+    import json as _json
+
+    from . import plugin as _plugin
+
+    spec = _json.loads(Path(spec_path).read_text(encoding="utf-8"))
+    mod = load(plugin_path)
+    fn = getattr(mod, "compare", None)
+    if not callable(fn):
+        print(f"{Path(plugin_path).name} declares no compare(ctx); nothing to do")
+        return 0
+    out = Path(spec["out_dir"])
+    out.mkdir(parents=True, exist_ok=True)
+    ctx = _plugin.CompareContext(
+        pair=spec.get("pair") or "",
+        units=spec.get("units") or {},
+        out=out,
+        config=spec.get("config") or {},
+        log=print,
+    )
+    fn(ctx)
+    return 0
+
+
 def main(argv):
     if argv[1] == "--selftest":
         return 0 if selftest(argv[2]) is not False else 1
     if argv[1] == "--guard":
         return guard(argv[2], sys.stdin.read())
+    if argv[1] == "--compare":
+        # A PLUGIN THAT CAN COMPARE ITS OWN UNITS, RUN ONCE PER ARM PAIR.
+        #
+        # `run(ctx)` sees one unit. Every comparison the design supports therefore had to be
+        # assembled by the HOST from per-unit tables - which is right for a quantity the host can
+        # recompute, and wrong for a differential figure the wrapped tool already ships. CellChat
+        # has four of those and every one needs two objects merged; there was nowhere for them to
+        # be called from, so they were not called, and the section's comparison figures were all
+        # reimplementations.
+        #
+        # This is the missing phase. The host hands the plugin two units' output directories and
+        # the plugin does whatever its upstream provides for a pair. It is optional: a plugin
+        # that declares no `compare(ctx)` is unaffected, and one that does is called in its own
+        # environment with its own interpreter, exactly as `run` is.
+        return _compare(argv[2], argv[3])
+    if argv[1] == "--phases":
+        # WHICH PHASES THIS PLUGIN IMPLEMENTS, so the host can ask instead of guessing.
+        mod = load(argv[2])
+        print(" ".join(p for p in ("run", "compare", "selftest")
+                       if callable(getattr(mod, p, None))))
+        return 0
     plugin_path = argv[1]
     inp = manifest.read_input(argv[2] if len(argv) > 2 else os.environ["SCPROFILE_IN"])
     out = Path(inp["out_dir"])

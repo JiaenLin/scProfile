@@ -332,15 +332,15 @@ PLUGIN = {
         "netVisual_barplot": {"skip": "owed"},
         "netVisual_individual": {"skip": "owed"},
         "netVisual_chord_cell": {"skip": "owed"},
-        "netVisual_diffInteraction": {"skip": "owed"},
+        "netVisual_diffInteraction": {"use": "figures/nativecmp_diffInteraction_{count,weight}.png, per arm pair"},
         "netVisual_embedding": {"skip": "owed"},
         "netVisual_embeddingZoomIn": {"skip": "owed"},
         "netVisual_embeddingPairwise": {"skip": "owed"},
         "netVisual_embeddingPairwiseZoomIn": {"skip": "owed"},
         "netAnalysis_dot": {"skip": "owed"},
         "netAnalysis_river": {"skip": "owed"},
-        "netAnalysis_diff_signalingRole_scatter": {"skip": "owed"},
-        "netAnalysis_signalingChanges_scatter": {"skip": "owed"},
+        "netAnalysis_diff_signalingRole_scatter": {"use": "figures/nativecmp_diff_signalingRole.png, per arm pair"},
+        "netAnalysis_signalingChanges_scatter": {"use": "figures/nativecmp_signalingChanges__<population>.png"},
         "plotGeneExpression": {"skip": "owed"},
         "StackedVlnPlot": {"skip": "owed"},
     },
@@ -2911,3 +2911,95 @@ cat("OK\n")
     ax.imshow([[0, 1], [1, 0]], cmap="viridis")
     plt.close(fig)
     ctx.log("  ok   the drawing path imports and draws")
+
+
+#: STEP THREE: the COMPARISON. CellChat ships four differential figures and every one of them
+#: needs two objects merged; a per-unit plugin had nowhere to call them from, so none was called
+#: and every comparison panel in the section was a reimplementation. This runs once per arm pair,
+#: on the objects the two units already saved, so it costs no inference at all.
+_R_COMPARE = r"""
+suppressMessages({library(CellChat); library(patchwork)})
+args <- commandArgs(trailingOnly = TRUE)
+rds_a <- args[1]; rds_b <- args[2]; name_a <- args[3]; name_b <- args[4]; figdir <- args[5]
+dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
+
+a <- readRDS(rds_a); b <- readRDS(rds_b)
+# The merged object is what every differential function here takes. Order matters: CellChat's
+# differentials are computed as the SECOND relative to the FIRST, so the names are recorded on
+# every figure this writes rather than left to the reader.
+m <- mergeCellChat(list(a, b), add.names = c(name_a, name_b))
+cat("merged:", name_a, "and", name_b, "\n")
+
+npng <- function(nm, expr, w = 2000, h = 1600, res = 200) {
+  path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
+  ok <- tryCatch({
+    grDevices::png(path, width = w, height = h, res = res)
+    on.exit(grDevices::dev.off(), add = TRUE)
+    print(expr); TRUE
+  }, error = function(e) { cat("native compare", nm, "FAILED:", conditionMessage(e), "\n"); FALSE })
+  if (ok) cat("native compare", nm, "written\n") else if (file.exists(path)) unlink(path)
+}
+
+# 1. the differential interaction network - CellChat's own answer to "which pairs changed"
+npng("diffInteraction_count", netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count"))
+npng("diffInteraction_weight", netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight"))
+
+# 2. the differential heatmap, same question in a form that reads pair by pair
+npng("diff_heatmap_count", netVisual_heatmap(m, measure = "count"))
+npng("diff_heatmap_weight", netVisual_heatmap(m, measure = "weight"))
+
+# 3. ranked information flow with BOTH arms on one axis, CellChat's own comparison mode
+npng("rankNet_stacked", rankNet(m, mode = "comparison", stacked = TRUE, do.stat = FALSE),
+     w = 1600, h = 2000)
+npng("rankNet_unstacked", rankNet(m, mode = "comparison", stacked = FALSE, do.stat = FALSE),
+     w = 1600, h = 2000)
+
+# 4. how each population's signalling ROLE moves between the two arms
+npng("diff_signalingRole", {
+  gg <- tryCatch(netAnalysis_diff_signalingRole_scatter(m), error = function(e) NULL)
+  if (is.null(gg)) stop("netAnalysis_diff_signalingRole_scatter returned nothing")
+  gg
+})
+
+# 5. per-population signalling changes - the one figure that names WHICH signals moved for a
+#    given population, which is the question a reader asks immediately after seeing the network
+groups <- intersect(levels(a@idents), levels(b@idents))
+for (g in head(groups, 4)) {
+  safe <- gsub("[^A-Za-z0-9]+", "_", g)
+  npng(paste0("signalingChanges__", safe),
+       netAnalysis_signalingChanges_scatter(m, idents.use = g))
+}
+"""
+
+
+def compare(ctx):
+    """CellChat's own differential figures for one pair of arms.
+
+    Runs on the two units' SAVED objects, so it costs no inference. Every figure here is
+    CellChat's, drawn by CellChat; none is a reimplementation.
+    """
+    import subprocess
+    import tempfile
+
+    names = ctx.names
+    if len(names) != 2:
+        ctx.log(f"compare needs exactly two units, got {names}")
+        return
+    rds = [ctx.dir_of(n) / "objects" / "cellchat.rds" for n in names]
+    missing = [str(p) for p in rds if not p.is_file()]
+    if missing:
+        # A SAVED OBJECT IS THE INPUT. Without it there is nothing to compare and re-running the
+        # inference here would hide that the unit never wrote one.
+        ctx.log(f"no saved CellChat object for {ctx.pair}: {missing}")
+        return
+    with tempfile.NamedTemporaryFile("w", suffix=".R", delete=False) as fh:
+        fh.write(_R_COMPARE)
+        script = fh.name
+    cmd = ["Rscript", script, str(rds[0]), str(rds[1]), names[0], names[1],
+           str(ctx.figures())]
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    for line in (p.stdout + p.stderr).splitlines():
+        if line.strip():
+            ctx.log(f"  R: {line.rstrip()}")
+    if p.returncode != 0:
+        ctx.log(f"compare FAILED for {ctx.pair} (exit {p.returncode})")

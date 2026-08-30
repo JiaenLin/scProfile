@@ -911,10 +911,16 @@ def test_every_ctx_attribute_a_plugin_uses_exists():
     import ast as _ast
     src = (Path(__file__).resolve().parents[1] / "scprofile" / "plugin.py").read_text()
     tree = _ast.parse(src)
-    ctx_cls = next(n for n in tree.body
-                   if isinstance(n, _ast.ClassDef) and n.name == "Context")
-    known = {n.name for n in ctx_cls.body if isinstance(n, (_ast.FunctionDef,))}
-    for n in _ast.walk(ctx_cls):
+    # BOTH CONTEXTS ARE THE CONTRACT. `run(ctx)` is given a Context; `compare(ctx)` is given a
+    # CompareContext - the phase that lets a plugin draw its wrapped tool's own DIFFERENTIAL
+    # figures, which need two finished units rather than one. Checking only Context reported
+    # every compare-phase attribute as undeclared.
+    ctx_classes = [n for n in tree.body
+                   if isinstance(n, _ast.ClassDef) and n.name in ("Context", "CompareContext")]
+    assert ctx_classes, "no Context class found in plugin.py"
+    ctx_cls = ctx_classes[0]
+    known = {n.name for c in ctx_classes for n in c.body if isinstance(n, (_ast.FunctionDef,))}
+    for n in [x for c in ctx_classes for x in _ast.walk(c)]:
         # `self.x = ...` in __init__ and anywhere else in the class
         if isinstance(n, _ast.Attribute) and isinstance(n.value, _ast.Name) \
                 and n.value.id == "self" and isinstance(n.ctx, _ast.Store):
