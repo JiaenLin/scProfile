@@ -206,3 +206,29 @@ def test_every_cli_paper_call_passes_the_plugin():
             missing.append(f"{fn}: {call[:70]}")
     assert not missing, ("a paper call in the CLI does not pass the plugin, so it reads the "
                          f"run-root ledger instead of the plugin's: {missing}")
+
+
+def test_the_status_line_agrees_with_itself():
+    """`summarise` said NO CLAIMS RECORDED while `next_step` said the loop had run, on a ledger
+    holding nine claims - because summarise read `status(out)` and dropped the plugin.
+
+    A status display that contradicts itself on one screen is worse than one that is merely
+    wrong: it teaches the reader that the tool's own reports need checking.
+    """
+    import tempfile
+    from pathlib import Path
+
+    from scprofile import paper as P
+
+    d = Path(tempfile.mkdtemp())
+    figs = d / "kernels" / "cellchat" / "figures"
+    figs.mkdir(parents=True)
+    (figs / "F1.png").write_bytes(b"x" * 100)
+    rec = P.claim(d, "A claim long enough to be checkable about the figure it cites here.",
+                  ["kernels/cellchat/figures/F1.png"], plugin="cellchat")
+    P.review(d, rec["id"], "standing", "a reviewer put it and it held", plugin="cellchat")
+
+    text = P.summarise(d, "cellchat")
+    assert "NO CLAIMS RECORDED" not in text, (
+        "summarise reports an empty ledger for a plugin that has claims")
+    assert rec["id"] in text, "the claim is not listed in its own plugin's summary"

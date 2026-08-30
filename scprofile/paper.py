@@ -222,7 +222,7 @@ def outstanding(out, plugin=""):
 
 def summarise(out, plugin=""):
     """One line per claim plus a tally. Printed by `scprofile paper` and by `check --out`."""
-    rows = status(out)
+    rows = status(out, plugin)
     if not rows:
         return ("NO CLAIMS RECORDED. The paper test has not been run on this figure set: nobody "
                 "has written down what it is supposed to show, so nothing has been able to "
