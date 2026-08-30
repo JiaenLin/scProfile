@@ -54,6 +54,12 @@ if "${CTRL[@]}" not in _run and "$CTRL" not in _run:
                     "does not reach the tool and the direction falls back to a recommendation")
 if "CTRL+=(--control" not in src:
     FAILURES.append("the job does not build the --control array")
+# `-v` SPLITS ITS OWN VALUE ON COMMAS. A comma-separated list is torn apart by PBS before the
+# script sees it: measured, a two-factor declaration arrived with only its first entry and the
+# second factor fell back silently to alphabetical order.
+if "IFS=','" in src:
+    FAILURES.append("a multi-value variable is split on commas, which `-v` has already used as "
+                    "its own separator - the second entry never arrives")
 if "CONTROL" not in (src[:src.index("set -")] if "set -" in src else src):
     FAILURES.append("CONTROL is consumed but not documented in the header")
 

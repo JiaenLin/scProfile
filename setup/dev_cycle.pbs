@@ -18,7 +18,8 @@
 # accepted on the qsub line and silently dropped - a run asked for a forced label column and
 # profiled the default one, with nothing in its output saying so.
 #
-# `CONTROL=<factor>=<level>[,<factor>=<level>...]` declares which level of each factor is the
+# `CONTROL=<factor>=<level>[;<factor>=<level>...]` - SEMICOLONS, because `-v` splits
+# its own value on commas and would tear a comma-separated list apart. Declares which level of each factor is the
 # CONTROL, so every contrast is measured against it. Without it the tool recommends one from a
 # vocabulary of experimental role and prints the basis; where a study's control is named in its
 # own field's words - a diet, an age, a timepoint - it must be declared, because the tool ships
@@ -367,10 +368,14 @@ run)
   # the array form is used rather than a bare ${CONTROL:+...}.
   CTRL=()
   if [ -n "${CONTROL:-}" ]; then
-    _old_ifs="$IFS"; IFS=','
+    # SEPARATED BY SEMICOLONS, NOT COMMAS. `-v` splits its own value on commas, so a
+    # comma-separated list is torn apart by PBS before this script ever sees it: measured, a
+    # two-factor declaration arrived with only its first entry and the second factor silently
+    # fell back to alphabetical order. The header warns about exactly this for KERNELS.
+    _old_ifs="$IFS"; IFS=';'
     for _c in $CONTROL; do [ -n "$_c" ] && CTRL+=(--control "$_c"); done
     IFS="$_old_ifs"
-    echo "  controls declared: ${CONTROL}"
+    echo "  controls declared: ${CONTROL}  (${#CTRL[@]} flag pair(s))"
   fi
 
   say "4. RUN"
