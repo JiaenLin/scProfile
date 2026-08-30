@@ -411,7 +411,7 @@ def _presence_block(payload_all, *, out_dir=None, name=""):
             + _arm_figs_html(name, got), got)
 
 
-def _arm_content(units, design, spec, *, out_dir=None, name=""):
+def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None):
     """({"contrast": [...], "arm": [...]}) - every between-arm and per-arm figure, drawn.
 
     THE COHORT PAGE CARRIED ONE FIGURE while the per-sample appendix carried a hundred. On a
@@ -465,7 +465,8 @@ def _arm_content(units, design, spec, *, out_dir=None, name=""):
     # A wrapped tool that ships differential figures should draw them; the host's panels exist for
     # the quantities it can recompute, not to re-implement a tool's own encoding. This is a no-op
     # for a plugin that declares no `compare(ctx)`, which is every plugin until it declares one.
-    _native_compare(name, spec, per, design, pairs, out_dir, units)
+    _native_compare(name, spec, per, design, pairs, out_dir, units,
+                    prefix=prefix)
 
     con = []
     for sp in pairs:
@@ -568,7 +569,7 @@ def _arm_appendix(name, content, plugin_arm_figs=()):
     return "".join(b)
 
 
-def _native_compare(name, spec, per, design, pairs, out_dir, units):
+def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None):
     """Invoke a plugin's `compare(ctx)` once per arm pair, in the plugin's own environment.
 
     The host knows the pairs and where each unit wrote; the plugin knows what its upstream can do
@@ -596,10 +597,27 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units):
         return
     # ASK THE PLUGIN WHETHER IT HAS THE PHASE, rather than importing it here: it lives in its own
     # environment and the host's interpreter may not be able to load it at all.
-    import sys as _sys
+    # THE PLUGIN'S OWN INTERPRETER, NOT THE HOST'S. Launching this with `sys.executable` put the
+    # compare phase in the host environment, where the wrapped tool is not installed and `Rscript`
+    # is not on PATH - so every comparison failed the moment it tried to call R, and the run
+    # sealed with no comparison figures and nothing in the log to say why. `runner.interpreter`
+    # is the same resolution the run phase uses, and `with_env_bin` puts that environment's own
+    # bin first so the tool's binaries resolve.
+    from . import kernels as _KK
+    from .runner import interpreter as _interp, with_env_bin as _envbin
+
     try:
-        q = subprocess.run([_sys.executable, str(entry), "--phases", str(plugin_file)],
-                           capture_output=True, text=True, timeout=120)
+        _k = _KK.discover().get(name)
+        exe, _why = _interp(_k, prefix) if _k is not None else (None, "no such kernel")
+    except Exception:                                                     # noqa: BLE001
+        exe = None
+    if not exe:
+        print(f"  native compare: no interpreter resolved for {name}; skipped")
+        return
+    env = _envbin(exe)
+    try:
+        q = subprocess.run([str(exe), str(entry), "--phases", str(plugin_file)],
+                           capture_output=True, text=True, timeout=300, env=env)
         if "compare" not in (q.stdout or ""):
             return
     except Exception:                                                     # noqa: BLE001
@@ -661,8 +679,8 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units):
             _json.dump(spec_json, fh)
             spath = fh.name
         try:
-            subprocess.run([_sys.executable, str(entry), "--compare", str(plugin_file), spath],
-                           capture_output=False, timeout=3600)
+            subprocess.run([str(exe), str(entry), "--compare", str(plugin_file), spath],
+                           capture_output=False, timeout=3600, env=env)
         except Exception as e:                                            # noqa: BLE001
             print(f"  native compare {label} failed: {e}")
 
@@ -1254,7 +1272,7 @@ def _overview_block(payload, *, plugin=None, by_arm=None):
                 "through the per-unit measures it declared.</p>")
     return out
 
-def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
+def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, prefix=None,
                  spec=None, constraint="", binds=(), by_arm=None, aware=False,
                  concordance=(), payload_all=None):
     """One kernel's own page. Ends in its own limits, not a shared block."""
@@ -1340,6 +1358,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None,
                                   _D.report_get(spec, "unit_metrics"),
                                   out_dir=out_dir, name=name))
         _arms = _arm_content(units, (payload_all or {}).get("design") or {}, spec,
+                             prefix=prefix,
                              out_dir=out_dir, name=name)
         # THE INTERACTION FIRST, because on a factorial design it is the question and the
         # marginal effects are its summary. A marginal effect can be flat while both simple
@@ -1680,7 +1699,7 @@ def write_index(out_dir, payload):
     return f
 
 
-def write_all(out_dir, payload):
+def write_all(out_dir, payload, *, prefix=None):
     """Every kernel page plus the index. Returns the index path."""
     cs = payload.get("cannot_show") or {}
     sm = payload.get("summaries") or {}
@@ -1695,7 +1714,7 @@ def write_all(out_dir, payload):
     con = payload.get("constraint_on_use") or ""
     cb = payload.get("constraint_binds") or {}
     for name, p in (payload.get("kernels") or {}).items():
-        write_kernel(out_dir, name, p, cs.get(name, []), sm.get(name, ""),
+        write_kernel(out_dir, name, p, cs.get(name, []), sm.get(name, ""), prefix=prefix,
                      merged=mg.get(name), spec=rs.get(name),
                      constraint=con, binds=cb.get(name) or [],
                      by_arm=(payload.get("by_arm") or {}).get(name),

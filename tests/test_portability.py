@@ -1612,7 +1612,10 @@ ck("and naming its members earns the decomposition too",
 ck("no host-owned kind is left undrawn once every column is declared",
    not _PK.gaps(), f"owed and not drawn: {_PK.gaps()}")
 
-_src_all = "".join((_P2("scprofile") / f).read_text()
+# ABSOLUTE, BECAUSE A RELATIVE PATH ONLY WORKS FROM THE REPO ROOT. Run from anywhere else -
+# which is what a job does - this raised FileNotFoundError on scprofile/compare_panel.py and
+# took the whole suite with it, so the portability suite was itself unportable.
+_src_all = "".join((_P2(__file__).resolve().parents[1] / "scprofile" / f).read_text()
                    for f in ("compare_panel.py", "network_panels.py", "panels.py"))
 # THE HOST MAY EXPLAIN ITSELF WITH A CONCRETE CASE; IT MAY NOT BRANCH ON ONE. Prose naming the
 # plugin whose defect produced a mechanism is how this whole tree is documented and it is not

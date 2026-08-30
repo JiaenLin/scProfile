@@ -1268,7 +1268,7 @@ def _run(a):
     # whose layout section omitted the run's primary deliverable while section 3 of the same file
     # linked the reader into it, with a file count short by 1 + 1 + n_kernels. Inspecting too
     # early is the same failure as describing what was intended; it just fails the other way.
-    idx = report.write_all(out, payload)
+    idx = report.write_all(out, payload, prefix=getattr(a, 'prefix', None))
     print(f"      {idx}")
     _judge(out)
     _write_readme(out, payload)
