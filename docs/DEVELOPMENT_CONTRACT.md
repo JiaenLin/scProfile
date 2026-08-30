@@ -105,3 +105,16 @@ all six.
 3. Land it as mechanism or plugin content (rule 1).
 4. Write the check, and see it fail on the defect.
 5. Run the suites, and the capacity guard (rule 2).
+
+---
+
+## When a choice is not settled, report both
+
+A parameter that changes the result and has no recorded reason is not resolved by picking one.
+Run it both ways and report both, with the evidence for each, and let the reader see the size of
+the difference the choice makes.
+
+This is cheap: `run --params '{"<name>": <value>}'` runs the alternative, and every number stays
+traceable because each setting has its own run directory and its own tables. What it is not is a
+licence to leave the choice open forever - a decision recorded as open with both results beside
+it is a decision someone can now actually make.
