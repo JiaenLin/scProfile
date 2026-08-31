@@ -866,7 +866,24 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
                 continue
             _ref_f = _ctrl.get(_f) or _lf[0]
             _agn_f = next((x for x in _lf if x != _ref_f), None)
-            for _gl in sorted(_lg, key=lambda x: (x != _ctrl.get(_g), x)):
+            # WHICH STRATUM IS SUBTRACTED FROM WHICH, MARKED RATHER THAN POSITIONAL.
+            #
+            # An interaction is one effect measured against the SAME effect in the control
+            # stratum: how much more a factor does under a perturbation than it does at baseline.
+            # So the CONTROL level of the other factor is the reference, and the difference is
+            # (effect where it is perturbed) minus (effect at baseline).
+            #
+            # The first version took the strata in the order they were emitted - control first,
+            # which is the right READING order - and subtracted the second from the first. That
+            # is the opposite subtraction, and it was invisible: both framings were flipped the
+            # same way, so they still agreed with each other and nothing looked inconsistent. A
+            # sign error that keeps its own internal consistency is the kind nothing catches.
+            #
+            # Marking the role makes the direction a property of the DECLARED control rather than
+            # of a list order, which is the same rule that already fixes every contrast's
+            # direction. Emission stays control-first, because that is how it should be read.
+            _ctrl_g = _ctrl.get(_g)
+            for _gl in sorted(_lg, key=lambda x: (x != _ctrl_g, x)):
                 _a = next((u for u in _cross if str((_rows.get(u) or {}).get(_f)) == _ref_f
                            and str((_rows.get(u) or {}).get(_g)) == _gl), None)
                 _b = next((u for u in _cross if str((_rows.get(u) or {}).get(_f)) == _agn_f
@@ -874,6 +891,8 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
                 if _a and _b:
                     _inter.append({"framing": f"{_f} response, by {_g}",
                                    "factor": _f, "stratum_factor": _g, "stratum": _gl,
+                                   "stratum_role":
+                                       "reference" if _gl == _ctrl_g else "against",
                                    "reference": _a, "against": _b})
         spec_json = {
             "pair": _COHORT_COMPARE,

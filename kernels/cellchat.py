@@ -4033,8 +4033,22 @@ if (!is.null(inter) && nrow(inter)) {
   for (fr in unique(inter$framing)) {
     rows <- inter[inter$framing == fr, , drop = FALSE]
     if (nrow(rows) != 2) next
+    # BY ROLE, NEVER BY POSITION. The host marks which stratum is the control; the interaction is
+    # the effect where the other factor is PERTURBED minus the same effect at BASELINE. Ordering
+    # the rows for reading and then subtracting the second from the first gave the opposite
+    # subtraction, and because both framings were flipped identically they still agreed with each
+    # other - a sign error that keeps its own internal consistency.
+    if (!"stratum_role" %in% names(rows)) { cat("no stratum role for", fr, "; skipped\n"); next }
+    i_ag <- which(rows$stratum_role == "against")[1]
+    i_rf <- which(rows$stratum_role == "reference")[1]
+    if (is.na(i_ag) || is.na(i_rf)) { cat("cannot place the strata for", fr, "; skipped\n"); next }
+    rows <- rows[c(i_ag, i_rf), , drop = FALSE]     # [1] is the perturbed stratum, [2] baseline
     safe <- gsub("[^A-Za-z0-9]+", "_", fr)
     st <- as.character(rows$stratum)
+    fac <- as.character(rows$factor[1])
+    eff <- paste0(as.character(rows$against[1]), " against ", as.character(rows$reference[1]))
+    # The effect being differenced, in the factor's own level names rather than unit names.
+    eff_lbl <- paste0(fac, " response")
 
     # ---- pathway level: rankNet per stratum, its own contributions and its own test ----
     flows <- list(); pvals <- list()
@@ -4085,12 +4099,16 @@ if (!is.null(inter) && nrow(inter)) {
         ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b",
                                         midpoint = 0) +
         ggplot2::coord_equal(xlim = c(-lim, lim), ylim = c(-lim, lim)) +
-        ggplot2::labs(x = paste0("change within ", st[2]), y = paste0("change within ", st[1]),
-                      colour = "interaction",
-                      title = fr,
-                      subtitle = paste0("one point per pathway; the dashed line is NO ",
-                                        "interaction - the same change in both strata. ",
-                                        "Distance from it is the interaction.")) +
+        ggplot2::labs(x = paste0(eff_lbl, " within ", st[2], "  (the control)"),
+                      y = paste0(eff_lbl, " within ", st[1]),
+                      colour = paste0("larger in\n", st[1], " (+) /\n", st[2], " (-)"),
+                      title = paste0("Does the ", fac, " response depend on ",
+                                     as.character(rows$stratum_factor[1]), "?"),
+                      subtitle = paste0("One point per pathway. Each axis is the ", eff_lbl,
+                                        " within one stratum. The dashed line is NO ",
+                                        "interaction - the same response in both. ABOVE it the ",
+                                        "response is larger in ", st[1], "; below it, larger in ",
+                                        st[2], ", which is the control.")) +
         ggplot2::theme_classic()
     }, w = 2000, h = 1900)
 
@@ -4110,10 +4128,12 @@ if (!is.null(inter) && nrow(inter)) {
           ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b",
                                           midpoint = 0) +
           ggplot2::coord_equal(xlim = c(-lim2, lim2), ylim = c(-lim2, lim2)) +
-          ggplot2::labs(x = paste0("log2 fold change within ", st[2]),
-                        y = paste0("log2 fold change within ", st[1]),
-                        colour = "interaction",
-                        title = paste0(fr, " - multiplicative scale"),
+          ggplot2::labs(x = paste0("log2 fold ", eff_lbl, " within ", st[2], "  (the control)"),
+                        y = paste0("log2 fold ", eff_lbl, " within ", st[1]),
+                        colour = paste0("larger in\n", st[1], " (+) /\n", st[2], " (-)"),
+                        title = paste0("Does the ", fac, " response depend on ",
+                                       as.character(rows$stratum_factor[1]),
+                                       "?  -  multiplicative scale"),
                         subtitle = paste0(nrow(pos), " of ", nrow(both), " pathways; the rest ",
                                           "are absent from an arm and have no fold change")) +
           ggplot2::theme_classic()
@@ -4140,16 +4160,35 @@ if (!is.null(inter) && nrow(inter)) {
                        paste0("nativecmp_interaction_", ms, "__", safe, ".csv")))
       ndev(paste0("interaction_", ms, "__", safe), {
         mx <- max(abs(M), na.rm = TRUE)
+        # THE TITLE NAMES THE EFFECT, NOT ONLY THE STRATA. "change within X minus change within Y"
+        # never says change OF WHAT, and a reader who has to reconstruct which factor is being
+        # differenced reads the panel as a bug. It also states which stratum is the control, and
+        # how many populations the panel covers - fewer than the pairwise panels beside it,
+        # because an interaction needs an element present in all four arms.
+        ttl <- paste0("Does the ", fac, " response depend on ",
+                      as.character(rows$stratum_factor[1]), "?   (", ms, ")")
+        sub <- paste0("(", as.character(rows$against[1]), " - ",
+                      as.character(rows$reference[1]), ") within ", st[1],
+                      "   minus   (", as.character(rows$against[2]), " - ",
+                      as.character(rows$reference[2]), ") within ", st[2],
+                      ", the control.    RED: the ", fac, " response is larger in ", st[1],
+                      ".   BLUE: larger in ", st[2],
+                      ".   WHITE: the same response in both, which is NO interaction.",
+                      "    Drawn on the ", nrow(M), " populations present in all arms.")
         ComplexHeatmap::draw(ComplexHeatmap::Heatmap(
-          M, name = paste0("interaction\n(", ms, ")"),
+          M, name = paste0("interaction\n(", ms, ")\n+ = larger in\n", st[1]),
           col = circlize::colorRamp2(c(-mx, 0, mx), c("#2166ac", "white", "#b2182b")),
           cluster_rows = FALSE, cluster_columns = FALSE,
+          row_title = "Sources (Sender)", column_title_side = "top",
+          row_title_gp = grid::gpar(fontsize = 10),
+          row_names_side = "left",
           row_names_gp = grid::gpar(fontsize = 8),
           column_names_gp = grid::gpar(fontsize = 8),
-          column_title = paste0(fr, " - ", ms,
-                                ": change within ", st[1], " minus change within ", st[2]),
-          column_title_gp = grid::gpar(fontsize = 10)))
-      }, w = 2000, h = 1700)
+          column_title = paste0(ttl, "\n", sub),
+          column_title_gp = grid::gpar(fontsize = 9)),
+          column_title = "Targets (Receiver)", column_title_side = "bottom",
+          column_title_gp = grid::gpar(fontsize = 10))
+      }, w = 2200, h = 1900)
     }
     cat("interaction drawn for framing:", fr, "over", nrow(both), "pathway(s)\n")
   }
@@ -4236,7 +4275,8 @@ def compare(ctx):
         inter = ctx.out / "interactions.tsv"
         if ctx.interactions:
             with open(inter, "w", encoding="utf-8") as fh:
-                cols = ("framing", "factor", "stratum_factor", "stratum", "reference", "against")
+                cols = ("framing", "factor", "stratum_factor", "stratum", "stratum_role",
+                        "reference", "against")
                 fh.write("\t".join(cols) + "\n")
                 for r in ctx.interactions:
                     fh.write("\t".join(str(r.get(c, "")) for c in cols) + "\n")
