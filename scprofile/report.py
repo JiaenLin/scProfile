@@ -1727,6 +1727,49 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                     "on this page, above.</div>")
     else:
         body.append(_figure_section(figs_all, spec))
+    # ---------------------------------------------------------------------------------------
+    # THE PROFILE PAGE: what is active in each unit, on its own.
+    #
+    # Every other page in this report is about a DIFFERENCE. None of them says what a single arm
+    # or a single animal actually does, and a reader who wants to describe one group has nowhere
+    # to look - the arms page holds a hundred panels of everything, and the per-sample appendix
+    # was retired for being an appendix.
+    #
+    # So this is a SUBSET, declared by the plugin: the few figures it marks `profile`, for every
+    # unit, group and sample alike, and nothing comparative. Three per unit here. A plugin that
+    # marks none gets no page, which is the honest outcome rather than a page of whatever was
+    # lying around.
+    _prof_ids = {str(f.get("id")) for f in ((spec or {}).get("report") or {}).get("figures") or []
+                 if f.get("profile") and f.get("id")}
+    _prof = [f for f in figs_all if f.get("unit") and str(f.get("id")) in _prof_ids] \
+        if _prof_ids else []
+    if _prof:
+        _by_unit = {}
+        for f in _prof:
+            _by_unit.setdefault(str(f.get("unit")), []).append(f)
+        _order = ([u for u in sorted(_by_unit) if _axis.get(u) == "group"]
+                  + [u for u in sorted(_by_unit) if _axis.get(u) != "group"])
+        pp = ["<h1>" + _e(name) + " &mdash; profile of each unit</h1>",
+              "<p class='sub'>What each unit carries <b>on its own</b>. Nothing on this page is "
+              "a comparison: every panel describes one unit, drawn from that unit's own fit, and "
+              "the comparisons between units are on the other pages. Arms come first, then the "
+              "samples inside them.</p>",
+              "<div class='warn'><b>An arm is one fit on its members' pooled cells; a sample is "
+              "its own fit.</b> A panel here and the panel for one of its samples are not a "
+              "whole and a part - they are two separate inferences, and neither is the sum of "
+              "the other.</div>"]
+        _n = 0
+        for u in _order:
+            kind = "arm" if _axis.get(u) == "group" else "sample"
+            pp.append(f"<h2>{_e(u)} <span class='sub'>&mdash; {kind}</span></h2>")
+            for f_ in sorted(_by_unit[u], key=lambda x: str(x.get("id"))):
+                _n += 1
+                pp.append(_panel(f_, _n))
+        pp.append(f"<p class='sub'><a href=\"{_e(name)}.html\">&larr; back to "
+                  f"{_e(name)}</a></p>")
+        (d / f"{name}_profile.html").write_text(
+            _page(f"{name} — profile of each unit — scProfile", "".join(pp)), encoding="utf-8")
+
     _links = []
     # THE WRITTEN SECTION, IF ONE EXISTS. It is rendered separately, by `paper --render`, and
     # nothing linked it: a reader following the report met every panel and never the section
@@ -1748,6 +1791,10 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                       f"--write &lt;file&gt;</code>. Where a section exists for this analysis it "
                       f"is in the run whose figures it cites, because its citations are paths "
                       f"inside that run.")
+    if _prof:
+        _links.append(f"<a href=\"{_e(name)}_profile.html\">the profile of each unit</a> "
+                      f"&mdash; {len(_prof)} panels describing what each arm and each sample "
+                      f"carries on its own, with no comparison in them")
     if arm_figs:
         _links.append(f"<a href=\"{_e(name)}_by_arm.html\">{len(arm_figs)} per-arm panels</a> "
                       f"&mdash; the same plots, once per arm of the design, each drawn from that "

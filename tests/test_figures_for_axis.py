@@ -88,13 +88,40 @@ for m in re.finditer(r"if \(!?draw_figs\)([^\n]*)", run_block):
 pl = (ROOT / "scprofile" / "plugin.py").read_text()
 blk = pl[pl.index("def emit_figure("):]
 blk = blk[:blk.index("\n    def ", 1)]
-if "if not self.draw_figures:" not in blk:
-    FAILURES.append("emit_figure does not honour the setting, so a plugin's own panels are "
-                    "drawn whatever the run asked for - the half-fix that leaves the per-sample "
-                    "page standing")
-elif blk.index("if not self.draw_figures:") > blk.index('"figures" / f"{name}.png"'):
+# CHECKED AS BEHAVIOUR, NOT AS SPELLING. The first version of this matched the literal text of
+# the guard and broke the moment the guard learned about profile figures - a check that fails
+# when its subject gains a capability is testing the source, not the property.
+if "self.draws(" not in blk:
+    FAILURES.append("emit_figure does not consult the per-figure decision, so a plugin's own "
+                    "panels are drawn whatever the run asked for - the half-fix that leaves the "
+                    "per-sample page standing")
+elif blk.index("self.draws(") > blk.index('"figures" / f"{name}.png"'):
     FAILURES.append("the guard sits after the file path is built, so the check happens too late "
                     "to skip the work")
+
+# 7. A PROFILE FIGURE IS DRAWN ON EVERY AXIS. The supplementary page describing what is active in
+#    each unit is made of a few declared panels, and switching the full set off for an axis must
+#    not switch those off too - a page with holes in it is worse than no page.
+c = Context(None, keys={}, out="/tmp", unit="u", unit_axis="sample", figures_for=["group"],
+            profile_figures=["P_keep"])
+check(not c.draw_figures, "the fixture is wrong: this unit's full set should be off")
+check(c.draws("P_keep"), "a declared profile figure is dropped on an excluded axis, so the "
+                         "profile page would have holes in it")
+check(not c.draws("X_other"), "a figure that is NOT in the profile set is drawn anyway, so the "
+                              "setting saves nothing")
+c2 = Context(None, keys={}, out="/tmp", unit="u", unit_axis="group", figures_for=["group"],
+             profile_figures=["P_keep"])
+check(c2.draws("X_other"), "an included axis stopped drawing its ordinary figures")
+
+# 8. THE PROFILE PAGE IS DERIVED FROM THE DECLARATION, not from a list of figure names. A page
+#    built from names the host knows is a page that only works for the plugin it was written for.
+rep = (ROOT / "scprofile" / "report.py").read_text()
+check('f.get("profile")' in rep,
+      "the profile page is not built from the plugins' own `profile` declarations")
+for bad in ("F8_pathway_rank", "F4_network", "F6_signaling_roles"):
+    if bad in rep:
+        FAILURES.append(f"report.py names the figure {bad!r}, which belongs to one plugin - the "
+                        f"profile page must be built from what plugins DECLARE")
 
 if FAILURES:
     print("FAIL")

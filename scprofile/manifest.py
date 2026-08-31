@@ -233,7 +233,7 @@ def layer_names(adata):
 
 def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=None, layers=None,
                  tables=None, figures=None, objects=None, absent=None, caveats=None, headline="",
-                 measured=None, metrics=None, contradictions=None,
+                 measured=None, metrics=None, contradictions=None, config=None,
                  contract=CONTRACT_VERSION):
     """Write `out.json` from inside a kernel. The only supported way for a kernel to report.
 
@@ -258,6 +258,12 @@ def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=Non
         "contract": contract,
         # ONE NUMBER PER INSTANCE, comparable across units. See Context.metric.
         "metrics": {str(k): float(v) for k, v in (metrics or {}).items()},
+        # WHAT THIS UNIT ACTUALLY RAN WITH, resolved - defaults filled in, overrides applied.
+        # It was recorded NOWHERE. A run could not say which parameters produced it, a reader
+        # could not tell a default from a choice, and a written section quoting a number had no
+        # way to state the settings behind it. Every value here is JSON-safe or dropped.
+        "config": {str(k): v for k, v in (config or {}).items()
+                   if isinstance(v, (str, int, float, bool)) or v is None},
         "kernel": kernel,
         "version": str(version),
         # WHAT THIS INSTANCE ACTUALLY COST, from the process that paid it: peak RSS,
@@ -406,7 +412,11 @@ def unknown_keys(payload):
              "metrics",
              # what the plugin said against its own headline, kept apart from `caveats` so the
              # reporter can put it where the claim is and the standard can check that it did
-             "contradictions"}
+             "contradictions",
+             # the RESOLVED parameters this unit ran with - defaults filled in, overrides
+             # applied. Without it a run cannot say what produced it and a reader cannot tell a
+             # default from a choice.
+             "config"}
     return sorted(set(payload) - known - set(OUTPUT_SLOTS))
 
 

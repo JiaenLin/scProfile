@@ -344,6 +344,67 @@ def cite(idx, paths):
     return (" (Figure " if len(ns) == 1 else " (Figures ") + ", ".join(str(i) for i in ns) + ")"
 
 
+#: A population is NAMED as accounting for a contrast on its own when its share of the two arms
+#: differs by at least this factor. Written here, before the run that tests it, so the threshold
+#: is a decision and not a description of whichever elements it happened to catch.
+#:
+#: 3.0 is the same factor this project's own removal rule uses for "differential across the
+#: design", chosen for consistency rather than tuned: a share that trebles between two arms is a
+#: composition difference large enough to produce a difference in a sum of pairs by itself.
+COMPOSITION_FOLD = 3.0
+
+#: And a population is NAMED as thin when its arm holds fewer than this many observations of it.
+#: 200 is twenty times the smallest floor a wrapped method here applies before it declines to
+#: score a population at all; below it a per-population quantity is being read off very few
+#: observations whatever the method says.
+COMPOSITION_THIN = 200
+
+
+def _composition(run, plugin, spec, units):
+    """{unit: {element: n}} from the per-element size table the plugin NAMES, or {}.
+
+    THE COMPOSITION IS WHY TWO TOTALS DIFFER MORE OFTEN THAN ANY PER-CELL CHANGE IS. A network
+    total is a sum over ordered pairs of populations, so two arms holding different proportions
+    of the same populations differ in the sum before anything a cell does differs. It was in no
+    file the run wrote, so no reader could check it, and every difference read as behaviour.
+    """
+    net = ((spec or {}).get("report") or {}).get("unit_network") or {}
+    rel, ecol, scol = (str(net.get("size_table") or ""),
+                       str(net.get("size_table_element") or ""),
+                       str(net.get("size_table_size") or ""))
+    if not (rel and ecol and scol):
+        return {}
+    out = {}
+    for u in units:
+        got = {}
+        for r in _rows(Path(run) / "kernels" / plugin / str(u) / rel):
+            try:
+                got[str(r.get(ecol))] = float(r.get(scol) or 0)
+            except (TypeError, ValueError):
+                continue
+        if got:
+            out[str(u)] = got
+    return out
+
+
+def _settings(run, plugin, units):
+    """{parameter: value} this run resolved, or {} - read from a finished unit's own manifest.
+
+    STATED ONCE, AT THE TOP. They are a property of the RUN, not of any comparison, and printing
+    them under each contrast puts a constant where a finding belongs - the same failure as the
+    aliasing line printed four times and the alignment sentence on a panel with no populations.
+    """
+    for u in units:
+        try:
+            cfg = json.loads((Path(run) / "kernels" / plugin / str(u) / "out.json")
+                             .read_text(encoding="utf-8")).get("config") or {}
+        except (OSError, ValueError):
+            continue
+        if cfg:
+            return dict(cfg)
+    return {}
+
+
 def section(run, plugin, spec=None, design=None, run_key=""):
     """The result section, as Markdown, composed from this run's tables.
 
@@ -416,6 +477,36 @@ def section(run, plugin, spec=None, design=None, run_key=""):
                      if _has_pc else "")
                   + f" {sig} | {_cell(lead)} |"]
         L += [""]
+    # THE COMPOSITION AND THE SETTINGS, ONCE. Both are properties of the RUN, so they go here and
+    # not under each comparison. A constant printed under every finding is the failure this
+    # section has already had twice - the aliasing line four times, the alignment sentence on a
+    # panel with no populations - and it buries the sentence that actually describes the result.
+    _arms = []
+    for lab in order:
+        for k in ("reference", "against"):
+            v = str(f[lab].get(k) or "")
+            if v and v not in _arms:
+                _arms.append(v)
+    comp = _composition(run, plugin, spec, _arms)
+    if comp:
+        pops = sorted({p for c in comp.values() for p in c})
+        cols = [a for a in _arms if a in comp]
+        L += ["### What each arm is made of", "",
+              "A network total is a sum over ordered pairs of populations, so two arms holding "
+              "different proportions of the same populations differ in that sum before anything "
+              "a cell does differs. Every comparison below is read against this table.", "",
+              "| population | " + " | ".join(_cell(c) for c in cols) + " |",
+              "|---" * (len(cols) + 1) + "|"]
+        tot = {c: sum(comp[c].values()) or 1.0 for c in cols}
+        for pop in pops:
+            L += ["| " + _cell(pop) + " | " + " | ".join(
+                f"{100.0 * comp[c].get(pop, 0.0) / tot[c]:.2f}% "
+                f"({int(comp[c].get(pop, 0.0)):,})" for c in cols) + " |"]
+        L += ["| **total cells** | " + " | ".join(f"**{int(tot[c]):,}**" for c in cols) + " |", ""]
+    _cfg = _settings(run, plugin, _arms)
+    if _cfg:
+        L += ["*Every unit was fitted with the same settings: "
+              + ", ".join(f"`{k} = {v}`" for k, v in sorted(_cfg.items())) + ".*", ""]
     if alias:
         L += ["; ".join(f"In this design **{k}** varies together with {', '.join(sorted(v))} "
                         f"across all samples, so a difference along {k} is a difference along "
@@ -463,6 +554,29 @@ def section(run, plugin, spec=None, design=None, run_key=""):
             L += [f"**{len(d['only_reference'])}** element(s) are detected in {d['reference']} "
                   f"and not in {d['against']}, and none the other way"
                   + _c(lab, "presence_or_magnitude") + "."]
+        # AND THE POPULATIONS THAT COULD ACCOUNT FOR THIS CONTRAST BY THEMSELVES. Named per
+        # contrast because they differ per contrast; the thresholds are declared above this
+        # function, before the run that tests them, rather than chosen from what they caught.
+        if comp:
+            ra, rb = str(d["reference"]), str(d["against"])
+            ca, cb = comp.get(ra) or {}, comp.get(rb) or {}
+            ta, tb = sum(ca.values()) or 1.0, sum(cb.values()) or 1.0
+            flagged = []
+            for pop in sorted(set(ca) | set(cb)):
+                sa, sb = ca.get(pop, 0.0) / ta, cb.get(pop, 0.0) / tb
+                if not (sa and sb):
+                    continue
+                fold = max(sa / sb, sb / sa)
+                thin = min(ca.get(pop, 0.0), cb.get(pop, 0.0)) < COMPOSITION_THIN
+                if fold >= COMPOSITION_FOLD or thin:
+                    flagged.append((pop, fold, int(min(ca.get(pop, 0), cb.get(pop, 0)))))
+            if flagged:
+                L += ["*Read with care in this contrast: "
+                      + "; ".join(f"**{p}** differs {_n(fl)}x in share between the arms "
+                                  f"(as few as {mn:,} cells in one of them)"
+                                  for p, fl, mn in flagged)
+                      + ". A difference in how much of a population an arm holds produces a "
+                        "difference in a sum over its pairs without anything per-cell changing.*"]
         _dir = _c(lab, "direction")
         if _dir:
             L += [f"Sending and receiving are shown separately: each population's outgoing and "

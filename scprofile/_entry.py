@@ -368,6 +368,9 @@ def main(argv):
     ctx = Context(A, keys=keys, out=out, cores=cores, memory_gb=memory_gb, unit=unit,
                   unit_members=members,
                   unit_axis=inp.get("unit_axis"), figures_for=inp.get("figures_for"),
+                  profile_figures=[str(f.get("id")) for f in
+                                   ((spec.get("report") or {}).get("figures") or [])
+                                   if f.get("profile") and f.get("id")],
                   organism=inp.get("organism"), assay=inp.get("assay"),
                   references=inp.get("references"),
                   # BY ROLE, NOT BY NAME. `Context` accepted these from the beginning and nothing
@@ -484,6 +487,9 @@ def main(argv):
         tables=ctx._tables, figures=ctx._figures, objects=ctx._objects,
         absent=ctx.absent, caveats=ctx.caveats,
         metrics=getattr(ctx, "_metrics", None),
+        # THE RESOLVED PARAMETERS, so a run can say what it ran with and a section can print the
+        # settings behind its numbers once, at the top, instead of nowhere.
+        config=getattr(ctx, "config", None),
         # AND AS A FIELD OF THEIR OWN, so the reporter can put them where the claim is and the
         # exit standard can check that it did. Composed into the headline above as well: two
         # consumers, one recorded fact, neither reading the other's copy.

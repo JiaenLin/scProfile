@@ -180,7 +180,7 @@ class Context:
     """
 
     def __init__(self, adata, *, keys, out, cores=1, memory_gb=None, unit=None, unit_axis=None,
-                 figures_for=None,
+                 figures_for=None, profile_figures=None,
                  unit_members=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
                  sentinels=(), provenance=None, constraint="", cache_dir=None,
@@ -219,6 +219,11 @@ class Context:
         #: is the default and what every run did before the setting existed. It is NOT a plugin
         #: parameter: which axes are worth drawing is a property of the run, not of the method.
         self.figures_for = tuple(str(x) for x in (figures_for or ()))
+        #: The figure ids the plugin declared as its per-unit PROFILE. These are drawn for every
+        #: unit whatever `figures_for` says: a profile page describing what is active in each
+        #: group needs its few panels for every group, and switching the full set off for an axis
+        #: must not switch off the three that page is made of.
+        self.profile_figures = frozenset(str(x) for x in (profile_figures or ()))
         #: The upstream tool's constraint on use, verbatim, or "" when the object carries none.
         #: `Guard` has had this since it existed and `Context` did not, so a plugin that wanted to
         #: REPRODUCE the constraint in its own caveats - rather than merely be refused by it - had
@@ -288,6 +293,16 @@ class Context:
         if not self.figures_for:
             return True
         return (self.unit_axis or "") in set(self.figures_for)
+
+    def draws(self, fid):
+        """Whether THIS figure should be drawn for this unit.
+
+        `draw_figures` answers for the unit; this answers for one panel, and the difference is
+        the profile set: a run that draws the full per-unit set for group units only still draws
+        the few declared profile panels everywhere, because the page built from them describes
+        every unit and a page with holes in it is worse than no page.
+        """
+        return self.draw_figures or str(fid) in self.profile_figures
 
     @property
     def X(self):
@@ -732,7 +747,7 @@ class Context:
         # the whole of the fix and no plugin needs to know the setting exists. The panel is not
         # RECORDED either: a figure that was not drawn must not appear in the manifest, or the
         # report links a file that is not on disk.
-        if not self.draw_figures:
+        if not self.draws(name):
             if close:
                 try:
                     import matplotlib.pyplot as _plt

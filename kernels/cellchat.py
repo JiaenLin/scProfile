@@ -441,6 +441,14 @@ PLUGIN = {
                          # without knowing what this method measures or what it calls its cells.
                          "size_metric": "cells",
                          "size_name": "cells",
+                         # AND HOW THOSE OBSERVATIONS SPLIT OVER THE POPULATIONS. A total is a
+                         # sum over ordered pairs, so two arms differing in composition differ in
+                         # the sum before anything per-cell does. Naming the table lets the host
+                         # state the composition ONCE for the run, and name a population whose
+                         # share moved enough to account for a difference by itself.
+                         "size_table": "tables/cellchat_composition.csv",
+                         "size_table_element": "population",
+                         "size_table_size": "cells",
                          # `member` is what a group DECOMPOSES INTO, and declaring it is what
                          # earns the contribution panel. The column is already in this table.
                          "member": "interaction_name"},
@@ -477,10 +485,10 @@ PLUGIN = {
                             "nothing below has been placed against the permutation floor and any "
                             "ranking rests on the communication probability alone. The run's "
                             "caveats say which of the three it was."},
-            {"id": "F4_network", "shows": "result", "required": True,
+            {"id": "F4_network", "shows": "result", "profile": True, "required": True,
              "question": "which populations are inferred to signal to which?",
              "source": "figures/F4_network.csv"},
-            {"id": "F6_signaling_roles", "shows": "result", "required": False,
+            {"id": "F6_signaling_roles", "shows": "result", "profile": True, "required": False,
              "question": "which populations are net senders and which are net receivers?",
              "source": "figures/F6_signaling_roles.csv",
              "when_absent": "no population carried any outgoing or incoming probability, so "
@@ -492,7 +500,7 @@ PLUGIN = {
              "when_absent": "fewer than two pathways carried a non-zero network, so a "
                             "pathway-by-population panel would be a single row. The edge list "
                             "still carries whatever was returned."},
-            {"id": "F8_pathway_rank", "shows": "result", "required": False,
+            {"id": "F8_pathway_rank", "shows": "result", "profile": True, "required": False,
              "question": "which pathways carry the most inferred signal in this unit?",
              "source": "figures/F8_pathway_rank.csv",
              "when_absent": "the returned table carries no `pathway_name` column, or every "
@@ -3052,6 +3060,15 @@ def run(ctx):
 
     ctx.log("figures:")
     drew_coverage = _fig_coverage(ctx, db_frame, var_names, detected, df, float(C["thresh"]))
+    # HOW THE UNIT'S OBSERVATIONS SPLIT OVER ITS POPULATIONS, written out. A network's totals
+    # are sums over ordered pairs of populations, so two arms that differ in composition differ
+    # in the sum before any per-cell behaviour differs - and on a real cohort one arm had twelve
+    # percentage points fewer of its largest population than the other. That is a fact a reader
+    # of a comparison needs and it was in no file the run wrote.
+    if n_cells:
+        ctx.emit_table("cellchat_composition", pd.DataFrame(
+            {"population": list(names),
+             "cells": [int(n_cells.get(p, 0)) for p in names]}).set_index("population"))
     _fig_population_power(ctx, names, n_cells, sent, received, above_floor,
                           int(C["min_cells"]), floor_why, n_sentinel_cells)
     drew_perm = _fig_permutation(ctx, df, int(C["nboot"]), float(C["thresh"]))

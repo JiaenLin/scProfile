@@ -183,7 +183,11 @@ UNIT_NETWORK_KEYS = ("table", "source", "target", "weight", "group", "member",
                      # biological behind it. Naming the metric lets the host put a per-observation
                      # scale beside the raw one without knowing what the method measures. Both
                      # optional; without them the host reports the raw scale only, as before.
-                     "size_metric", "size_name")
+                     "size_metric", "size_name",
+                     # AND A PER-ELEMENT BREAKDOWN of the same size, so the host can state the
+                     # composition of every unit once and name an element whose share moved
+                     # enough to account for a difference on its own. All optional.
+                     "size_table", "size_table_element", "size_table_size")
 
 #: What `weight_scale` may say. `per_object` means the weight was normalised within each unit -
 #: a communication probability computed over the cells present is the usual case - so widths
