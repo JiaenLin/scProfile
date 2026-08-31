@@ -24,6 +24,25 @@ all — the tool's own rule about scratch probes, broken on the manuscript itsel
 **If a number is not in the composed section or a run table, it does not go in the article.** Not
 because it is wrong — because a reader cannot open it.
 
+## Pick a template first
+
+A result section's shape depends on what was measured. A communication network, a
+differential-expression table and a trajectory are described differently, claim different things
+and carry different caveats — and a writer handed only the rules below writes the same paragraph
+for all three. That is what made the first sections read as reports on a run: correct, general,
+and about nothing in particular.
+
+**`templates/` holds one file per method family.** Read the one whose family matches the plugin
+the run used, then come back here — the template carries the METHOD (what it infers, what it
+supports, what it does not, the order to write in, the caveats with their citations, sentence
+patterns), and this file carries the RULES that hold whatever was measured.
+
+- `templates/cell-cell-communication.md` — ligand–receptor inference between populations
+
+**If no template matches, write from the rules and then add one.** `templates/README.md` says what
+a template must contain. The next person will meet the same method, and a template written once
+is the difference between their section and yours being comparable.
+
 ## What you are adding
 
 You are adding **reading**: what the measurements are about, in the language of the field, in the
