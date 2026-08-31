@@ -72,8 +72,19 @@ check('rows$stratum_role == "against"' in ck and 'rows$stratum_role == "referenc
 # AND THE PANEL MUST SAY WHICH COLOUR MEANS WHAT. A diverging scale with no reading is the
 # defect this repository has now fixed on three separate panel classes.
 blk = ck[ck.index("interaction_"):]
-check("RED: the" in ck and "BLUE: larger in" in ck,
+# THE PROPERTY IS "THE PANEL SAYS WHICH WAY THE COLOURS RUN", not any particular sentence.
+# This matched "RED: the" - a definite article - so shortening the subtitle to fit the plate
+# broke it while leaving the direction key fully intact. Check that both colours are named and
+# that each is attached to an INTERPOLATED stratum, which is what a hardcoded or missing key
+# would fail.
+check("RED: " in ck and "BLUE: " in ck,
       "the interaction heatmap has no direction key, so nothing on it says what red means")
+_red = ck.split("RED: ", 1)[-1].split("BLUE: ")[0] if "RED: " in ck else ""
+check("st[1]" in _red,
+      "the RED half of the direction key does not name the stratum it belongs to, so the panel "
+      "says a colour is larger without saying larger WHERE")
+check("st[2]" in ck.split("BLUE: ", 1)[-1] if "BLUE: " in ck else False,
+      "the BLUE half of the direction key does not name its stratum")
 check("Sources (Sender)" in ck and "Targets (Receiver)" in ck,
       "the interaction heatmap has no axis labels, unlike the tool's own heatmaps beside it")
 check("NO interaction" in ck,

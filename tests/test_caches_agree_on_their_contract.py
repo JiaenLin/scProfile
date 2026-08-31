@@ -28,9 +28,15 @@ def check(ok, msg):
         FAILURES.append(msg)
 
 
-check(len(re.findall(r"not rewritten", SRC)) >= 2,
+# MATCH THE WORD, NOT THE PHRASE. The matrix store builds its message across a line
+# continuation - "MB not " then "rewritten" - so "not rewritten" as one string appears in only
+# one of the two layers and this check failed on code that was correct. Comment lines are
+# excluded so that DESCRIBING the contract never satisfies it.
+_said = [ln for ln in SRC.splitlines()
+         if "rewritten" in ln and not ln.lstrip().startswith("#")]
+check(len(_said) >= 2,
       "only one cache layer reports declining to rewrite on a hit; the other still writes back "
-      "what it just read")
+      "what it just read (found: %r)" % (_said,))
 
 # The object store's write must be REACHABLE ONLY when the object was not loaded. Checking the
 # guard exists is not enough - it has to be the thing the write hangs off.
