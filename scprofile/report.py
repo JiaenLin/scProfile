@@ -411,7 +411,7 @@ def _presence_block(payload_all, *, out_dir=None, name=""):
             + _arm_figs_html(name, got), got)
 
 
-def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
+def _arm_content(units, design, spec, *, native_plots=None, out_dir=None, name="", prefix=None,
                  controls=None, unit_axis=None, unit_members=None):
     """({"contrast": [...], "arm": [...]}) - every between-arm and per-arm figure, drawn.
 
@@ -514,7 +514,7 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
                           # that no declaration is allowed to carry there.
                           controls=controls, unit_members=unit_members or {},
                           unit_cells=unit_cells or {},
-                          prefix=prefix, declared=(spec or {}).get("native_plots") or {})
+                          prefix=prefix, declared=dict(native_plots or {}))
 
     # THE TWO-SCALE TABLE, WRITTEN EVERY RUN. A result section quotes changes per element, and
     # where the weight is normalised within each unit those changes differ - sometimes in SIGN -
@@ -539,7 +539,7 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
     # there and a reader had to hold two of them side by side in their head. A marginal effect
     # can be flat while both simple effects are large and opposite.
     inter = []
-    for isp in CPan.interaction_specs(design):
+    for isp in CPan.interaction_specs(design, controls=controls):
         inter += CPan.draw_interaction(per, design, isp, figdir, name,
                                        group_col=net.get("group"),
                                        weight_scale=net.get("weight_scale", "per_object"))
@@ -766,8 +766,14 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             # phase does: a wrapped tool that writes to the current directory must not write
             # into the project.
             cdir.mkdir(parents=True, exist_ok=True)
-            subprocess.run([str(exe), str(entry), "--compare", str(plugin_file), spath],
-                           capture_output=False, timeout=3600, env=env, cwd=str(cdir))
+            _r = subprocess.run([str(exe), str(entry), "--compare", str(plugin_file), spath],
+                                capture_output=False, timeout=3600, env=env, cwd=str(cdir))
+            if _r.returncode != 0:
+                # LOUD, AND THE PANELS IT DID DRAW ARE STILL PLACED. An abort part-way leaves
+                # real figures on disk; discarding them would lose work the run paid for, and
+                # silence would let a half-drawn comparison read as a complete one.
+                print(f"  native compare {label} FAILED (exit {_r.returncode}); any panels it "
+                      f"drew before failing are placed, and the rest are missing from this page")
         except Exception as e:                                            # noqa: BLE001
             print(f"  native compare {label} failed: {e}")
             continue
@@ -910,8 +916,11 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             cdir.mkdir(parents=True, exist_ok=True)
             print(f"  native compare across {len(_cross)} crossed arm(s): "
                   + ", ".join(_cross))
-            subprocess.run([str(exe), str(entry), "--compare", str(plugin_file), spath],
-                           capture_output=False, timeout=3600, env=env, cwd=str(cdir))
+            _r = subprocess.run([str(exe), str(entry), "--compare", str(plugin_file), spath],
+                                capture_output=False, timeout=3600, env=env, cwd=str(cdir))
+            if _r.returncode != 0:
+                print(f"  native compare across arms FAILED (exit {_r.returncode}); any panels "
+                      f"it drew before failing are placed, and the rest are missing")
         except Exception as e:                                            # noqa: BLE001
             print(f"  native compare across arms failed: {e}")
         else:
@@ -1632,6 +1641,11 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                  concordance=(), payload_all=None):
     """One kernel's own page. Ends in its own limits, not a shared block."""
     p = payload or {}
+    # THE PLUGIN'S UPSTREAM-PLOT DECLARATION, bound once. `spec` in this function is the REPORT
+    # BLOCK; `native_plots` is a TOP-LEVEL key, and reading it off `spec` gave `{}` to everything
+    # that inverts it - so no compare caption could name the function that drew it and
+    # `population_axis` could never fire. Two consumers now read one binding.
+    _decl_native = (p.get("spec") or {}).get("native_plots") or {}
     # ONCE ON THE PAGE, AT THE TOP. `ctx.contradiction` records into `caveats` as well, so that
     # a refutation survives into any document built from the payload by something that has
     # never heard of the newer field. On the page that is the same sentence twice, once in a
@@ -1713,6 +1727,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                                   _D.report_get(spec, "unit_metrics"),
                                   out_dir=out_dir, name=name))
         _arms = _arm_content(units, (payload_all or {}).get("design") or {}, spec,
+                             native_plots=_decl_native,
                              prefix=prefix,
                              out_dir=out_dir, name=name,
                              unit_axis=(payload_all or {}).get("unit_axis") or {},
@@ -1791,7 +1806,6 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     figs_all = list(p.get("figures") or [])
     # AND THE PANELS THE WRAPPED TOOL DREW ITSELF, which reach the payload through nothing. See
     # `_native_unit_panels`: they were on disk and on no page.
-    _decl_native = (p.get("spec") or {}).get("native_plots") or {}
     _native_units = _native_unit_panels(out_dir, name,
                                         _decl_native,
                                         (payload_all or {}).get("unit_axis") or {})

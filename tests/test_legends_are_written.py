@@ -93,6 +93,21 @@ check(ck.count(".write_captions()") >= 1, "the plugin never writes its legends")
 check(ck.count(".legend(basename(path)") >= 6,
       f"only {ck.count('.legend(basename(path)')} of the plot wrappers record a legend")
 
+# CALL SITES, NOT DEFINITIONS. The first version of this counted `.legend(basename(path)` - which
+# is six WRAPPER DEFINITIONS - and passed while not one plot in two of the three scripts actually
+# supplied a legend. The profile page, whose entire content is per-unit panels, was carrying
+# filenames as its legends the whole time, which is verbatim the defect this file exists for.
+import re as _re                                                          # noqa: E402
+
+for _tag in ("_R_RUN", "_R_COMPARE", "_R_COHORT"):
+    _i = ck.index(_tag + " = ")
+    _j = ck.index('"""', ck.index('"""', _i) + 3)
+    _body = ck[_i:_j]
+    _sites = len(_re.findall(r"legend = paste0", _body))
+    check(_sites >= 2,
+          f"{_tag} has {_sites} plot call(s) that pass a legend - its panels fall back to the "
+          f"filename, which is not a legend")
+
 # EVERY PANEL THE PLUGIN DRAWS ITSELF MUST SAY SO. `by = \"plugin\"` is the claim that this is
 # the tool's NUMBERS and not its encoding; a panel we drew that omits it is reported as the
 # tool's own work.

@@ -467,6 +467,31 @@ def _run(a):
     # are the consistency check - and it was inferring it from whether the label happened to be
     # a key of the design table. That works until a project names an arm after a sample, and it
     # is a guess about something the resolver already knows for certain.
+    def _figures_for(args, axes):
+        """The axes to draw per-unit figures for, validated against the axes that EXIST.
+
+        WHITESPACE AND TYPOS WERE SILENT. `--figures-for "group, sample"` split into
+        `["group", " sample"]` and the second matched no axis, so every per-sample panel in the
+        run was dropped with no message; `--figures-for gruop` suppressed every per-unit figure
+        and exited 0. A setting that silently removes output is the thing this project's own rule
+        about naming what a cut removed exists to prevent.
+        """
+        want = [x.strip() for x in str(getattr(args, "figures_for", "") or "").split(",")]
+        want = [x for x in want if x]
+        if not want:
+            return []
+        known = sorted({str(v) for v in (axes or {}).values() if v})
+        unknown = [x for x in want if known and x not in known]
+        if unknown:
+            raise SystemExit(
+                f"--figures-for names {', '.join(repr(x) for x in unknown)}, which is not an "
+                f"axis this design has. The axes here are: {', '.join(known)}. Refusing rather "
+                f"than silently drawing nothing for every unit.")
+        print(f"  figures: per-unit panels for {', '.join(want)} only "
+              f"(of {', '.join(known) or 'none resolved'}); profile panels are drawn for every "
+              f"axis regardless")
+        return want
+
     unit_axis = {}
     for _ax in _plan_axes:
         for _u, _mem in _ax["units"].items():
@@ -673,7 +698,7 @@ def _run(a):
                                           if mem_gb else {})},
             unit=unit, unit_members=unit_members.get(str(unit)),
             unit_axis=unit_axis.get(str(unit)),
-            figures_for=[x for x in (getattr(a, "figures_for", "") or "").split(",") if x],
+            figures_for=_figures_for(a, unit_axis),
             constraint=constraint,
             # BESIDE THE RUNS, NOT INSIDE ONE. A run directory is sealed and a cache is
             # disposable; putting one in the other makes the run un-sealable or the cache

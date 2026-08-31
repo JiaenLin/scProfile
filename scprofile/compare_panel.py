@@ -642,7 +642,16 @@ def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edge
 
 
 
-def interaction_specs(design, factors=None, technical=None):
+def _ordered(levels, declared):
+    """[baseline, perturbed] - the control level first, by declaration or by recommendation."""
+    from .design_panel import control_for as _cf
+
+    ctl = _cf(list(levels), declared=declared)[0]
+    rest = [x for x in levels if x != ctl]
+    return ([ctl] + rest) if ctl in levels else list(levels)
+
+
+def interaction_specs(design, factors=None, technical=None, controls=None):
     """[(fA, fB, lo_a, hi_a, lo_b, hi_b)] - every pair of crossed two-level factors.
 
     A FACTORIAL DESIGN'S HEADLINE IS THE INTERACTION AND NOTHING DREW IT. Six two-arm contrasts
@@ -668,7 +677,13 @@ def interaction_specs(design, factors=None, technical=None):
     out = []
     for i, fa in enumerate(two):
         for fb in two[i + 1:]:
-            la, lb = sorted(lv[fa]), sorted(lv[fb])
+            # THE DECLARED CONTROL IS THE BASELINE, NOT THE ALPHABET. `sorted()` put whichever
+            # level sorts first in the baseline position, so this panel and the wrapped tool's
+            # own interaction panel - which does use the declared control - appeared on the same
+            # page as mirror images of one quantity, with their axes swapped and their effect
+            # signs flipped. Both were internally honest, which is why nothing errored.
+            la = _ordered(sorted(lv[fa]), (controls or {}).get(fa))
+            lb = _ordered(sorted(lv[fb]), (controls or {}).get(fb))
             cells = {(a, b): _members(design, {fa: a, fb: b}) for a in la for b in lb}
             if all(cells[k] for k in cells):
                 out.append((fa, fb, la[0], la[1], lb[0], lb[1]))

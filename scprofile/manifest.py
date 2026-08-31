@@ -231,6 +231,17 @@ def layer_names(adata):
     return sorted(str(k) for k in getattr(adata, "layers", ()) if k is not None)
 
 
+def _jsonable(v):
+    """`v` if it survives a JSON round trip, else its repr. Never silently dropped."""
+    import json as _j
+
+    try:
+        _j.dumps(v)
+        return v
+    except (TypeError, ValueError):
+        return repr(v)
+
+
 def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=None, layers=None,
                  tables=None, figures=None, objects=None, absent=None, caveats=None, headline="",
                  measured=None, metrics=None, contradictions=None, config=None,
@@ -261,9 +272,16 @@ def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=Non
         # WHAT THIS UNIT ACTUALLY RAN WITH, resolved - defaults filled in, overrides applied.
         # It was recorded NOWHERE. A run could not say which parameters produced it, a reader
         # could not tell a default from a choice, and a written section quoting a number had no
-        # way to state the settings behind it. Every value here is JSON-safe or dropped.
-        "config": {str(k): v for k, v in (config or {}).items()
-                   if isinstance(v, (str, int, float, bool)) or v is None},
+        # way to state the settings behind it.
+        #
+        # EVERY JSON-SAFE VALUE, NOT ONLY SCALARS. The first version admitted `str/int/float/bool`
+        # while claiming to admit whatever JSON does, and silently dropped every dict and list -
+        # including the model formula a design-aware plugin is given, which is the single most
+        # consequential setting such a run has. The section then printed the settings "this run
+        # was fitted with" and omitted which model was fitted. A value that will not serialise is
+        # recorded as its repr rather than vanishing, because an unreadable setting is still
+        # evidence and a missing one is not.
+        "config": {str(k): _jsonable(v) for k, v in (config or {}).items()},
         "kernel": kernel,
         "version": str(version),
         # WHAT THIS INSTANCE ACTUALLY COST, from the process that paid it: peak RSS,

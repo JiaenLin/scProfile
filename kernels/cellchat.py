@@ -835,12 +835,16 @@ dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
   invisible(NULL)
 }
 .write_captions <- function() {
+  # CALLED ON EXIT AS WELL AS AT THE END. An abort in a later section left `captions.tsv`
+  # unwritten, so panels drawn BEFORE the failure silently lost their legends and fell back to
+  # their filenames - a degradation that renders as a normal page.
   if (!length(.caps$rows)) return(invisible(NULL))
   d <- do.call(rbind, lapply(.caps$rows, function(r) as.data.frame(r, stringsAsFactors = FALSE)))
   utils::write.table(d, file.path(figdir, "captions.tsv"),
                      sep = "\t", row.names = FALSE, quote = FALSE)
   cat("wrote", nrow(d), "figure legend(s)\n")
 }
+on.exit(.write_captions(), add = TRUE)
 
 npng <- function(name, expr, w = 1800, h = 1500, res = 200, legend = "", by = "tool") {
   if (!draw_figs && !(name %in% profile_plots)) return(invisible(NULL))
@@ -890,11 +894,26 @@ npng("circle_weight", {
 })
 npng("heatmap_count", netVisual_heatmap(cc, measure = "count", color.heatmap = "Blues"))
 npng("heatmap_weight", netVisual_heatmap(cc, measure = "weight", color.heatmap = "Blues"))
-npng("signalingRole_scatter", netAnalysis_signalingRole_scatter(cc))
+npng("signalingRole_scatter", netAnalysis_signalingRole_scatter(cc),
+     legend = paste0("Each population placed by how much inferred signalling it SENDS ",
+                     "(horizontal) against how much it RECEIVES (vertical), for this unit ",
+                     "alone. Distance from the diagonal is how one-sided a population is. ",
+                     "Point size is the number of inferred links. Nothing here is a comparison ",
+                     "and nothing is tested."))
 npng("signalingRole_heatmap_out",
-     netAnalysis_signalingRole_heatmap(cc, pattern = "outgoing", width = 10, height = 12))
+     netAnalysis_signalingRole_heatmap(cc, pattern = "outgoing", width = 10, height = 12),
+     legend = paste0("Which signalling programmes this unit SENDS, and from which populations. ",
+                     "Rows are programmes, columns are populations. Colour is relative strength ",
+                     "RESCALED WITHIN EACH ROW, so it shows where a programme acts and NOT how ",
+                     "strong one programme is against another. The bars above and beside are the ",
+                     "column and row totals. One unit, no comparison."))
 npng("signalingRole_heatmap_in",
-     netAnalysis_signalingRole_heatmap(cc, pattern = "incoming", width = 10, height = 12))
+     netAnalysis_signalingRole_heatmap(cc, pattern = "incoming", width = 10, height = 12),
+     legend = paste0("Which signalling programmes this unit RECEIVES, and at which populations. ",
+                     "Rows are programmes, columns are populations. Colour is relative strength ",
+                     "RESCALED WITHIN EACH ROW, so it shows where a programme is received and ",
+                     "NOT how strong one programme is against another. One unit, no ",
+                     "comparison."))
 npng("bubble", netVisual_bubble(cc, sources.use = seq_len(ngrp), targets.use = seq_len(ngrp),
                                 remove.isolate = TRUE), w = 2600, h = 2000)
 npng("database_category", showDatabaseCategory(cc@DB))
@@ -1295,20 +1314,34 @@ def _flow_betweenness(net):
         try:
             return int(maximum_flow(csr_matrix(mat), s, t).flow_value)
         except Exception:                                                 # noqa: BLE001
-            return 0
+            # NONE, NOT ZERO. The caller's docstring promises to return None where a value
+            # cannot be computed "so the row can be named as absent rather than drawn as zero",
+            # and returning 0 here defeated that: a failed max-flow contributed nothing to the
+            # accumulator, so the node's centrality came out silently UNDER-REPORTED and was
+            # drawn as a small MEASURED value. A wrong number on a panel is worse than a gap.
+            return None
 
     out = np.zeros(n, dtype=float)
     for v in range(n):
         drop = cap.copy()
         drop[v, :] = 0
         drop[:, v] = 0
-        tot = 0
+        tot, failed = 0, False
         for s in range(n):
             for t in range(n):
                 if s == t or s == v or t == v:
                     continue
-                tot += max(0, _flow(cap, s, t) - _flow(drop, s, t))
-        out[v] = tot / scale
+                f_all, f_drop = _flow(cap, s, t), _flow(drop, s, t)
+                if f_all is None or f_drop is None:
+                    failed = True
+                    break
+                tot += max(0, f_all - f_drop)
+            if failed:
+                break
+        # ONE UNCOMPUTABLE PAIR MAKES THE WHOLE NODE UNCOMPUTABLE. A partial sum over the pairs
+        # that happened to succeed is a number nobody can interpret and nothing distinguishes it
+        # from a small true value.
+        out[v] = np.nan if failed else tot / scale
     return out
 
 
@@ -3540,12 +3573,16 @@ cat("merged:", name_a, "and", name_b, "\n")
   invisible(NULL)
 }
 .write_captions <- function() {
+  # CALLED ON EXIT AS WELL AS AT THE END. An abort in a later section left `captions.tsv`
+  # unwritten, so panels drawn BEFORE the failure silently lost their legends and fell back to
+  # their filenames - a degradation that renders as a normal page.
   if (!length(.caps$rows)) return(invisible(NULL))
   d <- do.call(rbind, lapply(.caps$rows, function(r) as.data.frame(r, stringsAsFactors = FALSE)))
   utils::write.table(d, file.path(figdir, "captions.tsv"),
                      sep = "\t", row.names = FALSE, quote = FALSE)
   cat("wrote", nrow(d), "figure legend(s)\n")
 }
+on.exit(.write_captions(), add = TRUE)
 
 npng <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "tool") {
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
@@ -3595,10 +3632,17 @@ ndev <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "too
 }
 ndev("diffInteraction_count", {
   netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count"); .diffkey()
-})
+}, legend = paste0("Which population pairs differ in the NUMBER of inferred interactions. Each ",
+                   "node is a population; an edge is drawn where the two arms differ, its width ",
+                   "in proportion to the size of that difference. Red is higher in ", name_b,
+                   "; blue is higher in ", name_a, ", the reference. An absent edge means the ",
+                   "two arms agree, not that the pair does not signal."))
 ndev("diffInteraction_weight", {
   netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight"); .diffkey()
-})
+}, legend = paste0("The same comparison on interaction STRENGTH rather than count. Red is ",
+                   "higher in ", name_b, "; blue is higher in ", name_a, ", the reference. ",
+                   "Strength and count can disagree: a pair can gain interactions while each is ",
+                   "weaker, and the two panels are drawn side by side for that reason."))
 
 # 2. the differential heatmap, same question in a form that reads pair by pair
 # THE COLOURS ARE NAMED. CellChat draws this with a diverging red-blue scale whose only legend
@@ -3885,12 +3929,16 @@ m <- mergeCellChat(objs, add.names = nms)
   invisible(NULL)
 }
 .write_captions <- function() {
+  # CALLED ON EXIT AS WELL AS AT THE END. An abort in a later section left `captions.tsv`
+  # unwritten, so panels drawn BEFORE the failure silently lost their legends and fell back to
+  # their filenames - a degradation that renders as a normal page.
   if (!length(.caps$rows)) return(invisible(NULL))
   d <- do.call(rbind, lapply(.caps$rows, function(r) as.data.frame(r, stringsAsFactors = FALSE)))
   utils::write.table(d, file.path(figdir, "captions.tsv"),
                      sep = "\t", row.names = FALSE, quote = FALSE)
   cat("wrote", nrow(d), "figure legend(s)\n")
 }
+on.exit(.write_captions(), add = TRUE)
 
 npng <- function(nm, expr, w = 2000, h = 1300, res = 200, legend = "", by = "tool") {
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
@@ -4100,7 +4148,11 @@ if (!is.null(inter) && nrow(inter)) {
   arm_of <- stats::setNames(seq_along(nms), nms)
   for (fr in unique(inter$framing)) {
     rows <- inter[inter$framing == fr, , drop = FALSE]
-    if (nrow(rows) != 2) next
+    if (nrow(rows) != 2) {
+      cat("interaction", fr, "has", nrow(rows), "stratum row(s) rather than 2; not drawn\n")
+      .plots$bad <- c(.plots$bad, paste0("interaction__", gsub("[^A-Za-z0-9]+", "_", fr)))
+      next
+    }
     # BY ROLE, NEVER BY POSITION. The host marks which stratum is the control; the interaction is
     # the effect where the other factor is PERTURBED minus the same effect at BASELINE. Ordering
     # the rows for reading and then subtracting the second from the first gave the opposite
@@ -4128,7 +4180,7 @@ if (!is.null(inter) && nrow(inter)) {
                             do.stat = TRUE, return.data = TRUE),
                     error = function(e) { cat("rankNet FAILED for", fr, st[k], ":",
                                               conditionMessage(e), "\n"); NULL })
-      if (is.null(r)) { okflow <- FALSE; break }
+      if (is.null(r)) { okflow <- FALSE; break }   # the failure is announced by the handler
       d <- r$signaling.contribution
       ref_n <- as.character(rows$reference[k]); agn_n <- as.character(rows$against[k])
       a <- stats::aggregate(d$contribution, by = list(name = d$name, grp = d$group), FUN = sum)
@@ -4143,7 +4195,11 @@ if (!is.null(inter) && nrow(inter)) {
       pvals[[k]] <- if (!is.null(d$pvalues))
         stats::aggregate(d$pvalues, by = list(name = d$name), FUN = min) else NULL
     }
-    if (!okflow) next
+    if (!okflow) {
+      cat("interaction", fr, "has no usable per-pathway flow; not drawn\n")
+      .plots$bad <- c(.plots$bad, paste0("interaction_flow__", gsub("[^A-Za-z0-9]+", "_", fr)))
+      next
+    }
 
     both <- merge(flows[[1]], flows[[2]], by = "name", all = TRUE, suffixes = c(".1", ".2"))
     both[is.na(both)] <- 0
