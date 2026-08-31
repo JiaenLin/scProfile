@@ -1708,8 +1708,11 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
         # already correct, and per-sample is what a unit meant before arms existed.
         def _is_group(_f):
             return False
+    _prof_ids = {str(f.get("id")) for f in (_D.report_get(spec, "figures") or [])
+                 if f.get("profile") and f.get("id")}
     arm_figs = [f for f in figs_all if f.get("unit") and _is_group(f)]
-    per_unit_figs = [f for f in figs_all if f.get("unit") and not _is_group(f)]
+    per_unit_figs = [f for f in figs_all if f.get("unit") and not _is_group(f)
+                     and str(f.get("id")) not in _prof_ids]
     cohort_figs = [f for f in figs_all if not f.get("unit")]
     if cohort_figs:
         body.append(_figure_section(cohort_figs, spec))
@@ -1739,8 +1742,6 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # unit, group and sample alike, and nothing comparative. Three per unit here. A plugin that
     # marks none gets no page, which is the honest outcome rather than a page of whatever was
     # lying around.
-    _prof_ids = {str(f.get("id")) for f in ((spec or {}).get("report") or {}).get("figures") or []
-                 if f.get("profile") and f.get("id")}
     _prof = [f for f in figs_all if f.get("unit") and str(f.get("id")) in _prof_ids] \
         if _prof_ids else []
     if _prof:
@@ -1767,8 +1768,11 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                 pp.append(_panel(f_, _n))
         pp.append(f"<p class='sub'><a href=\"{_e(name)}.html\">&larr; back to "
                   f"{_e(name)}</a></p>")
-        (d / f"{name}_profile.html").write_text(
+        _pd = Path(out_dir) / "report"
+        _pd.mkdir(parents=True, exist_ok=True)
+        (_pd / f"{name}_profile.html").write_text(
             _page(f"{name} — profile of each unit — scProfile", "".join(pp)), encoding="utf-8")
+        print(f"  wrote {name}_profile.html: {_n} panel(s) over {len(_order)} unit(s)")
 
     _links = []
     # THE WRITTEN SECTION, IF ONE EXISTS. It is rendered separately, by `paper --render`, and
