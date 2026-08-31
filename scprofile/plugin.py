@@ -1005,14 +1005,26 @@ class CompareContext:
     figures/tables directory for the pair.
     """
 
-    def __init__(self, *, pair, units, out, config=None, log=print):
+    def __init__(self, *, pair, units, out, config=None, members=None, unit_values=None,
+                 log=print):
         #: A label for this comparison, e.g. `age__aged__young`. Used in filenames.
         self.pair = str(pair)
-        #: {unit_name: Path} - the two finished units, in the order the contrast names them.
+        #: {unit_name: Path} - the finished units, in the order the contrast names them.
         self.units = {str(k): Path(v) for k, v in dict(units or {}).items()}
         #: Where this comparison's outputs go.
         self.out = Path(out)
         self.config = dict(config or {})
+        #: {unit: [the units it pools]} - who is inside each unit being compared, where the host
+        #: knows. A pooled arm is ONE fit on its members' cells and its members are separate
+        #: fits, so this is not a decomposition: it is what lets a panel show the spread behind
+        #: an arm without implying the arm is their sum. Empty where the units pool nothing.
+        self.members = {str(k): [str(x) for x in (v or [])]
+                        for k, v in dict(members or {}).items()}
+        #: {unit: {name: number}} - the host's own across-unit numbers, for every unit named
+        #: above AND every member of one. Computed from the plugin's declared `unit_network`, so
+        #: they are the same quantities `unit_totals` draws and a plugin can overlay them without
+        #: re-reading its own objects. A plugin that wants its own numbers still computes them.
+        self.unit_values = {str(k): dict(v or {}) for k, v in dict(unit_values or {}).items()}
         self.log = log
 
     @property

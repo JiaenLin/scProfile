@@ -868,7 +868,21 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     return [(f"C5_interaction__{slug}", path, cap, f"{fa} × {fb}")]
 
 
-def two_scale_table(per, design, pairs, *, group_col=None, weight="prob"):
+def _unit_for(um, members):
+    """The unit id whose membership is exactly this set of samples, or "".
+
+    A CONTRAST SIDE IS A SET OF SAMPLES; a per-unit quantity is keyed by UNIT. This is the same
+    resolution the native compare phase does, and it is here so a side's size can be looked up
+    without any consumer re-deriving which unit pooled it.
+    """
+    want = frozenset(str(x) for x in (members or ()))
+    for uid, mem in (um or {}).items():
+        if frozenset(str(x) for x in (mem or ())) == want:
+            return str(uid)
+    return ""
+
+
+def two_scale_table(per, design, pairs, *, group_col=None, weight="prob", unit_cells=None):
     """Every contrast's change per element, on BOTH scales, with whether the two agree.
 
     THE NUMBERS A RESULT SECTION QUOTES MUST COME FROM A FILE THE TOOL WROTE. These were computed
@@ -895,8 +909,13 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob"):
     for sp in pairs:
         label, factor, lo_lv, hi_lv = sp[0], sp[1], sp[2], sp[3]
         lo_f, hi_f = (sp[4] if len(sp) > 4 else None), (sp[5] if len(sp) > 5 else None)
-        e_lo, src_lo = pool(per, _members(design, lo_f), unit_members=_um)
-        e_hi, src_hi = pool(per, _members(design, hi_f), unit_members=_um)
+        m_lo, m_hi = _members(design, lo_f), _members(design, hi_f)
+        e_lo, src_lo = pool(per, m_lo, unit_members=_um)
+        e_hi, src_hi = pool(per, m_hi, unit_members=_um)
+        # HOW BIG EACH SIDE'S FIT WAS. A total is not comparable between two arms of different
+        # size without it, and a reader who is not given it will assume they were comparable.
+        c_lo = (unit_cells or {}).get(_unit_for(_um, m_lo))
+        c_hi = (unit_cells or {}).get(_unit_for(_um, m_hi))
         if e_lo is None or e_hi is None:
             continue
         gcol = group_col or "group"
@@ -915,6 +934,10 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob"):
                 "raw_from": ra, "raw_to": rb, "raw_delta": d_raw,
                 "share_from": sa, "share_to": sb, "share_delta_pp": d_share,
                 "total_from": tot_a, "total_to": tot_b,
+                # THE DENOMINATOR, ON THE ROW. Carried rather than computed downstream, so the
+                # per-observation scale in a written section and the one in a panel are the same
+                # arithmetic on the same two numbers.
+                "cells_from": c_lo, "cells_to": c_hi,
                 # WHICH OBJECT EACH SIDE CAME FROM. A number whose provenance is not on the row
                 # cannot be compared against a figure, and this table sits beside figures drawn
                 # from the arm's own fit.
@@ -924,12 +947,14 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob"):
     return rows
 
 
-def write_two_scale(per, design, pairs, out_path, *, group_col=None, weight="prob"):
+def write_two_scale(per, design, pairs, out_path, *, group_col=None, weight="prob",
+                    unit_cells=None):
     """Write `two_scale_table` as a CSV. Returns the path, or None when there is nothing to say."""
     import csv
     from pathlib import Path
 
-    rows = two_scale_table(per, design, pairs, group_col=group_col, weight=weight)
+    rows = two_scale_table(per, design, pairs, group_col=group_col, weight=weight,
+                           unit_cells=unit_cells)
     if not rows:
         return None
     out_path = Path(out_path)

@@ -436,6 +436,11 @@ PLUGIN = {
                          # without knowing what the host is writing about. Without this the
                          # composer said "weight", which is true and says nothing.
                          "weight_name": "interaction strength",
+                         # WHICH UNIT METRIC IS THE NUMBER OF OBSERVATIONS THE FIT USED. Naming
+                         # it here is what lets the host put a per-cell scale beside the raw one
+                         # without knowing what this method measures or what it calls its cells.
+                         "size_metric": "cells",
+                         "size_name": "cells",
                          # `member` is what a group DECOMPOSES INTO, and declaring it is what
                          # earns the contribution panel. The column is already in this table.
                          "member": "interaction_name"},
@@ -445,6 +450,7 @@ PLUGIN = {
         "unit_metrics": [
             {"id": "significant_edges", "question": "how many edges survived the permutation test in this unit?"},
             {"id": "populations", "question": "how many populations did this unit contribute? Edge count scales with the number of ordered pairs, which is quadratic in this."},
+            {"id": "cells", "question": "how many cells was this unit's network inferred from? Both edge count and total strength rise with it, so an arm built from more animals can carry a larger network with no biological difference behind it."},
         ],
         "figures": [
             # OPTIONAL, and its absence is the loudest thing on the page. Drawing it needs
@@ -3076,6 +3082,13 @@ def run(ctx):
     # draws the comparison, so this is the whole of what this plugin owes for one.
     ctx.metric("significant_edges", len(df))
     ctx.metric("populations", len(names))
+    # THE DENOMINATOR, AND ONLY THIS PLUGIN KNOWS IT. Edge count and total strength both rise
+    # with the number of cells - the permutation test has more power and the probability is
+    # computed over more expressing cells - so an arm assembled from more animals can carry a
+    # larger network with nothing biological behind it. The host cannot supply this number: it
+    # hands over the whole object and the plugin does its own subsetting and its own `min_cells`
+    # filtering, so the cells the fit ACTUALLY used are known here and nowhere else.
+    ctx.metric("cells", int(A.n_obs))
     ctx.headline = (f"{len(df):,} significant edges"
                     + (f" over {n_inter:,} ligand-receptor interaction(s)"
                        if n_inter is not None else "")
@@ -3762,6 +3775,9 @@ figdir <- args[1]
 n <- as.integer(args[2])
 rds <- args[seq(3, 2 + n)]
 nms <- args[seq(3 + n, 2 + 2 * n)]
+# args[3 + 2n]: a table of per-sample points, written by the host from this plugin's own edge
+# tables. Optional - absent, the bars are drawn alone, exactly as before.
+points_f <- if (length(args) >= 3 + 2 * n) args[3 + 2 * n] else ""
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 
 objs <- lapply(rds, readRDS)
@@ -3787,11 +3803,36 @@ npng <- function(nm, expr, w = 2000, h = 1300, res = 200) {
 
 # CellChat's own total-interactions bar, in the mode that takes every object at once. `group`
 # is the position of each arm in the merged object, which is what its own vignette passes.
+#
+# EACH ANIMAL AS A POINT ON ITS ARM'S BAR. Four bars say what each arm carries and nothing about
+# whether the animals inside it agree - and on a real cohort one animal carried more than the
+# whole of the opposite arm, which a reader of the bars alone would never suspect.
+#
+# The points are ANNOTATION on CellChat's own plot, not a reimplementation of it: the function
+# returns a ggplot and this adds a layer, the same move as the colour key added to the
+# differential network. The values are the host's, computed from this plugin's own declared edge
+# table, and they agree with the bars because they are the same quantity - verified on a real
+# run, 1743 both ways.
+#
+# AND THE BAR IS NOT THE MEAN OF THE POINTS. An arm is one fit on its members' pooled cells;
+# each point is a separate fit. The caption says so, because the geometry says the opposite.
+pts <- if (file.exists(points_f)) utils::read.delim(points_f, stringsAsFactors = FALSE) else NULL
 for (ms in c("count", "weight")) {
-  npng(paste0("compareInteractions_", ms),
-       compareInteractions(m, show.legend = FALSE, group = seq_along(objs), measure = ms,
-                           x.lab.rot = TRUE),
-       w = max(1400, 320 * length(objs)), h = 1300)
+  g <- compareInteractions(m, show.legend = FALSE, group = seq_along(objs), measure = ms,
+                           x.lab.rot = TRUE)
+  if (!is.null(pts) && nrow(pts) && ms %in% names(pts)) {
+    d <- pts[pts$arm %in% nms, , drop = FALSE]
+    if (nrow(d)) {
+      d$x <- match(d$arm, nms)
+      d$y <- d[[ms]]
+      g <- g + ggplot2::geom_point(
+        data = d, ggplot2::aes(x = x, y = y),
+        inherit.aes = FALSE, position = ggplot2::position_jitter(width = 0.12, height = 0),
+        shape = 21, size = 2.4, fill = "white", colour = "black", stroke = 0.6, alpha = 0.9)
+      cat("overlaid", nrow(d), "sample point(s) on", ms, "\n")
+    }
+  }
+  npng(paste0("compareInteractions_", ms), g, w = max(1500, 340 * length(objs)), h = 1300)
 }
 
 cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
@@ -3828,8 +3869,27 @@ def compare(ctx):
         with _tf.NamedTemporaryFile("w", suffix=".R", delete=False) as fh:
             fh.write(_R_COHORT)
             script = fh.name
+        # THE POINTS, FROM THE HOST'S OWN NUMBERS. `ctx.unit_values` holds the same totals the
+        # host draws in its across-unit panel, computed from this plugin's declared edge table -
+        # so the points and the bars are the same quantity and cannot drift. Written as a table
+        # rather than passed on the command line because the count is the number of samples.
+        points = ctx.out / "sample_points.tsv"
+        rows = []
+        for arm in names:
+            for m in (ctx.members.get(arm) or []):
+                v = ctx.unit_values.get(m) or {}
+                if "edges" in v:
+                    rows.append((m, arm, v.get("edges"), v.get("weight")))
+        if rows:
+            points.parent.mkdir(parents=True, exist_ok=True)
+            with open(points, "w", encoding="utf-8") as fh:
+                fh.write("unit\tarm\tcount\tweight\n")
+                for u, a, c, w in rows:
+                    fh.write(f"{u}\t{a}\t{c}\t{'' if w is None else w}\n")
+            ctx.log(f"  {len(rows)} sample point(s) to overlay on the arm bars")
         cmd = ([_RS(ctx), script, str(ctx.figures()), str(len(names))]
-               + [str(x) for x in rds] + list(names))
+               + [str(x) for x in rds] + list(names)
+               + [str(points) if rows else ""])
         pr = _sp.run(cmd, capture_output=True, text=True)
         for line in (pr.stdout + pr.stderr).splitlines():
             if line.strip():

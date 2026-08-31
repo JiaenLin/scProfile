@@ -176,7 +176,14 @@ UNIT_NETWORK_KEYS = ("table", "source", "target", "weight", "group", "member",
                      "weight_scale",
                      # what the plugin CALLS its quantity, so the host can write about
                      # it without knowing what it is. Optional; "weight" without it.
-                     "weight_name")
+                     "weight_name",
+                     # WHICH UNIT METRIC IS THE NUMBER OF OBSERVATIONS THE FIT USED, and what to
+                     # call them. A network's size rises with the observations behind it, so an
+                     # arm assembled from more samples can carry a larger one with nothing
+                     # biological behind it. Naming the metric lets the host put a per-observation
+                     # scale beside the raw one without knowing what the method measures. Both
+                     # optional; without them the host reports the raw scale only, as before.
+                     "size_metric", "size_name")
 
 #: What `weight_scale` may say. `per_object` means the weight was normalised within each unit -
 #: a communication probability computed over the cells present is the usual case - so widths

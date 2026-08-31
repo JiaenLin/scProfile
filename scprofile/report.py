@@ -460,6 +460,30 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
     if len(per) < 2:
         return empty
     figdir = Path(out_dir) / "kernels" / name / "figures"
+    # HOW MANY OBSERVATIONS EACH UNIT'S FIT USED, read from the metric the plugin NAMES.
+    #
+    # Both a network's edge count and its total weight rise with the observations behind them - a
+    # permutation test has more power, and a probability is computed over more expressing cells -
+    # so an arm assembled from more samples can carry a larger network with nothing biological
+    # behind it. Measured on a real cohort: one arm had six animals against another's four, and a
+    # marginal ratio of 2.58x on raw edges was 2.13x per thousand cells.
+    #
+    # The host cannot compute this itself. It hands the whole object to the plugin, which does its
+    # own subsetting and its own minimum-size filtering, so only the plugin knows how many
+    # observations the fit ACTUALLY used. It declares which of its unit metrics that is; a plugin
+    # declaring none gets the raw scale only, exactly as before.
+    _size_key = str(net.get("size_metric") or "")
+    unit_cells = {}
+    if _size_key:
+        for _u in (units or []):
+            _v = (_u.get("metrics") or {}).get(_size_key)
+            if _v is None:
+                continue
+            try:
+                unit_cells[str(_u.get("unit"))] = float(_v)
+            except (TypeError, ValueError):
+                pass
+
     # HOW MUCH NETWORK EACH UNIT CARRIES, drawn ONCE for the cohort rather than per contrast.
     # Every panel below shows where two arms differ and none of them says how much either arm
     # HAS, so a reader met a difference before meeting the totals it is a difference between.
@@ -470,7 +494,9 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
         _NP.unit_totals(CPan._Shim(figdir, name, "cohort", _cohort), per,
                         design=design, unit_axis=unit_axis or {},
                         unit_members=unit_members or {},
-                        weight_name=str(net.get("weight_name") or "weight"))
+                        weight_name=str(net.get("weight_name") or "weight"),
+                        unit_cells=unit_cells,
+                        size_name=str(net.get("size_name") or "observations"))
     except Exception:                                                     # noqa: BLE001
         _cohort = []
     # THE DECLARED CONTROLS REACH THE CONTRASTS, or the direction falls back to a
@@ -486,6 +512,7 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
                           # `native_plots` is a TOP-LEVEL plugin key, not a report key -
                           # reading it through report_get put a key in front of the checker
                           # that no declaration is allowed to carry there.
+                          controls=controls, unit_members=unit_members or {},
                           prefix=prefix, declared=(spec or {}).get("native_plots") or {})
 
     # THE TWO-SCALE TABLE, WRITTEN EVERY RUN. A result section quotes changes per element, and
@@ -496,7 +523,7 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
         _t = CPan.write_two_scale(
             per, design, pairs,
             Path(out_dir) / "kernels" / name / "tables" / f"{name}_two_scale.csv",
-            group_col=net.get("group"), weight="prob")
+            group_col=net.get("group"), weight="prob", unit_cells=unit_cells)
         if _t:
             print(f"  wrote {_t.name}: every contrast on both scales")
     except Exception as _err:                                             # noqa: BLE001
@@ -625,7 +652,8 @@ def _arm_appendix(name, content, plugin_arm_figs=()):
     return "".join(b)
 
 
-def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None,
+def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=None,
+                    unit_members=None, prefix=None,
                     declared=None):
     """Invoke a plugin's `compare(ctx)` once per arm pair, in the plugin's own environment.
 
@@ -769,17 +797,56 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None,
 
     _facs = _U.biological_factors(design or {})
     _cross = []
+    _rows = {}
     for _s in sorted(design or {}):
-        _g = _U.group_label((design or {}).get(_s), _facs) if _facs else None
+        _row = (design or {}).get(_s) or {}
+        _g = _U.group_label(_row, _facs) if _facs else None
         if _g and _g in udir and _g not in _cross:
             _cross.append(_g)
+            _rows[_g] = _row
+    # THE ORDER THE BARS ARE READ IN, and it was an accident of sample naming: the arms were
+    # taken in whatever order the sample names sorted, which put a perturbed arm first. An axis
+    # of arms reads from the control outward, so each factor's CONTROL level sorts first - the
+    # same rule that orders the contrasts themselves, applied one level down, and derived from
+    # the controls already declared rather than from any list of arm names.
+    from .design_panel import control_for as _cf
+
+    _ctrl = {}
+    for _f in _facs:
+        _lv = sorted({str((r or {}).get(_f, "")) for r in (design or {}).values()} - {""})
+        if len(_lv) >= 2:
+            _ctrl[_f] = _cf(_lv, declared=(controls or {}).get(_f))[0]
+    _cross.sort(key=lambda g: tuple(
+        (0 if str((_rows.get(g) or {}).get(f, "")) == _ctrl.get(f) else 1,
+         str((_rows.get(g) or {}).get(f, ""))) for f in _facs))
     if len(_cross) > 2:
         base = Path(out_dir)
         cdir = kdir / "compare" / _COHORT_COMPARE
+        # WHO IS INSIDE EACH ARM, AND WHAT EACH ONE CARRIES. An axis of four arm bars says
+        # nothing about whether the animals inside an arm agree, and on a real cohort one animal
+        # carried more of its arm's network than the whole of the opposite arm. The host already
+        # computes these totals for `unit_totals` from the plugin's declared `unit_network`, so
+        # handing them over costs nothing and keeps one arithmetic rather than two.
+        #
+        # An arm is ONE fit on its members' pooled cells and its members are separate fits, so
+        # these are not a decomposition and a plugin overlaying them must say so.
+        _mem = {u: [m for m in (unit_members or {}).get(u, []) if m in per] for u in _cross}
+        _vals = {}
+        for u in set(_cross) | {m for v in _mem.values() for m in v}:
+            df = per.get(u)
+            if df is None:
+                continue
+            try:
+                _vals[u] = {"edges": float(len(df)),
+                            "weight": float(df["prob"].astype(float).sum())}
+            except (KeyError, ValueError, TypeError):
+                _vals[u] = {"edges": float(len(df))}
         spec_json = {
             "pair": _COHORT_COMPARE,
             "units": {u: str((base / udir[u]) if not Path(udir[u]).is_absolute()
                              else Path(udir[u])) for u in _cross},
+            "members": _mem,
+            "unit_values": _vals,
             "out_dir": str(cdir),
         }
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
@@ -843,7 +910,8 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi):
     for f in sorted(figdir.glob("*.png")):
         fn = _NAT.function_for(declared, f.name)
         stem = f.stem[len("nativecmp_"):] if f.stem.startswith("nativecmp_") else f.stem
-        lead = (f"{label}: {stem.replace('_', ' ')}, drawn by "
+        lead = ((f"{label}: " if label else "")
+                + f"{stem.replace('_', ' ')}, drawn by "
                 + (f"the tool's own {fn}()." if fn else "the tool itself."))
         # THE DIRECTION IS THE FIRST THING A READER NEEDS and it is a positive statement, not a
         # caveat: it says what the picture shows. `lo` is the contrast's reference.

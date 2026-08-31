@@ -690,7 +690,8 @@ def contribution(ctx, edges, pops, group_col, member_col, *, fid="N7_contributio
 # --------------------------------------------------------------------------------------------
 
 def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, unit_members=None,
-                weight="prob", weight_name="weight", fid="P2_unit_totals", title=None):
+                weight="prob", weight_name="weight", unit_cells=None, size_name="observations",
+                fid="P2_unit_totals", title=None):
     """How much network each unit carries: edges, and total weight, per unit.
 
     THE FIRST QUESTION ABOUT A COMPARISON AND THE LAST ONE ANSWERED. Every panel in a between-arm
@@ -709,6 +710,14 @@ def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, unit_member
     differ - measured on one cohort, by a factor of 2.5 for the same arm - so the blocks are
     separated by a rule and the caption says so. This is the same fact `compare_panel.pool`
     exists to keep straight, drawn.
+
+    AND A PER-OBSERVATION SCALE BESIDE THE RAW ONE, where the plugin names its size metric. Both
+    quantities rise with the observations behind them - a permutation test has more power, and a
+    probability is computed over more of them - so an arm assembled from more samples can carry a
+    larger network with nothing biological behind it. Dividing does NOT remove that dependence,
+    which is rarely linear; it puts the arithmetic a reader would otherwise do in their head onto
+    the page, correctly, next to the raw number. It is a second scale, in the same sense as
+    `two_scale_table`, not a correction, and the caption says so.
 
     Nothing here knows what method produced the edges or what the weight means: the column names
     and the word for the quantity come from the plugin's own `unit_network` declaration.
@@ -765,11 +774,24 @@ def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, unit_member
     col = {v: cyc[i % len(cyc)] for i, v in enumerate(order)}
     bar_c = [col.get(lev.get(u, ""), "#B0B0B0") for u in units]
 
+    # THE SECOND SCALE, DRAWN ONLY WHERE THE SIZE IS KNOWN FOR EVERY UNIT. A per-observation
+    # panel with gaps in it invites a comparison between a normalised bar and a raw one.
+    _cells = {str(k): float(v) for k, v in (unit_cells or {}).items() if v}
+    per_obs = all(_cells.get(u) for u in units)
+    cols = [(n_edges, "edges"), (w_total, f"total {weight_name}")]
+    if per_obs:
+        k = 1000.0
+        cols += [([1.0 * e * k / _cells[u] for e, u in zip(n_edges, units)],
+                  f"edges per {k:,.0f} {size_name}"),
+                 ([1.0 * w * k / _cells[u] for w, u in zip(w_total, units)],
+                  f"{weight_name} per {k:,.0f} {size_name}")]
+
     y = list(range(len(units)))
-    fig, axes = plt.subplots(1, 2, figsize=(F.DOUBLE, max(2.4, 0.24 * len(units) + 1.2)),
+    fig, axes = plt.subplots(1, len(cols),
+                             figsize=(F.DOUBLE, max(2.4, 0.24 * len(units) + 1.2)),
                              layout="constrained", sharey=True)
-    for ax, vals, lab in ((axes[0], n_edges, "edges"),
-                          (axes[1], w_total, f"total {weight_name}")):
+    axes = list(axes) if len(cols) > 1 else [axes]
+    for ax, (vals, lab) in zip(axes, cols):
         ax.barh(y, vals, color=bar_c, height=0.72)
         ax.set_xlabel(lab, fontsize=7)
         ax.tick_params(labelsize=6)
@@ -779,8 +801,8 @@ def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, unit_member
     axes[0].invert_yaxis()
     if order:
         from matplotlib.patches import Patch
-        axes[1].legend(handles=[Patch(facecolor=col[v], label=f"{fac} = {v}") for v in order],
-                       fontsize=6, frameon=False, loc="lower right")
+        axes[-1].legend(handles=[Patch(facecolor=col[v], label=f"{fac} = {v}") for v in order],
+                        fontsize=6, frameon=False, loc="lower right")
     fig.suptitle(title or f"How much network each unit carries", fontsize=8)
 
     cap = (f"Edges and total {weight_name} per unit, for all {len(units)} of them: the size of "
@@ -793,7 +815,11 @@ def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, unit_member
            "two. The arm is the unit of inference; the samples beside it say whether the animals "
            "in an arm agree, and a thin arm is a fact about the experiment rather than a reason "
            "to withhold its comparison. Nothing here is a test: these are totals, with no "
-           "interval and no p-value.")
+           "interval and no p-value."
+           + (f" The right-hand panels divide by the {size_name} each fit used, which is a SECOND "
+              f"SCALE and not a correction: both quantities depend on that number in a way that "
+              f"is not linear, so dividing puts the arithmetic on the page rather than removing "
+              f"the dependence." if per_obs else ""))
     ctx.emit_figure(fid, fig, caption=cap)
     return True
 

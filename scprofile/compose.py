@@ -63,6 +63,10 @@ def _two_scale(run, plugin):
             "from": r.get("from"), "to": r.get("to"),
             "total_from": _f(r.get("total_from")), "total_to": _f(r.get("total_to")),
             "from_source": r.get("from_source", ""), "to_source": r.get("to_source", ""),
+            # THE DENOMINATOR EACH SIDE'S FIT USED, carried from the table rather than
+            # recomputed, so a ratio in this text and a bar in a panel are the same arithmetic.
+            "cells_from": _f(r.get("cells_from"), 0.0) or None,
+            "cells_to": _f(r.get("cells_to"), 0.0) or None,
             "elements": [], "only_from": [], "only_to": [], "disagree": 0, "n": 0})
         c["n"] += 1
         c["elements"].append((r["element"], _f(r.get("raw_delta"))))
@@ -131,6 +135,13 @@ def findings(run, plugin, spec=None):
             "source_table": str(ts_path.relative_to(Path(run))) if ts_path.is_file() else "",
             "source_stats": sig_rel or "",
             "from_source": c["from_source"], "to_source": c["to_source"],
+            # THE SAME RATIO ON A PER-OBSERVATION SCALE. A SECOND SCALE, NOT A CORRECTION: the
+            # dependence of a total on the observations behind it is not linear, so dividing puts
+            # the arithmetic on the page instead of removing it. Absent where the run did not
+            # record a size, and then simply not written.
+            "cells_reference": c["cells_from"], "cells_against": c["cells_to"],
+            "ratio_per_cell": ((tt / c["cells_to"]) / (tf / c["cells_from"]))
+            if (tf and tt and c["cells_from"] and c["cells_to"]) else None,
         }
     return out
 
@@ -391,14 +402,19 @@ def section(run, plugin, spec=None, design=None, run_key=""):
               f"**{by_size[-1]}** at **{_n(small['ratio'])}x**. Every difference below is measured "
               f"against that contrast's reference arm, and every number is read from a table in "
               f"run `{run_key or Path(run).name}`.", ""]
-        L += [f"| comparison | reference | {W} | elements differing | leading element |",
-              "|---|---|---|---|---|"]
+        _has_pc = any(f[l].get("ratio_per_cell") for l in ranked)
+        L += [f"| comparison | reference | {W} |"
+              + (" per observation |" if _has_pc else "")
+              + " elements differing | leading element |",
+              "|---|---|---|" + ("---|" if _has_pc else "") + "---|---|"]
         for l in ranked:
             d = f[l]
             lead = d["leading"][0][0] if d["leading"] else "—"
             sig = f"{d['n_significant']} of {d['n_tested']}" if d["n_tested"] else "not tested"
-            L += [f"| {_cell(l)} | {_cell(d['reference'])} | {_n(d['ratio'])}x | {sig} "
-                  f"| {_cell(lead)} |"]
+            L += [f"| {_cell(l)} | {_cell(d['reference'])} | {_n(d['ratio'])}x |"
+                  + ((f" {_n(d['ratio_per_cell'])}x |" if d.get("ratio_per_cell") else " — |")
+                     if _has_pc else "")
+                  + f" {sig} | {_cell(lead)} |"]
         L += [""]
     if alias:
         L += ["; ".join(f"In this design **{k}** varies together with {', '.join(sorted(v))} "
@@ -421,6 +437,13 @@ def section(run, plugin, spec=None, design=None, run_key=""):
                   f"{_n(d['total_reference'])} in the reference arm **{d['reference']}**, over "
                   f"{d['n_elements']} elements"
                   + _c(lab, "how_much_total", "who_changed") + "."]
+            if d.get("ratio_per_cell"):
+                # THE ARMS ARE NOT THE SAME SIZE AND THE READER IS TOLD SO HERE. Per contrast,
+                # because the sizes are - unlike the inference settings, which are a property of
+                # the run and are stated once at the top rather than under every comparison.
+                L += [f"The two arms were fitted on {_n(d['cells_against'], 0)} and "
+                      f"{_n(d['cells_reference'], 0)} cells, so on a per-cell scale the same "
+                      f"comparison is **{_n(d['ratio_per_cell'])}x**."]
         if d["n_tested"]:
             L += [f"**{d['n_significant']} of {d['n_tested']}** elements differ significantly "
                   f"between the arms by the method's own between-arm test"
@@ -477,11 +500,13 @@ def section(run, plugin, spec=None, design=None, run_key=""):
                   "none should be read into it.*", ""]
 
     L += ["## How this section was produced", "",
-          "Composed by the tool from this run's own tables, so it exists for every run and its "
-          "numbers cannot drift from the figures beside it. It states what was measured, in the "
-          "design's order, under the same labels the figure panel uses. It does not interpret: "
-          "an author who wants to say what the measurements mean edits this and passes it back "
-          "with `--section`, and that version replaces this one and is never overwritten.", ""]
+          "Every number above was read from a table in this run, by the tool, so the text and "
+          "the figures beside it cannot disagree and the section exists for every run. It is the "
+          "measured skeleton of a result. **The reading of it — what the changes mean, and what "
+          "they suggest — belongs in an authored version**, written against "
+          "`.claude/skills/result-section`, which may state findings and hypotheses in the "
+          "field's own language; pass it back with `--section` and it replaces this and is never "
+          "overwritten.", ""]
     return "\n".join(L)
 
 

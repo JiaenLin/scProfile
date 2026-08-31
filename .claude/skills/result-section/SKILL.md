@@ -24,11 +24,31 @@ all — the tool's own rule about scratch probes, broken on the manuscript itsel
 **If a number is not in the composed section or a run table, it does not go in the article.** Not
 because it is wrong — because a reader cannot open it.
 
-## What you are adding, and what you must not
+## What you are adding
 
 You are adding **reading**: what the measurements are about, in the language of the field, in the
-order the design gives. You are not adding numbers, tests, or conclusions the run does not
-support.
+order the design gives. **Write it as a research article, not as a report on a run.**
+
+### You may state findings, and you may state hypotheses
+
+*Standing instruction from the PI, 2026-08-31, replacing an earlier prohibition on "conclusions
+the run does not support" — that clause is why every section read as measurement with no reading
+of it, and why the manuscript sounded like a QC document.*
+
+Say what the result IS, in the field's own words. Name the biology. Where a pattern suggests a
+mechanism, say so. A hypothesis is a legitimate part of a results section and its absence is not
+caution, it is a section that stops before the interesting part.
+
+**The one thing required of a hypothesis is that it is legible as one.** The project's evidence
+rule permits interpretation and asks that it be labelled: a reader must be able to tell a measured
+number from a reading of it. "X is higher in the treated arm" and "this is consistent with Y"
+are both allowed; writing the second in the grammar of the first is not. That is a rule about
+GRAMMAR, not about permission - it costs a clause, and it is what lets everything else be said
+freely.
+
+**Numbers and tests are still the run's.** Interpretation is yours; arithmetic is not. Do not
+introduce a figure the run did not produce or a statistic it did not compute - see the next two
+sections, which are permissions rather than restrictions.
 
 ### Never downgrade or reject a finding
 
