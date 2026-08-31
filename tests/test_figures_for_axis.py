@@ -81,6 +81,21 @@ for m in re.finditer(r"if \(!?draw_figs\)([^\n]*)", run_block):
     if any(w in m.group(1) for w in ("computeCommunProb", "netAnalysis", "write")):
         FAILURES.append(f"the drawing flag gates computation: {m.group(0)[:90]}")
 
+# 6. IT MUST REACH THE PLUGIN'S OWN PANELS, NOT ONLY THE WRAPPED TOOL'S. The first version
+#    gated the R plots and nothing else, so ten Python-drawn panels per sample unit were still
+#    written, the per-sample page was still built, and the run reported a saving it had not made.
+#    Every shipped plugin emits through `emit_figure`, so that is where the setting belongs.
+pl = (ROOT / "scprofile" / "plugin.py").read_text()
+blk = pl[pl.index("def emit_figure("):]
+blk = blk[:blk.index("\n    def ", 1)]
+if "if not self.draw_figures:" not in blk:
+    FAILURES.append("emit_figure does not honour the setting, so a plugin's own panels are "
+                    "drawn whatever the run asked for - the half-fix that leaves the per-sample "
+                    "page standing")
+elif blk.index("if not self.draw_figures:") > blk.index('"figures" / f"{name}.png"'):
+    FAILURES.append("the guard sits after the file path is built, so the check happens too late "
+                    "to skip the work")
+
 if FAILURES:
     print("FAIL")
     for f in FAILURES:

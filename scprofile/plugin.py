@@ -720,6 +720,26 @@ class Context:
         RuntimeWarning at twenty, and the plugin that trips it is the one whose report has the
         most panels in it. `close=False` is there for the rare case of drawing on it again.
         """
+        # THE ONE PLACE A FIGURE IS WRITTEN, so the one place the run's figure setting applies.
+        #
+        # The first version of `--figures-for` reached only the wrapped tool's own plots, because
+        # that was where the drawing time obviously was. It left every panel a plugin draws
+        # ITSELF untouched - measured: ten per sample unit, a hundred images, and the per-sample
+        # page still built and still linked. Half a setting is worse than none, because the run
+        # reports the saving and the page it was supposed to remove is still there.
+        #
+        # Every one of the nine shipped plugins emits through this method, so gating it here is
+        # the whole of the fix and no plugin needs to know the setting exists. The panel is not
+        # RECORDED either: a figure that was not drawn must not appear in the manifest, or the
+        # report links a file that is not on disk.
+        if not self.draw_figures:
+            if close:
+                try:
+                    import matplotlib.pyplot as _plt
+                    _plt.close(fig)
+                except Exception:                                         # noqa: BLE001
+                    pass
+            return None
         png = self.out / "figures" / f"{name}.png"
         pdf = self.out / "figures" / f"{name}.pdf"
         self._stamp_provenance(fig)
