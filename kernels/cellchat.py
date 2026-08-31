@@ -827,9 +827,25 @@ if (!identical(normalizePath(store, mustWork = FALSE),
 figdir <- file.path(dirname(dirname(out)), "figures")
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 .plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
-npng <- function(name, expr, w = 1800, h = 1500, res = 200) {
+.caps <- new.env(); .caps$rows <- list()
+.legend <- function(fname, text, by) {
+  if (!nzchar(text)) return(invisible(NULL))
+  .caps$rows[[length(.caps$rows) + 1L]] <-
+    list(file = fname, caption = text, drawn_by = by)
+  invisible(NULL)
+}
+.write_captions <- function() {
+  if (!length(.caps$rows)) return(invisible(NULL))
+  d <- do.call(rbind, lapply(.caps$rows, function(r) as.data.frame(r, stringsAsFactors = FALSE)))
+  utils::write.table(d, file.path(figdir, "captions.tsv"),
+                     sep = "\t", row.names = FALSE, quote = FALSE)
+  cat("wrote", nrow(d), "figure legend(s)\n")
+}
+
+npng <- function(name, expr, w = 1800, h = 1500, res = 200, legend = "", by = "tool") {
   if (!draw_figs && !(name %in% profile_plots)) return(invisible(NULL))
   path <- file.path(figdir, paste0("native_", name, ".png"))
+  .legend(basename(path), legend, by)
   ok <- tryCatch({
     grDevices::png(path, width = w, height = h, res = res)
     on.exit(grDevices::dev.off(), add = TRUE)
@@ -843,9 +859,10 @@ npng <- function(name, expr, w = 1800, h = 1500, res = 200) {
 # Some CellChat functions DRAW rather than return - a base-graphics network, a ComplexHeatmap
 # object, a function whose value is NULL. `print` on those prints nothing or errors, so this
 # second wrapper evaluates for the side effect instead.
-ndev <- function(name, expr, w = 1800, h = 1500, res = 200) {
+ndev <- function(name, expr, w = 1800, h = 1500, res = 200, legend = "", by = "tool") {
   if (!draw_figs && !(name %in% profile_plots)) return(invisible(NULL))
   path <- file.path(figdir, paste0("native_", name, ".png"))
+  .legend(basename(path), legend, by)
   ok <- tryCatch({
     grDevices::png(path, width = w, height = h, res = res)
     on.exit(grDevices::dev.off(), add = TRUE)
@@ -1046,6 +1063,7 @@ try_write("net_embedding", {
 # fall off the front, and a caller that shows any tail at all shows this.
 mark("drawing")
 if (!draw_figs) cat("per-unit figures not requested for this unit's axis; none drawn\n")
+.write_captions()
 cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
     if (length(.plots$bad)) paste0("(", paste(.plots$bad, collapse = ", "), ")") else "", "\n")
 cat("PHASE SECONDS:",
@@ -3514,8 +3532,24 @@ mark("align and merge")
 cat("merged:", name_a, "and", name_b, "\n")
 
 .plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
-npng <- function(nm, expr, w = 2000, h = 1600, res = 200) {
+.caps <- new.env(); .caps$rows <- list()
+.legend <- function(fname, text, by) {
+  if (!nzchar(text)) return(invisible(NULL))
+  .caps$rows[[length(.caps$rows) + 1L]] <-
+    list(file = fname, caption = text, drawn_by = by)
+  invisible(NULL)
+}
+.write_captions <- function() {
+  if (!length(.caps$rows)) return(invisible(NULL))
+  d <- do.call(rbind, lapply(.caps$rows, function(r) as.data.frame(r, stringsAsFactors = FALSE)))
+  utils::write.table(d, file.path(figdir, "captions.tsv"),
+                     sep = "\t", row.names = FALSE, quote = FALSE)
+  cat("wrote", nrow(d), "figure legend(s)\n")
+}
+
+npng <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "tool") {
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
+  .legend(basename(path), legend, by)
   ok <- tryCatch({
     grDevices::png(path, width = w, height = h, res = res)
     on.exit(grDevices::dev.off(), add = TRUE)
@@ -3527,8 +3561,9 @@ npng <- function(nm, expr, w = 2000, h = 1600, res = 200) {
 # Some CellChat functions DRAW rather than return - a base-graphics circle, a ComplexHeatmap
 # object that must be `draw`n. `print` on those either errors or prints nothing, so a second
 # wrapper evaluates for its side effect instead of printing.
-ndev <- function(nm, expr, w = 2000, h = 1600, res = 200) {
+ndev <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "tool") {
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
+  .legend(basename(path), legend, by)
   ok <- tryCatch({
     grDevices::png(path, width = w, height = h, res = res)
     on.exit(grDevices::dev.off(), add = TRUE)
@@ -3796,6 +3831,7 @@ for (pw in head(paths, 6)) {
 # unit of a whole run with no file, no log line and no non-zero exit. A count at the end cannot
 # fall off the front, and a caller that shows any tail at all shows this.
 mark("drawing")
+.write_captions()
 cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
     if (length(.plots$bad)) paste0("(", paste(.plots$bad, collapse = ", "), ")") else "", "\n")
 cat("PHASE SECONDS:",
@@ -3841,8 +3877,24 @@ cat("populations per arm:",
 m <- mergeCellChat(objs, add.names = nms)
 
 .plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
-npng <- function(nm, expr, w = 2000, h = 1300, res = 200) {
+.caps <- new.env(); .caps$rows <- list()
+.legend <- function(fname, text, by) {
+  if (!nzchar(text)) return(invisible(NULL))
+  .caps$rows[[length(.caps$rows) + 1L]] <-
+    list(file = fname, caption = text, drawn_by = by)
+  invisible(NULL)
+}
+.write_captions <- function() {
+  if (!length(.caps$rows)) return(invisible(NULL))
+  d <- do.call(rbind, lapply(.caps$rows, function(r) as.data.frame(r, stringsAsFactors = FALSE)))
+  utils::write.table(d, file.path(figdir, "captions.tsv"),
+                     sep = "\t", row.names = FALSE, quote = FALSE)
+  cat("wrote", nrow(d), "figure legend(s)\n")
+}
+
+npng <- function(nm, expr, w = 2000, h = 1300, res = 200, legend = "", by = "tool") {
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
+  .legend(basename(path), legend, by)
   ok <- tryCatch({
     grDevices::png(path, width = w, height = h, res = res)
     on.exit(grDevices::dev.off(), add = TRUE)
@@ -3856,8 +3908,9 @@ npng <- function(nm, expr, w = 2000, h = 1300, res = 200) {
 # with only `npng` and then called `ndev` for the interaction heatmaps - "could not find function
 # ndev" halted the whole framing loop after the first framing's scatter plots, so one framing of
 # two was drawn and neither heatmap was. The sibling script had both wrappers; this one had one.
-ndev <- function(nm, expr, w = 2000, h = 1600, res = 200) {
+ndev <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "tool") {
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
+  .legend(basename(path), legend, by)
   ok <- tryCatch({
     grDevices::png(path, width = w, height = h, res = res)
     on.exit(grDevices::dev.off(), add = TRUE)
@@ -3905,7 +3958,15 @@ for (ms in c("count", "weight")) {
                            x.lab.rot = TRUE)
   if (!is.null(smp) && ms %in% names(smp))
     g <- .points(g, smp, suppressWarnings(as.numeric(smp[[ms]])))
-  npng(paste0("compareInteractions_", ms), g, w = max(1500, 340 * length(objs)), h = 1300)
+  npng(paste0("compareInteractions_", ms), g, w = max(1500, 340 * length(objs)), h = 1300,
+       legend = paste0("Total ", if (ms == "count") "number of inferred interactions"
+                       else "interaction strength",
+                       " in each arm the design crosses, one bar per arm, from one fit on that ",
+                       "arm's pooled cells. Open points are the individual samples inside each ",
+                       "arm, each its OWN separate fit: the bar is not their sum or their mean, ",
+                       "and on this cohort an arm's fit finds fewer interactions than its ",
+                       "samples do separately. Nothing here is tested; these are totals with no ",
+                       "interval."))
 
   # 2. AND THE SAME NUMBERS PER THOUSAND CELLS.
   #
@@ -3950,7 +4011,14 @@ for (ms in c("count", "weight")) {
         }
       }
       npng(paste0("compareInteractions_", ms, "_per1k"), gg,
-           w = max(1500, 340 * length(objs)), h = 1300)
+           w = max(1500, 340 * length(objs)), h = 1300, by = "plugin",
+           legend = paste0("The same totals divided by the cells each fit used, per 1,000 cells. ",
+                           "A SECOND SCALE, NOT A CORRECTION: the quantity does not rise linearly ",
+                           "with cell number, so dividing puts the arithmetic on the page rather ",
+                           "than removing the dependence. Each point is one sample divided by ITS ",
+                           "OWN cells. A pooled arm and a single sample are not comparable on this ",
+                           "scale - a smaller fit finds proportionally more - so read the points ",
+                           "against each other, not against the bar."))
       cat("drew", ms, "per 1,000 cells over", nrow(d), "arm(s)\n")
     } else {
       cat("no cell counts for these arms; the per-1,000-cell panel is not drawn\n")
@@ -4110,7 +4178,16 @@ if (!is.null(inter) && nrow(inter)) {
                                         "response is larger in ", st[1], "; below it, larger in ",
                                         st[2], ", which is the control.")) +
         ggplot2::theme_classic()
-    }, w = 2000, h = 1900)
+    }, w = 2000, h = 1900, by = "plugin",
+       legend = paste0("Does the ", fac, " response depend on ",
+                       as.character(rows$stratum_factor[1]), "? One point per signalling pathway. ",
+                       "The vertical axis is the ", eff_lbl, " within ", st[1],
+                       "; the horizontal axis is the same response within ", st[2],
+                       ", which is the control. The dashed line is NO interaction - an identical ",
+                       "response in both strata - so a point's distance from it IS the ",
+                       "interaction, and points ABOVE it respond more in ", st[1],
+                       ". Every value is rankNet's own per-pathway contribution; the method ",
+                       "provides no test for a difference of two differences and none is claimed."))
 
     # the multiplicative companion, on the pathways where all four arms hold something
     pos <- both[both$ref.1 > 0 & both$agn.1 > 0 & both$ref.2 > 0 & both$agn.2 > 0, , drop = FALSE]
@@ -4137,7 +4214,15 @@ if (!is.null(inter) && nrow(inter)) {
                         subtitle = paste0(nrow(pos), " of ", nrow(both), " pathways; the rest ",
                                           "are absent from an arm and have no fold change")) +
           ggplot2::theme_classic()
-      }, w = 2000, h = 1900)
+      }, w = 2000, h = 1900, by = "plugin",
+         legend = paste0("The same question on the MULTIPLICATIVE scale: log2 fold ", eff_lbl,
+                         " within ", st[1], " against the same within ", st[2],
+                         ", the control. Here no interaction means the same FOLD change in both ",
+                         "strata rather than the same absolute change, which is a different ",
+                         "question and can rank pathways differently. Drawn only on the ",
+                         nrow(pos), " of ", nrow(both), " pathways present in all four arms; the ",
+                         "rest are absent from one and have no fold change, which is why this ",
+                         "panel never appears without the additive one beside it."))
     } else {
       cat("too few pathways present in all four arms for the multiplicative panel:", fr, "\n")
     }
@@ -4188,7 +4273,18 @@ if (!is.null(inter) && nrow(inter)) {
           column_title_gp = grid::gpar(fontsize = 9)),
           column_title = "Targets (Receiver)", column_title_side = "bottom",
           column_title_gp = grid::gpar(fontsize = 10))
-      }, w = 2200, h = 1900)
+      }, w = 2200, h = 1900, by = "plugin",
+         legend = paste0("Does the ", fac, " response depend on ",
+                         as.character(rows$stratum_factor[1]), "?  Per ordered population pair, ",
+                         "for ", ms, ": the ", eff_lbl, " within ", st[1],
+                         " minus the same response within ", st[2], ", which is the control. ",
+                         "RED means the ", fac, " response is LARGER in ", st[1],
+                         "; BLUE means larger in ", st[2],
+                         "; WHITE means the same response in both, which is NO interaction and ",
+                         "not an absence of signalling. Rows are senders, columns are receivers. ",
+                         "Drawn on the ", nrow(M), " populations present in every arm, which is ",
+                         "fewer than the two-arm panels carry. Values are the merged object's ",
+                         "own matrices; no test applies to a difference of two differences."))
     }
     cat("interaction drawn for framing:", fr, "over", nrow(both), "pathway(s)\n")
   }
@@ -4196,6 +4292,7 @@ if (!is.null(inter) && nrow(inter)) {
   cat("the design supports no interaction here; none drawn\n")
 }
 
+.write_captions()
 cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
     if (length(.plots$bad)) paste0("(", paste(.plots$bad, collapse = ", "), ")") else "", "\n")
 """

@@ -70,9 +70,12 @@ check("draw_figs <- " in ck, "the embedded R never parses the flag")
 # MATCHED ON THE PROPERTY, NOT THE SPELLING - for the third time in this file's history. The
 # literal was checked twice before and broke twice when the guard gained a capability; what
 # matters is that BOTH plot wrappers consult the flag and that both allow the profile exception.
-_wrappers = ck.count("return(invisible(NULL))")
-check(_wrappers == 2,
-      f"expected an early return in exactly the two plot wrappers, found {_wrappers}")
+# SCOPED TO THE GUARD ITSELF, not to a return statement. Counting `return(invisible(NULL))`
+# across the whole file caught every other helper that returns early - a check that breaks when
+# an unrelated helper is added is measuring the wrong thing, for the fourth time in this file.
+_guards = ck.count("if (!draw_figs && !(name %in% profile_plots))")
+check(_guards == 2,
+      f"expected the drawing guard in exactly the two per-unit plot wrappers, found {_guards}")
 check(ck.count("!draw_figs") >= 2,
       "a plot wrapper does not consult the drawing flag at all")
 check(ck.count("profile_plots") >= 3,

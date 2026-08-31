@@ -960,13 +960,27 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi):
                       "compared, so both arms were restricted to the populations they share "
                       "and it is not in the panels on this page. It is in that arm's own "
                       "panels, and in this contrast's alignment file.")
+    # THE LEGEND, WHERE ONE WAS WRITTEN. Whatever drew a figure knows what it shows; the host
+    # knows only which function produced the file. Deriving a caption from the filename produced
+    # "interaction flow age response by diet, drawn by the tool itself" - which is a filename,
+    # and whose last clause is FALSE for a panel the plugin drew from the tool's numbers. The
+    # fallback stays for anything undescribed, so a plugin that has not been changed is unaffected.
+    from . import captions as _CAP
+
+    _legends = _CAP.read(figdir)
     out = []
     for f in sorted(figdir.glob("*.png")):
         fn = _NAT.function_for(declared, f.name)
         stem = f.stem[len("nativecmp_"):] if f.stem.startswith("nativecmp_") else f.stem
-        lead = ((f"{label}: " if label else "")
-                + f"{stem.replace('_', ' ')}, drawn by "
-                + (f"the tool's own {fn}()." if fn else "the tool itself."))
+        _leg = _legends.get(f.name) or {}
+        if _leg.get("caption"):
+            _prov = _CAP.provenance(_leg.get("drawn_by"), fn)
+            lead = ((f"{label}: " if label else "") + _leg["caption"]
+                    + (f" {_prov}" if _prov else ""))
+        else:
+            lead = ((f"{label}: " if label else "")
+                    + f"{stem.replace('_', ' ')}, drawn by "
+                    + (f"the tool's own {fn}()." if fn else "the tool itself."))
         # THE DIRECTION IS THE FIRST THING A READER NEEDS and it is a positive statement, not a
         # caveat: it says what the picture shows. `lo` is the contrast's reference.
         # THE ALIGNMENT SENTENCE BELONGS ONLY ON A PANEL THAT HAS A POPULATION AXIS. It was
@@ -1584,6 +1598,7 @@ def _native_unit_panels(out_dir, name, declared, axis):
     lands, and inverting that names the function behind a file. A plugin that declares nothing
     gets nothing, which is correct - a file whose origin cannot be named must not reach a page.
     """
+    from . import captions as _CAP
     from . import native as _NAT
 
     if not declared:
@@ -1593,16 +1608,20 @@ def _native_unit_panels(out_dir, name, declared, axis):
         d = Path(out_dir) / "kernels" / name / str(unit) / "figures"
         if not d.is_dir():
             continue
+        legends = _CAP.read(d)
         for f in sorted(d.glob("*.png")):
             fn = _NAT.function_for(declared, f.name)
             if not fn:
                 continue                  # not the tool's, or not declared: not ours to place
             stem = f.stem[len("native_"):] if f.stem.startswith("native_") else f.stem
+            leg = legends.get(f.name) or {}
+            body = leg.get("caption") or f"{stem.replace('_', ' ')}"
+            prov = _CAP.provenance(leg.get("drawn_by") or "tool", fn)
             out.append({
                 "id": f.stem, "unit": str(unit),
                 "path": str(f.relative_to(Path(out_dir))),
                 "native_function": fn,
-                "caption": f"[{unit}] {stem.replace('_', ' ')}, drawn by the tool's own {fn}(). "
+                "caption": f"[{unit}] {body} {prov} "
                            f"This panel describes {unit} alone and is not a comparison.",
             })
     return out
