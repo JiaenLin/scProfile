@@ -1517,6 +1517,43 @@ def _overview_block(payload, *, plugin=None, by_arm=None):
                 "through the per-unit measures it declared.</p>")
     return out
 
+def _native_unit_panels(out_dir, name, declared, axis):
+    """[{id, unit, path, caption}] for the per-unit figures the WRAPPED TOOL wrote.
+
+    THESE WERE DRAWN AND PLACED NOWHERE. A plugin's own panels arrive through its payload, but the
+    figures the wrapped tool writes go straight to disk from another interpreter and are recorded
+    by nothing - measured on a real run, 192 of them, on no page, in no manifest, cited by nothing.
+    The comparison phase had already learned this lesson and discovers its panels the same way;
+    the per-unit half had not.
+
+    Discovery is by the plugin's OWN declaration: `native_plots` says where each function's output
+    lands, and inverting that names the function behind a file. A plugin that declares nothing
+    gets nothing, which is correct - a file whose origin cannot be named must not reach a page.
+    """
+    from . import native as _NAT
+
+    if not declared:
+        return []
+    out = []
+    for unit in sorted(axis or {}):
+        d = Path(out_dir) / "kernels" / name / str(unit) / "figures"
+        if not d.is_dir():
+            continue
+        for f in sorted(d.glob("*.png")):
+            fn = _NAT.function_for(declared, f.name)
+            if not fn:
+                continue                  # not the tool's, or not declared: not ours to place
+            stem = f.stem[len("native_"):] if f.stem.startswith("native_") else f.stem
+            out.append({
+                "id": f.stem, "unit": str(unit),
+                "path": str(f.relative_to(Path(out_dir))),
+                "native_function": fn,
+                "caption": f"[{unit}] {stem.replace('_', ' ')}, drawn by the tool's own {fn}(). "
+                           f"This panel describes {unit} alone and is not a comparison.",
+            })
+    return out
+
+
 def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, prefix=None,
                  spec=None, constraint="", binds=(), by_arm=None, aware=False,
                  concordance=(), payload_all=None):
@@ -1678,7 +1715,14 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # panels are not comparable with each other even in principle. Nothing is deleted: every
     # panel is still rendered, on its own page, one click away.
     per_unit_extra = ""
-    figs_all = p.get("figures") or []
+    figs_all = list(p.get("figures") or [])
+    # AND THE PANELS THE WRAPPED TOOL DREW ITSELF, which reach the payload through nothing. See
+    # `_native_unit_panels`: they were on disk and on no page.
+    _decl_native = (p.get("spec") or {}).get("native_plots") or {}
+    _native_units = _native_unit_panels(out_dir, name,
+                                        _decl_native,
+                                        (payload_all or {}).get("unit_axis") or {})
+    figs_all += _native_units
     # AN ARM IS NOT AN ANIMAL, AND THEY WERE ROUTED TO THE SAME PAGE. Both carry a `unit`, so a
     # single truthiness test sent a plugin's four pooled-arm panels into an appendix titled "per
     # sample", interleaved with ten single-animal panels and nothing distinguishing them. The
@@ -1710,9 +1754,16 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
             return False
     _prof_ids = {str(f.get("id")) for f in (_D.report_get(spec, "figures") or [])
                  if f.get("profile") and f.get("id")}
-    arm_figs = [f for f in figs_all if f.get("unit") and _is_group(f)]
+    # AND THE WRAPPED TOOL'S OWN, marked the same way in its own declaration block. The profile
+    # page should show what the METHOD draws, not what the host reimplements: where a tool ships
+    # a per-unit plot for the same question, that is the panel a reader should meet.
+    _prof_fns = {fn for fn, rec in (_decl_native or {}).items() if (rec or {}).get("profile")}
+    arm_figs = [f for f in figs_all if f.get("unit") and _is_group(f)
+                and str(f.get("id")) not in _prof_ids
+                and str(f.get("native_function") or "") not in _prof_fns]
     per_unit_figs = [f for f in figs_all if f.get("unit") and not _is_group(f)
-                     and str(f.get("id")) not in _prof_ids]
+                     and str(f.get("id")) not in _prof_ids
+                     and str(f.get("native_function") or "") not in _prof_fns]
     cohort_figs = [f for f in figs_all if not f.get("unit")]
     if cohort_figs:
         body.append(_figure_section(cohort_figs, spec))
@@ -1742,8 +1793,10 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # unit, group and sample alike, and nothing comparative. Three per unit here. A plugin that
     # marks none gets no page, which is the honest outcome rather than a page of whatever was
     # lying around.
-    _prof = [f for f in figs_all if f.get("unit") and str(f.get("id")) in _prof_ids] \
-        if _prof_ids else []
+    _prof = [f for f in figs_all if f.get("unit")
+             and (str(f.get("id")) in _prof_ids
+                  or str(f.get("native_function") or "") in _prof_fns)] \
+        if (_prof_ids or _prof_fns) else []
     if _prof:
         _by_unit = {}
         for f in _prof:

@@ -67,9 +67,17 @@ check("--figures-for" in cli, "there is no way to ask for this on the command li
 ck = (ROOT / "kernels" / "cellchat.py").read_text()
 check("ctx.draw_figures" in ck, "the plugin never asks whether figures are wanted")
 check("draw_figs <- " in ck, "the embedded R never parses the flag")
-check(ck.count("if (!draw_figs) return(invisible(NULL))") == 2,
-      f"expected the guard in exactly the two plot wrappers, found "
-      f"{ck.count('if (!draw_figs) return(invisible(NULL))')}")
+# MATCHED ON THE PROPERTY, NOT THE SPELLING - for the third time in this file's history. The
+# literal was checked twice before and broke twice when the guard gained a capability; what
+# matters is that BOTH plot wrappers consult the flag and that both allow the profile exception.
+_wrappers = ck.count("return(invisible(NULL))")
+check(_wrappers == 2,
+      f"expected an early return in exactly the two plot wrappers, found {_wrappers}")
+check(ck.count("!draw_figs") >= 2,
+      "a plot wrapper does not consult the drawing flag at all")
+check(ck.count("profile_plots") >= 3,
+      "the R guard has no profile exception, so the profile page loses the units whose full "
+      "figure set the run switched off - a page with holes in exactly what it describes")
 run_block = ck[ck.index("_R_RUN"):]
 run_block = run_block[:run_block.index("_R_COMPARE")] if "_R_COMPARE" in run_block else run_block
 for line in run_block.splitlines():
@@ -122,6 +130,38 @@ for bad in ("F8_pathway_rank", "F4_network", "F6_signaling_roles"):
     if bad in rep:
         FAILURES.append(f"report.py names the figure {bad!r}, which belongs to one plugin - the "
                         f"profile page must be built from what plugins DECLARE")
+
+# 9. THE TWO HALVES OF THE PROFILE DECLARATION MUST AGREE. The plugin marks FUNCTIONS in its
+#    declaration, for the host to build the page from, and names PLOTS for its own R guard. A
+#    name in one that no longer resolves to the other produces a page with holes in it and no
+#    error anywhere - so the link is checked, through the same inversion the captions use.
+sys.path.insert(0, str(ROOT))
+from scprofile import native as _NAT                                      # noqa: E402
+from scprofile.kernels import discover                                    # noqa: E402
+
+for _n, _k in sorted(discover().items()):
+    _sp = getattr(_k, "spec", None) or {}
+    _decl = _sp.get("native_plots") or {}
+    _marked = {fn for fn, rec in _decl.items() if (rec or {}).get("profile")}
+    # READ FROM THE SOURCE, not by importing: a plugin runs in its own interpreter and may not
+    # import in the host's - which is the whole reason the declaration is data rather than code.
+    _plots = ()
+    _src = Path(getattr(_k, "path", "") or "")
+    if _src.is_file():
+        _m = re.search(r"_PROFILE_PLOTS\s*=\s*\(([^)]*)\)", _src.read_text(encoding="utf-8"))
+        if _m:
+            _plots = tuple(x.strip().strip('"\'') for x in _m.group(1).split(",") if x.strip())
+    if not (_marked or _plots):
+        continue
+    check(bool(_marked) and bool(_plots),
+          f"{_n} declares one half of the profile set and not the other "
+          f"(functions: {sorted(_marked)}, plots: {list(_plots)})")
+    for _pl in _plots:
+        _fn = _NAT.function_for(_decl, f"native_{_pl}.png")
+        check(_fn in _marked,
+              f"{_n}: the profile plot {_pl!r} resolves to {_fn!r}, which is not marked "
+              f"`profile` in native_plots - the guard and the page disagree about what the "
+              f"profile is")
 
 if FAILURES:
     print("FAIL")

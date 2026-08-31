@@ -317,8 +317,16 @@ PLUGIN = {
         "rankNet": {"use": "tables/cellchat_rank_net.csv per unit (return.data), and figures/nativecmp_rankNet_{stacked,unstacked}.png per arm pair - CellChat's comparison mode"},
         "netVisual_circle": {"use": "figures/native_circle_count.png and native_circle_weight.png"},
         "netVisual_heatmap": {"use": "figures/native_heatmap_{count,weight}.png per unit, and figures/nativecmp_diff_heatmap_{count,weight}.png per arm pair"},
-        "netAnalysis_signalingRole_scatter": {"use": "figures/native_signalingRole_scatter.png per unit, and figures/nativecmp_signalingRole_scatter_pair.png - both arms on one shared range"},
-        "netAnalysis_signalingRole_heatmap": {"use": "figures/native_signalingRole_heatmap_{out,in}.png per unit, and figures/nativecmp_signalingRole_heatmap_<pattern>.png - both arms, shared maximum"},
+        # `profile: True` MARKS THE PANELS THAT DESCRIBE ONE UNIT ON ITS OWN, for the profile
+        # page. These are the tool's own plots, not the host's reimplementations of them: where
+        # CellChat ships a per-unit figure for the same question, that is what a reader should
+        # meet. Three per unit - which programmes are active and who sends and receives them,
+        # and where each population sits as sender against receiver. More than that and the page
+        # becomes the appendix it replaces.
+        "netAnalysis_signalingRole_scatter": {"use": "figures/native_signalingRole_scatter.png per unit, and figures/nativecmp_signalingRole_scatter_pair.png - both arms on one shared range",
+                                              "profile": True},
+        "netAnalysis_signalingRole_heatmap": {"use": "figures/native_signalingRole_heatmap_{out,in}.png per unit, and figures/nativecmp_signalingRole_heatmap_<pattern>.png - both arms, shared maximum",
+                                              "profile": True},
         "netVisual_bubble": {"use": "figures/native_bubble.png per unit; figures/nativecmp_bubble_comparison.png - every enriched pair, both arms; and figures/nativecmp_bubble_focused.png - the same function on the pathways carrying the most flow, which is the overview at a density a reader can use"},
         "identifyCommunicationPatterns": {"use": "figures/native_patterns_{outgoing,incoming}.png"},
         "rankSimilarity": {"use": "figures/nativecmp_rankSimilarity_functional.png, per arm pair"},
@@ -485,10 +493,10 @@ PLUGIN = {
                             "nothing below has been placed against the permutation floor and any "
                             "ranking rests on the communication probability alone. The run's "
                             "caveats say which of the three it was."},
-            {"id": "F4_network", "shows": "result", "profile": True, "required": True,
+            {"id": "F4_network", "shows": "result", "required": True,
              "question": "which populations are inferred to signal to which?",
              "source": "figures/F4_network.csv"},
-            {"id": "F6_signaling_roles", "shows": "result", "profile": True, "required": False,
+            {"id": "F6_signaling_roles", "shows": "result", "required": False,
              "question": "which populations are net senders and which are net receivers?",
              "source": "figures/F6_signaling_roles.csv",
              "when_absent": "no population carried any outgoing or incoming probability, so "
@@ -500,7 +508,7 @@ PLUGIN = {
              "when_absent": "fewer than two pathways carried a non-zero network, so a "
                             "pathway-by-population panel would be a single row. The edge list "
                             "still carries whatever was returned."},
-            {"id": "F8_pathway_rank", "shows": "result", "profile": True, "required": False,
+            {"id": "F8_pathway_rank", "shows": "result", "required": False,
              "question": "which pathways carry the most inferred signal in this unit?",
              "source": "figures/F8_pathway_rank.csv",
              "when_absent": "the returned table carries no `pathway_name` column, or every "
@@ -662,6 +670,9 @@ cache_dir <- if (length(args) >= 11 && nzchar(args[11])) args[11] else ""
 # args[12]. Whether to draw this unit's own panels at all. Everything else in this script runs
 # either way: the inference, the tables, the saved object and the phase clock.
 draw_figs <- !(length(args) >= 12 && identical(toupper(args[12]), "FALSE"))
+# args[13]. Plots drawn on every unit whatever `draw_figs` says - the profile set.
+profile_plots <- if (length(args) >= 13 && nzchar(args[13]))
+  strsplit(args[13], ";", fixed = TRUE)[[1]] else character(0)
 
 # A PHASE CLOCK, DEFINED AT THE TOP BECAUSE R DOES NOT HOIST. Twice the cost of a round has
 # been diagnosed by assumption and been wrong: the inference was assumed dominant and was not,
@@ -814,7 +825,7 @@ figdir <- file.path(dirname(dirname(out)), "figures")
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 .plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
 npng <- function(name, expr, w = 1800, h = 1500, res = 200) {
-  if (!draw_figs) return(invisible(NULL))
+  if (!draw_figs && !(name %in% profile_plots)) return(invisible(NULL))
   path <- file.path(figdir, paste0("native_", name, ".png"))
   ok <- tryCatch({
     grDevices::png(path, width = w, height = h, res = res)
@@ -830,7 +841,7 @@ npng <- function(name, expr, w = 1800, h = 1500, res = 200) {
 # object, a function whose value is NULL. `print` on those prints nothing or errors, so this
 # second wrapper evaluates for the side effect instead.
 ndev <- function(name, expr, w = 1800, h = 1500, res = 200) {
-  if (!draw_figs) return(invisible(NULL))
+  if (!draw_figs && !(name %in% profile_plots)) return(invisible(NULL))
   path <- file.path(figdir, paste0("native_", name, ".png"))
   ok <- tryCatch({
     grDevices::png(path, width = w, height = h, res = res)
@@ -2994,11 +3005,14 @@ def run(ctx):
     # args[12] is whether this unit's own panels are wanted. The HOST decides: which unit axes
     # are worth drawing is a property of the run and not of the method, and the plugin only
     # honours it. Inference, tables and the saved object are unaffected either way.
+    # args[13] names the plots drawn on every unit whatever the figure setting says. The profile
+    # page is built from them and a page missing the units it describes is worse than no page.
     argv = [rscript, str(script), str(mtx), str(meta), db,
             str(C["min_cells"]), str(C["trim"]), str(edges_f),
             str(C["type"]), "TRUE" if C["population_size"] else "FALSE",
             str(C["nboot"]), str(C["thresh"]), str(cache or ""),
-            "TRUE" if ctx.draw_figures else "FALSE"]
+            "TRUE" if ctx.draw_figures else "FALSE",
+            _PROFILE_SEP.join(_PROFILE_PLOTS)]
     ctx.log(f"handing {A.n_obs:,} cells x {A.n_vars:,} genes to {db} via {rscript}")
     ctx.log(f"  type={C['type']} trim={C['trim']} population.size={C['population_size']} "
             f"nboot={C['nboot']} thresh={C['thresh']} min.cells={C['min_cells']}")
@@ -3855,6 +3869,19 @@ for (ms in c("count", "weight")) {
 cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
     if (length(.plots$bad)) paste0("(", paste(.plots$bad, collapse = ", "), ")") else "", "\n")
 """
+
+#: The per-unit plot names that make up the PROFILE, as `npng`/`ndev` are called with them.
+#: These correspond to the `native_plots` entries marked `profile: True`; `tests/` checks the two
+#: agree, because a name here that no longer matches a marked function would quietly produce a
+#: page with holes in it.
+_PROFILE_PLOTS = ("signalingRole_scatter", "signalingRole_heatmap_out", "signalingRole_heatmap_in")
+
+#: SEMICOLON AND NOT A COMMA. A comma inside the string literal that joins these was counted as
+#: an argument separator by the guard that checks the caller and the R script agree on how many
+#: arguments there are - so the list read as one argument longer than it is. The job layer chose
+#: semicolons for the same reason when `-v` split a control list on its commas.
+_PROFILE_SEP = ";"
+
 
 def _RS(ctx):
     """The R interpreter to run. `ctx.params` may name one; otherwise whatever is on PATH."""
