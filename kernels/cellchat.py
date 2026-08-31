@@ -732,6 +732,11 @@ if (file.exists(rds) && file.exists(stampf) &&
   cc <- tryCatch({ v <- readRDS(rds); cat("reusing the saved CellChat object; inference skipped\n"); v },
                  error = function(e) { cat("saved object unreadable:", conditionMessage(e), "\n"); NULL })
 }
+# WAS IT LOADED, OR IS IT ABOUT TO BE COMPUTED? The save below needs to know, because re-writing
+# a file that was just read from that same path is pure cost - and worse than cost, it moves the
+# object's mtime forward, which makes a cached input look NEWER than the artifacts legitimately
+# derived from it. The matrix store beside this one already declines the rewrite and says so.
+.from_cache <- !is.null(cc)
 
 if (is.null(cc)) {
 cc <- createCellChat(object = X, meta = meta, group.by = "label")
@@ -789,17 +794,25 @@ cc <- netAnalysis_computeCentrality(cc, slot.name = "netP")
 # exactly what it had. And the stamp is what declares the object valid, so writing it FIRST -
 # which is what this did - leaves a job killed in between advertising an object it never
 # finished writing.
-rds_tmp <- paste0(rds, ".tmp", Sys.getpid())
-saveRDS(cc, rds_tmp)
-if (!file.rename(rds_tmp, rds)) {
-  file.copy(rds_tmp, rds, overwrite = TRUE); unlink(rds_tmp)
+if (.from_cache) {
+  # NOTHING TO WRITE. The object came from this exact path under this exact stamp, so the bytes
+  # and the stamp on disk are already the ones this branch would produce. Measured on a
+  # cohort of eighteen units: 1.02 GB rewritten byte-identical per run, every mtime moved.
+  cat("object store: cache hit,", format(round(file.info(rds)$size / 1e6), big.mark = ","),
+      "MB not rewritten\n")
+} else {
+  rds_tmp <- paste0(rds, ".tmp", Sys.getpid())
+  saveRDS(cc, rds_tmp)
+  if (!file.rename(rds_tmp, rds)) {
+    file.copy(rds_tmp, rds, overwrite = TRUE); unlink(rds_tmp)
+  }
+  stamp_tmp <- paste0(stampf, ".tmp", Sys.getpid())
+  writeLines(unname(stamp), stamp_tmp)
+  if (!file.rename(stamp_tmp, stampf)) {
+    file.copy(stamp_tmp, stampf, overwrite = TRUE); unlink(stamp_tmp)
+  }
+  cat("saved the CellChat object for reuse:", rds, "\n")
 }
-stamp_tmp <- paste0(stampf, ".tmp", Sys.getpid())
-writeLines(unname(stamp), stamp_tmp)
-if (!file.rename(stamp_tmp, stampf)) {
-  file.copy(stamp_tmp, stampf, overwrite = TRUE); unlink(stamp_tmp)
-}
-cat("saved the CellChat object for reuse:", rds, "\n")
 # AND THE RUN KEEPS ITS OWN HANDLE ON IT. `produces` declares objects/cellchat.rds, so the
 # instance must carry one; a hard link is the same bytes and the same inode, so the run is
 # self-contained without a second copy. Falls back to a copy where the cache is on another
@@ -4284,12 +4297,35 @@ if (!is.null(inter) && nrow(inter)) {
     }
 
     # ---- crosstalk level: the objects' own matrices, delta of deltas ----
-    for (ms in c("count", "weight")) {
+    # THREE METRICS, AND THE THIRD IS THE SIZE-BALANCED ONE. `count` and `weight` are what
+    # `aggregateNet` writes, and both are computed AFTER `prob[pval >= thresh] <- 0`. That
+    # threshold is where population size enters: a population with few cells has a noisier
+    # trimean, fewer of its L-R pairs clear the permutation test, and its edges are under-counted
+    # SYSTEMATICALLY AND IN ONE DIRECTION - which reads on the panel as an absence of signalling
+    # rather than as an absence of power. `net$prob` is untouched by it, because `aggregateNet`
+    # thresholds a local copy and writes back only count and weight; and with
+    # population.size = FALSE the `P4` abundance term is the identity, so `net$prob` carries no
+    # direct cell-count term at all. Summing it over the L-R axis gives the SAME delta of deltas
+    # without the size-dependent filter. Nothing is rescaled, downsampled or re-fitted: this is
+    # the same fit read before the threshold instead of after it. The price is that no pair here
+    # is significant - it is a magnitude, and no test is attached.
+    .armmat <- function(k, ms) {
+      if (ms != "prob_all") return(mi@net[[k]][[ms]])
+      p <- mi@net[[k]]$prob
+      if (is.null(p)) stop("this object carries no net$prob")
+      A <- apply(p, c(1, 2), sum)
+      ref <- mi@net[[k]][["count"]]
+      if (!identical(dimnames(A)[[1]], rownames(ref)) ||
+          !identical(dimnames(A)[[2]], colnames(ref)))
+        stop("net$prob and net$count disagree on populations")
+      A
+    }
+    for (ms in c("count", "weight", "prob_all")) {
       M <- tryCatch({
-        g1 <- mi@net[[arm_of[[as.character(rows$against[1])]]]][[ms]] -
-              mi@net[[arm_of[[as.character(rows$reference[1])]]]][[ms]]
-        g2 <- mi@net[[arm_of[[as.character(rows$against[2])]]]][[ms]] -
-              mi@net[[arm_of[[as.character(rows$reference[2])]]]][[ms]]
+        g1 <- .armmat(arm_of[[as.character(rows$against[1])]], ms) -
+              .armmat(arm_of[[as.character(rows$reference[1])]], ms)
+        g2 <- .armmat(arm_of[[as.character(rows$against[2])]], ms) -
+              .armmat(arm_of[[as.character(rows$reference[2])]], ms)
         g1 - g2
       }, error = function(e) {
         cat("interaction matrix FAILED for", fr, ms, ":", conditionMessage(e), "\n"); NULL })
@@ -4299,6 +4335,19 @@ if (!is.null(inter) && nrow(inter)) {
       }
       utils::write.csv(M, file.path(figdir,
                        paste0("nativecmp_interaction_", ms, "__", safe, ".csv")))
+      # A METRIC NAME A READER CAN ACT ON. "prob_all" is a file name, not a quantity - the
+      # panel has to say which number it is and, for the balanced one, why it exists.
+      ms_lbl <- switch(ms, prob_all = "probability, no significance filter", ms)
+      ms_short <- switch(ms, prob_all = "prob, all pairs", ms)
+      ms_note <- if (ms == "prob_all") paste0(
+        " THIS IS THE SIZE-BALANCED PANEL. count and weight are computed after ",
+        "prob[pval >= thresh] <- 0, and that threshold is where population size enters: a ",
+        "population with few cells clears the permutation test less often, so its edges are ",
+        "under-counted in one direction and read as quiet rather than as under-powered. This ",
+        "panel sums net$prob over every L-R pair BEFORE that threshold. Same fit, same cells, ",
+        "nothing rescaled or downsampled - only the size-dependent filter is not applied. ",
+        "Because no pair is filtered, NOTHING HERE IS SIGNIFICANT: it is a magnitude, and the ",
+        "count and weight panels beside it remain the tested reading.") else ""
       ndev(paste0("interaction_", ms, "__", safe), {
         mx <- max(abs(M), na.rm = TRUE)
         # THE TITLE NAMES THE EFFECT, NOT ONLY THE STRATA. "change within X minus change within Y"
@@ -4307,17 +4356,21 @@ if (!is.null(inter) && nrow(inter)) {
         # how many populations the panel covers - fewer than the pairwise panels beside it,
         # because an interaction needs an element present in all four arms.
         ttl <- paste0("Does the ", fac, " response depend on ",
-                      as.character(rows$stratum_factor[1]), "?   (", ms, ")")
+                      as.character(rows$stratum_factor[1]), "?   (", ms_lbl, ")")
+        # SHORT ENOUGH TO SURVIVE THE PLATE. This ran as ONE line and was clipped at BOTH ends,
+        # so the reader lost the opening of the formula and the end of the colour key - and
+        # every word of it is already in the figure legend below, where nothing truncates. Two
+        # lines now, carrying only what cannot be reconstructed from the picture: which
+        # difference is being taken, and which way the colours run. What WHITE means and how
+        # many populations the panel covers stay in the legend rather than being said twice.
         sub <- paste0("(", as.character(rows$against[1]), " - ",
                       as.character(rows$reference[1]), ") within ", st[1],
                       "   minus   (", as.character(rows$against[2]), " - ",
-                      as.character(rows$reference[2]), ") within ", st[2],
-                      ", the control.    RED: the ", fac, " response is larger in ", st[1],
-                      ".   BLUE: larger in ", st[2],
-                      ".   WHITE: the same response in both, which is NO interaction.",
-                      "    Drawn on the ", nrow(M), " populations present in all arms.")
+                      as.character(rows$reference[2]), ") within ", st[2], " (control)",
+                      "\nRED: ", fac, " response larger in ", st[1],
+                      "     BLUE: larger in ", st[2])
         ComplexHeatmap::draw(ComplexHeatmap::Heatmap(
-          M, name = paste0("interaction\n(", ms, ")\n+ = larger in\n", st[1]),
+          M, name = paste0("interaction\n(", ms_short, ")\n+ = larger in\n", st[1]),
           col = circlize::colorRamp2(c(-mx, 0, mx), c("#2166ac", "white", "#b2182b")),
           cluster_rows = FALSE, cluster_columns = FALSE,
           row_title = "Sources (Sender)", column_title_side = "top",
@@ -4332,7 +4385,7 @@ if (!is.null(inter) && nrow(inter)) {
       }, w = 2200, h = 1900, by = "plugin",
          legend = paste0("Does the ", fac, " response depend on ",
                          as.character(rows$stratum_factor[1]), "?  Per ordered population pair, ",
-                         "for ", ms, ": the ", eff_lbl, " within ", st[1],
+                         "for ", ms_lbl, ": the ", eff_lbl, " within ", st[1],
                          " minus the same response within ", st[2], ", which is the control. ",
                          "RED means the ", fac, " response is LARGER in ", st[1],
                          "; BLUE means larger in ", st[2],
@@ -4340,7 +4393,8 @@ if (!is.null(inter) && nrow(inter)) {
                          "not an absence of signalling. Rows are senders, columns are receivers. ",
                          "Drawn on the ", nrow(M), " populations present in every arm, which is ",
                          "fewer than the two-arm panels carry. Values are the merged object's ",
-                         "own matrices; no test applies to a difference of two differences."))
+                         "own matrices; no test applies to a difference of two differences.",
+                         ms_note))
     }
     cat("interaction drawn for framing:", fr, "over", nrow(both), "pathway(s)\n")
   }

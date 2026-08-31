@@ -254,11 +254,23 @@ def _stems():
     return out
 
 
-def _figs_for(by, routes, label, needs, host=()):
+def _figs_for(by, routes, label, needs, host=(), scope="all"):
     """The plates this contrast drew for these needs, in route order, each once.
 
     NATIVE FIRST, HOST AS THE FALLBACK WITHIN A NEED - the same rule `paper.panel` applies, so
     the two documents choose the same plate for the same need rather than each choosing its own.
+
+    `scope` SEPARATES THE TWO KINDS OF PANEL A CONTRAST CAN ANSWER WITH, because they are not
+    read at the same point in the document:
+
+      "contrast"  only the plates drawn for THIS contrast;
+      "cohort"    only the plates drawn over every arm at once, which are filed under no
+                  contrast and so answer all of them;
+      "all"       both, which is what a CITATION wants - a sentence about one contrast may
+                  legitimately point at a panel drawn across the whole design.
+
+    The numbering wants them apart and the citing wants them together, so this is one argument
+    rather than two functions. See `figure_index` for why the order differs.
     """
     stems = _stems() if host else {}
     out = []
@@ -272,14 +284,19 @@ def _figs_for(by, routes, label, needs, host=()):
                 # the design's arms at once is filed under none of them, so keying strictly on
                 # the contrast name made it invisible to both documents - the same rule the
                 # `host:` branch below already applies, and `paper.panel` now applies too.
-                got += (by.get((label, fn)) or []) + (by.get(("", fn)) or [])
+                if scope != "cohort":
+                    got += by.get((label, fn)) or []
+                if scope != "contrast":
+                    got += by.get(("", fn)) or []
             elif r.startswith("host:") and not got:
                 stem = stems.get(r.split(":", 1)[1])
                 if not stem:
                     continue
                 hits = [str(f.get("path")) for f in host
                         if str(f.get("id") or "").startswith(stem)
-                        and (not f.get("label") or str(f.get("label")) == label)]
+                        and (str(f.get("label") or "") == label if scope == "contrast"
+                             else not f.get("label") if scope == "cohort"
+                             else (not f.get("label") or str(f.get("label")) == label))]
                 if hits:
                     got.append(hits[0])
         out += got
@@ -334,13 +351,26 @@ def figure_index(run, plugin, spec=None, design=None):
     if not f:
         return {}
     by, routes, host = _native_index(run, plugin, spec)
+    order = _order(f, design, _controls(run))
     idx, n = {}, 0
-    for label in _order(f, design, _controls(run)):
-        for _key, needs in SENTENCE_EVIDENCE:
-            for path in _figs_for(by, routes, label, needs, host):
-                if path not in idx:
-                    n += 1
-                    idx[path] = n
+    # TWO PASSES, AND THE COHORT PANELS COME SECOND. A panel drawn over every arm at once is
+    # filed under no contrast, so it answers all of them - and in a single pass it was therefore
+    # collected by whichever contrast happened to be read FIRST, which handed the design-wide
+    # panels Figure 1 onwards. That put the question the whole design exists to answer at the
+    # top of the document, ahead of the comparisons it is built out of, and left the reader
+    # walking the argument backwards.
+    #
+    # The rule is about SCOPE and not about any particular panel: everything drawn for a single
+    # contrast is read first, in the design's own order, and everything drawn across the design
+    # is read after it. Nothing is dropped and nothing moves between documents - the same paths
+    # are numbered, in a different order, and `cite` keeps resolving each of them.
+    for scope in ("contrast", "cohort"):
+        for label in order:
+            for _key, needs in SENTENCE_EVIDENCE:
+                for path in _figs_for(by, routes, label, needs, host, scope=scope):
+                    if path not in idx:
+                        n += 1
+                        idx[path] = n
     return idx
 
 
