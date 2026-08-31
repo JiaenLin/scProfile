@@ -3952,6 +3952,43 @@ for (ms in c("count", "weight")) {
 # and those are exactly the presence differences, so it is drawn as a companion and never alone.
 # =============================================================================================
 if (!is.null(inter) && nrow(inter)) {
+  # A SECOND MERGE, RESTRICTED, AND ONLY FOR THE INTERACTION.
+  #
+  # `rankNet` in comparison mode fails outright when the two objects carry different numbers of
+  # cell groups - "number of items to replace is not a multiple of replacement length" - and the
+  # matrix subtraction below fails for the same reason. Measured: two of this design's four arms
+  # held 10 populations and two held 12, so the framing whose strata paired a 10 with a 12 failed
+  # while the framing that paired like with like succeeded, and only half the interaction was
+  # drawn. The heatmaps failed silently, which is worse than failing loudly.
+  #
+  # The BARS above keep the unrestricted merge deliberately: an arm's own total must include
+  # every population that arm has, or the figure understates it and disagrees with the totals the
+  # written section quotes. The INTERACTION cannot: a difference of two differences is undefined
+  # for a population that is not in all four arms. So the two objects coexist and each panel says
+  # which it used.
+  shared4 <- Reduce(intersect, lapply(objs, function(o) levels(o@idents)))
+  dropped4 <- setdiff(Reduce(union, lapply(objs, function(o) levels(o@idents))), shared4)
+  if (length(dropped4))
+    cat("interaction restricted to the", length(shared4),
+        "population(s) present in all", length(objs), "arms; not compared:",
+        paste(dropped4, collapse = "; "), "\n")
+  writeLines(c(paste0("shared_all_arms\t", paste(shared4, collapse = "|")),
+               paste0("absent_from_some_arm\t", paste(dropped4, collapse = "|"))),
+             file.path(figdir, "nativecmp_interaction_alignment.tsv"))
+  if (length(shared4) < 2) {
+    cat("the arms share fewer than two populations; no interaction can be drawn\n")
+    inter <- NULL
+  }
+}
+if (!is.null(inter) && nrow(inter)) {
+  objs_i <- if (length(dropped4))
+    lapply(objs, function(o) netAnalysis_computeCentrality(
+      subsetCellChat(o, idents.use = shared4), slot.name = "netP")) else objs
+  names(objs_i) <- nms
+  # `mi`, NOT `m`. The comment above says the two objects coexist and the first draft then
+  # overwrote one with the other - which happened to work only because nothing below reads the
+  # unrestricted merge today, and would break the bars the moment something did.
+  mi <- mergeCellChat(objs_i, add.names = nms)
   arm_of <- stats::setNames(seq_along(nms), nms)
   for (fr in unique(inter$framing)) {
     rows <- inter[inter$framing == fr, , drop = FALSE]
@@ -3965,7 +4002,7 @@ if (!is.null(inter) && nrow(inter)) {
     for (k in 1:2) {
       i <- arm_of[[as.character(rows$reference[k])]]
       j <- arm_of[[as.character(rows$against[k])]]
-      r <- tryCatch(rankNet(m, mode = "comparison", comparison = c(i, j), stacked = FALSE,
+      r <- tryCatch(rankNet(mi, mode = "comparison", comparison = c(i, j), stacked = FALSE,
                             do.stat = TRUE, return.data = TRUE),
                     error = function(e) { cat("rankNet FAILED for", fr, st[k], ":",
                                               conditionMessage(e), "\n"); NULL })
@@ -4048,13 +4085,17 @@ if (!is.null(inter) && nrow(inter)) {
     # ---- crosstalk level: the objects' own matrices, delta of deltas ----
     for (ms in c("count", "weight")) {
       M <- tryCatch({
-        g1 <- m@net[[arm_of[[as.character(rows$against[1])]]]][[ms]] -
-              m@net[[arm_of[[as.character(rows$reference[1])]]]][[ms]]
-        g2 <- m@net[[arm_of[[as.character(rows$against[2])]]]][[ms]] -
-              m@net[[arm_of[[as.character(rows$reference[2])]]]][[ms]]
+        g1 <- mi@net[[arm_of[[as.character(rows$against[1])]]]][[ms]] -
+              mi@net[[arm_of[[as.character(rows$reference[1])]]]][[ms]]
+        g2 <- mi@net[[arm_of[[as.character(rows$against[2])]]]][[ms]] -
+              mi@net[[arm_of[[as.character(rows$reference[2])]]]][[ms]]
         g1 - g2
-      }, error = function(e) NULL)
-      if (is.null(M)) next
+      }, error = function(e) {
+        cat("interaction matrix FAILED for", fr, ms, ":", conditionMessage(e), "\n"); NULL })
+      if (is.null(M)) {
+        .plots$bad <- c(.plots$bad, paste0("interaction_", ms, "__", safe))
+        next
+      }
       utils::write.csv(M, file.path(figdir,
                        paste0("nativecmp_interaction_", ms, "__", safe, ".csv")))
       ndev(paste0("interaction_", ms, "__", safe), {
