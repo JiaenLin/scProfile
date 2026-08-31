@@ -527,11 +527,25 @@ def section(run, plugin, spec=None, design=None, run_key=""):
             # RULE-ONE'S THIRD QUESTION, ANSWERED BY THE RUN. An element absent from every arm at
             # one level of a factor has had a technical property turned into an apparent
             # biological one, and that is not a judgement the person making the removal can make.
-            L += ["Of those, "
-                  + "; ".join(f"**{e}** is absent from every arm with {f} = {lv}"
-                              for e, f, lv in _rm_diff)
-                  + " — so its absence lines up with the design rather than falling across it, "
-                    "and it should not be read as that factor having no such population.", ""]
+            #
+            # GROUPED BY ELEMENT, because one element aligns with several factors whenever those
+            # factors are aliased - and listing every pair separately produced eleven clauses in
+            # one sentence, ending in a singular "its" after a list. The fact is about the
+            # element; the factors it lines up with are its predicate.
+            _byel = {}
+            for _e, _f2, _lv in _rm_diff:
+                _byel.setdefault(_e, []).append((_f2, _lv))
+            L += ["Some of those absences line up with the design rather than falling across it. "
+                  "Where they do, the absence must not be read as that arm having none of the "
+                  "element: it is a property of which arms could be compared.", ""]
+            for _e, _fl in sorted(_byel.items()):
+                L += [f"- **{_e}** is absent from every arm with "
+                      + ", ".join(f"`{f2} = {lv}`" for f2, lv in sorted(set(_fl))) + "."]
+            L += [""]
+            if any(len(set(v)) > 1 for v in _byel.values()):
+                L += ["An element lining up with more than one factor at once is what aliasing "
+                      "looks like from here: those factors do not vary independently in this "
+                      "design, so which of them the absence belongs to cannot be told apart.", ""]
     _cfg = _settings(run, plugin, _arms)
     if _cfg:
         L += ["*Every unit was fitted with the same settings: "

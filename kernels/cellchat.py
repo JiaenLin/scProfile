@@ -3851,6 +3851,21 @@ npng <- function(nm, expr, w = 2000, h = 1300, res = 200) {
   if (ok) { .plots$ok <- .plots$ok + 1L; cat("native compare", nm, "written\n") }
   else { .plots$bad <- c(.plots$bad, nm); if (file.exists(path)) unlink(path) }
 }
+# AND THE SIDE-EFFECT WRAPPER. `ComplexHeatmap::draw` and the base-graphics network functions
+# DRAW rather than return, so `print` on them prints nothing or errors. This script was written
+# with only `npng` and then called `ndev` for the interaction heatmaps - "could not find function
+# ndev" halted the whole framing loop after the first framing's scatter plots, so one framing of
+# two was drawn and neither heatmap was. The sibling script had both wrappers; this one had one.
+ndev <- function(nm, expr, w = 2000, h = 1600, res = 200) {
+  path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
+  ok <- tryCatch({
+    grDevices::png(path, width = w, height = h, res = res)
+    on.exit(grDevices::dev.off(), add = TRUE)
+    force(expr); TRUE
+  }, error = function(e) { cat("native compare", nm, "FAILED:", conditionMessage(e), "\n"); FALSE })
+  if (ok) { .plots$ok <- .plots$ok + 1L; cat("native compare", nm, "written\n") }
+  else { .plots$bad <- c(.plots$bad, nm); if (file.exists(path)) unlink(path) }
+}
 
 # CellChat's own total-interactions bar, in the mode that takes every object at once. `group`
 # is the position of each arm in the merged object, which is what its own vignette passes.

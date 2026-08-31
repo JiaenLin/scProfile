@@ -7,6 +7,15 @@ written a 1.4 GB matrix for each of them. Python would have accepted the same ar
 is exactly why this is easy to write and easy to miss.
 
 Only helpers the script defines ITSELF are checked; anything from a library is out of scope.
+
+AND A SECOND FAILURE THE ORDER CHECK CANNOT SEE: a helper CALLED HERE AND DEFINED NOWHERE HERE.
+Checking order presumes the definition exists. A script written by copying its sibling inherits
+the sibling's calls and not always its definitions - measured, a plot wrapper was called in one
+embedded script and defined only in the other, and R halted the whole loop at the first call with
+"could not find function". Half an analysis was drawn and the tally reported no failure, because
+the process died before it printed one. A name defined in a SIBLING script of the same plugin and
+not in this one is the signature of that copy, and is precise enough to check without guessing at
+which names are library functions.
 """
 import re
 import sys
@@ -51,6 +60,31 @@ if CHECKED == 0:
     print("FAIL")
     print("  - no embedded R script defines a helper; this check proved nothing")
     raise SystemExit(1)
+
+# ---------------------------------------------------------------------------------------------
+# CALLED HERE, DEFINED ONLY IN A SIBLING. See the note at the top: this is the copy-paste failure
+# the order check cannot see, because order presumes existence.
+import re as _re2                                                          # noqa: E402
+
+for _f in sorted(ROOT.glob("kernels/*.py")):
+    _src = _f.read_text(encoding="utf-8")
+    _scripts = dict(_re2.findall(r"^(_R_[A-Z_]+)\s*=\s*r?\"\"\"(.*?)\"\"\"",
+                                 _src, _re2.S | _re2.M))
+    if len(_scripts) < 2:
+        continue
+    _defs = {k: set(_re2.findall(r"^\s*\.?([A-Za-z_][A-Za-z0-9_.]*)\s*<-\s*function", v,
+                                 _re2.M))
+             for k, v in _scripts.items()}
+    for _k, _body in _scripts.items():
+        _elsewhere = set().union(*[v for j, v in _defs.items() if j != _k]) - _defs[_k]
+        for _name in sorted(_elsewhere):
+            if _re2.search(r"(?<![A-Za-z0-9_.])" + _re2.escape(_name) + r"\s*\(", _body):
+                FAILURES.append(
+                    f"{_f.name} / {_k}: calls {_name}() which is defined in a SIBLING embedded "
+                    f"script and not in this one. R halts at the first call with 'could not find "
+                    f"function', part-way through whatever loop it was in, and a tally printed "
+                    f"after that point never runs - so the run reports no failure.")
+
 if FAILURES:
     print("FAIL")
     for x in FAILURES:
