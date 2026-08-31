@@ -513,6 +513,7 @@ def _arm_content(units, design, spec, *, out_dir=None, name="", prefix=None,
                           # reading it through report_get put a key in front of the checker
                           # that no declaration is allowed to carry there.
                           controls=controls, unit_members=unit_members or {},
+                          unit_cells=unit_cells or {},
                           prefix=prefix, declared=(spec or {}).get("native_plots") or {})
 
     # THE TWO-SCALE TABLE, WRITTEN EVERY RUN. A result section quotes changes per element, and
@@ -653,7 +654,7 @@ def _arm_appendix(name, content, plugin_arm_figs=()):
 
 
 def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=None,
-                    unit_members=None, prefix=None,
+                    unit_members=None, unit_cells=None, prefix=None,
                     declared=None):
     """Invoke a plugin's `compare(ctx)` once per arm pair, in the plugin's own environment.
 
@@ -841,8 +842,42 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
                             "weight": float(df["prob"].astype(float).sum())}
             except (KeyError, ValueError, TypeError):
                 _vals[u] = {"edges": float(len(df))}
+            # AND THE DENOMINATOR, so a per-observation scale can be drawn beside the raw one
+            # without the plugin re-deriving a number the host already has.
+            if (unit_cells or {}).get(u):
+                _vals[u]["cells"] = float(unit_cells[u])
+        # THE INTERACTION, ENUMERATED FROM THE DESIGN. For two factors each with two levels and
+        # all four crossed arms present, the design supports one interaction read two ways: each
+        # factor's effect, measured within each level of the other. The two readings are the SAME
+        # arithmetic - expand them and both are agn_agn - agn_ref - ref_agn + ref_ref - so a
+        # consumer must present one number twice rather than two findings.
+        #
+        # Enumerated here because only the host knows the design; the plugin is handed the arms
+        # and told which pairs make which stratum, and needs no idea what a factor is.
+        _inter = []
+        for _f in _facs:
+            _rest = [g for g in _facs if g != _f]
+            if len(_rest) != 1:
+                continue                  # more than two factors: not a 2x2, not enumerated here
+            _g = _rest[0]
+            _lf = sorted({str((r or {}).get(_f, "")) for r in (design or {}).values()} - {""})
+            _lg = sorted({str((r or {}).get(_g, "")) for r in (design or {}).values()} - {""})
+            if len(_lf) != 2 or len(_lg) != 2:
+                continue
+            _ref_f = _ctrl.get(_f) or _lf[0]
+            _agn_f = next((x for x in _lf if x != _ref_f), None)
+            for _gl in sorted(_lg, key=lambda x: (x != _ctrl.get(_g), x)):
+                _a = next((u for u in _cross if str((_rows.get(u) or {}).get(_f)) == _ref_f
+                           and str((_rows.get(u) or {}).get(_g)) == _gl), None)
+                _b = next((u for u in _cross if str((_rows.get(u) or {}).get(_f)) == _agn_f
+                           and str((_rows.get(u) or {}).get(_g)) == _gl), None)
+                if _a and _b:
+                    _inter.append({"framing": f"{_f} response, by {_g}",
+                                   "factor": _f, "stratum_factor": _g, "stratum": _gl,
+                                   "reference": _a, "against": _b})
         spec_json = {
             "pair": _COHORT_COMPARE,
+            "interactions": _inter,
             "units": {u: str((base / udir[u]) if not Path(udir[u]).is_absolute()
                              else Path(udir[u])) for u in _cross},
             "members": _mem,

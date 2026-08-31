@@ -1021,7 +1021,7 @@ class CompareContext:
     """
 
     def __init__(self, *, pair, units, out, config=None, members=None, unit_values=None,
-                 log=print):
+                 interactions=None, log=print):
         #: A label for this comparison, e.g. `age__aged__young`. Used in filenames.
         self.pair = str(pair)
         #: {unit_name: Path} - the finished units, in the order the contrast names them.
@@ -1040,6 +1040,11 @@ class CompareContext:
         #: they are the same quantities `unit_totals` draws and a plugin can overlay them without
         #: re-reading its own objects. A plugin that wants its own numbers still computes them.
         self.unit_values = {str(k): dict(v or {}) for k, v in dict(unit_values or {}).items()}
+        #: [{framing, factor, stratum_factor, stratum, reference, against}] - the simple effects
+        #: an interaction is built from, enumerated by the HOST from the design. A plugin needs no
+        #: idea what a factor is: it is told which arm pairs make which stratum. Empty where the
+        #: design supports no interaction, and then no interaction panel is drawn.
+        self.interactions = [dict(x or {}) for x in (interactions or [])]
         self.log = log
 
     @property

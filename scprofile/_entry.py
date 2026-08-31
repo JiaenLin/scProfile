@@ -225,6 +225,7 @@ def _compare(plugin_path, spec_path):
         config=spec.get("config") or {},
         members=spec.get("members") or {},
         unit_values=spec.get("unit_values") or {},
+        interactions=spec.get("interactions") or [],
         log=print,
     )
     fn(ctx)

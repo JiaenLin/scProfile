@@ -314,9 +314,9 @@ PLUGIN = {
     "native_plots": {
         # USED - CellChat draws these itself, into the instance's figures/ directory.
         "netAnalysis_computeCentrality": {"use": "tables/cellchat_centrality.csv (numbers only; its plot is not drawn)"},
-        "rankNet": {"use": "tables/cellchat_rank_net.csv per unit (return.data), and figures/nativecmp_rankNet_{stacked,unstacked}.png per arm pair - CellChat's comparison mode"},
+        "rankNet": {"use": "tables/cellchat_rank_net.csv per unit (return.data), figures/nativecmp_rankNet_{stacked,unstacked}.png per arm pair - CellChat's comparison mode - and figures/nativecmp_interaction_flow<suffix>.png, which PRESENTS its per-pathway contributions as one point per pathway: the change within one stratum against the change within the other. CellChat ships no interaction plot; the numbers and the between-arm test on each simple effect are entirely rankNet's, and no test is claimed for the difference of two differences"},
         "netVisual_circle": {"use": "figures/native_circle_count.png and native_circle_weight.png"},
-        "netVisual_heatmap": {"use": "figures/native_heatmap_{count,weight}.png per unit, and figures/nativecmp_diff_heatmap_{count,weight}.png per arm pair"},
+        "netVisual_heatmap": {"use": "figures/native_heatmap_{count,weight}.png per unit, figures/nativecmp_diff_heatmap_{count,weight}.png per arm pair, and figures/nativecmp_interaction_<suffix>.png - the same encoding on a DERIVED matrix, the difference of two of the differences this function draws, for which CellChat provides no plot and no test"},
         # `profile: True` MARKS THE PANELS THAT DESCRIBE ONE UNIT ON ITS OWN, for the profile
         # page. These are the tool's own plots, not the host's reimplementations of them: where
         # CellChat ships a per-unit figure for the same question, that is what a reader should
@@ -360,7 +360,10 @@ PLUGIN = {
         # host does not append the alignment sentence - which is about populations - to its
         # caption. Every other function here has one, which is why only this declares it, and
         # the default is True so a plugin that says nothing behaves as before.
-        "compareInteractions": {"use": "figures/nativecmp_compareInteractions_{count,weight}.png - total interactions and total strength, one bar per arm, over every arm the design crosses",
+        # The placeholder form covers the per-1,000-cell panels too. Written as a prefix rather
+        # than a brace list because a panel whose origin cannot be named does not reach a page,
+        # and a new second scale must not silently become an unplaceable file.
+        "compareInteractions": {"use": "figures/nativecmp_compareInteractions_<measure>.png - total interactions and total strength, one bar per arm, over every arm the design crosses; and the same numbers per 1,000 cells",
                                 "population_axis": False},
         "netVisual_individual": {"use": "figures/native_individual__<ligand_receptor>.png"},
         "netVisual_hierarchy1": {"use": "the left panel of figures/native_hierarchy__<pathway>.png; it takes a net matrix and netVisual(layout='hierarchy') is the documented way in"},
@@ -3809,6 +3812,10 @@ nms <- args[seq(3 + n, 2 + 2 * n)]
 # args[3 + 2n]: a table of per-sample points, written by the host from this plugin's own edge
 # tables. Optional - absent, the bars are drawn alone, exactly as before.
 points_f <- if (length(args) >= 3 + 2 * n) args[3 + 2 * n] else ""
+# The simple effects each interaction is built from, enumerated by the host from the design.
+inter_f <- if (length(args) >= 4 + 2 * n) args[4 + 2 * n] else ""
+inter <- if (nzchar(inter_f) && file.exists(inter_f))
+  utils::read.delim(inter_f, stringsAsFactors = FALSE) else NULL
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 
 objs <- lapply(rds, readRDS)
@@ -3847,23 +3854,226 @@ npng <- function(nm, expr, w = 2000, h = 1300, res = 200) {
 #
 # AND THE BAR IS NOT THE MEAN OF THE POINTS. An arm is one fit on its members' pooled cells;
 # each point is a separate fit. The caption says so, because the geometry says the opposite.
-pts <- if (file.exists(points_f)) utils::read.delim(points_f, stringsAsFactors = FALSE) else NULL
+vals <- if (file.exists(points_f)) utils::read.delim(points_f, stringsAsFactors = FALSE) else NULL
+smp <- if (!is.null(vals)) vals[vals$role == "sample", , drop = FALSE] else NULL
+armv <- if (!is.null(vals)) vals[vals$role == "arm", , drop = FALSE] else NULL
+cells <- if (!is.null(armv) && "cells" %in% names(armv))
+  stats::setNames(suppressWarnings(as.numeric(armv$cells)), armv$unit) else numeric(0)
+
+.points <- function(g, d, yy) {
+  if (is.null(d) || !nrow(d)) return(g)
+  d <- d[d$arm %in% nms & is.finite(yy), , drop = FALSE]
+  if (!nrow(d)) return(g)
+  d$x <- match(d$arm, nms); d$y <- yy[is.finite(yy)]
+  g + ggplot2::geom_point(data = d, ggplot2::aes(x = x, y = y), inherit.aes = FALSE,
+                          position = ggplot2::position_jitter(width = 0.12, height = 0),
+                          shape = 21, size = 2.4, fill = "white", colour = "black",
+                          stroke = 0.6, alpha = 0.9)
+}
+
 for (ms in c("count", "weight")) {
+  # 1. THE TOOL'S OWN BAR, untouched, with each animal as a point on its arm.
   g <- compareInteractions(m, show.legend = FALSE, group = seq_along(objs), measure = ms,
                            x.lab.rot = TRUE)
-  if (!is.null(pts) && nrow(pts) && ms %in% names(pts)) {
-    d <- pts[pts$arm %in% nms, , drop = FALSE]
-    if (nrow(d)) {
-      d$x <- match(d$arm, nms)
-      d$y <- d[[ms]]
-      g <- g + ggplot2::geom_point(
-        data = d, ggplot2::aes(x = x, y = y),
-        inherit.aes = FALSE, position = ggplot2::position_jitter(width = 0.12, height = 0),
-        shape = 21, size = 2.4, fill = "white", colour = "black", stroke = 0.6, alpha = 0.9)
-      cat("overlaid", nrow(d), "sample point(s) on", ms, "\n")
+  if (!is.null(smp) && ms %in% names(smp))
+    g <- .points(g, smp, suppressWarnings(as.numeric(smp[[ms]])))
+  npng(paste0("compareInteractions_", ms), g, w = max(1500, 340 * length(objs)), h = 1300)
+
+  # 2. AND THE SAME NUMBERS PER THOUSAND CELLS.
+  #
+  # CellChat has no per-observation mode, so this is not its function - it is its OUTPUT on a
+  # second scale. The values come out of `compareInteractions` itself (`g$data`), divided by the
+  # cells each fit used; nothing is recomputed, so the raw panel and this one cannot disagree
+  # about what the arm carries.
+  #
+  # A SECOND SCALE, NOT A CORRECTION. Both quantities depend on the number of cells behind them
+  # in a way that is not linear, so dividing puts the arithmetic on the page rather than removing
+  # the dependence - and each animal's point is divided by ITS OWN cell count, not its arm's.
+  if (length(cells)) {
+    d <- g$data
+    ycol <- if ("count" %in% names(d)) "count" else names(d)[1]
+    d$unit <- as.character(d$dataset)
+    d$n <- cells[d$unit]
+    ok <- is.finite(d$n) & d$n > 0
+    if (any(ok)) {
+      d <- d[ok, , drop = FALSE]
+      d$per1k <- d[[ycol]] / d$n * 1000
+      d$unit <- factor(d$unit, levels = nms)
+      gg <- ggplot2::ggplot(d, ggplot2::aes(x = unit, y = per1k, fill = unit)) +
+        ggplot2::geom_col(width = 0.6, show.legend = FALSE) +
+        ggplot2::geom_text(ggplot2::aes(label = sprintf("%.1f", per1k)), vjust = -0.6, size = 3) +
+        ggplot2::labs(x = NULL,
+                      y = if (ms == "count") "Interactions per 1,000 cells"
+                          else "Interaction strength per 1,000 cells") +
+        ggplot2::theme_classic() +
+        ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
+      if (!is.null(smp) && ms %in% names(smp) && "cells" %in% names(smp)) {
+        sn <- suppressWarnings(as.numeric(smp$cells))
+        sv <- suppressWarnings(as.numeric(smp[[ms]])) / sn * 1000
+        keep <- is.finite(sv)
+        if (any(keep)) {
+          sd_ <- smp[keep, , drop = FALSE]; sd_$x <- match(sd_$arm, nms); sd_$y <- sv[keep]
+          gg <- gg + ggplot2::geom_point(data = sd_, ggplot2::aes(x = x, y = y),
+                                         inherit.aes = FALSE,
+                                         position = ggplot2::position_jitter(width = 0.12,
+                                                                             height = 0),
+                                         shape = 21, size = 2.4, fill = "white",
+                                         colour = "black", stroke = 0.6, alpha = 0.9)
+        }
+      }
+      npng(paste0("compareInteractions_", ms, "_per1k"), gg,
+           w = max(1500, 340 * length(objs)), h = 1300)
+      cat("drew", ms, "per 1,000 cells over", nrow(d), "arm(s)\n")
+    } else {
+      cat("no cell counts for these arms; the per-1,000-cell panel is not drawn\n")
     }
   }
-  npng(paste0("compareInteractions_", ms), g, w = max(1500, 340 * length(objs)), h = 1300)
+}
+
+# =============================================================================================
+# THE INTERACTION: does one factor's effect depend on the other?
+#
+# TWO QUESTIONS, ONE NUMBER. Each factor's effect measured within each level of the other gives
+# two framings, and expanding them shows they are the same arithmetic:
+#     (agn_agn - agn_ref) - (ref_agn - ref_ref)  ==  (agn_agn - ref_agn) - (agn_ref - ref_ref)
+# So this computes it once and presents it under each framing, beside that framing's own simple
+# effects. Reporting them as two findings would double-count one quantity.
+#
+# EVERY QUANTITY IS THE TOOL'S. Per-pathway flow and its between-arm p-value come from `rankNet`
+# in comparison mode with its own test; per-pair counts and strengths are the objects' own `@net`
+# matrices. The interaction is arithmetic on those, and CELLCHAT HAS NO TEST FOR A DIFFERENCE OF
+# TWO DIFFERENCES - so none is claimed, and none is invented.
+#
+# BOTH SCALES, BECAUSE AN INTERACTION IS NOT SCALE-FREE. On the additive scale "no interaction"
+# means the same absolute change in both strata; on the multiplicative scale it means the same
+# fold change. They disagree - measured on a real cohort, only two of the top eight pathways were
+# shared between them - and neither is wrong. The additive scale is always defined and is drawn
+# for every pathway; the multiplicative one is undefined wherever an arm holds none of a pathway,
+# and those are exactly the presence differences, so it is drawn as a companion and never alone.
+# =============================================================================================
+if (!is.null(inter) && nrow(inter)) {
+  arm_of <- stats::setNames(seq_along(nms), nms)
+  for (fr in unique(inter$framing)) {
+    rows <- inter[inter$framing == fr, , drop = FALSE]
+    if (nrow(rows) != 2) next
+    safe <- gsub("[^A-Za-z0-9]+", "_", fr)
+    st <- as.character(rows$stratum)
+
+    # ---- pathway level: rankNet per stratum, its own contributions and its own test ----
+    flows <- list(); pvals <- list()
+    okflow <- TRUE
+    for (k in 1:2) {
+      i <- arm_of[[as.character(rows$reference[k])]]
+      j <- arm_of[[as.character(rows$against[k])]]
+      r <- tryCatch(rankNet(m, mode = "comparison", comparison = c(i, j), stacked = FALSE,
+                            do.stat = TRUE, return.data = TRUE),
+                    error = function(e) { cat("rankNet FAILED for", fr, st[k], ":",
+                                              conditionMessage(e), "\n"); NULL })
+      if (is.null(r)) { okflow <- FALSE; break }
+      d <- r$signaling.contribution
+      ref_n <- as.character(rows$reference[k]); agn_n <- as.character(rows$against[k])
+      a <- stats::aggregate(d$contribution, by = list(name = d$name, grp = d$group), FUN = sum)
+      wide <- stats::reshape(a, idvar = "name", timevar = "grp", direction = "wide")
+      names(wide) <- sub("^x\\.", "", names(wide))
+      if (!(ref_n %in% names(wide) && agn_n %in% names(wide))) { okflow <- FALSE; break }
+      flows[[k]] <- data.frame(name = wide$name,
+                               ref = as.numeric(wide[[ref_n]]),
+                               agn = as.numeric(wide[[agn_n]]),
+                               stringsAsFactors = FALSE)
+      flows[[k]][is.na(flows[[k]])] <- 0
+      pvals[[k]] <- if (!is.null(d$pvalues))
+        stats::aggregate(d$pvalues, by = list(name = d$name), FUN = min) else NULL
+    }
+    if (!okflow) next
+
+    both <- merge(flows[[1]], flows[[2]], by = "name", all = TRUE, suffixes = c(".1", ".2"))
+    both[is.na(both)] <- 0
+    both$d1 <- both$agn.1 - both$ref.1
+    both$d2 <- both$agn.2 - both$ref.2
+    both$interaction <- both$d1 - both$d2
+    lim <- max(abs(c(both$d1, both$d2)), na.rm = TRUE)
+    top <- both[order(-abs(both$interaction)), ][seq_len(min(12, nrow(both))), , drop = FALSE]
+    utils::write.csv(both[order(-abs(both$interaction)), ],
+                     file.path(figdir, paste0("nativecmp_interaction__", safe, ".csv")),
+                     row.names = FALSE)
+
+    npng(paste0("interaction_flow__", safe), {
+      ggplot2::ggplot(both, ggplot2::aes(x = d2, y = d1)) +
+        ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") +
+        ggplot2::geom_hline(yintercept = 0, colour = "grey85") +
+        ggplot2::geom_vline(xintercept = 0, colour = "grey85") +
+        ggplot2::geom_point(ggplot2::aes(colour = interaction), size = 2.4) +
+        ggrepel::geom_text_repel(data = top, ggplot2::aes(label = name), size = 3,
+                                 max.overlaps = 20, min.segment.length = 0) +
+        ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b",
+                                        midpoint = 0) +
+        ggplot2::coord_equal(xlim = c(-lim, lim), ylim = c(-lim, lim)) +
+        ggplot2::labs(x = paste0("change within ", st[2]), y = paste0("change within ", st[1]),
+                      colour = "interaction",
+                      title = fr,
+                      subtitle = paste0("one point per pathway; the dashed line is NO ",
+                                        "interaction - the same change in both strata. ",
+                                        "Distance from it is the interaction.")) +
+        ggplot2::theme_classic()
+    }, w = 2000, h = 1900)
+
+    # the multiplicative companion, on the pathways where all four arms hold something
+    pos <- both[both$ref.1 > 0 & both$agn.1 > 0 & both$ref.2 > 0 & both$agn.2 > 0, , drop = FALSE]
+    if (nrow(pos) >= 3) {
+      pos$l1 <- log2(pos$agn.1 / pos$ref.1); pos$l2 <- log2(pos$agn.2 / pos$ref.2)
+      pos$li <- pos$l1 - pos$l2
+      lim2 <- max(abs(c(pos$l1, pos$l2)), na.rm = TRUE)
+      ptop <- pos[order(-abs(pos$li)), ][seq_len(min(12, nrow(pos))), , drop = FALSE]
+      npng(paste0("interaction_flow_log__", safe), {
+        ggplot2::ggplot(pos, ggplot2::aes(x = l2, y = l1)) +
+          ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") +
+          ggplot2::geom_point(ggplot2::aes(colour = li), size = 2.4) +
+          ggrepel::geom_text_repel(data = ptop, ggplot2::aes(label = name), size = 3,
+                                   max.overlaps = 20, min.segment.length = 0) +
+          ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b",
+                                          midpoint = 0) +
+          ggplot2::coord_equal(xlim = c(-lim2, lim2), ylim = c(-lim2, lim2)) +
+          ggplot2::labs(x = paste0("log2 fold change within ", st[2]),
+                        y = paste0("log2 fold change within ", st[1]),
+                        colour = "interaction",
+                        title = paste0(fr, " - multiplicative scale"),
+                        subtitle = paste0(nrow(pos), " of ", nrow(both), " pathways; the rest ",
+                                          "are absent from an arm and have no fold change")) +
+          ggplot2::theme_classic()
+      }, w = 2000, h = 1900)
+    } else {
+      cat("too few pathways present in all four arms for the multiplicative panel:", fr, "\n")
+    }
+
+    # ---- crosstalk level: the objects' own matrices, delta of deltas ----
+    for (ms in c("count", "weight")) {
+      M <- tryCatch({
+        g1 <- m@net[[arm_of[[as.character(rows$against[1])]]]][[ms]] -
+              m@net[[arm_of[[as.character(rows$reference[1])]]]][[ms]]
+        g2 <- m@net[[arm_of[[as.character(rows$against[2])]]]][[ms]] -
+              m@net[[arm_of[[as.character(rows$reference[2])]]]][[ms]]
+        g1 - g2
+      }, error = function(e) NULL)
+      if (is.null(M)) next
+      utils::write.csv(M, file.path(figdir,
+                       paste0("nativecmp_interaction_", ms, "__", safe, ".csv")))
+      ndev(paste0("interaction_", ms, "__", safe), {
+        mx <- max(abs(M), na.rm = TRUE)
+        ComplexHeatmap::draw(ComplexHeatmap::Heatmap(
+          M, name = paste0("interaction\n(", ms, ")"),
+          col = circlize::colorRamp2(c(-mx, 0, mx), c("#2166ac", "white", "#b2182b")),
+          cluster_rows = FALSE, cluster_columns = FALSE,
+          row_names_gp = grid::gpar(fontsize = 8),
+          column_names_gp = grid::gpar(fontsize = 8),
+          column_title = paste0(fr, " - ", ms,
+                                ": change within ", st[1], " minus change within ", st[2]),
+          column_title_gp = grid::gpar(fontsize = 10)))
+      }, w = 2000, h = 1700)
+    }
+    cat("interaction drawn for framing:", fr, "over", nrow(both), "pathway(s)\n")
+  }
+} else {
+  cat("the design supports no interaction here; none drawn\n")
 }
 
 cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
@@ -3917,23 +4127,44 @@ def compare(ctx):
         # host draws in its across-unit panel, computed from this plugin's declared edge table -
         # so the points and the bars are the same quantity and cannot drift. Written as a table
         # rather than passed on the command line because the count is the number of samples.
-        points = ctx.out / "sample_points.tsv"
+        # ONE TABLE FOR EVERY UNIT IN THIS COMPARISON, arms and the samples inside them. The arm
+        # rows carry the denominator the per-observation panels divide by; the sample rows are
+        # the points. Both are the host's own numbers, computed from this plugin's declared edge
+        # table, so a bar, a point and a normalised bar are three readings of one arithmetic.
+        points = ctx.out / "unit_values.tsv"
         rows = []
         for arm in names:
+            v = ctx.unit_values.get(arm) or {}
+            rows.append((arm, arm, "arm", v.get("edges"), v.get("weight"), v.get("cells")))
             for m in (ctx.members.get(arm) or []):
-                v = ctx.unit_values.get(m) or {}
-                if "edges" in v:
-                    rows.append((m, arm, v.get("edges"), v.get("weight")))
+                mv = ctx.unit_values.get(m) or {}
+                if "edges" in mv:
+                    rows.append((m, arm, "sample", mv.get("edges"), mv.get("weight"),
+                                 mv.get("cells")))
         if rows:
             points.parent.mkdir(parents=True, exist_ok=True)
             with open(points, "w", encoding="utf-8") as fh:
-                fh.write("unit\tarm\tcount\tweight\n")
-                for u, a, c, w in rows:
-                    fh.write(f"{u}\t{a}\t{c}\t{'' if w is None else w}\n")
-            ctx.log(f"  {len(rows)} sample point(s) to overlay on the arm bars")
+                fh.write("unit\tarm\trole\tcount\tweight\tcells\n")
+                for u, a, r, c, w, n in rows:
+                    fh.write("\t".join(str("" if x is None else x)
+                                       for x in (u, a, r, c, w, n)) + "\n")
+            ctx.log(f"  {sum(1 for r in rows if r[2] == 'sample')} sample point(s) and "
+                    f"{sum(1 for r in rows if r[2] == 'arm')} arm denominator(s) for the bars")
+        # THE FRAMINGS, WRITTEN OUT. The host enumerated which arm pairs make which stratum; this
+        # only carries them across, so the plugin needs no idea what a factor is.
+        inter = ctx.out / "interactions.tsv"
+        if ctx.interactions:
+            with open(inter, "w", encoding="utf-8") as fh:
+                cols = ("framing", "factor", "stratum_factor", "stratum", "reference", "against")
+                fh.write("\t".join(cols) + "\n")
+                for r in ctx.interactions:
+                    fh.write("\t".join(str(r.get(c, "")) for c in cols) + "\n")
+            ctx.log(f"  {len(ctx.interactions)} simple effect(s) over "
+                    f"{len({r.get('framing') for r in ctx.interactions})} interaction framing(s)")
         cmd = ([_RS(ctx), script, str(ctx.figures()), str(len(names))]
                + [str(x) for x in rds] + list(names)
-               + [str(points) if rows else ""])
+               + [str(points) if rows else "",
+                  str(inter) if ctx.interactions else ""])
         pr = _sp.run(cmd, capture_output=True, text=True)
         for line in (pr.stdout + pr.stderr).splitlines():
             if line.strip():
