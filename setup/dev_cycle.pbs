@@ -18,6 +18,11 @@
 # accepted on the qsub line and silently dropped - a run asked for a forced label column and
 # profiled the default one, with nothing in its output saying so.
 #
+# `FIGURES_FOR=<axis>[,<axis>]` - draw per-unit figures only for units on these axes, e.g.
+# `FIGURES_FOR=group`. Unset draws them for every axis, which is what every run did before this
+# existed. It decides what is DRAWN, never what is computed: every unit still runs and still
+# writes its tables, so a panel built on per-unit numbers is unaffected.
+#
 # `CONTROL=<factor>=<level>[;<factor>=<level>...]` - SEMICOLONS, because `-v` splits
 # its own value on commas and would tear a comma-separated list apart. Declares which level of each factor is the
 # CONTROL, so every contrast is measured against it. Without it the tool recommends one from a
@@ -420,6 +425,7 @@ PYEOF
       --prefix "$PREFIX" ${REFS:+--references "$REFS"} ${SEARCH:+--search "$SEARCH"} \
       ${REUSE:+--reuse-from "$REUSE"} ${REUSE_GRADE:+--reuse-min-grade "$REUSE_GRADE"} \
       ${SECTION:+--section "$SECTION"} ${NOCACHE:+--no-cache} \
+      ${FIGURES_FOR:+--figures-for "$FIGURES_FOR"} \
       ${PARAMJSON:+--params "$PARAMJSON"} \
       "${CTRL[@]}" \
       --cores "${CORES:-${NCPUS:-4}}" --timeout "${TIMEOUT:-7200}" || echo "  run exit $?"

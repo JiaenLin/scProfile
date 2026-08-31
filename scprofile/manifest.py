@@ -80,6 +80,7 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
                 references=None, reference_specs=None, params=None, upstream=None,
                 upstream_units=None, sentinels=DEFAULT_SENTINELS,
                 provenance=None, resources=None, unit=None, unit_members=None,
+                unit_axis=None, figures_for=None,
                 constraint="", cache_dir=None,
                 contract=CONTRACT_VERSION):
     """Write `in.json`. Every path is made ABSOLUTE first.
@@ -166,6 +167,11 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
         # over the arm's pooled cells rather than once per sample.
 
         "unit_members": list(unit_members) if unit_members else None,
+        # WHICH AXIS THIS UNIT CAME FROM, and which axes this run wants figures for. Both are
+        # the host's knowledge, not the plugin's: the resolver named the axes and the run was
+        # asked which of them to draw.
+        "unit_axis": str(unit_axis) if unit_axis else None,
+        "figures_for": list(figures_for) if figures_for else None,
     }
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)

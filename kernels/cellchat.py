@@ -348,7 +348,12 @@ PLUGIN = {
         # from the functions somebody listed, and an exhaustive-looking table with a hole in it
         # reads exactly like a complete one. This is the total-interactions bar - the first
         # figure a reader of a comparison asks for - and it had never been drawn.
-        "compareInteractions": {"use": "figures/nativecmp_compareInteractions_{count,weight}.png, per arm pair - total interactions and total strength per arm"},
+        # `population_axis: False` says this panel has no population rows or columns, so the
+        # host does not append the alignment sentence - which is about populations - to its
+        # caption. Every other function here has one, which is why only this declares it, and
+        # the default is True so a plugin that says nothing behaves as before.
+        "compareInteractions": {"use": "figures/nativecmp_compareInteractions_{count,weight}.png - total interactions and total strength, one bar per arm, over every arm the design crosses",
+                                "population_axis": False},
         "netVisual_individual": {"use": "figures/native_individual__<ligand_receptor>.png"},
         "netVisual_hierarchy1": {"use": "the left panel of figures/native_hierarchy__<pathway>.png; it takes a net matrix and netVisual(layout='hierarchy') is the documented way in"},
         "netVisual_hierarchy2": {"use": "the right panel of figures/native_hierarchy__<pathway>.png"},
@@ -640,6 +645,9 @@ thresh <- as.numeric(args[10])
 # the instance directory, and the whole cross-run reuse did nothing while every log line looked
 # normal. An index that lives away from its siblings is an index nobody can count.
 cache_dir <- if (length(args) >= 11 && nzchar(args[11])) args[11] else ""
+# args[12]. Whether to draw this unit's own panels at all. Everything else in this script runs
+# either way: the inference, the tables, the saved object and the phase clock.
+draw_figs <- !(length(args) >= 12 && identical(toupper(args[12]), "FALSE"))
 
 # A PHASE CLOCK, DEFINED AT THE TOP BECAUSE R DOES NOT HOIST. Twice the cost of a round has
 # been diagnosed by assumption and been wrong: the inference was assumed dominant and was not,
@@ -792,6 +800,7 @@ figdir <- file.path(dirname(dirname(out)), "figures")
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 .plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
 npng <- function(name, expr, w = 1800, h = 1500, res = 200) {
+  if (!draw_figs) return(invisible(NULL))
   path <- file.path(figdir, paste0("native_", name, ".png"))
   ok <- tryCatch({
     grDevices::png(path, width = w, height = h, res = res)
@@ -807,6 +816,7 @@ npng <- function(name, expr, w = 1800, h = 1500, res = 200) {
 # object, a function whose value is NULL. `print` on those prints nothing or errors, so this
 # second wrapper evaluates for the side effect instead.
 ndev <- function(name, expr, w = 1800, h = 1500, res = 200) {
+  if (!draw_figs) return(invisible(NULL))
   path <- file.path(figdir, paste0("native_", name, ".png"))
   ok <- tryCatch({
     grDevices::png(path, width = w, height = h, res = res)
@@ -1007,6 +1017,7 @@ try_write("net_embedding", {
 # unit of a whole run with no file, no log line and no non-zero exit. A count at the end cannot
 # fall off the front, and a caller that shows any tail at all shows this.
 mark("drawing")
+if (!draw_figs) cat("per-unit figures not requested for this unit's axis; none drawn\n")
 cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
     if (length(.plots$bad)) paste0("(", paste(.plots$bad, collapse = ", "), ")") else "", "\n")
 cat("PHASE SECONDS:",
@@ -2966,10 +2977,14 @@ def run(ctx):
         ("type", "trim", "population_size", "nboot", "thresh", "min_cells"))).encode()
     ).hexdigest()[:10]
     cache = ctx.cache("objects", _pkey)
+    # args[12] is whether this unit's own panels are wanted. The HOST decides: which unit axes
+    # are worth drawing is a property of the run and not of the method, and the plugin only
+    # honours it. Inference, tables and the saved object are unaffected either way.
     argv = [rscript, str(script), str(mtx), str(meta), db,
             str(C["min_cells"]), str(C["trim"]), str(edges_f),
             str(C["type"]), "TRUE" if C["population_size"] else "FALSE",
-            str(C["nboot"]), str(C["thresh"]), str(cache or "")]
+            str(C["nboot"]), str(C["thresh"]), str(cache or ""),
+            "TRUE" if ctx.draw_figures else "FALSE"]
     ctx.log(f"handing {A.n_obs:,} cells x {A.n_vars:,} genes to {db} via {rscript}")
     ctx.log(f"  type={C['type']} trim={C['trim']} population.size={C['population_size']} "
             f"nboot={C['nboot']} thresh={C['thresh']} min.cells={C['min_cells']}")
@@ -3379,36 +3394,55 @@ a <- readRDS(rds_a); b <- readRDS(rds_b)
 # run - two contrasts erroring and two producing quietly misaligned figures, which is the worse
 # outcome because nothing reports it.
 #
-# `liftCellChat` is CellChat's own function for this. Both objects are lifted to the UNION of
-# their cell groups, not the intersection: the intersection would DELETE a population from the
-# comparison, and a population present in one arm and absent from the other is a result, not a
-# nuisance. A lifted-in group carries zero edges on the side it was absent from, so its
-# difference is that arm's whole value - which is true, and is why the lifted names are printed
-# and written to a file the caption can quote.
+# A POPULATION ONLY ONE ARM HAS CANNOT BE COMPARED, SO IT IS NOT IN A COMPARISON FIGURE.
 #
-# Centrality is recomputed AFTER lifting. It is stored per cell group, so the values carried in
-# from before the lift describe a different group set.
+# The first version lifted both arms to the UNION, on the reasoning that the intersection would
+# delete a population from the comparison. That reasoning was wrong about what a comparison
+# figure IS. A lifted-in group carries zero edges on the side it was absent from, so its
+# "difference" is the whole of the arm that has it - and on a real cohort that made the two
+# arm-specific populations the largest red column and the largest blue row in every differential
+# panel. Neither was a change.
+#
+# Blanking those rows was the next attempt and was still wrong: a blank row keeps the label, the
+# colour block and the space, and reads as MEASURED AND EQUAL - the same misreading, quieter.
+#
+# So both objects are restricted to the populations they share, with `subsetCellChat`, which is
+# CellChat's own function for it and updates `@net` and `@netP` with the cells. Nothing is lost
+# and nothing is hidden: the per-arm panels are drawn from the unrestricted objects and still
+# show every population, the names of the dropped ones are printed, written to
+# nativecmp_alignment.tsv and stated in every caption in this contrast, and re-running without
+# the restriction restores them. What is removed is the possibility of reading a presence as a
+# change, in a figure whose whole subject is change.
+#
+# Centrality is recomputed AFTER the subset. It is stored per cell group, so values carried in
+# from before describe a different group set.
 # ---------------------------------------------------------------------------------------------
 lev_a <- levels(a@idents); lev_b <- levels(b@idents)
 group_new <- union(lev_a, lev_b)
+shared <- intersect(lev_a, lev_b)
 only_a <- setdiff(lev_a, lev_b); only_b <- setdiff(lev_b, lev_a)
+absent <- union(only_a, only_b)
 cat("populations:", length(lev_a), "in", name_a, "|", length(lev_b), "in", name_b,
-    "| union", length(group_new), "\n")
+    "| union", length(group_new), "| shared", length(shared), "\n")
 if (length(only_a)) cat("absent from", name_b, ":", paste(only_a, collapse = "; "), "\n")
 if (length(only_b)) cat("absent from", name_a, ":", paste(only_b, collapse = "; "), "\n")
 writeLines(c(paste0("union\t", paste(group_new, collapse = "|")),
+             paste0("shared\t", paste(shared, collapse = "|")),
              paste0("absent_from_", name_b, "\t", paste(only_a, collapse = "|")),
              paste0("absent_from_", name_a, "\t", paste(only_b, collapse = "|"))),
            file.path(figdir, "nativecmp_alignment.tsv"))
 
-if (length(only_a) || length(only_b)) {
-  a <- liftCellChat(a, group.new = group_new)
-  b <- liftCellChat(b, group.new = group_new)
+if (!length(shared)) stop("the two arms share no cell group; there is nothing to compare")
+if (length(absent)) {
+  a <- subsetCellChat(a, idents.use = shared)
+  b <- subsetCellChat(b, idents.use = shared)
   a <- netAnalysis_computeCentrality(a, slot.name = "netP")
   b <- netAnalysis_computeCentrality(b, slot.name = "netP")
-  cat("lifted both objects to the union and recomputed centrality\n")
+  cat("restricted both objects to the", length(shared),
+      "population(s) present in both, and recomputed centrality; not compared:",
+      paste(absent, collapse = "; "), "\n")
 } else {
-  cat("both objects already carry the same cell groups; no lift needed\n")
+  cat("both objects already carry the same cell groups; no restriction needed\n")
 }
 stopifnot(identical(levels(a@idents), levels(b@idents)))
 
@@ -3447,57 +3481,7 @@ ndev <- function(nm, expr, w = 2000, h = 1600, res = 200) {
 # 0. TOTAL INTERACTIONS AND TOTAL STRENGTH PER ARM - CellChat's own summary bar, and the first
 #    thing a reader of a comparison asks. Drawn on the UNMASKED object: a total is a total, and
 #    every population contributes to it including the ones with no counterpart.
-npng("compareInteractions_count",
-     compareInteractions(m, show.legend = FALSE, group = c(1, 2), measure = "count"),
-     w = 1500, h = 1100)
-npng("compareInteractions_weight",
-     compareInteractions(m, show.legend = FALSE, group = c(1, 2), measure = "weight"),
-     w = 1500, h = 1100)
 
-# ---------------------------------------------------------------------------------------------
-# A POPULATION WITH NO COUNTERPART HAS A PRESENCE, NOT A CHANGE - so it is masked AT SOURCE.
-#
-# The lift above puts both arms on the union of their cell groups, which is right: the
-# intersection would DELETE a population from the comparison. But a group lifted in carries zero
-# edges on the side it was absent from, so its "difference" is the whole of the arm that has it -
-# and on this cohort that made the two arm-specific populations the largest red column and the
-# largest blue row in every differential panel. Neither is a change. Both are a presence, drawn
-# in the ink reserved for change, at the top of the figure a reader looks at first.
-#
-# THE MASK IS ON THE MATRIX THE DIFFERENCE IS COMPUTED FROM, not on the finished picture. Painting
-# over a rendered figure fixes the panels somebody remembered and leaves the number in the object
-# for the next consumer; blanking the row and column in `@net` removes the artefact from every
-# panel computed from it at once.
-#
-# NOTHING IS REMOVED. `m` itself is untouched and carries every population - the totals above,
-# the ranked flow, the bubbles and the role panels all still see them. Only the DIFFERENTIAL
-# panels read `md`, the names are already written to nativecmp_alignment.tsv, and every caption
-# in this contrast states them. Not drawing it restores the padded value.
-#
-# Zero rather than NA: a differential panel has no ink for "undefined", and NA propagates into
-# CellChat's own colour scaling. Zero draws nothing, which is what a population with no
-# counterpart should contribute to a picture of change, and the caption says which cells those
-# are so a blank is not read as "measured and equal".
-# ---------------------------------------------------------------------------------------------
-shared <- intersect(lev_a, lev_b)
-absent <- union(only_a, only_b)
-.mask <- function(obj, pops) {
-  if (!length(pops)) return(obj)
-  for (i in seq_along(obj@net)) {
-    for (sl in c("count", "weight")) {
-      M <- obj@net[[i]][[sl]]
-      if (is.null(M) || is.null(rownames(M))) next
-      hit <- intersect(pops, rownames(M))
-      if (length(hit)) { M[hit, ] <- 0; M[, hit] <- 0 }
-      obj@net[[i]][[sl]] <- M
-    }
-  }
-  obj
-}
-md <- .mask(m, absent)
-if (length(absent))
-  cat("masked from the differential panels (no counterpart in the other arm):",
-      paste(absent, collapse = "; "), "\n")
 
 # 1. the differential interaction network - CellChat's own answer to "which pairs changed"
 # A KEY FOR THE COLOURS. CellChat draws this network with red and blue edges and NO legend
@@ -3515,10 +3499,10 @@ if (length(absent))
                                 "blank here:", paste(absent, collapse = ", ")))
 }
 ndev("diffInteraction_count", {
-  netVisual_diffInteraction(md, weight.scale = TRUE, measure = "count"); .diffkey()
+  netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count"); .diffkey()
 })
 ndev("diffInteraction_weight", {
-  netVisual_diffInteraction(md, weight.scale = TRUE, measure = "weight"); .diffkey()
+  netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight"); .diffkey()
 })
 
 # 2. the differential heatmap, same question in a form that reads pair by pair
@@ -3529,11 +3513,11 @@ ndev("diffInteraction_weight", {
   paste0(what, ": ", name_b, " against ", name_a,
          "  |  red = higher in ", name_b, ", blue = higher in ", name_a)
 ndev("diff_heatmap_count", ComplexHeatmap::draw(
-  netVisual_heatmap(md, measure = "count",
+  netVisual_heatmap(m, measure = "count",
                     title.name = .diffttl("Differential number of interactions"))),
   w = 2400, h = 1800)
 ndev("diff_heatmap_weight", ComplexHeatmap::draw(
-  netVisual_heatmap(md, measure = "weight",
+  netVisual_heatmap(m, measure = "weight",
                     title.name = .diffttl("Differential interaction strength"))),
   w = 2400, h = 1800)
 
@@ -3693,10 +3677,10 @@ for (g in shared) {
 # `x.lab.rot = TRUE` because the default is FALSE and these names are long: every tick label
 # was drawn horizontally at the same place and they overprinted into one unreadable smear across
 # the bottom, with not a single population name readable off the axis. Seen by opening it.
-npng("barplot_count", netVisual_barplot(md, comparison = c(1, 2), measure = "count",
+npng("barplot_count", netVisual_barplot(m, comparison = c(1, 2), measure = "count",
                                         sources.use = seq_along(group_new), x.lab.rot = TRUE),
      w = 2200, h = 1700)
-npng("barplot_weight", netVisual_barplot(md, comparison = c(1, 2), measure = "weight",
+npng("barplot_weight", netVisual_barplot(m, comparison = c(1, 2), measure = "weight",
                                          sources.use = seq_along(group_new), x.lab.rot = TRUE),
      w = 2200, h = 1700)
 
@@ -3760,6 +3744,65 @@ cat("PHASE SECONDS:",
 """
 
 
+#: EVERY ARM ON ONE AXIS, once for the whole run.
+#:
+#: Drawn from the arms AS THEY ARE, with no restriction to shared populations - and that is a
+#: deliberate difference from the pairwise script. The restriction there exists because a
+#: DIFFERENTIAL panel reads a population only one arm has as a change. A bar of an arm's own
+#: total has no such failure: dropping a population that arm genuinely contains would understate
+#: it, and would put this figure at odds with the totals the composed section quotes, which are
+#: computed from the arm's own unrestricted edges.
+_R_COHORT = r"""
+suppressPackageStartupMessages({
+  library(CellChat)
+  library(patchwork)
+})
+args <- commandArgs(trailingOnly = TRUE)
+figdir <- args[1]
+n <- as.integer(args[2])
+rds <- args[seq(3, 2 + n)]
+nms <- args[seq(3 + n, 2 + 2 * n)]
+dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
+
+objs <- lapply(rds, readRDS)
+names(objs) <- nms
+cat("arms:", paste(nms, collapse = ", "), "\n")
+cat("populations per arm:",
+    paste(sprintf("%s=%d", nms, sapply(objs, function(o) nlevels(o@idents))), collapse = " "),
+    "\n")
+
+m <- mergeCellChat(objs, add.names = nms)
+
+.plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
+npng <- function(nm, expr, w = 2000, h = 1300, res = 200) {
+  path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
+  ok <- tryCatch({
+    grDevices::png(path, width = w, height = h, res = res)
+    on.exit(grDevices::dev.off(), add = TRUE)
+    print(expr); TRUE
+  }, error = function(e) { cat("native compare", nm, "FAILED:", conditionMessage(e), "\n"); FALSE })
+  if (ok) { .plots$ok <- .plots$ok + 1L; cat("native compare", nm, "written\n") }
+  else { .plots$bad <- c(.plots$bad, nm); if (file.exists(path)) unlink(path) }
+}
+
+# CellChat's own total-interactions bar, in the mode that takes every object at once. `group`
+# is the position of each arm in the merged object, which is what its own vignette passes.
+for (ms in c("count", "weight")) {
+  npng(paste0("compareInteractions_", ms),
+       compareInteractions(m, show.legend = FALSE, group = seq_along(objs), measure = ms,
+                           x.lab.rot = TRUE),
+       w = max(1400, 320 * length(objs)), h = 1300)
+}
+
+cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
+    if (length(.plots$bad)) paste0("(", paste(.plots$bad, collapse = ", "), ")") else "", "\n")
+"""
+
+def _RS(ctx):
+    """The R interpreter to run. `ctx.params` may name one; otherwise whatever is on PATH."""
+    return (getattr(ctx, "params", {}) or {}).get("rscript") or "Rscript"
+
+
 def compare(ctx):
     """CellChat's own differential figures for one pair of arms.
 
@@ -3769,9 +3812,33 @@ def compare(ctx):
     import subprocess
     import tempfile
 
+    import subprocess as _sp
+    import tempfile as _tf
+
     names = ctx.names
+    if len(names) > 2:
+        # EVERY ARM AT ONCE. The host hands this the design's crossed arms when there are more
+        # than two of them; the functions that take N objects are answered here, and the
+        # pairwise script below is left to the ones that genuinely compare two.
+        rds = [ctx.dir_of(n) / "objects" / "cellchat.rds" for n in names]
+        missing = [str(x) for x in rds if not x.is_file()]
+        if missing:
+            ctx.log(f"no saved CellChat object for {missing}")
+            return
+        with _tf.NamedTemporaryFile("w", suffix=".R", delete=False) as fh:
+            fh.write(_R_COHORT)
+            script = fh.name
+        cmd = ([_RS(ctx), script, str(ctx.figures()), str(len(names))]
+               + [str(x) for x in rds] + list(names))
+        pr = _sp.run(cmd, capture_output=True, text=True)
+        for line in (pr.stdout + pr.stderr).splitlines():
+            if line.strip():
+                ctx.log(f"  R: {line.rstrip()}")
+        if pr.returncode != 0:
+            ctx.log(f"compare across arms FAILED (exit {pr.returncode})")
+        return
     if len(names) != 2:
-        ctx.log(f"compare needs exactly two units, got {names}")
+        ctx.log(f"compare needs two units or more than two, got {names}")
         return
     rds = [ctx.dir_of(n) / "objects" / "cellchat.rds" for n in names]
     missing = [str(p) for p in rds if not p.is_file()]

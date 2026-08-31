@@ -747,7 +747,63 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, prefix=None,
         # from the review ledger and therefore from every writing brief, so a manuscript could
         # not quote the tool's own comparison even though the run had drawn it.
         drawn += _native_panels(cdir / "figures", str(label), declared, out_dir, lo, hi)
+
+    # ---------------------------------------------------------------------------------------
+    # AND ONCE OVER EVERY ARM THE DESIGN CROSSES, not only two at a time.
+    #
+    # Some of a tool's own comparison functions take N objects, and asking them for one pair at
+    # a time produces a figure per contrast that says less than one figure would. Measured here:
+    # the total-interactions bar drawn per pair was twelve plates carrying, between them, exactly
+    # the four numbers that fit on one axis - and a reader comparing arm three with arm four had
+    # to hold two plates side by side to do it.
+    #
+    # The crossed arms are the design's own: the label every sample gets from all its biological
+    # factors together, which `units.group_label` already computes and the resolver already ran
+    # to build these units. A one-factor design gives two, a 2x2 gives four, a 2x3 gives six -
+    # the same code.
+    #
+    # A plugin that can only compare two objects sees a set of four, says so, and returns; that
+    # is why the count is passed rather than assumed, and why this cannot break a plugin that
+    # has not been changed for it.
+    from . import units as _U
+
+    _facs = _U.biological_factors(design or {})
+    _cross = []
+    for _s in sorted(design or {}):
+        _g = _U.group_label((design or {}).get(_s), _facs) if _facs else None
+        if _g and _g in udir and _g not in _cross:
+            _cross.append(_g)
+    if len(_cross) > 2:
+        base = Path(out_dir)
+        cdir = kdir / "compare" / _COHORT_COMPARE
+        spec_json = {
+            "pair": _COHORT_COMPARE,
+            "units": {u: str((base / udir[u]) if not Path(udir[u]).is_absolute()
+                             else Path(udir[u])) for u in _cross},
+            "out_dir": str(cdir),
+        }
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+            _json.dump(spec_json, fh)
+            spath = fh.name
+        try:
+            cdir.mkdir(parents=True, exist_ok=True)
+            print(f"  native compare across {len(_cross)} crossed arm(s): "
+                  + ", ".join(_cross))
+            subprocess.run([str(exe), str(entry), "--compare", str(plugin_file), spath],
+                           capture_output=False, timeout=3600, env=env, cwd=str(cdir))
+        except Exception as e:                                            # noqa: BLE001
+            print(f"  native compare across arms failed: {e}")
+        else:
+            # NO LABEL. A panel drawn over every arm answers its question for EVERY contrast,
+            # so it is not filed under one of them - the same rule the host's own cohort panels
+            # already follow, and the consumers match an unlabelled panel against any contrast.
+            drawn += _native_panels(cdir / "figures", "", declared, out_dir, "", "")
     return drawn
+
+
+#: The directory and pair name a compare-over-every-arm runs under. Named once, because the
+#: host writes it and two consumers read it back.
+_COHORT_COMPARE = "_across_arms"
 
 
 def _native_panels(figdir, label, declared, out_dir, lo, hi):
@@ -762,9 +818,9 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi):
     figdir = Path(figdir)
     if not figdir.is_dir():
         return []
-    # WHAT THE ALIGNMENT DID, carried into every caption from this contrast. A population present
-    # in one arm and absent from the other is lifted in with zero edges, so its whole difference
-    # is the other arm's value - true, and invisible unless the caption says it.
+    # WHAT THE ALIGNMENT DID, carried into every caption from this contrast. A population one
+    # arm has and the other does not cannot be compared, so it is not in these panels at all -
+    # true, and invisible unless the caption says it.
     lifted = ""
     tsv = figdir / "nativecmp_alignment.tsv"
     if tsv.is_file():
@@ -779,13 +835,10 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi):
             # EXPLAIN, DO NOT WARN. This read as a caution about what the panel does not
             # establish; it is a plain fact about what the arms contained, and a reader who
             # knows it can use the figure rather than distrust it.
-            lifted = (" " + "; ".join(gone) + ". Both arms were put on the same population "
-                      "set so the difference could be taken, and in the DIFFERENTIAL panels "
-                      "that population's row and column are blank: a population with no "
-                      "counterpart in the other arm has a presence, not a change, and drawing "
-                      "the arm's own value as a difference made it the largest block in the "
-                      "figure. It is in every other panel here, and in this contrast's "
-                      "alignment file.")
+            lifted = (" " + "; ".join(gone) + ". A population only one arm has cannot be "
+                      "compared, so both arms were restricted to the populations they share "
+                      "and it is not in the panels on this page. It is in that arm's own "
+                      "panels, and in this contrast's alignment file.")
     out = []
     for f in sorted(figdir.glob("*.png")):
         fn = _NAT.function_for(declared, f.name)
@@ -794,7 +847,16 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi):
                 + (f"the tool's own {fn}()." if fn else "the tool itself."))
         # THE DIRECTION IS THE FIRST THING A READER NEEDS and it is a positive statement, not a
         # caveat: it says what the picture shows. `lo` is the contrast's reference.
-        rest = (f"{hi} measured against {lo}, which is the reference." + lifted)
+        # THE ALIGNMENT SENTENCE BELONGS ONLY ON A PANEL THAT HAS A POPULATION AXIS. It was
+        # appended to every caption in the contrast, so a two-bar chart of arm totals carried a
+        # paragraph about rows and columns it does not have - which reads as though something
+        # had been done to that figure, and buries the one sentence that describes it.
+        _fn = _NAT.function_for(declared, f.name)
+        has_pops = bool((declared.get(_fn) or {}).get("population_axis", True))
+        rest = ((f"{hi} measured against {lo}, which is the reference."
+                 if (lo and hi) else
+                 "Every arm the design crosses, on one axis.")
+                + (lifted if has_pops else ""))
         out.append((f"NC_{label}_{stem}", str(f), (lead, rest), str(label),
                     str(f.relative_to(Path(out_dir)))))
     return out

@@ -248,7 +248,12 @@ def _figs_for(by, routes, label, needs, host=()):
         for r in (routes.get(need) or []):
             r = str(r)
             if r.startswith("native:"):
-                got += by.get((label, r.split(":", 1)[1])) or []
+                fn = r.split(":", 1)[1]
+                # AN UNLABELLED NATIVE PANEL ANSWERS EVERY CONTRAST. A figure drawn over all of
+                # the design's arms at once is filed under none of them, so keying strictly on
+                # the contrast name made it invisible to both documents - the same rule the
+                # `host:` branch below already applies, and `paper.panel` now applies too.
+                got += (by.get((label, fn)) or []) + (by.get(("", fn)) or [])
             elif r.startswith("host:") and not got:
                 stem = stems.get(r.split(":", 1)[1])
                 if not stem:
@@ -267,15 +272,29 @@ def _figs_for(by, routes, label, needs, host=()):
     return uniq
 
 
-def _order(f, design):
-    """The contrasts in the DESIGN's order, falling back to alphabetical.
+def _controls(run):
+    """{factor: control level} the run recorded, or `{}`.
+
+    THE ORDER OF THE SECTION DEPENDS ON THEM. `comparisons()` puts the control stratum first,
+    and without the declaration it falls back to alphabetical - which on a real study put the
+    perturbed stratum ahead of the untreated one. The run already writes what was declared.
+    """
+    try:
+        return dict(json.loads((Path(run) / "report.json")
+                               .read_text(encoding="utf-8")).get("controls") or {})
+    except (OSError, ValueError):
+        return {}
+
+
+def _order(f, design, controls=None):
+    """The contrasts in the DESIGN's reading order, falling back to alphabetical.
 
     One definition, because the section, the claims and the figure numbers all walk it and a
     figure numbered in one order and printed in another is unreadable.
     """
     from .design_panel import comparisons as _cmps
 
-    cmps = _cmps(design or {}) if design else []
+    cmps = _cmps(design or {}, controls=controls) if design else []
     return [c.get("label") for c in cmps if c.get("label") in f] or sorted(f)
 
 
@@ -297,7 +316,7 @@ def figure_index(run, plugin, spec=None, design=None):
         return {}
     by, routes, host = _native_index(run, plugin, spec)
     idx, n = {}, 0
-    for label in _order(f, design):
+    for label in _order(f, design, _controls(run)):
         for _key, needs in SENTENCE_EVIDENCE:
             for path in _figs_for(by, routes, label, needs, host):
                 if path not in idx:
@@ -332,8 +351,9 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     if not f:
         return ""
     W = _weight_name(spec)
-    cmps = _cmps(design or {}) if design else []
-    order = _order(f, design)
+    ctl = _controls(run)
+    cmps = _cmps(design or {}, controls=ctl) if design else []
+    order = _order(f, design, ctl)
     # THE FIGURES, NUMBERED, so the sentences can point at them. Built from the same routes the
     # panel places by, so a number in this text and the plate printed under it are the same
     # object by construction rather than by anyone keeping two lists in step.
@@ -350,7 +370,8 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         for a in (c.get("aliased_with") or []):
             alias.setdefault(str(c.get("factor")), set()).add(str(a))
 
-    ranked = sorted((l for l in order if f[l]["ratio"]), key=lambda l: -f[l]["ratio"])
+    ranked = [l for l in order if f[l]["ratio"]]
+    by_size = sorted(ranked, key=lambda l: -f[l]["ratio"])
     L = [COMPOSED_MARK, "", "# What this run measured across the design", ""]
 
     # THE SUMMARY FIRST. A reader should not have to assemble the shape of the result from six
@@ -364,10 +385,10 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         return str(x).replace("|", "\\|")
 
     if ranked:
-        big, small = f[ranked[0]], f[ranked[-1]]
+        big, small = f[by_size[0]], f[by_size[-1]]
         L += [f"Across {len(order)} comparison(s) the design supports, the largest difference in "
-              f"total {W} is **{ranked[0]}** at **{_n(big['ratio'])}x**, and the smallest is "
-              f"**{ranked[-1]}** at **{_n(small['ratio'])}x**. Every difference below is measured "
+              f"total {W} is **{by_size[0]}** at **{_n(big['ratio'])}x**, and the smallest is "
+              f"**{by_size[-1]}** at **{_n(small['ratio'])}x**. Every difference below is measured "
               f"against that contrast's reference arm, and every number is read from a table in "
               f"run `{run_key or Path(run).name}`.", ""]
         L += [f"| comparison | reference | {W} | elements differing | leading element |",
@@ -486,7 +507,7 @@ def claims(run, plugin, spec=None, design=None):
         return _figs_for(by, routes, label, needs, host)
 
     made = []
-    for label in _order(f, design):
+    for label in _order(f, design, _controls(run)):
         d = f[label]
         if d["ratio"]:
             cites = figs_for(label, ("who_changed", "what_carries_it"))

@@ -672,6 +672,8 @@ def _run(a):
             resources={"cores": cores, **({"memory_gb": round(float(mem_gb), 2)}
                                           if mem_gb else {})},
             unit=unit, unit_members=unit_members.get(str(unit)),
+            unit_axis=unit_axis.get(str(unit)),
+            figures_for=[x for x in (getattr(a, "figures_for", "") or "").split(",") if x],
             constraint=constraint,
             # BESIDE THE RUNS, NOT INSIDE ONE. A run directory is sealed and a cache is
             # disposable; putting one in the other makes the run un-sealable or the cache
@@ -3173,6 +3175,11 @@ def main(argv=None):
     r.add_argument("--control", action="append", metavar="FACTOR=LEVEL",
                    help="the control level of a factor, e.g. --control diet=chow. Repeatable. "
                         "Without it the tool recommends one and says on what basis.")
+    r.add_argument("--figures-for", metavar="AXIS[,AXIS]", default="",
+                   help="draw per-unit figures only for units on these axes, e.g. "
+                        "--figures-for group. Empty (the default) draws them for every axis, "
+                        "as before. The units still RUN and still write their tables whichever "
+                        "way this is set - it decides what is drawn, not what is computed.")
     r.add_argument("--section", type=Path,
                    help="a written result section (Markdown) to carry into this run and render "
                         "with its figures. One per plugin: `--section cellchat=path.md`, or a "

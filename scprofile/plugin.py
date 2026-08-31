@@ -179,7 +179,8 @@ class Context:
     `headline`. What reaches the merged object is exactly what it emitted.
     """
 
-    def __init__(self, adata, *, keys, out, cores=1, memory_gb=None, unit=None,
+    def __init__(self, adata, *, keys, out, cores=1, memory_gb=None, unit=None, unit_axis=None,
+                 figures_for=None,
                  unit_members=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
                  sentinels=(), provenance=None, constraint="", cache_dir=None,
@@ -211,6 +212,13 @@ class Context:
         #: qualification that lives only in a caption does not travel with the image into a
         #: slide, a grant or a referee's PDF.
         self.unit_members = tuple(str(m) for m in (unit_members or ()))
+        #: Which axis this unit came from - the resolver knows it for certain, so it is carried
+        #: rather than inferred from whether the name happens to be a key of the design table.
+        self.unit_axis = str(unit_axis or "")
+        #: Which unit axes this RUN wants per-unit figures for. Empty means all of them, which
+        #: is the default and what every run did before the setting existed. It is NOT a plugin
+        #: parameter: which axes are worth drawing is a property of the run, not of the method.
+        self.figures_for = tuple(str(x) for x in (figures_for or ()))
         #: The upstream tool's constraint on use, verbatim, or "" when the object carries none.
         #: `Guard` has had this since it existed and `Context` did not, so a plugin that wanted to
         #: REPRODUCE the constraint in its own caveats - rather than merely be refused by it - had
@@ -262,6 +270,25 @@ class Context:
             (self.out / d).mkdir(parents=True, exist_ok=True)
 
     # ---- reading -------------------------------------------------------------------------
+    @property
+    def draw_figures(self):
+        """Whether THIS unit's per-unit figures are wanted in this run. Default: yes.
+
+        A RUN THAT DRAWS EVERY PANEL FOR EVERY UNIT SPENDS MOST OF ITSELF DRAWING. Measured on a
+        cohort of eighteen units, ten of them single samples: the per-sample panels were 340 of
+        the run's figures and about half its wall clock, and they answer a different question
+        from the group panels - they are the consistency check, not the result.
+
+        So which axes get figures is a RUN-LEVEL setting (`--figures-for`), not a decision any
+        plugin makes for itself and not a deletion of the capability: the default is every axis,
+        exactly as before, and the units still run and still write their tables, so a panel built
+        on per-unit numbers keeps them. Nothing here knows what the axes are called - it compares
+        against whatever the resolver named them.
+        """
+        if not self.figures_for:
+            return True
+        return (self.unit_axis or "") in set(self.figures_for)
+
     @property
     def X(self):
         """The matrix this plugin should work on: its declared lognorm layer, or X."""

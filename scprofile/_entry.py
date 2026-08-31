@@ -365,6 +365,7 @@ def main(argv):
 
     ctx = Context(A, keys=keys, out=out, cores=cores, memory_gb=memory_gb, unit=unit,
                   unit_members=members,
+                  unit_axis=inp.get("unit_axis"), figures_for=inp.get("figures_for"),
                   organism=inp.get("organism"), assay=inp.get("assay"),
                   references=inp.get("references"),
                   # BY ROLE, NOT BY NAME. `Context` accepted these from the beginning and nothing

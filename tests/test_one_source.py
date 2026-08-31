@@ -36,7 +36,11 @@ if "control_basis" not in blk:
 pi = src.index("def panel(out")
 pj = src.find("\ndef ", pi + 1)
 pblk = src[pi:pj if pj > 0 else len(src)]
-if "_cmps(des)" not in pblk:
+# MATCHED ON THE CALL, NOT ON ITS EXACT ARGUMENTS. The literal was `_cmps(des)`, so adding the
+# declared controls - which is what puts the contrasts in reading order - read as the panel no
+# longer building from `comparisons` at all. A guard that fires when its subject gains an
+# argument is testing the spelling, not the property.
+if "_cmps(des" not in pblk:
     FAILURES.append("the panel does not build from design_panel.comparisons")
 
 if FAILURES:

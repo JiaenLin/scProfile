@@ -201,7 +201,7 @@ def _order(factors, alias):
     return keep
 
 
-def comparisons(design, factors=None, technical=None):
+def comparisons(design, factors=None, technical=None, controls=None):
     """EVERY QUESTION THIS DESIGN CAN BE ASKED, enumerated from the design table alone.
 
     THIS IS THE SKELETON OF A RESULT SECTION, and its absence is why one was shallow. A writer
@@ -296,7 +296,42 @@ def comparisons(design, factors=None, technical=None):
                         "question": (f"Does the {fa} difference depend on {fb}? Equivalently: is "
                                      f"the {fa} response in one {fb} level different from the "
                                      f"{fa} response in the other?")})
-    return out
+
+    # THE ORDER A RESULT IS READ IN, and it is not the order the enumeration happens to produce.
+    #
+    # A MARGINAL EFFECT IS AN AVERAGE OVER STRATA, so it means something only once the strata
+    # have been seen. Emitted marginals-first, the section opened with the averaged answer and
+    # showed the effects it averages three screens later, which is the order that hides an
+    # interaction: a flat marginal reads as "no effect" until the reader reaches the two large
+    # opposite simple effects underneath it.
+    #
+    # And WITHIN the simple effects, the CONTROL stratum first: one factor's effect measured in
+    # the other factor's control level is the effect on its own, and the same effect measured in
+    # a perturbed level is that effect under a second change. Reading the perturbed one first
+    # asks the reader to hold two changes at once. The control level is the one DECLARED on the
+    # command line, so this is derived from the design and its declaration and needs no list of
+    # contrast names anywhere - nor any idea of what a control is called in a given field.
+    rank = {"simple": 0, "marginal": 1, "interaction": 2}
+    ctrl = {}
+    for f in bio:
+        lv = _levels(f)
+        if len(lv) >= 2:
+            # `declared` is a LEVEL, not the whole mapping - passing the dict made every
+            # factor fall through to the alphabetical fallback and put the treated stratum first.
+            ctrl[f] = control_for(list(lv), declared=(controls or {}).get(f))[0]
+
+    def _key(c):
+        k = str(c.get("kind") or "")
+        st = c.get("stratum") or {}
+        # 0 for the control stratum, 1 for any other; a comparison with no stratum has neither
+        second = 0
+        if k == "simple" and st:
+            g, gl = next(iter(st.items()))
+            second = 0 if ctrl.get(str(g)) == str(gl) else 1
+        f = str(c.get("factor") or "")
+        return (rank.get(k, 9), second, bio.index(f) if f in bio else len(bio), f)
+
+    return sorted(out, key=_key)
 
 
 def draw(per_sample, design, path, *, cells=None, width=None):

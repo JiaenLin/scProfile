@@ -871,7 +871,7 @@ def panel(out, *, run_key="", plugin=""):
         if stem:
             stems[kind] = stem
 
-    cmps = _cmps(des)
+    cmps = _cmps(des, controls=pay.get("controls"))
     # A FIGURE IS PLACED ONCE. Several evidence needs can route to the same panel - the presence
     # map answers three of them - and the panel emitted it for every need of every comparison:
     # one figure, twenty-one times, which reads as though absence were the finding. Once is
@@ -913,7 +913,12 @@ def panel(out, *, run_key="", plugin=""):
                 r = str(r)
                 if r.startswith("native:"):
                     fn = r.split(":", 1)[1]
-                    for h in (by.get((label, fn)) or []):
+                    # AN UNLABELLED NATIVE PANEL ANSWERS EVERY CONTRAST. A figure drawn over all of the design's
+            # arms at once is not filed under any one of them, so keying strictly on the contrast
+            # name made it invisible to both documents - drawn on every run, placed in none, which
+            # is the exact failure this lookup was written to end. The host's own cohort panels
+            # have always matched this way; the tool's now do too.
+                    for h in (by.get((label, fn)) or []) + (by.get(("", fn)) or []):
                         found.append((fn, h))
                 elif r.startswith("host:"):
                     kind = r.split(":", 1)[1]
