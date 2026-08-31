@@ -3479,6 +3479,19 @@ writeLines(c(paste0("union\t", paste(group_new, collapse = "|")),
              paste0("absent_from_", name_a, "\t", paste(only_b, collapse = "|"))),
            file.path(figdir, "nativecmp_alignment.tsv"))
 
+# THE RECORD, IN THE HOST'S FORMAT. A removal described by its category cannot be argued with;
+# one that names what went can. `scprofile.removals` reads this from anywhere under the plugin's
+# directory and refuses a row that names nothing.
+if (length(absent)) {
+  .rem <- do.call(rbind, lapply(absent, function(p) data.frame(
+    scope = paste0("contrast: ", name_b, " against ", name_a),
+    element_kind = "population", element = p,
+    absent_from = if (p %in% only_a) name_b else name_a,
+    present_in  = if (p %in% only_a) name_a else name_b,
+    reason = "present in one arm and not the other, so no difference can be computed for it",
+    stringsAsFactors = FALSE)))
+  utils::write.csv(.rem, file.path(dirname(figdir), "removals.csv"), row.names = FALSE)
+}
 if (!length(shared)) stop("the two arms share no cell group; there is nothing to compare")
 if (length(absent)) {
   a <- subsetCellChat(a, idents.use = shared)
@@ -3975,6 +3988,18 @@ if (!is.null(inter) && nrow(inter)) {
   writeLines(c(paste0("shared_all_arms\t", paste(shared4, collapse = "|")),
                paste0("absent_from_some_arm\t", paste(dropped4, collapse = "|"))),
              file.path(figdir, "nativecmp_interaction_alignment.tsv"))
+  if (length(dropped4)) {
+    .rem4 <- do.call(rbind, lapply(dropped4, function(p) {
+      has <- nms[vapply(objs, function(o) p %in% levels(o@idents), logical(1))]
+      data.frame(scope = "interaction", element_kind = "population", element = p,
+                 absent_from = paste(setdiff(nms, has), collapse = "|"),
+                 present_in = paste(has, collapse = "|"),
+                 reason = paste("absent from at least one arm of the design; a difference of",
+                                "two differences is undefined without all four"),
+                 stringsAsFactors = FALSE)
+    }))
+    utils::write.csv(.rem4, file.path(dirname(figdir), "removals.csv"), row.names = FALSE)
+  }
   if (length(shared4) < 2) {
     cat("the arms share fewer than two populations; no interaction can be drawn\n")
     inter <- NULL

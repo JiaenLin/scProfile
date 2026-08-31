@@ -503,6 +503,35 @@ def section(run, plugin, spec=None, design=None, run_key=""):
                 f"{100.0 * comp[c].get(pop, 0.0) / tot[c]:.2f}% "
                 f"({int(comp[c].get(pop, 0.0)):,})" for c in cols) + " |"]
         L += ["| **total cells** | " + " | ".join(f"**{int(tot[c]):,}**" for c in cols) + " |", ""]
+    # WHAT THIS RUN DECLINED TO COMPARE, ONCE. Every comparison here restricts itself to the
+    # elements its arms share, and an element dropped for that reason is invisible in the result:
+    # a panel drawn on nine populations and one drawn on eleven look identical. Named rather than
+    # described, because a category cannot be argued with and a list can.
+    try:
+        from . import removals as _RM
+        _rrows = _RM.read(run, plugin)
+        _n_rm, _rm_names, _rm_diff = _RM.summarise(
+            _rrows, design,
+            json.loads((Path(run) / "report.json").read_text(encoding="utf-8"))
+            .get("unit_members") or {})
+    except Exception:                                                     # noqa: BLE001
+        _n_rm, _rm_names, _rm_diff = 0, [], []
+    if _n_rm:
+        L += ["### What was not compared", "",
+              f"{_n_rm} element(s) could not enter every comparison, because a difference cannot "
+              f"be computed for something one side does not have: "
+              + ", ".join(f"**{x}**" for x in _rm_names)
+              + ". Each is present in its own arm's panels and absent only from the comparisons; "
+                "the run records where each was found and where it was not.", ""]
+        if _rm_diff:
+            # RULE-ONE'S THIRD QUESTION, ANSWERED BY THE RUN. An element absent from every arm at
+            # one level of a factor has had a technical property turned into an apparent
+            # biological one, and that is not a judgement the person making the removal can make.
+            L += ["Of those, "
+                  + "; ".join(f"**{e}** is absent from every arm with {f} = {lv}"
+                              for e, f, lv in _rm_diff)
+                  + " — so its absence lines up with the design rather than falling across it, "
+                    "and it should not be read as that factor having no such population.", ""]
     _cfg = _settings(run, plugin, _arms)
     if _cfg:
         L += ["*Every unit was fitted with the same settings: "
