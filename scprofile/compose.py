@@ -67,6 +67,8 @@ def _two_scale(run, plugin):
             # recomputed, so a ratio in this text and a bar in a panel are the same arithmetic.
             "cells_from": _f(r.get("cells_from"), 0.0) or None,
             "cells_to": _f(r.get("cells_to"), 0.0) or None,
+            "unit_from": str(r.get("unit_from") or ""),
+            "unit_to": str(r.get("unit_to") or ""),
             "elements": [], "only_from": [], "only_to": [], "disagree": 0, "n": 0})
         c["n"] += 1
         c["elements"].append((r["element"], _f(r.get("raw_delta"))))
@@ -135,6 +137,7 @@ def findings(run, plugin, spec=None):
             "source_table": str(ts_path.relative_to(Path(run))) if ts_path.is_file() else "",
             "source_stats": sig_rel or "",
             "from_source": c["from_source"], "to_source": c["to_source"],
+            "unit_reference": c["unit_from"], "unit_against": c["unit_to"],
             # THE SAME RATIO ON A PER-OBSERVATION SCALE. A SECOND SCALE, NOT A CORRECTION: the
             # dependence of a total on the observations behind it is not linear, so dividing puts
             # the arithmetic on the page instead of removing it. Absent where the run did not
@@ -208,12 +211,17 @@ def _native_index(run, plugin, spec):
     """
     routes = ((spec or {}).get("report") or {}).get("provides_evidence") or {}
     declared = (spec or {}).get("native_plots") or {}
+    native = []
     try:
         placed = json.loads((Path(run) / "report" / "panels.json")
                             .read_text(encoding="utf-8")).get(plugin) or {}
         native = placed.get("native") or []
     except (OSError, ValueError):
-        native = []
+        # A RUN WITHOUT A RECORDED PANEL LIST STILL GETS ITS SECTION. The handler bound only
+        # `native`, so the next line read an unbound `placed` and raised NameError - which a
+        # broad except upstream turned into no section, no claims and no panel at all, reported
+        # as one line in a log. The figures are then uncited; the numbers still stand.
+        placed = {}
     from . import native as _NAT
 
     by = {}
@@ -388,12 +396,16 @@ def _composition(run, plugin, spec, units):
 
 
 def _settings(run, plugin, units):
-    """{parameter: value} this run resolved, or {} - read from a finished unit's own manifest.
+    """({parameter: value}, all_agree) - what this run resolved, and whether every unit agrees.
 
     STATED ONCE, AT THE TOP. They are a property of the RUN, not of any comparison, and printing
-    them under each contrast puts a constant where a finding belongs - the same failure as the
-    aliasing line printed four times and the alignment sentence on a panel with no populations.
+    them under each contrast puts a constant where a finding belongs.
+
+    THE AGREEMENT IS CHECKED, NOT ASSUMED. The first version returned the FIRST unit's config and
+    the section printed "Every unit was fitted with the same settings" - a universal claim from a
+    sample of one. Where the units disagree that is a finding about the run, not a footnote.
     """
+    seen = {}
     for u in units:
         try:
             cfg = json.loads((Path(run) / "kernels" / plugin / str(u) / "out.json")
@@ -401,8 +413,11 @@ def _settings(run, plugin, units):
         except (OSError, ValueError):
             continue
         if cfg:
-            return dict(cfg)
-    return {}
+            seen[str(u)] = dict(cfg)
+    if not seen:
+        return {}, True
+    first = next(iter(seen.values()))
+    return first, all(v == first for v in seen.values())
 
 
 def section(run, plugin, spec=None, design=None, run_key=""):
@@ -481,9 +496,14 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     # not under each comparison. A constant printed under every finding is the failure this
     # section has already had twice - the aliasing line four times, the alignment sentence on a
     # panel with no populations - and it buries the sentence that actually describes the result.
+    # BY UNIT, NOT BY LEVEL. `reference`/`against` are factor LEVELS: two contrasts both read
+    # "young against aged" while meaning different objects, so looking a side up by that name
+    # returned the MARGINAL unit for every conditional contrast. The composition table listed
+    # four marginal arms while telling the reader every comparison is read against it, and the
+    # per-contrast composition caveat was computed from the wrong pair every time.
     _arms = []
     for lab in order:
-        for k in ("reference", "against"):
+        for k in ("unit_reference", "unit_against"):
             v = str(f[lab].get(k) or "")
             if v and v not in _arms:
                 _arms.append(v)
@@ -542,13 +562,15 @@ def section(run, plugin, spec=None, design=None, run_key=""):
                 L += [f"- **{_e}** is absent from every arm with "
                       + ", ".join(f"`{f2} = {lv}`" for f2, lv in sorted(set(_fl))) + "."]
             L += [""]
-            if any(len(set(v)) > 1 for v in _byel.values()):
+            if any(len({f2 for f2, _lv in v}) > 1 for v in _byel.values()):
                 L += ["An element lining up with more than one factor at once is what aliasing "
                       "looks like from here: those factors do not vary independently in this "
                       "design, so which of them the absence belongs to cannot be told apart.", ""]
-    _cfg = _settings(run, plugin, _arms)
+    _cfg, _same = _settings(run, plugin, _arms)
     if _cfg:
-        L += ["*Every unit was fitted with the same settings: "
+        L += ["*" + ("Every unit was fitted with the same settings: " if _same else
+                     "**The units were NOT all fitted with the same settings**, which makes their "
+                     "numbers not directly comparable. One unit's were: ")
               + ", ".join(f"`{k} = {v}`" for k, v in sorted(_cfg.items())) + ".*", ""]
     if alias:
         L += ["; ".join(f"In this design **{k}** varies together with {', '.join(sorted(v))} "
@@ -601,7 +623,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         # contrast because they differ per contrast; the thresholds are declared above this
         # function, before the run that tests them, rather than chosen from what they caught.
         if comp:
-            ra, rb = str(d["reference"]), str(d["against"])
+            ra, rb = str(d.get("unit_reference") or ""), str(d.get("unit_against") or "")
             ca, cb = comp.get(ra) or {}, comp.get(rb) or {}
             ta, tb = sum(ca.values()) or 1.0, sum(cb.values()) or 1.0
             flagged = []

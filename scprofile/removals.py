@@ -116,19 +116,38 @@ def differential(rows, design, arm_members=None):
     converted into an apparent biological difference, and no downstream analysis can undo it. It
     is also the one thing about a removal that the person making it is worst placed to judge.
     """
-    out = []
+    # POOLED ACROSS EVERY ROW FOR AN ELEMENT, not judged row by row. A plugin writes one row per
+    # comparison, so the same element appears several times with different sides. Judging each
+    # row alone and unioning the answers reported an element as "absent from every arm with
+    # A = x, A = y" - both levels of one factor, a contradiction presented as an answer.
+    #
+    # AND AN ARM THE DESIGN CANNOT PLACE DISQUALIFIES THE CLAIM. An arm that is neither a design
+    # row nor a known pool contributes no level, and ignoring it let an unplaceable arm silently
+    # support "absent from every arm with A = x" when it may well have been the other level.
+    gone_by, have_by, unplaceable = {}, {}, set()
     for r in (rows or []):
         el = str(r.get("element", "")).strip()
-        gone = [x for x in str(r.get("absent_from", "")).split("|") if x.strip()]
-        have = [x for x in str(r.get("present_in", "")).split("|") if x.strip()]
-        if not (el and gone and have):
+        if not el:
             continue
-        lv_gone = [_levels(design, arm_members, a) for a in gone]
-        lv_have = [_levels(design, arm_members, a) for a in have]
-        for f in {k for d in lv_gone + lv_have for k in d}:
-            g = {d.get(f) for d in lv_gone if d.get(f)}
-            h = {d.get(f) for d in lv_have if d.get(f)}
-            # absent from exactly one level, and present at none of the arms carrying it
+        for key, store in (("absent_from", gone_by), ("present_in", have_by)):
+            for a in str(r.get(key, "")).split("|"):
+                a = a.strip()
+                if not a:
+                    continue
+                lv = _levels(design, arm_members, a)
+                if not lv:
+                    unplaceable.add((el, a))
+                store.setdefault(el, {})[a] = lv
+    out = []
+    for el, gone in gone_by.items():
+        have = have_by.get(el) or {}
+        if not have:
+            continue
+        if any(e == el for e, _a in unplaceable):
+            continue                      # an arm we cannot place could be on either side
+        for f in {k for d in list(gone.values()) + list(have.values()) for k in d}:
+            g = {d.get(f) for d in gone.values() if d.get(f)}
+            h = {d.get(f) for d in have.values() if d.get(f)}
             if len(g) == 1 and h and not (g & h):
                 out.append((el, f, next(iter(g))))
     return sorted(set(out))

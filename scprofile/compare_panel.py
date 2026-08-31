@@ -914,8 +914,14 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob", unit_c
         e_hi, src_hi = pool(per, m_hi, unit_members=_um)
         # HOW BIG EACH SIDE'S FIT WAS. A total is not comparable between two arms of different
         # size without it, and a reader who is not given it will assume they were comparable.
-        c_lo = (unit_cells or {}).get(_unit_for(_um, m_lo))
-        c_hi = (unit_cells or {}).get(_unit_for(_um, m_hi))
+        # THE UNIT, NOT ONLY THE LEVEL. `from`/`to` are factor LEVELS - two different contrasts
+        # both say "young" against "aged" - so any consumer resolving a side by that name reads
+        # the MARGINAL unit even for a conditional contrast. That is the same mistake the native
+        # compare phase documents having already made once, and it reached the composition table
+        # a reader is told every comparison is read against.
+        u_lo, u_hi = _unit_for(_um, m_lo), _unit_for(_um, m_hi)
+        c_lo = (unit_cells or {}).get(u_lo)
+        c_hi = (unit_cells or {}).get(u_hi)
         if e_lo is None or e_hi is None:
             continue
         gcol = group_col or "group"
@@ -938,14 +944,29 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob", unit_c
         _p_lo = set(e_lo["source"]) | set(e_lo["target"])
         _p_hi = set(e_hi["source"]) | set(e_hi["target"])
         _shared = _p_lo & _p_hi
-        if _shared and (_p_lo - _shared or _p_hi - _shared):
+        if not _shared:
+            # NO SHARED ELEMENT IS NOT "NOTHING TO RESTRICT", it is nothing to compare. The guard
+            # read `if _shared and ...`, so two arms with no population in common skipped the
+            # restriction entirely and produced a ratio between two disjoint networks.
+            print(f"  two-scale: {label} shares no population between its arms; "
+                  f"no comparison is possible and no row is written")
+            continue
+        if _p_lo - _shared or _p_hi - _shared:
             e_lo = e_lo[e_lo["source"].isin(_shared) & e_lo["target"].isin(_shared)]
             e_hi = e_hi[e_hi["source"].isin(_shared) & e_hi["target"].isin(_shared)]
             if e_lo.empty or e_hi.empty:
                 continue
         a = e_lo.groupby(gcol)[weight].sum()
         b = e_hi.groupby(gcol)[weight].sum()
-        tot_a, tot_b = float(a.sum()) or 1.0, float(b.sum()) or 1.0
+        tot_a, tot_b = float(a.sum()), float(b.sum())
+        if not (tot_a and tot_b):
+            # AN ARM WITH NOTHING IN IT IS NOT A CONTRAST. Substituting 1.0 to avoid dividing by
+            # zero wrote a fabricated total into the table, and the written section quoted it:
+            # "Total is 3.00 against 1.00 in the reference arm". The share scale is undefined
+            # here and the ratio is meaningless; the contrast is skipped and said to be skipped.
+            print(f"  two-scale: {label} has an arm with no signal at all "
+                  f"({lo_lv}={tot_a:g}, {hi_lv}={tot_b:g}); no row written for it")
+            continue
         for g in sorted(set(a.index) | set(b.index)):
             ra, rb = float(a.get(g, 0.0)), float(b.get(g, 0.0))
             sa, sb = 100.0 * ra / tot_a, 100.0 * rb / tot_b
@@ -960,6 +981,7 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob", unit_c
                 # per-observation scale in a written section and the one in a panel are the same
                 # arithmetic on the same two numbers.
                 "cells_from": c_lo, "cells_to": c_hi,
+                "unit_from": u_lo, "unit_to": u_hi,
                 # WHICH POPULATIONS THIS ROW WAS COMPUTED OVER, so a reader can see that the
                 # number and the panel beside it are about the same set.
                 "populations_compared": len(_shared),

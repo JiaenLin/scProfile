@@ -66,6 +66,21 @@ check("scattered" not in names,
 check(("aligned", "f", "hi") in got,
       f"the flag does not name the factor and level it lines up with: {got}")
 
+# 2b. A DIFFERENTIAL CLAIM MUST NOT CONTRADICT ITSELF, and an arm the design cannot place must
+#     not silently support one. A plugin writes one row per comparison, so an element appears in
+#     several rows with different sides; judging each row alone and unioning the answers reported
+#     an element as absent from every arm at BOTH levels of one factor.
+contra = [{"element": "P", "absent_from": "lo_base", "present_in": "hi_base"},
+          {"element": "P", "absent_from": "hi_treat", "present_in": "lo_treat"}]
+check(not RM.differential(contra, DES, MEM),
+      f"an element absent at BOTH levels of one factor was reported as aligned with it: "
+      f"{RM.differential(contra, DES, MEM)} - a contradiction presented as rule one's answer")
+
+unk = [{"element": "Q", "absent_from": "mystery|lo_base", "present_in": "hi_base"}]
+check(not RM.differential(unk, DES, MEM),
+      "an arm the design cannot place was allowed to support an alignment claim; it may belong "
+      "to either level, so the claim is not established")
+
 # 3. no vocabulary of its own
 src = (ROOT / "scprofile" / "removals.py").read_text()
 for word in ("population", "gene", "pathway", "cell"):

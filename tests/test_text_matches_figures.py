@@ -69,6 +69,36 @@ if rows:
           f"the row does not record the population present in one arm only "
           f"(got {rows[0].get('populations_only_one_arm')!r})")
 
+# 5. THE UNIT, NOT THE LEVEL. `from`/`to` are factor LEVELS - two contrasts can both read
+#    "young against aged" and mean different objects - so a consumer resolving a side by that
+#    name reads the MARGINAL unit for every conditional contrast. Found in a real run: the
+#    composition table listed four marginal arms while telling the reader every comparison is
+#    read against it, and the per-contrast composition caveat used the wrong pair every time.
+if rows:
+    check("unit_from" in rows[0] and "unit_to" in rows[0],
+          "the row does not record WHICH UNIT each side came from, so a consumer can only "
+          "resolve a side by its level name - which is the same object for several contrasts")
+    check(rows[0].get("unit_from") == "ctl" and rows[0].get("unit_to") == "trt",
+          f"the recorded units are wrong: {rows[0].get('unit_from')!r} / "
+          f"{rows[0].get('unit_to')!r}")
+
+# 6. NO INVENTED DENOMINATOR, AND NO COMPARISON BETWEEN DISJOINT ARMS.
+empty = {"ctl": edges(SHARED), "trt": edges([("A", "B", 0.0, "p1")]),
+         "s1": edges(SHARED), "s3": edges(SHARED)}
+zero_rows = CP.two_scale_table(
+    {"ctl": edges(SHARED), "trt": edges([]), "s1": edges(SHARED), "s3": edges([])},
+    design, pairs, group_col="group", weight="prob")
+check(not zero_rows,
+      "an arm with no signal at all still produced a row; the total was replaced with 1.0 and "
+      "the section quoted it as a measurement")
+
+disjoint = {"ctl": edges([("A", "B", 1.0, "p1")]), "trt": edges([("X", "Y", 8.0, "p9")]),
+            "s1": edges([("A", "B", 1.0, "p1")]), "s3": edges([("X", "Y", 8.0, "p9")])}
+dj = CP.two_scale_table(disjoint, design, pairs, group_col="group", weight="prob")
+check(not dj,
+      "two arms sharing NO population produced a ratio anyway - the restriction was skipped "
+      "precisely when there was nothing to compare")
+
 src = (ROOT / "scprofile" / "compare_panel.py").read_text()
 check("_shared" in src and "isin(_shared)" in src,
       "the restriction is not applied in compare_panel, so the table and the figures can diverge "
