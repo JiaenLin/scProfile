@@ -2767,6 +2767,42 @@ def _paper(a):
     return 0
 
 
+def _agenda(a):
+    """What the agent still has to do on this run, in order, with the state of each.
+
+    THE INTERFACE OVER THE AGENT'S HALF. Each step had a command and there was nothing over
+    them, so it depended on remembering the order - and the record shows what that produces:
+    across this project's whole history, `run --section` had been used zero times. `--strict`
+    exits non-zero while anything is outstanding, which is what a gate or a promotion step reads.
+    """
+    from . import agenda as AG
+    from . import brief as BR
+
+    out = Path(a.out)
+    if not out.is_dir():
+        print(f"scprofile: no such run directory: {out}", file=sys.stderr)
+        return REFUSE
+    pay = BR._payload(out)
+    names = [a.plugin] if a.plugin else sorted((pay.get("kernels") or {}))
+    if not names:
+        print("scprofile: this run has no plugin results to write up", file=sys.stderr)
+        return REFUSE
+    left = 0
+    for nm in names:
+        t = AG.tasks(out, nm)
+        p = AG.write_agenda(out, nm)
+        undone = [x for x in t if x["state"] != AG.DONE]
+        left += len(undone)
+        print(f"  {nm}: {len(t) - len(undone)} of {len(t)} done  ->  {p}")
+        for x in undone:
+            print(f"    [{x['state']}] {x['title']}")
+            print(f"        {x['do']}")
+    if a.strict and left:
+        print(f"\n{left} agent task(s) outstanding.", file=sys.stderr)
+        return 1
+    return 0
+
+
 def _write(a):
     """Emit the writing brief - the evidence an AGENT writes the result from.
 
@@ -3468,6 +3504,15 @@ def main(argv=None):
     ls_.add_argument("--kernel", help="plugins to consider, comma separated")
     ls_.add_argument("--json", action="store_true", help="machine-readable")
     ls_.set_defaults(fn=_landscape)
+
+    ag = sub.add_parser("agenda",
+                        help="[agent] what remains to be done on this run, in order")
+    ag.add_argument("--out", required=True, type=Path, help="a run directory")
+    ag.add_argument("--plugin", default="", help="one plugin. Omit for every plugin in the run")
+    ag.add_argument("--strict", action="store_true",
+                    help="exit non-zero while any agent task is outstanding. For a gate, or for "
+                         "a promotion step that must not accept an unwritten result.")
+    ag.set_defaults(fn=_agenda)
 
     wr = sub.add_parser("write",
                         help="[agent] the brief to write this run's result from")

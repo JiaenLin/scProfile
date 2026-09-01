@@ -509,6 +509,17 @@ if [ -d "${OUT:-}/report" ]; then
   #
   # `review --strict` is the gate, and belongs where a human is promoting a run, not here.
   "$PY" -m scprofile.cli review --out "$OUT" || echo "  review exit $?"
+
+  say "9. WHAT THE AGENT STILL HAS TO DO"
+  # THE HANDOFF, PRINTED WHERE THE JOB ENDS. A PBS job cannot wait for an agent: it fits, draws,
+  # seals and exits, and the agent works between jobs. So the last thing it does is say what
+  # remains and in what order, with the command for each - otherwise the agent's half depends on
+  # someone remembering the sequence, and the record shows what that produces. Every task's state
+  # is read off this run's own artifacts, so this cannot describe a state the run has moved past.
+  #
+  # NOT GATED HERE, for the same reason `review` is not: `agenda --strict` is what a promotion
+  # step reads, and a cycle with nobody at the screen is not the place for it.
+  "$PY" -m scprofile.cli agenda --out "$OUT" || echo "  agenda exit $?"
 fi
 
 _DONE=1

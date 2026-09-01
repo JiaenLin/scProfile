@@ -2211,6 +2211,10 @@ def write_index(out_dir, payload):
                 _br = _BR.write_brief(out_dir, _pl)
                 if _br:
                     print(f"      {_br}  (what to write this up from)")
+                from . import agenda as _AG
+                _ag = _AG.write_agenda(out_dir, _pl)
+                _left = _AG.outstanding(out_dir, _pl)
+                print(f"      {_ag}  ({len(_left)} agent task(s) outstanding)")
             except Exception as _be:                                      # noqa: BLE001
                 print(f"      writing brief not produced ({_be})")
             _pan = _PA.panel(out_dir, plugin=_pl, run_key=Path(out_dir).name)
