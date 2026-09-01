@@ -4764,6 +4764,24 @@ if (!is.null(inter) && nrow(inter)) {
       # can surface, because a reversal is a property of the two components and not of their gap.
       npng(paste0("interaction_lr_scatter__", safe), {
         dd <- lr$d
+        # ONE RANGE FOR BOTH AXES. The dashed diagonal only MEANS "no interaction" if a unit on
+        # one axis is a unit on the other, so equal scaling is not a style choice here. But
+        # `coord_equal()` on its own kept each axis's own range - -9..+2 against -3..+6 - and
+        # squared the panel by stretching it, which stranded the data in one corner and blew the
+        # shaded quadrants up to fill the plate. A shared symmetric-about-the-data range keeps
+        # the diagonal honest AND uses the space.
+        .r <- range(c(dd$resp1, dd$resp2), na.rm = TRUE)
+        .pad <- max(diff(.r) * 0.10, 1e-9)
+        .lim <- c(.r[1] - .pad, .r[2] + .pad)
+        # LABELS TURN INWARD. Placed always to the right, every point in the right-hand half put
+        # its name off the plate - four were cut on the first render. Anchoring on the side that
+        # faces the middle keeps them inside the panel whichever quadrant the point is in.
+        dd$hj <- ifelse(dd$resp2 > mean(.lim), 1.12, -0.12)
+        # AND ONLY THE LARGEST REVERSALS ARE NAMED, said out loud rather than left to
+        # `check_overlap`, which drops colliding labels silently - a removal with no record.
+        .lab <- dd[dd$flip, , drop = FALSE]
+        .lab <- .lab[order(-abs(.lab$ix)), , drop = FALSE]
+        .lab <- utils::head(.lab, 10)
         ggplot2::ggplot(dd, ggplot2::aes(x = resp2, y = resp1)) +
           ggplot2::annotate("rect", xmin = -Inf, xmax = 0, ymin = 0, ymax = Inf,
                             fill = "#b2182b", alpha = 0.06) +
@@ -4774,25 +4792,24 @@ if (!is.null(inter) && nrow(inter)) {
           ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed",
                                linewidth = 0.4, colour = "grey30") +
           ggplot2::geom_point(ggplot2::aes(colour = flip), size = 2.4, alpha = 0.9) +
-          ggplot2::geom_text(data = dd[dd$flip, , drop = FALSE],
-                             ggplot2::aes(label = pair), size = 2.4, hjust = -0.08,
-                             check_overlap = TRUE) +
+          ggplot2::geom_text(data = .lab,
+                             ggplot2::aes(label = pair, hjust = hj), size = 2.6) +
           ggplot2::scale_colour_manual(values = c(`TRUE` = "#b2182b", `FALSE` = "grey45"),
                                        labels = c(`TRUE` = "direction overturns",
                                                   `FALSE` = "same direction in both"),
                                        name = NULL) +
-          ggplot2::coord_equal() +
+          ggplot2::coord_equal(xlim = .lim, ylim = .lim) +
           ggplot2::labs(
             x = paste0(eff_lbl, " within ", st[2], " (the control)"),
             y = paste0(eff_lbl, " within ", st[1]),
             title = paste0("Does any ligand-receptor pair respond to ", fac,
                            " in OPPOSITE directions between ", st[1], " and ", st[2], "?"),
-            subtitle = paste0("Both axes are percentage points of each arm's total ",
-                              "communication probability. The dashed line is NO interaction; ",
-                              "distance from it is the interaction.\nShaded quadrants are the ",
-                              "pairs whose direction overturns - ", lr$n_flip, " of ", lr$n_all,
-                              " pairs present in all four arms do so; the labelled ones are ",
-                              "those drawn here.")) +
+            # SHORT ENOUGH TO FIT. The first version ran off the right edge on both of its
+            # lines, losing the end of the sentence that says what the dashed line is.
+            subtitle = paste0("Axes: percentage points of each arm's own total.\n",
+                              "Dashed line = no interaction. Shaded quadrants = direction ",
+                              "overturns (", lr$n_flip, " of ", lr$n_all, " pairs; ",
+                              nrow(.lab), " named).")) +
           ggplot2::theme_classic() +
           ggplot2::theme(legend.position = "top")
       }, w = 2000, h = 2000, by = "plugin",
@@ -4809,7 +4826,8 @@ if (!is.null(inter) && nrow(inter)) {
                          "because a difference of +1 against -1 and one of +8 against +5 are ",
                          "both simply a gap. ", lr$n_flip, " of ", lr$n_all,
                          " pairs present in all four arms overturn. Overturning pairs are ",
-                         "labelled; the rest are not, to keep the panel readable. No test ",
+                         "labelled, the largest reversals first, and the count of both is on ",
+                         "the plate; the rest are not, to keep the panel readable. No test ",
                          "applies to a difference of two differences and none is claimed."))
     }
     cat("interaction drawn for framing:", fr, "over", nrow(both), "pathway(s)\n")
