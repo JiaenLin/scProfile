@@ -753,11 +753,29 @@ stampf <- file.path(store, "cellchat.inference.txt")
 #
 # Adding them invalidates every existing entry once. That is the correct cost: those entries
 # cannot say which version made them, so none of them can be trusted to.
+# md5 OF A STRING, WITHOUT WRITING ONE. `tools::md5sum` takes a path, and the span being hashed
+# is a slice of a file rather than a file - writing it out to hash it would put a temporary file
+# in the instance directory on every unit.
+digest_chr <- function(x) {
+  f <- tempfile(); on.exit(unlink(f), add = TRUE)
+  writeLines(x, f); unname(tools::md5sum(f))
+}
 .ccver <- tryCatch(as.character(utils::packageVersion("CellChat")),
                    error = function(e) "CellChat-version-unknown")
 .recipe <- tryCatch({
   .f <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])
-  if (!is.na(.f) && nzchar(.f) && file.exists(.f)) unname(tools::md5sum(.f)) else "recipe-unknown"
+  if (is.na(.f) || !nzchar(.f) || !file.exists(.f)) "recipe-unknown" else {
+    .l <- readLines(.f, warn = FALSE)
+    .a <- grep("^# --- RECIPE START ---", .l)[1]
+    .b <- grep("^# --- RECIPE END ---", .l)[1]
+    # NO MARKERS IS NOT "NO RECIPE". Falling back to the whole file keeps the stamp SAFE if the
+    # markers are ever removed or renamed - it over-invalidates, which costs time, rather than
+    # under-invalidating, which costs correctness.
+    if (is.na(.a) || is.na(.b) || .b <= .a)
+      digest_chr(paste(.l, collapse = "\n"))
+    else
+      digest_chr(paste(.l[.a:.b], collapse = "\n"))
+  }
 }, error = function(e) "recipe-unknown")
 stamp <- paste(tools::md5sum(mtx), tools::md5sum(meta_f), db_name, mean_type, trim,
                pop_size, nboot, thresh, min_cells, .ccver, .recipe, sep = "|")
@@ -775,6 +793,13 @@ if (file.exists(rds) && file.exists(stampf) &&
 .from_cache <- !is.null(cc)
 
 if (is.null(cc)) {
+# --- RECIPE START --- everything between these two markers determines the SAVED OBJECT, and the
+# cache stamp hashes exactly this span. Hashing the whole script instead was correct and far too
+# blunt: a figure title, a legend, a colour - none of which the object has ever heard of -
+# invalidated eighteen fitted objects and bought a two-and-a-half hour re-inference. Under-
+# invalidating is a wrong answer; over-invalidating is a workflow that stops being used, and the
+# reuse this cache exists for is spent on edits that cannot change what it holds. Move a line
+# that alters the object INSIDE these markers, or the stamp will not see it.
 cc <- createCellChat(object = X, meta = meta, group.by = "label")
 cc@DB <- get(db_name)
 cc <- subsetData(cc)
@@ -817,6 +842,7 @@ try_write <- function(name, expr) {
 cc <- computeCommunProbPathway(cc)
 cc <- aggregateNet(cc)
 cc <- netAnalysis_computeCentrality(cc, slot.name = "netP")
+# --- RECIPE END ---
 
 # SAVED HERE, NOT EARLIER. The first version wrote the object straight after inference, before
 # the pathway probabilities, the aggregate network and the centrality were added to it. A reused
