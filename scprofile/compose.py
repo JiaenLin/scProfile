@@ -787,9 +787,10 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         # to across runs. The requirement that a reader meets the result immediately has not
         # gone; it moved one line down, where it can be more specific than a heading allowed.
         #
-        # THE ARMS ARE NAMED BY UNIT, NOT BY LEVEL. `age | diet = chow` and `age | diet = HFD`
-        # both read "young against aged" at the level of factors while comparing different
-        # objects; the units say which. Falls back to the levels where a contrast has no units
+        # THE ARMS ARE NAMED BY UNIT, NOT BY LEVEL. In a crossed design, one factor's contrast
+        # taken within each level of the other reads identically at the level of FACTORS - the
+        # same two levels in both - while comparing different objects. Only the units tell them
+        # apart, and the run records them. Falls back to the levels where a contrast has no units
         # recorded, which is what a marginal one looks like on some designs.
         _to = d.get("unit_against") or d["against"]
         _fr = d.get("unit_reference") or d["reference"]

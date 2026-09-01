@@ -43,7 +43,11 @@ if d > 0:
     # so moving the loop moves the boundary with it.
     _end = SRC.find("# ---- LIGAND-RECEPTOR LEVEL", body_end)
     _stop = _end if _end > body_end else len(SRC)
-    outside = SRC[:d] + SRC[_stop:]
+    # THE METRIC LOOP ITSELF, and nothing else. The accessor's own body sits above `body_end`
+    # and is excluded by starting there; the ligand-receptor panel below the marker reads
+    # `net$prob` as the [pop x pop x pair] ARRAY and sums two dimensions, which `.armmat` - a
+    # 2-D matrix - cannot serve, so it ends the span rather than being flagged as a bypass.
+    outside = SRC[body_end:_stop]
     stray = re.findall(r"mi@net\[\[", outside)
     check(not stray,
           "%d per-arm matrix read(s) bypass the accessor, so a metric can silently read the "
