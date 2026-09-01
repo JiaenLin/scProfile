@@ -352,6 +352,7 @@ def figure_index(run, plugin, spec=None, design=None):
         return {}
     by, routes, host = _native_index(run, plugin, spec)
     order = _order(f, design, _controls(run))
+    place = _positions(spec)
     idx, n = {}, 0
     # TWO PASSES, AND THE COHORT PANELS COME SECOND. A panel drawn over every arm at once is
     # filed under no contrast, so it answers all of them - and in a single pass it was therefore
@@ -364,14 +365,49 @@ def figure_index(run, plugin, spec=None, design=None):
     # contrast is read first, in the design's own order, and everything drawn across the design
     # is read after it. Nothing is dropped and nothing moves between documents - the same paths
     # are numbered, in a different order, and `cite` keeps resolving each of them.
-    for scope in ("contrast", "cohort"):
+    # THREE PASSES, BECAUSE A DESIGN-WIDE PANEL IS NOT ONE CATEGORY. The totals per arm orient a
+    # reader and belong first; the contrasts are the body; the interaction is the conclusion the
+    # design was built to reach and belongs last. All three are unlabelled, so nothing about the
+    # panel itself distinguishes them - the plugin says which is which, and this applies it.
+    for pos in ("overview", "contrast", "conclusion"):
+        scope = "contrast" if pos == "contrast" else "cohort"
         for label in order:
             for _key, needs in SENTENCE_EVIDENCE:
                 for path in _figs_for(by, routes, label, needs, host, scope=scope):
-                    if path not in idx:
-                        n += 1
-                        idx[path] = n
+                    if path in idx:
+                        continue
+                    if scope == "cohort" and place(path) != pos:
+                        continue
+                    n += 1
+                    idx[path] = n
     return idx
+
+
+#: A panel with no declared position is body - the middle of the document, with the contrasts.
+DEFAULT_POSITION = "contrast"
+
+
+def _positions(spec):
+    """A function {figure path -> "overview" | "contrast" | "conclusion"} from the declaration.
+
+    KEYED ON THE FIGURE ID'S PREFIX, NOT ON THE FUNCTION THAT DREW IT, because one upstream
+    function can draw panels belonging in different places - a difference between two arms is
+    body, and a difference of two of those differences is the conclusion, and the same function
+    draws both. Longest prefix wins so a plugin can put a general rule and an exception beside
+    each other. The host knows nothing about any particular panel; it applies what is declared.
+    """
+    decl = {str(k): str(v) for k, v in
+            (((spec or {}).get("report") or {}).get("figure_position") or {}).items()}
+    keys = sorted(decl, key=len, reverse=True)
+
+    def where(path):
+        base = str(path).rsplit("/", 1)[-1]
+        for k in keys:
+            if base.startswith(k):
+                return decl[k]
+        return DEFAULT_POSITION
+
+    return where
 
 
 def cite(idx, paths):

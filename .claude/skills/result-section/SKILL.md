@@ -87,10 +87,104 @@ and the section then reported "nothing here is tested between arms" as though th
 property of the method. The tool had offered two ways past an error and the one that removed the
 test was taken. Check what the run actually ran before writing that something cannot be done.*
 
+## The architecture of the document
+
+**This order is the same for every plugin.** What changes between plugins is what fills each
+part, and that comes from the plugin's own declaration - never from this file, which is why the
+same skill writes a communication paper and a differential-expression one.
+
+1. **The overview.** What each group is and how they differ in total, in prose, with the
+   design-wide panels beside it. A reader meets the groups before any machinery.
+2. **The reference profile.** The control group described in its own right, at every level the
+   plugin declares, with no comparison in it. A difference means nothing until the thing it is a
+   difference *from* has been described.
+3. **One section per crossed comparison**, each walking the plugin's levels coarsest first.
+4. **One section per marginal comparison** - a factor's effect pooled over the other. These come
+   AFTER the crossed ones because a marginal is an average over strata and is unreadable until
+   the strata have been seen.
+5. **The interactions.** One factor's response conditioned on the other, at the same levels.
+   This is the deepest claim the design supports and it belongs last.
+6. **Limitations.** One paragraph, under 200 words, ranked by what actually threatens the
+   conclusions.
+7. **Supporting material.** Composition tables, what could not be compared, settings, the full
+   caveat list.
+
+**Nothing that is machinery opens the document.** A composition table, a QC statement or a
+settings block at the top tells a reader what was checked before telling them what was found -
+they arrive at a number with nothing to attach it to. All of it is real and all of it belongs
+after the argument, where a reader who wants to check something can find it.
+
+### Levels: how a comparison is walked
+
+A plugin declares an ordered list of **levels** - the granularities its method resolves, coarsest
+first. Every comparison section walks the same list in the same order, so the document has one
+shape whatever the plugin is:
+
+| plugin kind | coarse | middle | fine |
+|---|---|---|---|
+| cell-cell communication | which cell types talk | which programmes | which ligand-receptor pairs |
+| differential expression | which cell types respond | which programmes | which genes |
+
+The host asks the plugin for the list and for which panels answer each level. **Do not write the
+level names into the prose from memory** - a section that names "ligand-receptor pairs" when the
+plugin is measuring something else is the failure this arrangement exists to prevent.
+
+### Section headings name the comparison, not the finding
+
+> `Differential cell-cell communication features between aged_chow and young_chow`
+
+**This supersedes the older rule that a heading should be a finding.** That rule was written when
+the result was one section, and it is wrong once there is a section per comparison: a heading
+that changes with the result makes the document's structure depend on its outcome, so two runs
+of the same design produce differently-shaped papers and nothing can be cross-referenced. The
+finding goes in the section's first sentence, where it belongs and where it can be as specific
+as the data allows.
+
+**The arm names come from the units, never from the factor levels.** Two contrasts can both read
+"young against aged" while comparing different objects - `young_chow -> aged_chow` and
+`young_HFD -> aged_HFD`. The run records the units; use them.
+
+### When two scales disagree, say which one carries the claim
+
+A total and the same total per observation are two readings of one result, and they can rank the
+groups differently. **Report both, then state which one the claim is made on and why** - in one
+sentence, in the text, not left to the reader.
+
+The rule that settles it is not a preference: **if the groups differ in size, the per-observation
+scale is what a claim about behaviour is made on, and the absolute scale is what a claim about
+total burden is made on.** Say which of the two you are making.
+
+> *Aged chow-fed hearts carry more total inferred interaction than young HFD-fed hearts (1,193
+> against 871), but this is the larger sample: per 1,000 cells the two are close (38.7 against
+> 36.5), so the difference in the total is a difference in how much tissue was sampled rather
+> than in how much each cell signals.*
+
+*Cost: the same four arms ranked one way on the total and another per 1,000 cells, with both
+panels on the page and no sentence saying which to read. A reader could take either and reach
+opposite conclusions about whether diet or age dominates.*
+
+### The limitations paragraph
+
+One paragraph, **under 200 words**, at the end of the text. It is a **ranking of the run's own
+recorded caveats**, not new prose: the run collects them, this selects the few that actually
+threaten the conclusions and states them plainly. A different cohort produces different
+limitations with nobody editing text.
+
+Rank by what would change a conclusion if a reader disagreed with it. A confound the design
+cannot separate outranks a preparation caveat, which outranks a threshold. The full list stays in
+the supporting material - the paragraph is what a reader meets at the end of the argument.
+
 ## The shape of the section
 
-**Titles are findings, not activities.** "Aged hearts signal more, and the increase is broad",
-not "Age comparison". A reader should be able to read only the headings and know the result.
+**A finding opens each section, in its first sentence.** "Aged hearts signal more, and the
+increase is broad", not "the age comparison was performed". A reader moving through the document
+should meet the result immediately under each heading.
+
+*This was previously written as a rule about HEADINGS - "titles are findings" - and it is
+superseded by the architecture above, for one reason: with a section per comparison, a heading
+that states the result makes the document's shape depend on its outcome. Two runs of the same
+design then produce papers that cannot be laid side by side. The requirement did not disappear,
+it moved one line down, where it can be more specific than a heading ever allowed.*
 
 **Use the comparison labels the run enumerates, verbatim and in order.** They are the panel's
 section names too, so a reader moving between the documents lands in the same place.

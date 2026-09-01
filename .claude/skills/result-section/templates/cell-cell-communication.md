@@ -42,22 +42,75 @@ skipped the only sentence that distinguishes them.
 - **That an absent element was tested.** Elements below a minimum-cell floor are dropped before
   scoring; absence there is a threshold, not a biological zero.
 
+## The three levels, for this method
+
+The general skill walks every comparison through the plugin's declared **levels**, coarsest
+first. For cell-cell communication they are:
+
+| level | what it names | what answers it |
+|---|---|---|
+| **1. sender - receiver** | which cell types communicate, and in which direction | the aggregated network: a circle plot and the population x population matrix; between arms, the differential matrix |
+| **2. signalling** | which programmes carry that communication | pathway-level aggregate for one arm; `rankNet`'s own between-arm comparison for two |
+| **3. ligand - receptor** | which specific pairs are behind a programme, in which cell types | the bubble plot over source and target; within a pathway, the contribution of each pair |
+
+**Every comparison section walks all three, in that order, and names the cell types at each.**
+A statement that a pathway changed, with no sender and no receiver attached, is not a
+cell-cell communication result - it is a differential expression result wearing one's clothes.
+The direction is the whole content of this method: say who signals to whom.
+
+## Describing the reference group before any comparison
+
+The control is described in its own right, at all three levels, and this is not optional
+background - a differential is unreadable without it:
+
+- **which cell types are the senders and which the receivers**, and how one-sided each is;
+- **which programmes dominate**, and in which populations they act;
+- **which ligand-receptor pairs carry the largest programmes**, named.
+
+Nothing here is a comparison and nothing here is tested. Say so once, and give the numbers.
+
+## The interactions, at all three levels
+
+The interaction is one factor's response **conditioned on the other** - the age response within
+one diet compared against the age response within the other. It is the deepest claim a 2x2
+supports and the easiest to state loosely, so three things are fixed:
+
+- **It is described at all three levels, like any other comparison.** Which sender-receiver pairs
+  respond differently between the strata; which programmes; which ligand-receptor pairs. A
+  heatmap of population pairs alone answers one third of the question.
+- **The control stratum is named in every sentence.** "The age response is larger in HFD than in
+  chow" is a complete statement; "the age response depends on diet" is not, because it does not
+  say which way.
+- **No test exists for it and none may be implied.** CellChat tests a difference between two
+  arms; a difference of two differences has no test in the method, so every number here is a
+  magnitude with no interval. Say it once, plainly, and do not soften it into a hedge.
+
+**A conditioned claim needs the element present in all four arms**, and that restriction tightens
+as the levels get finer - it already costs populations at level 1 and pathways at level 2, and it
+will cost more at ligand-receptor level. Name what was dropped; a smaller matrix drawn silently
+reads as biology.
+
 ## The order to write in
 
-1. **What was inferred, and separately in what.** Networks are fitted per arm and then compared.
-2. **What was excluded and why** — populations below the cell floor, and populations one arm has
-   and the other does not. Published practice is explicit about this: one snRNA study states
-   "Cell types or subtypes with less than 10 nuclei in either disease group were excluded"
-   (doi:10.1016/j.celrep.2023.112086). Name what went, do not describe the category.
-3. **How much network each arm carries**, before any difference. A ratio between two arms is
-   uninterpretable without the totals it is a ratio of.
-4. **The comparison, per contrast, in the design's order** — conditional effects before marginal
-   ones, since a marginal effect averages over strata.
-5. **Which programmes carry the difference**, with the method's own between-arm test named.
-6. **A focus.** Published sections narrow: the same study "compared the signaling networks in
-   [one condition] to the signaling networks in [the other], focused on endothelial subtypes"
-   (doi:10.1016/j.celrep.2023.112086). A section that reports every pathway equally reports none.
-7. **The caveats**, once each, where they belong.
+The general skill fixes the document's order. Within it, this method's specifics:
+
+1. **The overview** - how much network each arm carries, on both scales, with the sentence saying
+   which scale the claim is made on. A ratio between two arms is uninterpretable without the
+   totals it is a ratio of.
+2. **The reference group**, at all three levels, as above.
+3. **Each crossed comparison**, walking the three levels.
+4. **Each marginal comparison**, the same, after the crossed ones.
+5. **The interactions**, the same, last.
+6. **A focus, inside each section.** Published sections narrow: one snRNA study "compared the
+   signaling networks in [one condition] to the signaling networks in [the other], focused on
+   endothelial subtypes" (doi:10.1016/j.celrep.2023.112086). A section that reports every pathway
+   equally reports none.
+7. **Limitations**, one paragraph, under 200 words.
+8. **Supporting material** - what was inferred and in what, what was excluded and why, the
+   composition table, the settings. Published practice is explicit about exclusions: "Cell types
+   or subtypes with less than 10 nuclei in either disease group were excluded"
+   (doi:10.1016/j.celrep.2023.112086). Name what went; do not describe the category. **None of
+   this opens the document.**
 
 ## Caveats to attach, with citations
 

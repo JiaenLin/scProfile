@@ -383,6 +383,23 @@ PLUGIN = {
     },
 
     "report": {
+        # WHERE EACH PANEL SITS IN THE DOCUMENT, DECLARED BY THIS PLUGIN AND APPLIED BY THE HOST.
+        #
+        # A panel drawn over the whole design is filed under no contrast, and the host used to
+        # read that as one category and put all of them after the comparisons. It is two: the
+        # totals per arm ORIENT a reader and belong first, and the interaction is the conclusion
+        # the whole design is built to reach and belongs last. Both are design-wide; they sit at
+        # opposite ends of the paper.
+        #
+        # Keyed by figure-id PREFIX rather than by function, because one function draws panels
+        # that belong in different places - `netVisual_heatmap` draws both the between-arm
+        # difference, which is body, and the difference of two differences, which is the
+        # conclusion. Longest prefix wins; anything unmatched is body. The host applies whatever
+        # a plugin declares here and knows nothing about what these particular panels are.
+        "figure_position": {
+            "nativecmp_compareInteractions": "overview",
+            "nativecmp_interaction": "conclusion",
+        },
         # WHAT THIS PLUGIN CAN SUPPLY, PER PIECE OF EVIDENCE A COMPARISON NEEDS. The needs come
         # from `evidence.NEEDS` and are about the biology, not about CellChat; this is CellChat's
         # own answer to each, best route first.
