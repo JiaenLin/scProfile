@@ -40,6 +40,21 @@ from pathlib import Path
 #: Where the ledger lives, relative to a run directory.
 LEDGER = "FIGURE_REVIEW.jsonl"
 
+#: A SECOND LEDGER, BESIDE THE RUNS RATHER THAN INSIDE ONE, keyed by the image itself.
+#:
+#: A review is bound to a figure's sha256, so an unchanged image IS the same image and a look at
+#: it is still a look. But the ledger lived only inside the run directory, so a run that reused
+#: every fitted object and redrew nothing still reported every one of its figures as never looked
+#: at - on this cohort, 672 of them, per run. Honouring that means re-reviewing an unchanged
+#: figure set on every run, which nobody will do, so the step gets skipped: a gate that demands
+#: the impossible is a gate that is off.
+#:
+#: The carried ledger sits in the PARENT of the run directories - the stage's run root - because
+#: that is the scope over which figures actually recur. Runs stay sealed: this is written beside
+#: them, never into one. Every look is still recorded in its own run as well, so a run remains a
+#: complete account of itself.
+CARRIED = "FIGURE_REVIEW.carried.jsonl"
+
 
 def ledger_path(out, plugin=""):
     """Where the looks are recorded: the plugin's own directory, or the run root.
@@ -54,6 +69,34 @@ def ledger_path(out, plugin=""):
     root = _K.plugin_out(out, plugin) if plugin else _P(out)
     return root / LEDGER
 
+
+def carried_path(out):
+    """The cross-run ledger, beside the run directories rather than inside one."""
+    return Path(out).resolve().parent / CARRIED
+
+
+def read_carried(out):
+    """{sha256: entry} - every look taken on any run in this stage, keyed by the IMAGE."""
+    f = carried_path(out)
+    seen = {}
+    if not f.exists():
+        return seen
+    try:
+        lines = f.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return seen
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(rec, dict) and rec.get("sha256"):
+            seen[str(rec["sha256"])] = rec
+    return seen
+
 #: A note below this many words is not a look, it is a keystroke.
 MIN_NOTE_WORDS = 4
 
@@ -61,6 +104,11 @@ MIN_NOTE_WORDS = 4
 SUFFIXES = (".png", ".jpg", ".jpeg", ".svg", ".pdf")
 
 REVIEWED, STALE, UNREVIEWED = "reviewed", "stale", "unreviewed"
+
+#: Looked at on an EARLIER run, and the image has not changed since. It counts as reviewed - the
+#: review is bound to the bytes, and these are the same bytes - but it is named differently so a
+#: reader can tell a look taken here from one carried in.
+CARRIED_OK = "reviewed (carried)"
 
 
 def digest(path):
@@ -135,17 +183,41 @@ def record(out, figure, note, *, reviewer="", plugin=""):
     ledger_path(root, plugin).parent.mkdir(parents=True, exist_ok=True)
     with open(ledger_path(root, plugin), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(rec) + "\n")
+    # AND BESIDE THE RUNS, so the look survives the run it was taken in. The run keeps its own
+    # complete account either way; this is what stops an unchanged figure being presented as
+    # unexamined on every later run.
+    try:
+        c = dict(rec)
+        c["run"] = root.name
+        cp = carried_path(root)
+        cp.parent.mkdir(parents=True, exist_ok=True)
+        with open(cp, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(c) + "\n")
+    except OSError as e:
+        # NOT FATAL AND NOT SILENT. The look is recorded in the run; only the carry failed.
+        print(f"  the look was recorded in this run but could not be carried forward ({e})")
     return rec
 
 
 def status(out, plugin=""):
     """[(relpath, state, why)] for every figure, sorted. `state` is one of the three above."""
     led = read_ledger(out, plugin)
+    carried = read_carried(out)
     rows = []
     for rel in figures(out):
         rec = led.get(rel)
         if rec is None:
-            rows.append((rel, UNREVIEWED, "never looked at"))
+            # NOT IN THIS RUN'S LEDGER, BUT PERHAPS THE SAME IMAGE. A run that reused its fitted
+            # objects and redrew nothing produces figures byte-identical to an earlier run's, and
+            # a look at those bytes is still a look. Matched on the image, never on the path.
+            now = digest(Path(out) / rel)
+            prev = carried.get(now) if now else None
+            if prev:
+                rows.append((rel, CARRIED_OK,
+                             f"looked at on an earlier run ({prev.get('at', 'date unknown')}) "
+                             f"and the image is unchanged"))
+            else:
+                rows.append((rel, UNREVIEWED, "never looked at"))
             continue
         now = digest(Path(out) / rel)
         if now and rec.get("sha256") and now != rec["sha256"]:
@@ -159,7 +231,9 @@ def status(out, plugin=""):
 
 def outstanding(out, plugin=""):
     """Figures needing a look: never reviewed, or redrawn since."""
-    return [(r, st) for r, st, _w in status(out, plugin) if st != REVIEWED]
+    # A CARRIED LOOK IS A LOOK. It was taken on these exact bytes; which run it was taken in is
+    # provenance, not a reason to demand it again.
+    return [(r, st) for r, st, _w in status(out, plugin) if st not in (REVIEWED, CARRIED_OK)]
 
 
 def summarise(out, plugin=""):
