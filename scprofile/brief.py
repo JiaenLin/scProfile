@@ -85,15 +85,16 @@ def write_brief(run, plugin, spec=None, design=None):
          "## What to do, in order", "",
          f"1. Read this brief.",
          f"2. **Open every figure listed under _Figures to look at_** and record what you saw:",
-         f"   `scprofile review --out {run} --plugin {plugin} --figure <path> --note \"...\"`.",
-         f"   A note is refused if it is too short or copied from another figure. A redraw "
-         f"   destroys the record, so a figure changed since it was looked at comes back.",
+         f"   `scprofile review --out {run} --plugin {plugin} --figure <path> --note \"...\"`",
+         f"   A note is refused if it is too short, or copied from another figure. The record is "
+         f"bound to the image, so a figure redrawn since it was looked at comes back onto the "
+         f"list.",
          f"3. Write the result against `{SKILL}/SKILL.md`"
          + (f" and the template it names for this method, `{SKILL}/templates/{tmpl}.md`."
             if tmpl else ", which names no template for this plugin - say so rather than "
                           "borrowing another method's."),
-         f"4. Carry it back into the run: `scprofile run --section <file>`. A section outside "
-         f"   the run has no run key and its citations resolve to nothing.", "",
+         f"4. Carry it back into the run: `scprofile run --section <file>`. A section outside the "
+         f"run has no run key and its citations resolve to nothing.", "",
          f"**You are writing about {subject}.** The reference level of every factor is "
          + (", ".join(f"`{k} = {v}`" for k, v in sorted(ctl.items())) if ctl
             else "not declared, so direction cannot be assumed") + ".", ""]
@@ -101,11 +102,26 @@ def write_brief(run, plugin, spec=None, design=None):
     L += ["## The contrasts, in reading order", "",
           "| contrast | reference | against | ratio | per observation | elements differing |",
           "|---|---|---|---|---|---|"]
+    def _cell(x):
+        # A CONTRAST LABEL CONTAINS A PIPE - `age | diet = chow` - and this is a pipe-delimited
+        # table. Unescaped, one label became three cells and every value after it shifted left.
+        # The composer had this bug and it was fixed there; writing a second table by hand
+        # reproduced it, which is what a second implementation of one thing is for.
+        return str(x).replace("|", "\\|")
+
+    def _num(x):
+        # THREE SIGNIFICANT FIGURES, not sixteen. `3.221313010331362` is not more precise than
+        # `3.22`, it is only harder to read, and a brief that is hard to read is skimmed.
+        try:
+            return f"{float(x):.3g}"
+        except (TypeError, ValueError):
+            return "—"
+
     for lab in order:
         d = f[lab]
-        L.append(f"| {lab} | {d.get('unit_reference') or d['reference']} "
-                 f"| {d.get('unit_against') or d['against']} "
-                 f"| {d['ratio'] or '—'} | {d.get('ratio_per_cell') or '—'} "
+        L.append(f"| {_cell(lab)} | {_cell(d.get('unit_reference') or d['reference'])} "
+                 f"| {_cell(d.get('unit_against') or d['against'])} "
+                 f"| {_num(d['ratio'])} | {_num(d.get('ratio_per_cell'))} "
                  f"| {d['n_significant']} of {d['n_tested']} |")
     L += ["", "*Read against both scales. Where a total and a per-observation figure disagree "
               "in size, say which one the claim is made on - the skill states the rule.*", ""]
