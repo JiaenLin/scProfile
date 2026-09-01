@@ -766,8 +766,14 @@ digest_chr <- function(x) {
   .f <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])
   if (is.na(.f) || !nzchar(.f) || !file.exists(.f)) "recipe-unknown" else {
     .l <- readLines(.f, warn = FALSE)
-    .a <- grep("^# --- RECIPE START ---", .l)[1]
-    .b <- grep("^# --- RECIPE END ---", .l)[1]
+    # THE NEEDLE IS BUILT, NOT WRITTEN. Spelling the marker out here put the literal in the file
+    # TWICE - once in this search and once as the marker itself - and the search line comes
+    # first, so both this grep and the guard that checks the span found the searcher rather than
+    # the marker. The span then covered two lines of itself and none of the inference, and the
+    # stamp went on looking exactly as valid as before.
+    .mk <- function(w) paste0("^# --- RECIPE ", w, " ---")
+    .a <- grep(.mk("START"), .l)[1]
+    .b <- grep(.mk("END"), .l)[1]
     # NO MARKERS IS NOT "NO RECIPE". Falling back to the whole file keeps the stamp SAFE if the
     # markers are ever removed or renamed - it over-invalidates, which costs time, rather than
     # under-invalidating, which costs correctness.
