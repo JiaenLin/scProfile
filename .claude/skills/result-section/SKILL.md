@@ -87,6 +87,34 @@ and the section then reported "nothing here is tested between arms" as though th
 property of the method. The tool had offered two ways past an error and the one that removed the
 test was taken. Check what the run actually ran before writing that something cannot be done.*
 
+## Before anything: get the brief, and LOOK AT THE FIGURES
+
+**This is the first step and it is mechanised, because it is the one most easily skipped.**
+
+    scprofile write  --out <run> [--plugin <p>]
+
+That writes `kernels/<plugin>/WRITING_BRIEF.md`: the contrasts in reading order with their
+reference arms, every figure with the number the paper gives it, what the run recorded against
+itself, and which template this method declares. Every entry names the file it came from.
+
+**Then open every figure the brief lists, and record what you saw:**
+
+    scprofile review --out <run> --plugin <p> --figure <path> --note "what you saw"
+
+A note is refused if it is too short to be a look, or copied from another figure. The record is
+bound to the image's sha256, so a redrawn figure loses its review and comes back onto the list.
+
+Why this is a step and not a suggestion: **every figure defect found in this project was found
+by opening the image while the suite was green.** An encoding that contradicted its legend. A
+ranking that hid the thing the panel existed to show. Labels driven off the axes by a fix for
+labels. A table shows none of these, and nothing fails.
+
+*Cost: 672 figures in one run, two of them ever opened, and a manuscript written from the tables
+beneath them. The writing was fluent and described panels nobody had seen.*
+
+**You are the agent that runs this tool.** `docs/AGENT_CONTRACT.md` says which half of the work
+is yours: the tool measures, and you read, look, and write. Neither substitutes for the other.
+
 ## The architecture of the document
 
 **This order is the same for every plugin.** What changes between plugins is what fills each
