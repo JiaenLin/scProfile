@@ -4704,9 +4704,9 @@ if (!is.null(inter) && nrow(inter)) {
                          "; BLUE means larger in ", st[2],
                          ". In brackets after each pair is the sender and receiver carrying most ",
                          "of it, so the pair is read in a cell type rather than on its own. ",
-                         "Values are PERCENTAGE POINTS: each arm's pairs are expressed as a "
-                         "share of that arm's own total before any difference is taken, because "
-                         "a communication probability is normalised within its own object. "
+                         "Values are PERCENTAGE POINTS: each arm's pairs are expressed as a ",
+                         "share of that arm's own total before any difference is taken, because ",
+                         "a communication probability is normalised within its own object. ",
                          "Drawn on the ", nrow(lr$d), " largest of ", lr$n_all,
                          " pairs present in ALL FOUR arms, out of ", lr$n_any,
                          " seen in any of them - a pair absent from one arm has no difference of ",
