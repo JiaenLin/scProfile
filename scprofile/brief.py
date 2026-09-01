@@ -128,11 +128,21 @@ def write_brief(run, plugin, spec=None, design=None):
 
     L += ["## Figures to look at", "",
           "Numbered as the paper numbers them. **Open each one before writing about it.**", ""]
+    # THE PAIRS ARE (path, state), NOT PATHS. Stringifying them produced "('a.png', 'unreviewed')"
+    # and compared it against a path, so nothing ever matched and the brief marked NOTHING as
+    # outstanding on a run where not one figure had been looked at. The list is the whole point
+    # of this section; silently empty, it reads as "all reviewed" and the step gets skipped.
+    #
+    # AND THE FAILURE IS LOUD. This was wrapped in `except Exception: pass`, which is why the
+    # defect above could not announce itself: a gate that cannot report its own breakage is a
+    # gate that is off without anyone deciding to switch it off.
     outstanding = set()
     try:
-        outstanding = {str(x) for x in (R.outstanding(run, plugin) or [])}
-    except Exception:                                                     # noqa: BLE001
-        pass
+        outstanding = {str(r) for r, _st in (R.outstanding(run, plugin) or [])}
+    except Exception as _e:                                               # noqa: BLE001
+        L.append(f"> **The review ledger could not be read ({_e}), so nothing below is marked "
+                 f"as outstanding. Treat every figure as unreviewed.**")
+        L.append("")
     for path, n in sorted(idx.items(), key=lambda kv: kv[1]):
         mark = " **(not yet looked at)**" if path in outstanding else ""
         L.append(f"- Figure {n}: `{path}`{mark}")

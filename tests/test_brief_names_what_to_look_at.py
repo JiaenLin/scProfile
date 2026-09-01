@@ -1,0 +1,76 @@
+"""The writing brief marks the figures nobody has looked at, and says so loudly if it cannot.
+
+The brief's list of figures is the mechanism that makes looking a STEP rather than advice. If
+it silently marks nothing, it reads as "everything has been reviewed" and the step is skipped by
+an agent doing exactly as it was told.
+
+That is what happened: `review.outstanding()` returns `(path, state)` PAIRS, the brief
+stringified them into `"('a.png', 'unreviewed')"` and compared that against a path, so on a run
+where not one figure had been opened it marked zero as outstanding. Wrapped in
+`except Exception: pass`, so it could not report its own breakage either.
+
+Checked behaviourally - the brief is built against a stubbed ledger and the output is read -
+because the defect was a silently empty set, which is invisible in the presence of any string.
+"""
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+import scprofile.brief as B                                               # noqa: E402
+import scprofile.compose as C                                            # noqa: E402
+import scprofile.review as R                                             # noqa: E402
+
+FAILURES = []
+
+
+def check(ok, msg):
+    if not ok:
+        FAILURES.append(msg)
+
+
+IDX = {"figures/looked_at.png": 1, "figures/never_opened.png": 2}
+
+C.findings = lambda run, plugin, spec: {"age": {"ratio": 2.0, "reference": "y", "against": "a",
+                                                "ratio_per_cell": 1.5, "n_significant": 3,
+                                                "n_tested": 4}}
+C.figure_index = lambda run, plugin, spec=None, design=None: IDX
+C._controls = lambda run: {"age": "y"}
+C._order = lambda f, design, controls=None: ["age"]
+# ONE reviewed, ONE not - so an implementation that marks all or none fails either way.
+R.outstanding = lambda out, plugin="": [("figures/never_opened.png", "unreviewed")]
+
+import tempfile                                                          # noqa: E402
+
+with tempfile.TemporaryDirectory() as d:
+    p = B.write_brief(d, "plug", spec={"report": {"subject": "widgets"}}, design={})
+    check(p is not None, "the brief was not written at all")
+    if p:
+        txt = Path(p).read_text(encoding="utf-8")
+        never = [l for l in txt.splitlines() if "never_opened.png" in l]
+        looked = [l for l in txt.splitlines() if "looked_at.png" in l]
+        check(bool(never) and "not yet looked at" in never[0],
+              "a figure nobody has opened is not marked as outstanding, so the brief reads as "
+              "though everything had been reviewed: %r" % (never,))
+        check(bool(looked) and "not yet looked at" not in looked[0],
+              "a figure that HAS been reviewed is marked outstanding, so the mark means nothing")
+
+    # A LEDGER THAT CANNOT BE READ MUST SAY SO, not quietly mark nothing.
+    def _boom(out, plugin=""):
+        raise RuntimeError("ledger unreadable")
+
+    R.outstanding = _boom
+    p2 = B.write_brief(d, "plug2", spec={"report": {"subject": "widgets"}}, design={})
+    if p2:
+        t2 = Path(p2).read_text(encoding="utf-8")
+        check("could not be read" in t2 and "unreviewed" in t2,
+              "the brief swallowed a broken review ledger instead of warning that nothing is "
+              "marked")
+
+if FAILURES:
+    print("FAIL")
+    for f in FAILURES:
+        print("  -", f)
+    sys.exit(1)
+print("ok - outstanding figures are marked, reviewed ones are not, and a broken ledger says so")
