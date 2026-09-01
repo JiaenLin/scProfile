@@ -369,7 +369,22 @@ def figure_index(run, plugin, spec=None, design=None):
     # reader and belong first; the contrasts are the body; the interaction is the conclusion the
     # design was built to reach and belongs last. All three are unlabelled, so nothing about the
     # panel itself distinguishes them - the plugin says which is which, and this applies it.
-    for pos in ("overview", "contrast", "conclusion"):
+    for pos in ("overview",):
+        for label in order:
+            for _key, needs in SENTENCE_EVIDENCE:
+                for path in _figs_for(by, routes, label, needs, host, scope="cohort"):
+                    if path not in idx and place(path) == "overview":
+                        n += 1
+                        idx[path] = n
+    # THE REFERENCE PROFILE IS NUMBERED BETWEEN THE OVERVIEW AND THE CONTRASTS, because that is
+    # where it is read. Its panels are filed under no contrast and under no design-wide need, so
+    # they entered no pass at all and the paper could not cite them - the control group had 144
+    # panels in the run and none in the manuscript.
+    for path in profile_figures(run, plugin, spec, reference_unit(design, _controls(run))):
+        if path not in idx and (Path(run) / path).is_file():
+            n += 1
+            idx[path] = n
+    for pos in ("contrast", "conclusion"):
         scope = "contrast" if pos == "contrast" else "cohort"
         for label in order:
             for _key, needs in SENTENCE_EVIDENCE:
@@ -499,6 +514,45 @@ LIMIT_CUES = (
 )
 
 
+def reference_unit(design, controls):
+    """The unit sitting at the control level of EVERY factor, or "" - the thing to describe first.
+
+    A difference is unreadable until the thing it is a difference FROM has been described, and
+    the run already knows which that is: the arm where every factor takes its declared control
+    level. Derived, never named - a study with different factors gets its own reference from the
+    same rule, and nothing here knows what any level means.
+    """
+    if not controls:
+        return ""
+    for unit, vals in sorted((design or {}).items()):
+        if all(str((vals or {}).get(k, "")) == str(v) for k, v in controls.items()):
+            return str(unit)
+    return ""
+
+
+def profile_figures(run, plugin, spec, unit):
+    """The panels this plugin marks `profile` for one unit, that exist. Declaration-driven.
+
+    A PROFILE PANEL IS FILED UNDER NO CONTRAST, so it never enters the contrast index and the
+    paper could not cite it. The plugin already marks which of its functions produce the profile
+    set; this inverts that the same way captions resolve which function drew a file, so the host
+    learns nothing about the method.
+    """
+    from . import native as _NAT
+
+    declared = (spec or {}).get("native_plots") or {}
+    keep = {fn for fn, d in declared.items() if isinstance(d, dict) and d.get("profile")}
+    if not (keep and unit):
+        return []
+    d = Path(run) / "kernels" / plugin / str(unit) / "figures"
+    out = []
+    for f in sorted(d.glob("*.png")):
+        rel = f"kernels/{plugin}/{unit}/figures/{f.name}"
+        if _NAT.function_for(declared, rel) in keep:
+            out.append(rel)
+    return out
+
+
 def _limitations(run, plugin, alias=None, comp=None, arms=()):
     """One paragraph, capped, ranked from the run's OWN caveats. `[]` where there are none.
 
@@ -620,6 +674,9 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     # object by construction rather than by anyone keeping two lists in step.
     by, routes, host = _native_index(run, plugin, spec)
     idx = figure_index(run, plugin, spec, design)
+    # THE SAME MAPPING THE INDEX WALKS, so the section and the numbering cannot disagree about
+    # which panels are the document's conclusion.
+    place = _positions(spec)
 
     def _c(label, *needs):
         return cite(idx, _figs_for(by, routes, label, needs, host))
@@ -792,6 +849,23 @@ def section(run, plugin, spec=None, design=None, run_key=""):
                         f"across all samples, so a difference along {k} is a difference along "
                         f"both" for k, v in sorted(alias.items())) + ".", ""]
 
+    # THE THING EVERY DIFFERENCE IS A DIFFERENCE FROM, DESCRIBED FIRST. Without it the document
+    # opens on a comparison and the reader has nothing to attach it to. The panels exist per unit
+    # and were filed under no contrast, so nothing cited them: 144 profile panels in the run and
+    # none in the manuscript.
+    _ref = reference_unit(design, ctl)
+    _reffigs = [p_ for p_ in profile_figures(run, plugin, spec, _ref) if p_ in idx]
+    if _ref and _reffigs:
+        L += [f"## The reference group: {_ref}", "",
+              f"**{_ref}** is the arm at the control level of every factor "
+              + ", ".join(f"`{k} = {v}`" for k, v in sorted(ctl.items()))
+              + f", and every comparison below is read against it. Described here on its own, "
+              f"at each level this method resolves, with nothing compared and nothing tested"
+              + cite(idx, _reffigs) + ".", "",
+              "*The reading of these panels — which populations send and which receive, which "
+              "programmes dominate and in which populations, and which pairs carry them — is "
+              "for the authored version. This names the evidence and its numbers.*", ""]
+
     for lab in order:
         d = f[lab]
         # THE HEADING NAMES THE COMPARISON; THE FINDING IS THE FIRST SENTENCE UNDER IT.
@@ -899,6 +973,16 @@ def section(run, plugin, spec=None, design=None, run_key=""):
             L += [f"The effect of **{fac}** is {_n(a['ratio'])}x in `{ls[0]}` and "
                   f"{_n(b['ratio'])}x in `{ls[1]}` — log2 {la:+.2f} against {lb:+.2f}, a "
                   f"difference of {la - lb:+.2f}."]
+        # THE PANELS THIS SECTION IS ABOUT. They are drawn across the whole design, so the rule
+        # that an unlabelled panel answers every contrast handed them to every OTHER section and
+        # left this one - the section they were drawn for - citing nothing at all. The plugin
+        # marks them as the document's conclusion; that mark is what selects them here.
+        _concl = sorted((p_ for p_ in idx if place(p_) == "conclusion"), key=lambda x: idx[x])
+        if _concl:
+            L += ["", f"The panels for this question{cite(idx, _concl)} carry it at every level "
+                      f"the method resolves — which population pairs respond differently between "
+                      f"the strata, which programmes, and which ligand-receptor pairs, including "
+                      f"those whose direction OVERTURNS between them.", ""]
         L += ["", "*This is arithmetic on the simple effects above. The method provides no test "
                   "for a difference of two differences, so no significance is attached to it and "
                   "none should be read into it.*", ""]
