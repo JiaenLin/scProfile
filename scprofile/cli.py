@@ -2767,6 +2767,39 @@ def _paper(a):
     return 0
 
 
+def _write(a):
+    """Emit the writing brief - the evidence an AGENT writes the result from.
+
+    THE WRITING IS THE AGENT'S, NOT THE TOOL'S. scProfile is run by an agent, and a section
+    assembled from f-strings cannot decide what matters, synthesise across levels, or narrow to
+    a focus - which is the one thing the writing template asks for. So the tool gathers the
+    evidence and names the skill, the template and the figures; the agent looks, then writes.
+    """
+    from . import brief as BR
+
+    out = Path(a.out)
+    if not out.is_dir():
+        print(f"scprofile: no such run directory: {out}", file=sys.stderr)
+        return REFUSE
+    pay = BR._payload(out)
+    names = [a.plugin] if a.plugin else sorted((pay.get("kernels") or {}))
+    if not names:
+        print("scprofile: this run has no plugin results to write from", file=sys.stderr)
+        return REFUSE
+    wrote = 0
+    for nm in names:
+        spec = ((pay.get("kernels") or {}).get(nm) or {}).get("spec")
+        p = BR.write_brief(out, nm, spec=spec, design=pay.get("design") or {})
+        if p:
+            wrote += 1
+            print(f"  wrote {p}")
+            print(f"    open the figures it lists, record each with `scprofile review`, then "
+                  f"write against {BR.SKILL}")
+        else:
+            print(f"  {nm}: nothing measured to write from")
+    return 0 if wrote else REFUSE
+
+
 def _review(a):
     """The figure-review ledger: record a look, or report what has not been looked at.
 
@@ -3435,6 +3468,13 @@ def main(argv=None):
     ls_.add_argument("--kernel", help="plugins to consider, comma separated")
     ls_.add_argument("--json", action="store_true", help="machine-readable")
     ls_.set_defaults(fn=_landscape)
+
+    wr = sub.add_parser("write",
+                        help="[agent] the brief to write this run's result from")
+    wr.add_argument("--out", required=True, type=Path, help="a run directory")
+    wr.add_argument("--plugin", default="",
+                    help="one plugin's brief. Omit for every plugin the run produced")
+    wr.set_defaults(fn=_write)
 
     rv = sub.add_parser("review",
                         help="[you] which figures have been LOOKED AT, and which have not")

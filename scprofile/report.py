@@ -2200,6 +2200,19 @@ def write_index(out_dir, payload):
             _pap = _PA.render(out_dir, plugin=_pl, run_key=Path(out_dir).name)
             if _pap:
                 print(f"      {_pap}")
+            # THE BRIEF, FOR THE AGENT WHO WRITES THIS UP. Emitted on every run rather than
+            # asked for, because a writing phase nobody knows exists is a writing phase that
+            # does not happen - and the composed section beside it is a fallback, not the
+            # manuscript.
+            try:
+                from . import brief as _BR
+                # spec and design left to the brief, which reads report.json itself - the
+                # same file every other consumer reads, so there is one source and not two.
+                _br = _BR.write_brief(out_dir, _pl)
+                if _br:
+                    print(f"      {_br}  (what to write this up from)")
+            except Exception as _be:                                      # noqa: BLE001
+                print(f"      writing brief not produced ({_be})")
             _pan = _PA.panel(out_dir, plugin=_pl, run_key=Path(out_dir).name)
             if _pan:
                 print(f"      {_pan}")

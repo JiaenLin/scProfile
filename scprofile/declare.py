@@ -174,7 +174,8 @@ def report_figures(spec) -> list:
 #: reporter IGNORES an unknown key - which was false, since both are read - and a validator
 #: telling a reader that a live setting is inert is worse than one that says nothing.
 REPORT_KEYS = ("figures", "reads_with", "unit_metrics", "unit_network",
-               "provides_evidence", "comparison_stats", "subject", "figure_position")
+               "provides_evidence", "comparison_stats", "subject", "figure_position",
+               "writing_template")
 
 #: THE COLUMNS A `unit_network` NAMES. `table`, `source`, `target` and `weight` are required and
 #: are the network itself; `group` and `member` are optional and each earns further panels -

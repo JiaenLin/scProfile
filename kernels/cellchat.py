@@ -336,6 +336,17 @@ PLUGIN = {
                                               "profile": True},
         "netAnalysis_signalingRole_heatmap": {"use": "figures/native_signalingRole_heatmap_{out,in}.png per unit, and figures/nativecmp_signalingRole_heatmap_<pattern>.png - both arms, shared maximum",
                                               "profile": True},
+        # NOT A WRAPPED FUNCTION. CellChat draws no interaction at ligand-receptor level, so
+        # these two are this plugin's own: a magnitude ranking and, beside it, the two component
+        # responses as a position - which is the only one of the two that can show a pair whose
+        # direction OVERTURNS between strata, because a reversal is a property of the components
+        # and not of the gap between them.
+        "-- this plugin, no upstream --": {
+            "use": "figures/nativecmp_interaction_lr__<suffix>.png - the largest interactions "
+                   "and the largest reversals at ligand-receptor level, with the sender and "
+                   "receiver carrying most of each; and figures/nativecmp_interaction_lr_"
+                   "scatter__<suffix>.png - the same pairs as response-against-response, where "
+                   "an overturn is a quadrant rather than a rank"},
         "netVisual_bubble": {"use": "figures/native_bubble.png per unit; figures/nativecmp_bubble_comparison.png - every enriched pair, both arms; and figures/nativecmp_bubble_focused.png - the same function on the pathways carrying the most flow, which is the overview at a density a reader can use",
                              "profile": True},
         "identifyCommunicationPatterns": {"use": "figures/native_patterns_{outgoing,incoming}.png"},
@@ -409,6 +420,11 @@ PLUGIN = {
         # WHAT THIS METHOD IS ABOUT, for a section heading. The host writes "Differential
         # <subject> between <arm> and <arm>" and must not know what any plugin measures.
         "subject": "cell-cell communication",
+        # THE TEMPLATE THIS METHOD IS WRITTEN WITH, declared here and not mapped from the
+        # plugin's name by the host. A method ships the writing guidance that suits it exactly
+        # as it ships its panels; mapping a name to a template is the place where adding a
+        # second method quietly stops working.
+        "writing_template": "cell-cell-communication",
         "figure_position": {
             "nativecmp_compareInteractions": "overview",
             "nativecmp_interaction": "conclusion",
@@ -4593,9 +4609,18 @@ if (!is.null(inter) && nrow(inter)) {
                       as.character(rows$reference[2]), ") within ", st[2], " (control)",
                       "\nRED: ", fac, " response larger in ", st[1],
                       "     BLUE: larger in ", st[2])
+        # THE MATRIX NEEDS AN EDGE. Without a border the cells float against the page: the
+        # axis titles sit next to nothing, a white cell at the margin is indistinguishable from
+        # background, and the reader cannot see where the matrix ends. `netVisual_heatmap` is
+        # CellChat's own encoding and is left exactly as its authors drew it - this panel is
+        # NOT that. It is a derived matrix, a difference of two of the differences that function
+        # draws, for which CellChat ships no plot, so every styling decision in it is this
+        # plugin's to make and to get right.
         ComplexHeatmap::draw(ComplexHeatmap::Heatmap(
           M, name = paste0("interaction\n(", ms_short, ")\n+ = larger in\n", st[1]),
           col = circlize::colorRamp2(c(-mx, 0, mx), c("#2166ac", "white", "#b2182b")),
+          border = TRUE,
+          rect_gp = grid::gpar(col = "grey88", lwd = 0.4),
           cluster_rows = FALSE, cluster_columns = FALSE,
           row_title = "Sources (Sender)", column_title_side = "top",
           row_title_gp = grid::gpar(fontsize = 10),
@@ -4656,18 +4681,33 @@ if (!is.null(inter) && nrow(inter)) {
       # PRESENT IN ALL FOUR, or the difference is not a difference. Named, not dropped quietly.
       keep <- Reduce(intersect, list(names(a1), names(r1), names(a2), names(r2)))
       if (length(keep) < 2) stop("fewer than two pairs are present in all four arms")
+      # BOTH RESPONSES ARE KEPT, NOT ONLY THEIR DIFFERENCE. A pair at +3 may be +5 against +2 -
+      # the same direction, larger in one stratum - or +1.5 against -1.5, which is a REVERSAL:
+      # the factor acts one way here and the opposite way there. Those are different biology and
+      # the difference alone cannot tell them apart, so the components travel with it.
       d <- data.frame(pair = keep,
-                      ix = (a1[keep] - r1[keep]) - (a2[keep] - r2[keep]),
+                      resp1 = a1[keep] - r1[keep],
+                      resp2 = a2[keep] - r2[keep],
                       stringsAsFactors = FALSE)
-      d <- d[is.finite(d$ix), , drop = FALSE]
+      d$ix <- d$resp1 - d$resp2
+      d <- d[is.finite(d$ix) & is.finite(d$resp1) & is.finite(d$resp2), , drop = FALSE]
+      # A REVERSAL IS A SIGN CHANGE BETWEEN THE STRATA, and it is measured rather than eyeballed.
+      d$flip <- (d$resp1 * d$resp2) < 0
+      # RANKING BY |DIFFERENCE| ALONE SUPPRESSES EXACTLY WHAT THE PANEL IS FOR. A reversal from
+      # +1 to -1 scores 2; an unremarkable same-direction change from 8 to 5 scores 3 and
+      # outranks it. So the selection takes the largest differences AND the largest reversals,
+      # and a reversal cannot be crowded out by magnitude it was never going to win on.
       d <- d[order(-abs(d$ix)), , drop = FALSE]
-      d <- utils::head(d, 25)
+      .keep_rows <- unique(c(utils::head(which(d$flip), 12), utils::head(seq_len(nrow(d)), 18)))
+      d <- d[sort(.keep_rows), , drop = FALSE]
+      d <- d[order(-abs(d$ix)), , drop = FALSE]
       d$where <- vapply(d$pair,
                         function(nm) .top(arm_of[[as.character(rows$against[1])]], nm),
                         character(1))
       d$label <- ifelse(is.na(d$where), d$pair, paste0(d$pair, "  (", d$where, ")"))
-      list(d = d, n_all = length(keep), n_any = length(unique(c(names(a1), names(r1),
-                                                                names(a2), names(r2)))))
+      list(d = d, n_all = length(keep), n_flip = sum((a1[keep] - r1[keep]) *
+                                                     (a2[keep] - r2[keep]) < 0, na.rm = TRUE),
+           n_any = length(unique(c(names(a1), names(r1), names(a2), names(r2)))))
     }, error = function(e) {
       cat("interaction at ligand-receptor level FAILED for", fr, ":", conditionMessage(e), "\n")
       NULL })
@@ -4685,8 +4725,12 @@ if (!is.null(inter) && nrow(inter)) {
           ggplot2::coord_flip() +
           ggplot2::scale_fill_manual(values = c(`TRUE` = "#b2182b", `FALSE` = "#2166ac")) +
           ggplot2::labs(x = NULL,
+                        # WHAT THE NUMBER IS, ON THE AXIS. It read "percentage points" and never
+                        # said of WHAT - a pair's share of its own arm's total communication
+                        # probability - so the quantity was unreadable from the plate.
                         y = paste0(eff_lbl, " within ", st[1], " minus the same within ", st[2],
-                                   " (percentage points)"),
+                                   "\n(percentage points of each arm's total communication ",
+                                   "probability)"),
                         title = paste0("Which ligand-receptor pairs respond to ", fac,
                                        " differently between ", st[1], " and ", st[2], "?"),
                         subtitle = paste0("RED: the ", fac, " response is larger in ", st[1],
@@ -4712,6 +4756,61 @@ if (!is.null(inter) && nrow(inter)) {
                          " seen in any of them - a pair absent from one arm has no difference of ",
                          "differences and is not shown. No test applies to a difference of two ",
                          "differences and none is claimed."))
+      # THE SAME PAIRS AS A POSITION, WHERE A REVERSAL IS VISIBLE INSTEAD OF RANKED. The bars
+      # show how big the interaction is; they cannot show what it is made of. Here each pair is
+      # its response in one stratum against its response in the other: the dashed diagonal is NO
+      # interaction, distance from it IS the interaction, and the two off-diagonal quadrants are
+      # the pairs whose direction OVERTURNS between strata - which no ordering of a difference
+      # can surface, because a reversal is a property of the two components and not of their gap.
+      npng(paste0("interaction_lr_scatter__", safe), {
+        dd <- lr$d
+        ggplot2::ggplot(dd, ggplot2::aes(x = resp2, y = resp1)) +
+          ggplot2::annotate("rect", xmin = -Inf, xmax = 0, ymin = 0, ymax = Inf,
+                            fill = "#b2182b", alpha = 0.06) +
+          ggplot2::annotate("rect", xmin = 0, xmax = Inf, ymin = -Inf, ymax = 0,
+                            fill = "#2166ac", alpha = 0.06) +
+          ggplot2::geom_hline(yintercept = 0, linewidth = 0.3, colour = "grey40") +
+          ggplot2::geom_vline(xintercept = 0, linewidth = 0.3, colour = "grey40") +
+          ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+                               linewidth = 0.4, colour = "grey30") +
+          ggplot2::geom_point(ggplot2::aes(colour = flip), size = 2.4, alpha = 0.9) +
+          ggplot2::geom_text(data = dd[dd$flip, , drop = FALSE],
+                             ggplot2::aes(label = pair), size = 2.4, hjust = -0.08,
+                             check_overlap = TRUE) +
+          ggplot2::scale_colour_manual(values = c(`TRUE` = "#b2182b", `FALSE` = "grey45"),
+                                       labels = c(`TRUE` = "direction overturns",
+                                                  `FALSE` = "same direction in both"),
+                                       name = NULL) +
+          ggplot2::coord_equal() +
+          ggplot2::labs(
+            x = paste0(eff_lbl, " within ", st[2], " (the control)"),
+            y = paste0(eff_lbl, " within ", st[1]),
+            title = paste0("Does any ligand-receptor pair respond to ", fac,
+                           " in OPPOSITE directions between ", st[1], " and ", st[2], "?"),
+            subtitle = paste0("Both axes are percentage points of each arm's total ",
+                              "communication probability. The dashed line is NO interaction; ",
+                              "distance from it is the interaction.\nShaded quadrants are the ",
+                              "pairs whose direction overturns - ", lr$n_flip, " of ", lr$n_all,
+                              " pairs present in all four arms do so; the labelled ones are ",
+                              "those drawn here.")) +
+          ggplot2::theme_classic() +
+          ggplot2::theme(legend.position = "top")
+      }, w = 2000, h = 2000, by = "plugin",
+         legend = paste0("Each point is one ligand-receptor pair, placed by its ", eff_lbl,
+                         " within ", st[1], " (vertical) against the same response within ",
+                         st[2], ", which is the control (horizontal). Both axes are PERCENTAGE ",
+                         "POINTS of each arm's total communication probability, so a value is a ",
+                         "pair's share of its own arm before any difference is taken. The dashed ",
+                         "diagonal is NO interaction - an identical response in both strata - so ",
+                         "a point's distance from it IS the interaction. THE SHADED QUADRANTS ",
+                         "ARE THE OVERTURNS: a pair there responds to ", fac,
+                         " in one direction within ", st[1], " and in the OPPOSITE direction ",
+                         "within ", st[2], ", which the bar panel beside this one cannot show, ",
+                         "because a difference of +1 against -1 and one of +8 against +5 are ",
+                         "both simply a gap. ", lr$n_flip, " of ", lr$n_all,
+                         " pairs present in all four arms overturn. Overturning pairs are ",
+                         "labelled; the rest are not, to keep the panel readable. No test ",
+                         "applies to a difference of two differences and none is claimed."))
     }
     cat("interaction drawn for framing:", fr, "over", nrow(both), "pathway(s)\n")
   }
