@@ -7,10 +7,16 @@ redrew nothing still reported every figure as never looked at: 672 of them, on e
 Honouring that means re-reviewing an unchanged figure set every time, which nobody does. A gate
 that demands the impossible is a gate that is off, and this one had been off since it was built.
 
-So a second ledger sits BESIDE the run directories, keyed by the image rather than by the path.
-The run keeps its own complete account; the carried one is what stops unchanged bytes being
-presented as unexamined. Checked on real files with real digests, because the whole mechanism is
-about bytes.
+So a look is carried by READING the sibling runs' own ledgers, keyed by the image rather than by
+the path. Nothing extra is written, and a sibling counts only if it is a run - a directory
+carrying a `report.json`.
+
+That last clause is not decoration. The first version wrote a shared ledger at the run's parent,
+which is a guess about layout dressed as a fact: for a run in a temp directory it lands in the
+system temp directory and carries looks between runs that have nothing to do with each other. A
+contract test creating a run under /tmp caught it on the first execution.
+
+Checked on real files with real digests, because the whole mechanism is about bytes.
 """
 import sys
 from pathlib import Path
@@ -41,6 +47,9 @@ with tempfile.TemporaryDirectory() as td:
     a, b = stage / "runA", stage / "runB"
     for r in (a, b):
         _mkfig(r, "kernels/p/figures/same.png", b"IDENTICAL-BYTES")
+        # A SIBLING COUNTS ONLY IF IT IS A RUN. Without this marker neither directory is one,
+        # and nothing should carry - which is the isolation an unrelated directory relies on.
+        (r / "report.json").write_text("{}", encoding="utf-8")
     _mkfig(b, "kernels/p/figures/redrawn.png", b"NEW-BYTES")
     _mkfig(a, "kernels/p/figures/redrawn.png", b"OLD-BYTES")
 
@@ -67,8 +76,16 @@ with tempfile.TemporaryDirectory() as td:
     # THE RUN'S OWN ACCOUNT IS STILL COMPLETE - the carry is in addition, not instead.
     check("kernels/p/figures/same.png" in R.read_ledger(a, "p"),
           "the look was not recorded in the run it was taken in")
-    check(R.carried_path(a) == R.carried_path(b),
-          "two runs of one stage resolve different carried ledgers, so nothing is shared")
+    check([d.name for d in R.sibling_runs(b)] == ["runA"],
+          "run B does not see run A as a sibling run, so nothing can carry")
+
+    # AND A DIRECTORY THAT IS NOT A RUN CARRIES NOTHING, whatever it holds.
+    lone = Path(td) / "elsewhere" / "runC"
+    _mkfig(lone, "kernels/p/figures/same.png", b"IDENTICAL-BYTES")
+    st3 = dict((r, s_) for r, s_, _w in R.status(lone, "p"))
+    check(st3.get("kernels/p/figures/same.png") == R.UNREVIEWED,
+          "an unrelated directory inherited a look from a run it has nothing to do with: %r"
+          % (st3.get("kernels/p/figures/same.png"),))
 
 if FAILURES:
     print("FAIL")

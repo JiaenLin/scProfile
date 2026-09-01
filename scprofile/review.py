@@ -40,7 +40,7 @@ from pathlib import Path
 #: Where the ledger lives, relative to a run directory.
 LEDGER = "FIGURE_REVIEW.jsonl"
 
-#: A SECOND LEDGER, BESIDE THE RUNS RATHER THAN INSIDE ONE, keyed by the image itself.
+#: LOOKS CARRY BETWEEN RUNS, READ FROM THE RUNS' OWN LEDGERS - no shared file is written.
 #:
 #: A review is bound to a figure's sha256, so an unchanged image IS the same image and a look at
 #: it is still a look. But the ledger lived only inside the run directory, so a run that reused
@@ -49,11 +49,16 @@ LEDGER = "FIGURE_REVIEW.jsonl"
 #: figure set on every run, which nobody will do, so the step gets skipped: a gate that demands
 #: the impossible is a gate that is off.
 #:
-#: The carried ledger sits in the PARENT of the run directories - the stage's run root - because
-#: that is the scope over which figures actually recur. Runs stay sealed: this is written beside
-#: them, never into one. Every look is still recorded in its own run as well, so a run remains a
-#: complete account of itself.
-CARRIED = "FIGURE_REVIEW.carried.jsonl"
+#: THE FIRST VERSION WROTE A SHARED LEDGER AT `Path(out).parent`, which is a guess about layout
+#: dressed as a fact. For a run under `runs/<tool>/<stage>/<key>` it lands where intended; for a
+#: run anywhere else - a temp directory, say - it lands in that directory's parent and carries
+#: looks between runs that have nothing to do with each other. A test creating a run under the
+#: system temp directory caught it immediately, which is what it is for.
+#:
+#: So nothing extra is written. A sibling's looks are read from THAT RUN'S OWN ledger, and a
+#: sibling counts only if it is a run - a directory carrying a `report.json`. Scope becomes a
+#: property of what is on disk rather than of a path this module assumed.
+RUN_MARKER = "report.json"
 
 
 def ledger_path(out, plugin=""):
@@ -70,31 +75,32 @@ def ledger_path(out, plugin=""):
     return root / LEDGER
 
 
-def carried_path(out):
-    """The cross-run ledger, beside the run directories rather than inside one."""
-    return Path(out).resolve().parent / CARRIED
+def sibling_runs(out):
+    """Other RUN directories beside this one. A run is a directory carrying a `report.json`.
 
-
-def read_carried(out):
-    """{sha256: entry} - every look taken on any run in this stage, keyed by the IMAGE."""
-    f = carried_path(out)
-    seen = {}
-    if not f.exists():
-        return seen
+    Being a sibling directory is not enough - the parent of a run is not always a run root, and
+    treating it as one carries looks between unrelated runs.
+    """
+    here = Path(out).resolve()
     try:
-        lines = f.read_text(encoding="utf-8").splitlines()
+        return sorted(d for d in here.parent.iterdir()
+                      if d.is_dir() and d != here and (d / RUN_MARKER).is_file())
     except OSError:
-        return seen
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(rec, dict) and rec.get("sha256"):
-            seen[str(rec["sha256"])] = rec
+        return []
+
+
+def read_carried(out, plugin=""):
+    """{sha256: entry} - looks taken on sibling runs, keyed by the IMAGE they were taken on.
+
+    Read from each run's OWN ledger. A review is bound to a figure's bytes, so an unchanged image
+    carries; nothing else does, and nothing is written outside the run being reviewed.
+    """
+    seen = {}
+    for run in sibling_runs(out):
+        for rel, rec in read_ledger(run, plugin).items():
+            sha = str(rec.get("sha256") or "")
+            if sha:
+                seen.setdefault(sha, dict(rec, run=run.name))
     return seen
 
 #: A note below this many words is not a look, it is a keystroke.
@@ -183,26 +189,13 @@ def record(out, figure, note, *, reviewer="", plugin=""):
     ledger_path(root, plugin).parent.mkdir(parents=True, exist_ok=True)
     with open(ledger_path(root, plugin), "a", encoding="utf-8") as fh:
         fh.write(json.dumps(rec) + "\n")
-    # AND BESIDE THE RUNS, so the look survives the run it was taken in. The run keeps its own
-    # complete account either way; this is what stops an unchanged figure being presented as
-    # unexamined on every later run.
-    try:
-        c = dict(rec)
-        c["run"] = root.name
-        cp = carried_path(root)
-        cp.parent.mkdir(parents=True, exist_ok=True)
-        with open(cp, "a", encoding="utf-8") as fh:
-            fh.write(json.dumps(c) + "\n")
-    except OSError as e:
-        # NOT FATAL AND NOT SILENT. The look is recorded in the run; only the carry failed.
-        print(f"  the look was recorded in this run but could not be carried forward ({e})")
     return rec
 
 
 def status(out, plugin=""):
     """[(relpath, state, why)] for every figure, sorted. `state` is one of the three above."""
     led = read_ledger(out, plugin)
-    carried = read_carried(out)
+    carried = read_carried(out, plugin)
     rows = []
     for rel in figures(out):
         rec = led.get(rel)
@@ -214,8 +207,8 @@ def status(out, plugin=""):
             prev = carried.get(now) if now else None
             if prev:
                 rows.append((rel, CARRIED_OK,
-                             f"looked at on an earlier run ({prev.get('at', 'date unknown')}) "
-                             f"and the image is unchanged"))
+                             f"looked at on run {prev.get('run', '?')} "
+                             f"({prev.get('at', 'date unknown')}) and the image is unchanged"))
             else:
                 rows.append((rel, UNREVIEWED, "never looked at"))
             continue
