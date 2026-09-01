@@ -4709,8 +4709,8 @@ if (!is.null(inter) && nrow(inter)) {
                          "a communication probability is normalised within its own object. "
                          "Drawn on the ", nrow(lr$d), " largest of ", lr$n_all,
                          " pairs present in ALL FOUR arms, out of ", lr$n_any,
-                         " seen in any of them - a pair absent from one arm has no difference of "
-                         "differences and is not shown. No test applies to a difference of two "
+                         " seen in any of them - a pair absent from one arm has no difference of ",
+                         "differences and is not shown. No test applies to a difference of two ",
                          "differences and none is claimed."))
     }
     cat("interaction drawn for framing:", fr, "over", nrow(both), "pathway(s)\n")
