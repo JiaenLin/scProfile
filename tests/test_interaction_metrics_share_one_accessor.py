@@ -35,7 +35,15 @@ if d > 0:
     # The accessor's own body is the ONLY place allowed to touch mi@net directly.
     body_end = SRC.find("for (ms in c(", d)
     check(body_end > d, "the metric loop no longer follows the accessor")
-    outside = SRC[:d] + SRC[body_end:]
+    # THE RULE IS ABOUT THE METRIC LOOP, so the span checked ends where the loop does. The
+    # ligand-receptor panel below it reads `net$prob` as the [pop x pop x pair] ARRAY and sums
+    # two of its dimensions; `.armmat` returns a 2-D matrix and cannot serve it. Checking the
+    # whole script flagged that as a bypass - a guard firing on the one thing it was not written
+    # about, which is how a guard gets switched off. The end marker is a comment in the script,
+    # so moving the loop moves the boundary with it.
+    _end = SRC.find("# ---- LIGAND-RECEPTOR LEVEL", body_end)
+    _stop = _end if _end > body_end else len(SRC)
+    outside = SRC[:d] + SRC[_stop:]
     stray = re.findall(r"mi@net\[\[", outside)
     check(not stray,
           "%d per-arm matrix read(s) bypass the accessor, so a metric can silently read the "

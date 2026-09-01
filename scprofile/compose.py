@@ -376,8 +376,18 @@ def figure_index(run, plugin, spec=None, design=None):
                 for path in _figs_for(by, routes, label, needs, host, scope=scope):
                     if path in idx:
                         continue
-                    if scope == "cohort" and place(path) != pos:
-                        continue
+                    if scope == "cohort":
+                        # AN UNDECLARED DESIGN-WIDE PANEL GOES LAST, which is where all of them
+                        # went before positions existed. Defaulting it to the CONTRAST position
+                        # instead dropped it from the document entirely - it matched neither
+                        # cohort pass and the contrast pass never looks at unlabelled panels -
+                        # so a need answered only by a host route was numbered by nothing and
+                        # the plate the figure panel placed never reached the paper.
+                        at = place(path)
+                        if at not in ("overview", "conclusion"):
+                            at = "conclusion"
+                        if at != pos:
+                            continue
                     n += 1
                     idx[path] = n
     return idx

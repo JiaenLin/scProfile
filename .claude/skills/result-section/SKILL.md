@@ -131,7 +131,10 @@ plugin is measuring something else is the failure this arrangement exists to pre
 
 ### Section headings name the comparison, not the finding
 
-> `Differential cell-cell communication features between aged_chow and young_chow`
+> `Differential <subject> between <treated arm> and <reference arm>`
+>
+> where `<subject>` is what the plugin declares it measures and the two arm names are the
+> UNITS the run recorded for that contrast.
 
 **This supersedes the older rule that a heading should be a finding.** That rule was written when
 the result was one section, and it is wrong once there is a section per comparison: a heading
@@ -140,9 +143,10 @@ of the same design produce differently-shaped papers and nothing can be cross-re
 finding goes in the section's first sentence, where it belongs and where it can be as specific
 as the data allows.
 
-**The arm names come from the units, never from the factor levels.** Two contrasts can both read
-"young against aged" while comparing different objects - `young_chow -> aged_chow` and
-`young_HFD -> aged_HFD`. The run records the units; use them.
+**The arm names come from the units, never from the factor levels.** In a crossed design two
+contrasts can both read "level A against level B" at the level of FACTORS while comparing
+different objects - the same factor contrast taken within each level of the other factor. The
+levels are identical in both; only the units differ. The run records the units; use them.
 
 ### When two scales disagree, say which one carries the claim
 
@@ -154,10 +158,9 @@ The rule that settles it is not a preference: **if the groups differ in size, th
 scale is what a claim about behaviour is made on, and the absolute scale is what a claim about
 total burden is made on.** Say which of the two you are making.
 
-> *Aged chow-fed hearts carry more total inferred interaction than young HFD-fed hearts (1,193
-> against 871), but this is the larger sample: per 1,000 cells the two are close (38.7 against
-> 36.5), so the difference in the total is a difference in how much tissue was sampled rather
-> than in how much each cell signals.*
+> *Arm A carries more in total than arm B (1,193 against 871), but arm A is the larger sample:
+> per 1,000 observations the two are close (38.7 against 36.5), so the difference in the total
+> is a difference in how much was sampled rather than in how much each observation does.*
 
 *Cost: the same four arms ranked one way on the total and another per 1,000 cells, with both
 panels on the page and no sentence saying which to read. A reader could take either and reach

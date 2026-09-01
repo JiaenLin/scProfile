@@ -78,9 +78,10 @@ supports and the easiest to state loosely, so three things are fixed:
 - **It is described at all three levels, like any other comparison.** Which sender-receiver pairs
   respond differently between the strata; which programmes; which ligand-receptor pairs. A
   heatmap of population pairs alone answers one third of the question.
-- **The control stratum is named in every sentence.** "The age response is larger in HFD than in
-  chow" is a complete statement; "the age response depends on diet" is not, because it does not
-  say which way.
+- **The control stratum is named in every sentence.** "The response to the first factor is
+  larger in one level of the second than in the other, and which is which" is a complete
+  statement; "the response to the first depends on the second" is not, because it does not say
+  which way.
 - **No test exists for it and none may be implied.** CellChat tests a difference between two
   arms; a difference of two differences has no test in the method, so every number here is a
   magnitude with no interval. Say it once, plainly, and do not soften it into a hedge.
