@@ -380,7 +380,8 @@ def figure_index(run, plugin, spec=None, design=None):
     # where it is read. Its panels are filed under no contrast and under no design-wide need, so
     # they entered no pass at all and the paper could not cite them - the control group had 144
     # panels in the run and none in the manuscript.
-    for path in profile_figures(run, plugin, spec, reference_unit(design, _controls(run))):
+    for path in profile_figures(run, plugin, spec,
+                                reference_unit(design, _controls(run), _unit_dirs(run, plugin))):
         if path not in idx and (Path(run) / path).is_file():
             n += 1
             idx[path] = n
@@ -514,20 +515,49 @@ LIMIT_CUES = (
 )
 
 
-def reference_unit(design, controls):
-    """The unit sitting at the control level of EVERY factor, or "" - the thing to describe first.
+def reference_unit(design, controls, available=()):
+    """The GROUP at the control level of every biological factor, or "" - what to describe first.
 
     A difference is unreadable until the thing it is a difference FROM has been described, and
-    the run already knows which that is: the arm where every factor takes its declared control
-    level. Derived, never named - a study with different factors gets its own reference from the
-    same rule, and nothing here knows what any level means.
+    the run already knows which that is.
+
+    IT IS THE ARM, NOT A SAMPLE IN IT. The first version scanned `design` - which is keyed by
+    SAMPLE - and returned the first animal whose row happened to sit at every control level. That
+    animal is one replicate; the manuscript's reference is the pooled arm, fitted once on all of
+    its cells, and it is the arm every contrast is actually measured against. Describing a single
+    sample instead would put a control profile in the paper that no comparison is read against.
+
+    The name is built with `units.group_label`, which is how the host names a crossed arm
+    everywhere else, so nothing here invents a naming convention that could drift from the units
+    the run produced. `available` is the set of units that exist; where the crossed arm is absent
+    the reference falls back to a sample at the same levels, because a run of one sample per cell
+    of the design has no pooled arm to describe and the replicate is then the only thing there is.
     """
+    from . import units as _U
+
     if not controls:
         return ""
+    have = {str(x) for x in (available or ())}
+    factors = _U.biological_factors(design or {})
+    row = {f: controls[f] for f in factors if f in controls}
+    if factors and len(row) == len(factors):
+        name = str(_U.group_label(row, factors))
+        if name and (not have or name in have):
+            return name
     for unit, vals in sorted((design or {}).items()):
         if all(str((vals or {}).get(k, "")) == str(v) for k, v in controls.items()):
-            return str(unit)
+            if not have or str(unit) in have:
+                return str(unit)
     return ""
+
+
+def _unit_dirs(run, plugin):
+    """The unit names this run actually produced, from the directories it wrote."""
+    d = Path(run) / "kernels" / str(plugin)
+    try:
+        return {p.name for p in d.iterdir() if p.is_dir()}
+    except OSError:
+        return set()
 
 
 def profile_figures(run, plugin, spec, unit):
@@ -853,7 +883,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     # opens on a comparison and the reader has nothing to attach it to. The panels exist per unit
     # and were filed under no contrast, so nothing cited them: 144 profile panels in the run and
     # none in the manuscript.
-    _ref = reference_unit(design, ctl)
+    _ref = reference_unit(design, ctl, _unit_dirs(run, plugin))
     _reffigs = [p_ for p_ in profile_figures(run, plugin, spec, _ref) if p_ in idx]
     if _ref and _reffigs:
         L += [f"## The reference group: {_ref}", "",
