@@ -1009,10 +1009,13 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         # marks them as the document's conclusion; that mark is what selects them here.
         _concl = sorted((p_ for p_ in idx if place(p_) == "conclusion"), key=lambda x: idx[x])
         if _concl:
+            # THE HOST STATES THE STRUCTURE; IT DOES NOT NAME THE LEVELS. Enumerating them here
+            # put one method's vocabulary into prose every plugin emits - so a different method
+            # would have described its result in terms it does not measure. What the levels ARE
+            # is the plugin's template's to say.
             L += ["", f"The panels for this question{cite(idx, _concl)} carry it at every level "
-                      f"the method resolves — which population pairs respond differently between "
-                      f"the strata, which programmes, and which ligand-receptor pairs, including "
-                      f"those whose direction OVERTURNS between them.", ""]
+                      f"the method resolves, including any element whose direction OVERTURNS "
+                      f"between the strata rather than only changing in size.", ""]
         L += ["", "*This is arithmetic on the simple effects above. The method provides no test "
                   "for a difference of two differences, so no significance is attached to it and "
                   "none should be read into it.*", ""]
