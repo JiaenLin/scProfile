@@ -315,8 +315,17 @@ PLUGIN = {
         # USED - CellChat draws these itself, into the instance's figures/ directory.
         "netAnalysis_computeCentrality": {"use": "tables/cellchat_centrality.csv (numbers only; its plot is not drawn)"},
         "rankNet": {"use": "tables/cellchat_rank_net.csv per unit (return.data), figures/nativecmp_rankNet_{stacked,unstacked}.png per arm pair - CellChat's comparison mode - and figures/nativecmp_interaction_flow<suffix>.png, which PRESENTS its per-pathway contributions as one point per pathway: the change within one stratum against the change within the other. CellChat ships no interaction plot; the numbers and the between-arm test on each simple effect are entirely rankNet's, and no test is claimed for the difference of two differences"},
-        "netVisual_circle": {"use": "figures/native_circle_count.png and native_circle_weight.png"},
-        "netVisual_heatmap": {"use": "figures/native_heatmap_{count,weight}.png per unit, figures/nativecmp_diff_heatmap_{count,weight}.png per arm pair, and figures/nativecmp_interaction_<suffix>.png - the same encoding on a DERIVED matrix, the difference of two of the differences this function draws, for which CellChat provides no plot and no test"},
+        # THE PROFILE HAS TO ANSWER ALL THREE LEVELS, NOT ONE. It shipped the signalling-role
+        # panels alone, which say where a programme acts and whether a population is a net
+        # sender - and nothing about WHICH cell types communicate or WHICH ligand-receptor pairs
+        # carry it. A reference group described only by role cannot be the thing a differential
+        # is read against, because two of the three levels a comparison then discusses were
+        # never described for the control. These panels already existed; they were drawn per
+        # unit and gated off the profile page, so the fix is a declaration and not a figure.
+        "netVisual_circle": {"use": "figures/native_circle_count.png and native_circle_weight.png",
+                             "profile": True},
+        "netVisual_heatmap": {"profile": True,
+                              "use": "figures/native_heatmap_{count,weight}.png per unit, figures/nativecmp_diff_heatmap_{count,weight}.png per arm pair, and figures/nativecmp_interaction_<suffix>.png - the same encoding on a DERIVED matrix, the difference of two of the differences this function draws, for which CellChat provides no plot and no test"},
         # `profile: True` MARKS THE PANELS THAT DESCRIBE ONE UNIT ON ITS OWN, for the profile
         # page. These are the tool's own plots, not the host's reimplementations of them: where
         # CellChat ships a per-unit figure for the same question, that is what a reader should
@@ -327,7 +336,8 @@ PLUGIN = {
                                               "profile": True},
         "netAnalysis_signalingRole_heatmap": {"use": "figures/native_signalingRole_heatmap_{out,in}.png per unit, and figures/nativecmp_signalingRole_heatmap_<pattern>.png - both arms, shared maximum",
                                               "profile": True},
-        "netVisual_bubble": {"use": "figures/native_bubble.png per unit; figures/nativecmp_bubble_comparison.png - every enriched pair, both arms; and figures/nativecmp_bubble_focused.png - the same function on the pathways carrying the most flow, which is the overview at a density a reader can use"},
+        "netVisual_bubble": {"use": "figures/native_bubble.png per unit; figures/nativecmp_bubble_comparison.png - every enriched pair, both arms; and figures/nativecmp_bubble_focused.png - the same function on the pathways carrying the most flow, which is the overview at a density a reader can use",
+                             "profile": True},
         "identifyCommunicationPatterns": {"use": "figures/native_patterns_{outgoing,incoming}.png"},
         "rankSimilarity": {"use": "figures/nativecmp_rankSimilarity_functional.png, per arm pair"},
         "showDatabaseCategory": {"use": "figures/native_database_category.png"},
@@ -4625,7 +4635,11 @@ cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
 #: These correspond to the `native_plots` entries marked `profile: True`; `tests/` checks the two
 #: agree, because a name here that no longer matches a marked function would quietly produce a
 #: page with holes in it.
-_PROFILE_PLOTS = ("signalingRole_scatter", "signalingRole_heatmap_out", "signalingRole_heatmap_in")
+_PROFILE_PLOTS = ("signalingRole_scatter", "signalingRole_heatmap_out", "signalingRole_heatmap_in",
+                  # LEVEL 1 - which cell types communicate, and in which direction.
+                  "circle_count", "circle_weight", "heatmap_count", "heatmap_weight",
+                  # LEVEL 3 - which ligand-receptor pairs carry it, by source and target.
+                  "bubble")
 
 #: SEMICOLON AND NOT A COMMA. A comma inside the string literal that joins these was counted as
 #: an argument separator by the guard that checks the caller and the R script agree on how many

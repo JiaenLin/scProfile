@@ -648,6 +648,33 @@ def section(run, plugin, spec=None, design=None, run_key=""):
                      if _has_pc else "")
                   + f" {sig} | {_cell(lead)} |"]
         L += [""]
+        # WHICH SCALE THE CLAIM IS MADE ON, SAID RATHER THAN LEFT TO THE READER. The two columns
+        # can rank the arms differently - a total is bigger partly because the arm is bigger -
+        # and with both on the page and no sentence between them a reader may take either and
+        # reach the opposite conclusion. Named only where the two actually disagree, so it is a
+        # finding about this run and not a paragraph that appears whatever the numbers are.
+        if _has_pc:
+            _split = [l for l in ranked
+                      if f[l].get("ratio_per_cell")
+                      and (f[l]["ratio"] - 1.0) * (f[l]["ratio_per_cell"] - 1.0) < 0]
+            _shrunk = [l for l in ranked
+                       if f[l].get("ratio_per_cell") and l not in _split
+                       and abs(math.log2(f[l]["ratio"] or 1.0))
+                           > 2 * abs(math.log2(f[l]["ratio_per_cell"] or 1.0))]
+            if _split:
+                L += ["**The two scales disagree in DIRECTION on "
+                      + ", ".join(f"`{l}`" for l in _split)
+                      + ".** The arm carrying more in total carries less per observation, which "
+                      "means the difference in the total is a difference in how much was "
+                      "sampled. A claim about how much each observation does is read from the "
+                      "per-observation column; a claim about total burden is read from the "
+                      "other. Say which is being made.", ""]
+            elif _shrunk:
+                L += ["**The two scales agree in direction but not in size on "
+                      + ", ".join(f"`{l}`" for l in _shrunk)
+                      + "** - most of the difference in the total is the difference in how much "
+                      "was sampled rather than in what each observation does. Read a claim "
+                      "about behaviour from the per-observation column.", ""]
     # THE COMPOSITION AND THE SETTINGS, ONCE. Both are properties of the RUN, so they go here and
     # not under each comparison. A constant printed under every finding is the failure this
     # section has already had twice - the aliasing line four times, the alignment sentence on a
