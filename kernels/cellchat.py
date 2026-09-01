@@ -341,7 +341,7 @@ PLUGIN = {
         # responses as a position - which is the only one of the two that can show a pair whose
         # direction OVERTURNS between strata, because a reversal is a property of the components
         # and not of the gap between them.
-        "-- this plugin, no upstream --": {
+        "interaction_lr": {
             "use": "figures/nativecmp_interaction_lr__<suffix>.png - the largest interactions "
                    "and the largest reversals at ligand-receptor level, with the sender and "
                    "receiver carrying most of each; and figures/nativecmp_interaction_lr_"
@@ -467,7 +467,13 @@ PLUGIN = {
             "direction": ["native:netAnalysis_signalingRole_scatter",
                           "native:netAnalysis_signalingRole_heatmap", "host:role_shift"],
             "presence_or_magnitude": ["host:unit_presence"],
-            "specificity": ["native:netVisual_bubble", "host:matrix"],
+            # AND THE SAME NEED AT THE FINEST LEVEL, CONDITIONED. Declaring a panel is not
+            # placing it: the paper indexes figures by the NEED they answer, so two panels
+            # declared with no route were drawn on every run and reached no page at all - not
+            # the paper, not the panel, not even the brief that tells an agent what to look at.
+            # That is the failure recorded three comments above this line, for a different
+            # figure, which is how little it takes to repeat.
+            "specificity": ["native:netVisual_bubble", "native:interaction_lr", "host:matrix"],
             # THE TOTALS, WHICH THE SECTION STATES FIRST AND HAD NO PICTURE OF.
             # `compareInteractions` is CellChat's own bar for the two arms of this contrast;
             # `unit_totals` puts every arm AND every sample on one axis - the same quantity at
