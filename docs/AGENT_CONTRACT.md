@@ -31,6 +31,26 @@ reports every pathway equally reports none.
 So the generated section is a **fallback for a run nobody writes up**, and it says so. The real
 result comes from an agent, and `scprofile write` exists to hand that agent the evidence.
 
+## One run produces all of its output
+
+**A run is a unit.** Its objects, its figures and its documents all come from ONE tool version,
+and the run key names that version. Nothing else is a run.
+
+So when the tool changes, **run the pipeline** — do not rebuild a part of an existing run. The
+object cache makes this cheap: an edit that does not touch the inference span reuses every
+fitted object, and a full run costs about the same as rebuilding the documents alone.
+
+`scprofile report` exists to rebuild documents from `report.json`, and it is for a run whose
+DOCUMENTS were lost or whose reporter was itself the thing being repaired — not for skipping a
+run because the change looked small. Used casually it produces a directory whose figures came
+from one commit and whose prose came from another, under a single run key that names only one of
+them. That is not a faster run; it is an artifact nobody can trace, and it reads exactly like a
+correct one.
+
+*Cost: a partial rebuild pointed at the wrong run directory, produced a report, exited zero, and
+the paper it was supposed to change looked unchanged - which was then investigated as a defect in
+the tool. The tool was fine. The shortcut was not.*
+
 ## The writing phase, in order
 
     scprofile write   --out <run> [--plugin <p>]     # the brief: evidence, figures, template
