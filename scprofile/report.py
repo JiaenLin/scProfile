@@ -1938,21 +1938,6 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                       f"--write &lt;file&gt;</code>. Where a section exists for this analysis it "
                       f"is in the run whose figures it cites, because its citations are paths "
                       f"inside that run.")
-    # THE PAGE MUST REACH ITS OWN FIGURE PANEL. Every other derived page is linked from here and
-    # the panel was not, so a reader arriving at the section had no route to the one plate per
-    # evidence need - and the exit standard, which exempts a gallery only where its PARENT links
-    # to it, was right to keep checking it as though it were a page in its own right. The link is
-    # the fix; exempting an unreachable page would have been the standard being talked around.
-    from .paper import panel_name as _panel_name
-    # DERIVED HERE, NOT BORROWED. `_pd` is bound inside the branch that writes the profile page,
-    # so reading it out here raised UnboundLocalError on every run with no profile - and this is
-    # the SECOND time a name bound in one branch of this function has been read from another.
-    # The directory is one expression; computing it costs nothing and cannot be unbound.
-    _rep_dir = Path(out_dir) / "report"
-    if (_rep_dir / _panel_name(name)).is_file():
-        _links.append(f"<a href=\"{_e(_panel_name(name))}\">the figure panel</a> "
-                      f"&mdash; one plate per piece of evidence each comparison needs, chosen "
-                      f"by the route the plugin declares for that need")
     if _prof:
         _links.append(f"<a href=\"{_e(name)}_profile.html\">the profile of each unit</a> "
                       f"&mdash; {len(_prof)} panels describing what each arm and each sample "
@@ -2218,6 +2203,27 @@ def write_index(out_dir, payload):
             _pan = _PA.panel(out_dir, plugin=_pl, run_key=Path(out_dir).name)
             if _pan:
                 print(f"      {_pan}")
+                # LINKED FROM HERE, BECAUSE HERE IS WHERE THE PANEL IS KNOWN TO EXIST. The
+                # section page is written by `write_all` BEFORE this runs, and the panel cannot
+                # be produced earlier because it reads the `panels.json` that writing the section
+                # pages creates. So a link decided while the section is written can only ever
+                # test a file that is not there yet - which is exactly what it did, silently, and
+                # the gallery stayed unreachable while looking linked in the source.
+                #
+                # The exit standard exempts a gallery only where its parent EXISTS and LINKS to
+                # it, and it was right to go on checking an unreachable page as a page.
+                _back = Path(out_dir) / "report" / f"{_pl}.html"
+                _pn = _PA.panel_name(_pl)
+                try:
+                    _t = _back.read_text(encoding="utf-8")
+                    if _pn not in _t:
+                        _back.write_text(
+                            _t + f'<p class="sub"><a href="{_e(_pn)}">the figure panel</a> '
+                                 f'&mdash; one plate per piece of evidence each comparison '
+                                 f'needs, chosen by the route the plugin declares for that '
+                                 f'need.</p>', encoding="utf-8")
+                except OSError:
+                    pass
     except Exception as _panel_err:                                       # noqa: BLE001
         # NOT `as _e`. `_e` is this module's HTML escape helper, and binding it in an except
         # clause makes it a LOCAL of the whole function - so every earlier use of it in the same
