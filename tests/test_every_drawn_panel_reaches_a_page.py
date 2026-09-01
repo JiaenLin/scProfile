@@ -14,6 +14,7 @@ A panel may legitimately have no route: the profile set is placed by its own `pr
 by a need. So the rule is that every declared function is EITHER routed by a need OR marked
 profile - and a function that is neither is named here rather than discovered a round later.
 """
+import ast
 import sys
 from pathlib import Path
 
@@ -25,12 +26,25 @@ CHECKED = 0
 
 for f in sorted((ROOT / "kernels").glob("*.py")):
     src = f.read_text(encoding="utf-8")
-    ns = {}
+    # READ THE LITERAL, DO NOT IMPORT THE MODULE. A plugin imports its own environment's
+    # packages at module scope, which the host interpreter running the suite does not have - so
+    # importing to read a declaration makes the check pass by skipping, which is the failure
+    # mode a guard must not have. `ast.literal_eval` on the declaration itself needs nothing.
+    spec = {}
     try:
-        exec(compile(src, str(f), "exec"), ns)                            # noqa: S102
-    except Exception:                                                     # noqa: BLE001
+        tree = ast.parse(src)
+        for node in tree.body:
+            if not isinstance(node, ast.Assign) or not isinstance(node.value, ast.Dict):
+                continue
+            try:
+                d = ast.literal_eval(node.value)
+            except (ValueError, SyntaxError):
+                continue
+            if isinstance(d, dict) and "native_plots" in d:
+                spec = d
+                break
+    except SyntaxError:
         continue
-    spec = ns.get("SPEC") or ns.get("DECLARE") or {}
     declared = (spec or {}).get("native_plots") or {}
     routes = ((spec or {}).get("report") or {}).get("provides_evidence") or {}
     if not declared:
