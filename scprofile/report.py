@@ -1944,7 +1944,12 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # to it, was right to keep checking it as though it were a page in its own right. The link is
     # the fix; exempting an unreachable page would have been the standard being talked around.
     from .paper import panel_name as _panel_name
-    if (_pd / _panel_name(name)).is_file():
+    # DERIVED HERE, NOT BORROWED. `_pd` is bound inside the branch that writes the profile page,
+    # so reading it out here raised UnboundLocalError on every run with no profile - and this is
+    # the SECOND time a name bound in one branch of this function has been read from another.
+    # The directory is one expression; computing it costs nothing and cannot be unbound.
+    _rep_dir = Path(out_dir) / "report"
+    if (_rep_dir / _panel_name(name)).is_file():
         _links.append(f"<a href=\"{_e(_panel_name(name))}\">the figure panel</a> "
                       f"&mdash; one plate per piece of evidence each comparison needs, chosen "
                       f"by the route the plugin declares for that need")
