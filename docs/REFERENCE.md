@@ -39,6 +39,7 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | `scprofile status` | For one run directory: which instances are finished and which are outstanding. |
 | `scprofile landscape` | Across many run directories: what earlier runs hold, and what a new run would still have to compute. |
 | `scprofile licence` | Evaluates a run's results against the licence criteria and, with `--grant`, records licences for reuse. |
+| `scprofile write` | The writing brief: the evidence this run's result is written from, and the order to do it in — read, **look at the figures**, write against the skill and the plugin's declared template, carry it back with `run --section`. The tool gathers; the agent writes. |
 | `scprofile review` | Records that a figure has been looked at, and reports which have not. |
 | `scprofile paper` | The paper test: records a claim written from the figures and what each review round did to it. A claim is bound to the figures it cites, so a redraw makes it stale. `docs/PAPER_TEST.md`. |
 | `scprofile check` | One green/red line per element of scProfile. Exits non-zero if any is red. With `--out`, also checks what a run produced. |
