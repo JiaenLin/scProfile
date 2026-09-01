@@ -395,9 +395,20 @@ PLUGIN = {
         "netVisual_embeddingZoomIn": {"use": "figures/native_embeddingZoomIn_functional.png"},
         "netVisual_embeddingPairwise": {"use": "figures/nativecmp_embeddingPairwise_functional.png"},
         "netVisual_embeddingPairwiseZoomIn": {"use": "figures/nativecmp_embeddingPairwiseZoomIn_functional.png"},
-        "netAnalysis_dot": {"use": "figures/native_dot_{outgoing,incoming}.png; k=3 patterns, fixed"},
+        # DECLARED AND NEVER CALLED. No code in this plugin draws either of these, so the file
+        # each names does not exist in any run. They are kept because the declaration is also the
+        # accounting of what the wrapped tool offers - an upstream function this plugin does NOT
+        # use is a fact worth recording - and `unplaced` says so, with the reason, rather than
+        # letting them read as panels a reader might go looking for.
+        "netAnalysis_dot": {"use": "figures/native_dot_{outgoing,incoming}.png; k=3 patterns, fixed",
+                            "unplaced": "not drawn by this plugin; the role heatmaps carry the "
+                                        "same question and are placed"},
         "netAnalysis_river": {"use": "figures/native_river_{outgoing,incoming}.png; k=3, fixed"},
-        "netAnalysis_diff_signalingRole_scatter": {"use": "figures/nativecmp_diff_signalingRole.png, per arm pair"},
+        "netAnalysis_diff_signalingRole_scatter": {
+            "use": "figures/nativecmp_diff_signalingRole.png, per arm pair",
+            "unplaced": "the panel this plugin draws under that name comes from "
+                        "netAnalysis_signalingRole_scatter on the merged object, and is placed "
+                        "through `direction`"},
         "netAnalysis_signalingChanges_scatter": {"use": "figures/nativecmp_signalingChanges__<population>.png"},
         "plotGeneExpression": {"use": "figures/native_geneExpression__<pathway>.png"},
         "StackedVlnPlot": {"skip": "duplicate_of", "same_as": "plotGeneExpression"},
@@ -460,13 +471,20 @@ PLUGIN = {
             # pays for and nobody sees.
             "who_changed": ["native:netVisual_diffInteraction", "native:netVisual_heatmap",
                             "host:diff_matrix"],
-            "what_carries_it": ["native:rankNet", "host:flow_compare"],
+            # `netAnalysis_signalingChanges_scatter` draws one panel per population - which
+            # programmes that population gained and lost between the two arms - and 62 of them
+            # were produced and cited nowhere. It answers this need at population resolution,
+            # which is what a reader asks next after the ranking.
+            "what_carries_it": ["native:rankNet", "native:netAnalysis_signalingChanges_scatter",
+                                "host:flow_compare"],
             # The scatter puts each population in one sending-against-receiving plane; the role
             # heatmaps say WHICH programmes it sends and receives, per arm, over the same
             # pathway set. Two halves of one need, and only the first was reaching a reader.
             "direction": ["native:netAnalysis_signalingRole_scatter",
                           "native:netAnalysis_signalingRole_heatmap", "host:role_shift"],
-            "presence_or_magnitude": ["host:unit_presence"],
+            # The river plot is how CellChat shows which populations use which programmes
+            # together; 17 were drawn per run and reached no page.
+            "presence_or_magnitude": ["host:unit_presence", "native:netAnalysis_river"],
             # AND THE SAME NEED AT THE FINEST LEVEL, CONDITIONED. Declaring a panel is not
             # placing it: the paper indexes figures by the NEED they answer, so two panels
             # declared with no route were drawn on every run and reached no page at all - not

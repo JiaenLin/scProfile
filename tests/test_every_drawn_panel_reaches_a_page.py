@@ -57,9 +57,19 @@ for f in sorted((ROOT / "kernels").glob("*.py")):
             continue
         if fn in routed or d.get("profile"):
             continue
+        # AN ESCAPE THAT LEAVES A RECORD. A declaration is also the accounting of what the
+        # wrapped tool OFFERS, so a function this plugin does not draw is a fact worth keeping -
+        # and it must not read as a panel someone could go looking for. `unplaced` carries the
+        # reason, and a reason is required: an escape with no record is the gate switched off.
+        why = str(d.get("unplaced") or "").strip()
+        if why and len(why.split()) >= 4:
+            continue
+        if d.get("unplaced"):
+            FAILURES.append(f"{f.name}: `{fn}` is marked unplaced with no usable reason")
+            continue
         FAILURES.append(
-            f"{f.name}: `{fn}` is declared and drawn, but no evidence route names it and it is "
-            f"not marked `profile` - so nothing can cite it and it reaches no page")
+            f"{f.name}: `{fn}` is declared, and no evidence route names it, and it is not "
+            f"marked `profile` or `unplaced` - so if it draws anything, nothing can cite it")
 
 if not CHECKED:
     print("FAIL")
