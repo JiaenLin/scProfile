@@ -725,7 +725,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     # THE SUMMARY FIRST. A reader should not have to assemble the shape of the result from six
     # subsections; the run knows which contrast is largest and can say so.
     def _cell(x):
-        # A CONTRAST LABEL CONTAINS A PIPE - `age | diet = chow` is how a simple effect is named
+        # A CONTRAST LABEL CAN CONTAIN A PIPE - a simple effect is named `<factor> | <other>
         # in this design and in every other - and a pipe is the column separator. Unescaped, the
         # four conditional rows carried six cells against a five-column header, so the table a
         # reader meets first rendered with its contrast names split in half. Escaped the standard
@@ -792,7 +792,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     # section has already had twice - the aliasing line four times, the alignment sentence on a
     # panel with no populations - and it buries the sentence that actually describes the result.
     # BY UNIT, NOT BY LEVEL. `reference`/`against` are factor LEVELS: two contrasts both read
-    # "young against aged" while meaning different objects, so looking a side up by that name
+    # the same two LEVELS while meaning different objects, so looking a side up by level name
     # returned the MARGINAL unit for every conditional contrast. The composition table listed
     # four marginal arms while telling the reader every comparison is read against it, and the
     # per-contrast composition caveat was computed from the wrong pair every time.
@@ -900,7 +900,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         d = f[lab]
         # THE HEADING NAMES THE COMPARISON; THE FINDING IS THE FIRST SENTENCE UNDER IT.
         #
-        # It used to be the finding - "aged carries 3.22x the strength of young" - which reads
+        # It used to be the finding - "<arm> carries 3.2x the strength of <arm>" - which reads
         # well and makes the document's SHAPE depend on its outcome: two runs of one design
         # produce differently-titled sections and nothing can be laid side by side or referred
         # to across runs. The requirement that a reader meets the result immediately has not

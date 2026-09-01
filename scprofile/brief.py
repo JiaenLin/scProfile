@@ -4,7 +4,7 @@ WHY THIS EXISTS. The section used to be ASSEMBLED BY CODE - headings built from 
 limitations paragraph ranked and joined, a sentence emitted when two scales diverged past a
 threshold. That is deterministic and traceable and it is not writing. It cannot decide what
 matters, synthesise across levels, or narrow to a focus, which is the one thing the writing
-template asks for: a section that reports every pathway equally reports none.
+template asks for: a section that reports every element equally reports none.
 
 scProfile is run BY AN AGENT. So the writing is the agent's, and the tool's job is to hand it
 the evidence in one place - not to imitate the writing badly.
@@ -103,7 +103,7 @@ def write_brief(run, plugin, spec=None, design=None):
           "| contrast | reference | against | ratio | per observation | elements differing |",
           "|---|---|---|---|---|---|"]
     def _cell(x):
-        # A CONTRAST LABEL CONTAINS A PIPE - `age | diet = chow` - and this is a pipe-delimited
+        # A CONTRAST LABEL CAN CONTAIN A PIPE - a simple effect is named `<factor> | <other>
         # table. Unescaped, one label became three cells and every value after it shifted left.
         # The composer had this bug and it was fixed there; writing a second table by hand
         # reproduced it, which is what a second implementation of one thing is for.
