@@ -3375,7 +3375,7 @@ def run(ctx):
                if ctx.was_drawn("F1_database_coverage") else
                "no coverage panel was drawn for this unit, and nothing here counts what is "
                "PRESENT in the ")
-            "object, not what the preparation removed.")
+            + "object, not what the preparation removed.")
     elif ctx.assay == "cell":
         ctx.caveat(
             "Whole cells. Dissociation itself changes ligand and receptor expression, and no "
