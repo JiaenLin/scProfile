@@ -1938,6 +1938,16 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                       f"--write &lt;file&gt;</code>. Where a section exists for this analysis it "
                       f"is in the run whose figures it cites, because its citations are paths "
                       f"inside that run.")
+    # THE PAGE MUST REACH ITS OWN FIGURE PANEL. Every other derived page is linked from here and
+    # the panel was not, so a reader arriving at the section had no route to the one plate per
+    # evidence need - and the exit standard, which exempts a gallery only where its PARENT links
+    # to it, was right to keep checking it as though it were a page in its own right. The link is
+    # the fix; exempting an unreachable page would have been the standard being talked around.
+    from .paper import panel_name as _panel_name
+    if (_pd / _panel_name(name)).is_file():
+        _links.append(f"<a href=\"{_e(_panel_name(name))}\">the figure panel</a> "
+                      f"&mdash; one plate per piece of evidence each comparison needs, chosen "
+                      f"by the route the plugin declares for that need")
     if _prof:
         _links.append(f"<a href=\"{_e(name)}_profile.html\">the profile of each unit</a> "
                       f"&mdash; {len(_prof)} panels describing what each arm and each sample "

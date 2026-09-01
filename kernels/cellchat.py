@@ -687,7 +687,13 @@ profile_plots <- if (length(args) >= 13 && nzchar(args[13]))
 # been diagnosed by assumption and been wrong: the inference was assumed dominant and was not,
 # then the matrix write was, and it takes one to five seconds. Guessing where a run spends its
 # time is what makes every round of development expensive, so the run measures itself.
-.clock <- new.env(); .clock$t0 <- proc.time()[["elapsed"]]; .clock$marks <- list()
+# t0 IS ZERO, NOT "NOW". `proc.time()` elapsed is measured from the moment R STARTED, so anchoring
+# the clock at zero makes the first mark cover everything before it - interpreter start-up and
+# loading CellChat and its dependencies, which happen above this line and were therefore charged
+# to nothing. Anchoring it at "now" instead made the first phase report 0 while the cost it was
+# supposed to name sat outside the clock entirely: an accounting line that says zero is worse than
+# no line, because it reads as a measurement.
+.clock <- new.env(); .clock$t0 <- 0; .clock$marks <- list()
 mark <- function(what) {
   now <- proc.time()[["elapsed"]]
   .clock$marks[[what]] <- now - .clock$t0
@@ -3567,7 +3573,13 @@ rds_a <- args[1]; rds_b <- args[2]; name_a <- args[3]; name_b <- args[4]; figdir
 # been diagnosed by assumption and been wrong: the inference was assumed dominant and was not,
 # then the matrix write was, and it takes one to five seconds. Guessing where a run spends its
 # time is what makes every round of development expensive, so the run measures itself.
-.clock <- new.env(); .clock$t0 <- proc.time()[["elapsed"]]; .clock$marks <- list()
+# t0 IS ZERO, NOT "NOW". `proc.time()` elapsed is measured from the moment R STARTED, so anchoring
+# the clock at zero makes the first mark cover everything before it - interpreter start-up and
+# loading CellChat and its dependencies, which happen above this line and were therefore charged
+# to nothing. Anchoring it at "now" instead made the first phase report 0 while the cost it was
+# supposed to name sat outside the clock entirely: an accounting line that says zero is worse than
+# no line, because it reads as a measurement.
+.clock <- new.env(); .clock$t0 <- 0; .clock$marks <- list()
 mark <- function(what) {
   now <- proc.time()[["elapsed"]]
   .clock$marks[[what]] <- now - .clock$t0
