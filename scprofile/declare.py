@@ -164,8 +164,17 @@ def report_figures(spec) -> list:
 #: "a note to a human that reads as a setting", while the composer was in fact reading
 #: both. A key that IS read must be declared, or the warning trains a reader to ignore
 #: exactly the message that would matter for a key that is not.
+#: `subject` and `figure_position` are read by the COMPOSER: the first names what the method
+#: measures, so a section heading can say "Differential <subject> between <arm> and <arm>"
+#: without the host knowing what any plugin does; the second says where each panel sits in the
+#: document, keyed by figure-id prefix, because a design-wide panel may be the overview that
+#: opens the paper or the conclusion that closes it and nothing about the panel says which.
+#:
+#: Registering them here is not bookkeeping. The warning that caught their absence says the
+#: reporter IGNORES an unknown key - which was false, since both are read - and a validator
+#: telling a reader that a live setting is inert is worse than one that says nothing.
 REPORT_KEYS = ("figures", "reads_with", "unit_metrics", "unit_network",
-               "provides_evidence", "comparison_stats")
+               "provides_evidence", "comparison_stats", "subject", "figure_position")
 
 #: THE COLUMNS A `unit_network` NAMES. `table`, `source`, `target` and `weight` are required and
 #: are the network itself; `group` and `member` are optional and each earns further panels -
