@@ -396,6 +396,9 @@ PLUGIN = {
         # difference, which is body, and the difference of two differences, which is the
         # conclusion. Longest prefix wins; anything unmatched is body. The host applies whatever
         # a plugin declares here and knows nothing about what these particular panels are.
+        # WHAT THIS METHOD IS ABOUT, for a section heading. The host writes "Differential
+        # <subject> between <arm> and <arm>" and must not know what any plugin measures.
+        "subject": "cell-cell communication",
         "figure_position": {
             "nativecmp_compareInteractions": "overview",
             "nativecmp_interaction": "conclusion",

@@ -461,6 +461,91 @@ def _composition(run, plugin, spec, units):
     return out
 
 
+#: The limitations paragraph is capped. A limitation nobody reaches is not a limitation, and the
+#: full list stays in the supporting material for anyone who wants all of it.
+LIMIT_WORDS = 200
+
+#: HOW A LIMITATION IS RANKED, most threatening first. The question is not "how alarming does
+#: this sound" but "if a reader disagreed with it, would a conclusion change".
+#:
+#:   1. a confound the design cannot separate  - it reattributes the finding to something else;
+#:   2. a quantity with no test                - the claim has no support of the kind implied;
+#:   3. a measurement that is not comparable   - the number means less than it looks like;
+#:   4. everything else.
+#:
+#: Matched on what a caveat SAYS rather than on which plugin wrote it, so the ranking travels.
+LIMIT_CUES = (
+    ("no test", "not tested", "provides no test", "no significance", "cannot be separated",
+     "cannot separate", "not interpretable"),
+    ("not comparable", "not directly comparable", "relative", "not calibrated", "per-object"),
+)
+
+
+def _limitations(run, plugin, alias=None, comp=None, arms=()):
+    """One paragraph, capped, ranked from the run's OWN caveats. `[]` where there are none.
+
+    NOT NEW PROSE. The run records what it could not do while it was doing it; this selects and
+    orders. Written fresh, a limitations paragraph drifts from the data the moment either
+    changes, and on a different cohort it would be wrong rather than merely stale.
+
+    Deduplication is most of the work: a caveat the plugin emits per unit arrives eighteen times
+    with a different prefix each time, and eighteen copies of one sentence is not eighteen
+    limitations. The unit tag is dropped and the sentence counted once.
+    """
+    import json as _json
+    import re as _re
+
+    try:
+        pay = _json.loads((Path(run) / "report.json").read_text(encoding="utf-8"))
+        raw = ((pay.get("kernels") or {}).get(plugin) or {}).get("caveats") or []
+    except (OSError, ValueError):
+        return []
+
+    seen, uniq = set(), []
+    for c in raw:
+        t = _re.sub(r"^\s*\[[^\]]+\]\s*", "", str(c)).strip()
+        # THE SAME SENTENCE ABOUT DIFFERENT UNITS IS ONE LIMITATION. Numbers differ per unit, so
+        # sentences are keyed on their words with the digits removed - otherwise "576 cells" and
+        # "412 cells" are two limitations and the paragraph fills with one caveat counted twice.
+        key = _re.sub(r"\d[\d,.]*", "#", t.lower())
+        if t and key not in seen:
+            seen.add(key)
+            uniq.append(t)
+    if not uniq and not alias:
+        return []
+
+    def rank(t):
+        low = t.lower()
+        for i, cues in enumerate(LIMIT_CUES):
+            if any(q in low for q in cues):
+                return i + 1
+        return len(LIMIT_CUES) + 1
+
+    out = []
+    # A CONFOUND THE HOST COMPUTED COMES FIRST, ahead of anything a plugin said, because it is a
+    # property of the DESIGN: no analysis of these data can separate the factors it names, so it
+    # bounds every claim in the document rather than one of them.
+    for k, v in sorted((alias or {}).items()):
+        out.append(f"**{k}** varies together with {', '.join(sorted(v))} across every sample, so "
+                   f"a difference along {k} is a difference along all of them and cannot be "
+                   f"attributed to {k} alone.")
+    out += sorted(uniq, key=rank)
+
+    kept, n = [], 0
+    for t in out:
+        w = len(t.split())
+        if n + w > LIMIT_WORDS:
+            break
+        kept.append(t)
+        n += w
+    if not kept:
+        return []
+    more = len(out) - len(kept)
+    tail = (f" {more} further caveat(s) the run recorded are in the supporting material."
+            if more > 0 else "")
+    return ["## Limitations", "", " ".join(kept) + tail, ""]
+
+
 def _settings(run, plugin, units):
     """({parameter: value}, all_agree) - what this run resolved, and whether every unit agrees.
 
@@ -504,6 +589,11 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     if not f:
         return ""
     W = _weight_name(spec)
+    # WHAT THIS METHOD IS ABOUT, IN THE PLUGIN'S OWN WORDS. A section heading has to name the
+    # subject - "differential cell-cell communication between X and Y" - and the host must not
+    # know what any plugin measures. Declared by the plugin; a neutral noun where it is not, so
+    # a plugin that declares nothing still produces a readable heading.
+    SUBJECT = str(((spec or {}).get("report") or {}).get("subject") or "features")
     ctl = _controls(run)
     cmps = _cmps(design or {}, controls=ctl) if design else []
     order = _order(f, design, ctl)
@@ -573,11 +663,18 @@ def section(run, plugin, spec=None, design=None, run_key=""):
             v = str(f[lab].get(k) or "")
             if v and v not in _arms:
                 _arms.append(v)
+    # SUPPORTING MATERIAL IS COLLECTED HERE AND EMITTED AFTER THE ARGUMENT. The composition
+    # table, what could not be compared and the settings are all real and all checkable, and
+    # every one of them used to stand between the reader and the first result: a document that
+    # opens with what was verified tells you what was checked before it tells you what was
+    # found, so the reader meets a number with nothing to attach it to. Same content, same
+    # order, moved to where someone who wants to check something will go looking for it.
+    SUPP = []
     comp = _composition(run, plugin, spec, _arms)
     if comp:
         pops = sorted({p for c in comp.values() for p in c})
         cols = [a for a in _arms if a in comp]
-        L += ["### What each arm is made of", "",
+        SUPP += ["### What each arm is made of", "",
               "A network total is a sum over ordered pairs of populations, so two arms holding "
               "different proportions of the same populations differ in that sum before anything "
               "a cell does differs. Every comparison below is read against this table.", "",
@@ -585,10 +682,10 @@ def section(run, plugin, spec=None, design=None, run_key=""):
               "|---" * (len(cols) + 1) + "|"]
         tot = {c: sum(comp[c].values()) or 1.0 for c in cols}
         for pop in pops:
-            L += ["| " + _cell(pop) + " | " + " | ".join(
+            SUPP += ["| " + _cell(pop) + " | " + " | ".join(
                 f"{100.0 * comp[c].get(pop, 0.0) / tot[c]:.2f}% "
                 f"({int(comp[c].get(pop, 0.0)):,})" for c in cols) + " |"]
-        L += ["| **total cells** | " + " | ".join(f"**{int(tot[c]):,}**" for c in cols) + " |", ""]
+        SUPP += ["| **total cells** | " + " | ".join(f"**{int(tot[c]):,}**" for c in cols) + " |", ""]
     # WHAT THIS RUN DECLINED TO COMPARE, ONCE. Every comparison here restricts itself to the
     # elements its arms share, and an element dropped for that reason is invisible in the result:
     # a panel drawn on nine populations and one drawn on eleven look identical. Named rather than
@@ -603,7 +700,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     except Exception:                                                     # noqa: BLE001
         _n_rm, _rm_names, _rm_diff = 0, [], []
     if _n_rm:
-        L += ["### What was not compared", "",
+        SUPP += ["### What was not compared", "",
               f"{_n_rm} element(s) could not enter every comparison, because a difference cannot "
               f"be computed for something one side does not have: "
               + ", ".join(f"**{x}**" for x in _rm_names)
@@ -621,20 +718,20 @@ def section(run, plugin, spec=None, design=None, run_key=""):
             _byel = {}
             for _e, _f2, _lv in _rm_diff:
                 _byel.setdefault(_e, []).append((_f2, _lv))
-            L += ["Some of those absences line up with the design rather than falling across it. "
+            SUPP += ["Some of those absences line up with the design rather than falling across it. "
                   "Where they do, the absence must not be read as that arm having none of the "
                   "element: it is a property of which arms could be compared.", ""]
             for _e, _fl in sorted(_byel.items()):
-                L += [f"- **{_e}** is absent from every arm with "
+                SUPP += [f"- **{_e}** is absent from every arm with "
                       + ", ".join(f"`{f2} = {lv}`" for f2, lv in sorted(set(_fl))) + "."]
-            L += [""]
+            SUPP += [""]
             if any(len({f2 for f2, _lv in v}) > 1 for v in _byel.values()):
-                L += ["An element lining up with more than one factor at once is what aliasing "
+                SUPP += ["An element lining up with more than one factor at once is what aliasing "
                       "looks like from here: those factors do not vary independently in this "
                       "design, so which of them the absence belongs to cannot be told apart.", ""]
     _cfg, _same = _settings(run, plugin, _arms)
     if _cfg:
-        L += ["*" + ("Every unit was fitted with the same settings: " if _same else
+        SUPP += ["*" + ("Every unit was fitted with the same settings: " if _same else
                      "**The units were NOT all fitted with the same settings**, which makes their "
                      "numbers not directly comparable. One unit's were: ")
               + ", ".join(f"`{k} = {v}`" for k, v in sorted(_cfg.items())) + ".*", ""]
@@ -645,12 +742,21 @@ def section(run, plugin, spec=None, design=None, run_key=""):
 
     for lab in order:
         d = f[lab]
-        # THE HEADING IS THE FINDING, generated from the measurement so the two cannot diverge.
-        if d["ratio"]:
-            head = (f"{d['against']} carries {_n(d['ratio'])}x the {W} of {d['reference']}"
-                    + (f", in {lab}" if kind.get(lab) not in ("marginal", "") else ""))
-        else:
-            head = lab
+        # THE HEADING NAMES THE COMPARISON; THE FINDING IS THE FIRST SENTENCE UNDER IT.
+        #
+        # It used to be the finding - "aged carries 3.22x the strength of young" - which reads
+        # well and makes the document's SHAPE depend on its outcome: two runs of one design
+        # produce differently-titled sections and nothing can be laid side by side or referred
+        # to across runs. The requirement that a reader meets the result immediately has not
+        # gone; it moved one line down, where it can be more specific than a heading allowed.
+        #
+        # THE ARMS ARE NAMED BY UNIT, NOT BY LEVEL. `age | diet = chow` and `age | diet = HFD`
+        # both read "young against aged" at the level of factors while comparing different
+        # objects; the units say which. Falls back to the levels where a contrast has no units
+        # recorded, which is what a marginal one looks like on some designs.
+        _to = d.get("unit_against") or d["against"]
+        _fr = d.get("unit_reference") or d["reference"]
+        head = f"Differential {SUBJECT} between {_to} and {_fr}" if _to and _fr else lab
         L += [f"## {head}", ""]
         if quest.get(lab):
             L += [f"*{quest[lab]}*", ""]
@@ -743,6 +849,16 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         L += ["", "*This is arithmetic on the simple effects above. The method provides no test "
                   "for a difference of two differences, so no significance is attached to it and "
                   "none should be read into it.*", ""]
+
+    # LIMITATIONS, THEN THE SUPPORTING MATERIAL, IN THAT ORDER AND BOTH AFTER THE ARGUMENT.
+    L += _limitations(run, plugin, alias, comp, _arms)
+    if SUPP:
+        L += ["## Supporting material", "",
+              "Everything below is the machinery of the result rather than the result: what each "
+              "arm is made of, what could not be compared, and the settings every unit was "
+              "fitted with. It is here because a reader who wants to check a number comes "
+              "looking for it, and a reader who does not should not have to walk through it to "
+              "reach the first finding.", ""] + SUPP
 
     L += ["## How this section was produced", "",
           "Every number above was read from a table in this run, by the tool, so the text and "
