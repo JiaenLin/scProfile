@@ -4635,11 +4635,16 @@ cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
 #: These correspond to the `native_plots` entries marked `profile: True`; `tests/` checks the two
 #: agree, because a name here that no longer matches a marked function would quietly produce a
 #: page with holes in it.
+# THE PROFILE COVERS ALL THREE LEVELS, and the tuple below is read as a literal by the guard
+# that checks it against `native_plots`, so the reasoning lives here rather than inside it:
+#
+#   level 1, which cell types communicate  - circle_count, circle_weight, heatmap_count,
+#                                            heatmap_weight
+#   level 2, which programmes carry it     - signalingRole_heatmap_out, signalingRole_heatmap_in,
+#                                            signalingRole_scatter
+#   level 3, which ligand-receptor pairs   - bubble
 _PROFILE_PLOTS = ("signalingRole_scatter", "signalingRole_heatmap_out", "signalingRole_heatmap_in",
-                  # LEVEL 1 - which cell types communicate, and in which direction.
-                  "circle_count", "circle_weight", "heatmap_count", "heatmap_weight",
-                  # LEVEL 3 - which ligand-receptor pairs carry it, by source and target.
-                  "bubble")
+                  "circle_count", "circle_weight", "heatmap_count", "heatmap_weight", "bubble")
 
 #: SEMICOLON AND NOT A COMMA. A comma inside the string literal that joins these was counted as
 #: an argument separator by the guard that checks the caller and the R script agree on how many

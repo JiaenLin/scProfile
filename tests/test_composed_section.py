@@ -49,13 +49,29 @@ check("COMPOSED_MARK" in pap,
 check("startswith(_C.COMPOSED_MARK)" in pap,
       "the composed/authored distinction is not actually applied when deciding to rebuild")
 
-# 4. THE SECTION MUST LEAD WITH FINDINGS, NOT WITH THE DESIGN'S QUESTIONS. A section whose
-#    headings are questions reads as a questionnaire; one whose headings are answers reads as a
-#    result, and a reader who reads only the headings knows what was found.
+# 4. THE HEADING NAMES THE COMPARISON AND IS GENERATED FROM THE RUN; THE FINDING IS THE FIRST
+#    SENTENCE UNDER IT.
+#
+#    This check previously required the heading to BE the finding - "aged carries 3.22x the
+#    strength of young". That reads well and makes the document's SHAPE depend on its outcome:
+#    two runs of one design produce differently-titled sections, so nothing can be laid side by
+#    side or cited across runs. With a section per comparison that is the wrong trade, and the
+#    requirement it protected has not gone - a reader still meets the result immediately, one
+#    line lower, where it can be more specific than a heading allowed.
+#
+#    What still has to hold, and is what this checks: the heading is BUILT FROM THE RUN rather
+#    than authored, so it cannot drift from the text beneath it; and it names the arms by UNIT,
+#    because two contrasts can read "young against aged" while comparing different objects.
 sec = src[src.index("def section("):src.index("def claims(")]
-if "## {head}" not in sec or "head = (f\"{d['against']} carries" not in sec:
-    FAILURES.append("the section's headings are not generated from the measurement, so they "
-                    "cannot be findings and can drift from the text beneath them")
+if "## {head}" not in sec:
+    FAILURES.append("the section's headings are not generated at all, so they can drift from "
+                    "the text beneath them")
+if "unit_against" not in sec or "unit_reference" not in sec:
+    FAILURES.append("the heading does not name the arms by UNIT, so two different comparisons "
+                    "can carry the same title")
+if "Differential {SUBJECT}" not in sec:
+    FAILURES.append("the heading does not name the comparison, or names a subject this host "
+                    "decided rather than one the plugin declared")
 if "the largest difference in" not in sec:
     FAILURES.append("the section does not open with the shape of the result, so a reader must "
                     "assemble it from the subsections")
