@@ -435,6 +435,14 @@ def cite(idx, paths):
 #: 3.0 is the same factor this project's own removal rule uses for "differential across the
 #: design", chosen for consistency rather than tuned: a share that trebles between two arms is a
 #: composition difference large enough to produce a difference in a sum of pairs by itself.
+#: HOW FAR THE TWO SCALES MAY DIVERGE BEFORE THE TEXT SAYS SO, in log2 of the ratio. 0.4 is a
+#: factor of about 1.32 between the two ratios - the point at which quoting one and not the other
+#: changes what a reader would conclude about size. Written here, before the run that tests it, so
+#: the threshold is a decision rather than a description of whichever contrasts it happened to
+#: catch. It is deliberately below any reversal: a reversal is the loud case and is rare, and the
+#: failure this exists for is two scales agreeing in direction while disagreeing in magnitude.
+SCALE_GAP_LOG2 = 0.4
+
 COMPOSITION_FOLD = 3.0
 
 #: And a population is NAMED as thin when its arm holds fewer than this many observations of it.
@@ -664,27 +672,34 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         # reach the opposite conclusion. Named only where the two actually disagree, so it is a
         # finding about this run and not a paragraph that appears whatever the numbers are.
         if _has_pc:
-            _split = [l for l in ranked
-                      if f[l].get("ratio_per_cell")
-                      and (f[l]["ratio"] - 1.0) * (f[l]["ratio_per_cell"] - 1.0) < 0]
-            _shrunk = [l for l in ranked
-                       if f[l].get("ratio_per_cell") and l not in _split
-                       and abs(math.log2(f[l]["ratio"] or 1.0))
-                           > 2 * abs(math.log2(f[l]["ratio_per_cell"] or 1.0))]
-            if _split:
+            # HOW FAR APART THE TWO SCALES ARE, PER CONTRAST, in log2 of the ratio. A reversal is
+            # the loud case and it is rare; the common one is agreement in direction with a large
+            # disagreement in SIZE, which is what a reader takes a conclusion from.
+            _gap = {}
+            for l in ranked:
+                _pc = f[l].get("ratio_per_cell")
+                if _pc and f[l]["ratio"]:
+                    _gap[l] = math.log2(f[l]["ratio"]) - math.log2(_pc)
+            _rev = [l for l in _gap
+                    if (f[l]["ratio"] - 1.0) * (f[l]["ratio_per_cell"] - 1.0) < 0]
+            _big = [l for l in _gap if l not in _rev and abs(_gap[l]) >= SCALE_GAP_LOG2]
+            if _rev:
                 L += ["**The two scales disagree in DIRECTION on "
-                      + ", ".join(f"`{l}`" for l in _split)
-                      + ".** The arm carrying more in total carries less per observation, which "
-                      "means the difference in the total is a difference in how much was "
-                      "sampled. A claim about how much each observation does is read from the "
-                      "per-observation column; a claim about total burden is read from the "
-                      "other. Say which is being made.", ""]
-            elif _shrunk:
+                      + ", ".join(f"`{l}`" for l in _rev)
+                      + ".** The arm carrying more in total carries less per observation, so the "
+                      "difference in the total is a difference in how much was sampled. A claim "
+                      "about what each observation does is read from the per-observation column; "
+                      "a claim about total burden is read from the other. **Say which is being "
+                      "made.**", ""]
+            if _big:
                 L += ["**The two scales agree in direction but not in size on "
-                      + ", ".join(f"`{l}`" for l in _shrunk)
-                      + "** - most of the difference in the total is the difference in how much "
-                      "was sampled rather than in what each observation does. Read a claim "
-                      "about behaviour from the per-observation column.", ""]
+                      + ", ".join(f"`{l}` ({_n(f[l]['ratio'])}x against "
+                                  f"{_n(f[l]['ratio_per_cell'])}x per observation)"
+                                  for l in sorted(_big, key=lambda x: -abs(_gap[x])))
+                      + ".** Where the total moves further than the per-observation figure, part "
+                      "of the difference is a difference in how much was sampled rather than in "
+                      "what each observation does. **A claim about behaviour is read from the "
+                      "per-observation column; a claim about total burden from the other.**", ""]
     # THE COMPOSITION AND THE SETTINGS, ONCE. Both are properties of the RUN, so they go here and
     # not under each comparison. A constant printed under every finding is the failure this
     # section has already had twice - the aliasing line four times, the alignment sentence on a
