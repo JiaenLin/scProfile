@@ -4773,15 +4773,30 @@ if (!is.null(inter) && nrow(inter)) {
         .r <- range(c(dd$resp1, dd$resp2), na.rm = TRUE)
         .pad <- max(diff(.r) * 0.10, 1e-9)
         .lim <- c(.r[1] - .pad, .r[2] + .pad)
-        # LABELS TURN INWARD. Placed always to the right, every point in the right-hand half put
-        # its name off the plate - four were cut on the first render. Anchoring on the side that
-        # faces the middle keeps them inside the panel whichever quadrant the point is in.
-        dd$hj <- ifelse(dd$resp2 > mean(.lim), 1.12, -0.12)
-        # AND ONLY THE LARGEST REVERSALS ARE NAMED, said out loud rather than left to
+        # LABELS ARE REPELLED, NOT PLACED BY HAND. Anchoring them on the side facing the middle
+        # kept them inside the panel, and did nothing about each other: the reversals cluster
+        # near the origin - their values are small beside the two outliers that set the shared
+        # range - so a dozen names landed on the same square inch and became an unreadable mass.
+        # `ggrepel` pushes them apart and draws a leader back to the point, which is the whole
+        # problem solved by a package already declared among this plugin's dependencies.
+        # ONLY THE LARGEST REVERSALS ARE NAMED, said out loud rather than left to
         # `check_overlap`, which drops colliding labels silently - a removal with no record.
         .lab <- dd[dd$flip, , drop = FALSE]
         .lab <- .lab[order(-abs(.lab$ix)), , drop = FALSE]
         .lab <- utils::head(.lab, 10)
+        # DEGRADE, DO NOT DIE. `ggrepel::` loads the namespace on demand, so an environment
+        # without it would take the whole cohort script down at draw time and cost every panel
+        # after this one - the failure mode this script has already had once, from a missing
+        # comma. It is a declared dependency and is expected to be here; if it is not, the names
+        # are placed plainly and the panel says nothing false.
+        .repel <- requireNamespace("ggrepel", quietly = TRUE)
+        .lab_layer <- if (.repel)
+          ggrepel::geom_text_repel(data = .lab, ggplot2::aes(label = pair), size = 2.6,
+                                   min.segment.length = 0, segment.size = 0.25,
+                                   segment.colour = "grey55", box.padding = 0.45,
+                                   max.overlaps = Inf, seed = 1L)
+        else
+          ggplot2::geom_text(data = .lab, ggplot2::aes(label = pair), size = 2.6, hjust = -0.1)
         ggplot2::ggplot(dd, ggplot2::aes(x = resp2, y = resp1)) +
           ggplot2::annotate("rect", xmin = -Inf, xmax = 0, ymin = 0, ymax = Inf,
                             fill = "#b2182b", alpha = 0.06) +
@@ -4792,8 +4807,7 @@ if (!is.null(inter) && nrow(inter)) {
           ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed",
                                linewidth = 0.4, colour = "grey30") +
           ggplot2::geom_point(ggplot2::aes(colour = flip), size = 2.4, alpha = 0.9) +
-          ggplot2::geom_text(data = .lab,
-                             ggplot2::aes(label = pair, hjust = hj), size = 2.6) +
+          .lab_layer +
           ggplot2::scale_colour_manual(values = c(`TRUE` = "#b2182b", `FALSE` = "grey45"),
                                        labels = c(`TRUE` = "direction overturns",
                                                   `FALSE` = "same direction in both"),
