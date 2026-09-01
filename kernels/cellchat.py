@@ -4620,6 +4620,99 @@ if (!is.null(inter) && nrow(inter)) {
                          "own matrices; no test applies to a difference of two differences.",
                          ms_unit, ms_note))
     }
+
+    # ---- LIGAND-RECEPTOR LEVEL, THE THIRD ONE, WHICH WAS ABSENT ----
+    #
+    # The panels above answer WHICH CELL TYPES respond differently between the strata, and the
+    # flow panels answer WHICH PROGRAMMES. Nothing answered WHICH LIGAND-RECEPTOR PAIRS, so a
+    # conditioned claim could be made at two of the three levels this method resolves and the
+    # finest one - the pairs a reader would go and validate - had no panel at all.
+    #
+    # `net$prob` is [population x population x pair], so summing the first two dimensions gives
+    # each pair's total in an arm. As at the other levels the quantity is per-object normalised,
+    # so each arm becomes a SHARE of its own total before any difference is taken. The leading
+    # sender-receiver pair is carried onto the label, which is what keeps this cell-type
+    # specific rather than a list of molecules floating free of the tissue.
+    lr <- tryCatch({
+      .pv <- function(k) {
+        p <- mi@net[[k]]$prob
+        if (is.null(p)) stop("no net$prob")
+        v <- apply(p, 3, sum, na.rm = TRUE)
+        t <- sum(v, na.rm = TRUE)
+        if (!is.finite(t) || t <= 0) stop("arm total is not positive")
+        100 * v / t
+      }
+      .top <- function(k, nm) {
+        p <- mi@net[[k]]$prob
+        m <- p[, , nm]
+        if (all(!is.finite(m)) || max(m, na.rm = TRUE) <= 0) return(NA_character_)
+        w <- which(m == max(m, na.rm = TRUE), arr.ind = TRUE)[1, ]
+        paste0(dimnames(p)[[1]][w[1]], " -> ", dimnames(p)[[2]][w[2]])
+      }
+      a1 <- .pv(arm_of[[as.character(rows$against[1])]])
+      r1 <- .pv(arm_of[[as.character(rows$reference[1])]])
+      a2 <- .pv(arm_of[[as.character(rows$against[2])]])
+      r2 <- .pv(arm_of[[as.character(rows$reference[2])]])
+      # PRESENT IN ALL FOUR, or the difference is not a difference. Named, not dropped quietly.
+      keep <- Reduce(intersect, list(names(a1), names(r1), names(a2), names(r2)))
+      if (length(keep) < 2) stop("fewer than two pairs are present in all four arms")
+      d <- data.frame(pair = keep,
+                      ix = (a1[keep] - r1[keep]) - (a2[keep] - r2[keep]),
+                      stringsAsFactors = FALSE)
+      d <- d[is.finite(d$ix), , drop = FALSE]
+      d <- d[order(-abs(d$ix)), , drop = FALSE]
+      d <- utils::head(d, 25)
+      d$where <- vapply(d$pair,
+                        function(nm) .top(arm_of[[as.character(rows$against[1])]], nm),
+                        character(1))
+      d$label <- ifelse(is.na(d$where), d$pair, paste0(d$pair, "  (", d$where, ")"))
+      list(d = d, n_all = length(keep), n_any = length(unique(c(names(a1), names(r1),
+                                                                names(a2), names(r2)))))
+    }, error = function(e) {
+      cat("interaction at ligand-receptor level FAILED for", fr, ":", conditionMessage(e), "\n")
+      NULL })
+    if (is.null(lr)) {
+      .plots$bad <- c(.plots$bad, paste0("interaction_lr__", safe))
+    } else {
+      utils::write.csv(lr$d, file.path(figdir,
+                       paste0("nativecmp_interaction_lr__", safe, ".csv")), row.names = FALSE)
+      npng(paste0("interaction_lr__", safe), {
+        dd <- lr$d
+        dd$label <- factor(dd$label, levels = rev(dd$label))
+        ggplot2::ggplot(dd, ggplot2::aes(x = label, y = ix, fill = ix > 0)) +
+          ggplot2::geom_col(show.legend = FALSE) +
+          ggplot2::geom_hline(yintercept = 0, linewidth = 0.3) +
+          ggplot2::coord_flip() +
+          ggplot2::scale_fill_manual(values = c(`TRUE` = "#b2182b", `FALSE` = "#2166ac")) +
+          ggplot2::labs(x = NULL,
+                        y = paste0(eff_lbl, " within ", st[1], " minus the same within ", st[2],
+                                   " (percentage points)"),
+                        title = paste0("Which ligand-receptor pairs respond to ", fac,
+                                       " differently between ", st[1], " and ", st[2], "?"),
+                        subtitle = paste0("RED: the ", fac, " response is larger in ", st[1],
+                                          "    BLUE: larger in ", st[2],
+                                          "\n", nrow(dd), " of ", lr$n_all,
+                                          " pairs present in all four arms, of ", lr$n_any,
+                                          " seen in any")) +
+          ggplot2::theme_classic() +
+          ggplot2::theme(axis.text.y = ggplot2::element_text(size = 7))
+      }, w = 2200, h = 1900, by = "plugin",
+         legend = paste0("Which ligand-receptor pairs respond to ", fac, " differently between ",
+                         st[1], " and ", st[2], "? Each bar is one pair: the ", eff_lbl,
+                         " within ", st[1], " minus the same response within ", st[2],
+                         ", which is the control. RED means the response is LARGER in ", st[1],
+                         "; BLUE means larger in ", st[2],
+                         ". In brackets after each pair is the sender and receiver carrying most "
+                         "of it, so the pair is read in a cell type rather than on its own. "
+                         "Values are PERCENTAGE POINTS: each arm's pairs are expressed as a "
+                         "share of that arm's own total before any difference is taken, because "
+                         "a communication probability is normalised within its own object. "
+                         "Drawn on the ", nrow(lr$d), " largest of ", lr$n_all,
+                         " pairs present in ALL FOUR arms, out of ", lr$n_any,
+                         " seen in any of them - a pair absent from one arm has no difference of "
+                         "differences and is not shown. No test applies to a difference of two "
+                         "differences and none is claimed."))
+    }
     cat("interaction drawn for framing:", fr, "over", nrow(both), "pathway(s)\n")
   }
 } else {
