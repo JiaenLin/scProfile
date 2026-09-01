@@ -54,7 +54,12 @@ from pathlib import Path
 #: Pages that are appendices to a plugin page rather than pages a reader reads. A page named
 #: with one of these is exempt from the criteria ONLY IF its parent exists and links to it -
 #: the link is what stops the exemption being used to move figures out of sight.
-APPENDIX_SUFFIXES = ("_by_sample", "_by_arm")
+#: `_panel` and `_profile` are galleries by construction - one plate per declared evidence need
+#: across every comparison, and the per-unit profile of every unit - so the figure count is what
+#: they are FOR. They are exempt on exactly the same condition as the other two and no weaker
+#: one: the parent page must exist and must link to them, which is what stops the suffix being
+#: used to move figures out of a reader's way.
+APPENDIX_SUFFIXES = ("_by_sample", "_by_arm", "_panel", "_profile")
 
 #: A page may carry at most this many figures. Above it, a reader stops.
 MAX_FIGURES = 12
@@ -224,7 +229,12 @@ def check_page(path, *, exempt=(), recorded=()):
     # attribute the reporter does not emit made the criterion pass on a page carrying the
     # same five plots ten times over. A check that CANNOT fail is worse than no check: it
     # reports the very defect it was written for as absent.
-    ids = [m.rsplit("/", 1)[-1] for m in re.findall(r'src="([^"]+\.png)"', html)]
+    # THE PATH, NOT THE BASENAME. Keying on the filename alone made every per-unit page a page
+    # of "repeats": eighteen units each draw `native_signalingRole_scatter.png`, and those are
+    # eighteen DIFFERENT figures of eighteen different units. The defect this criterion exists
+    # to catch - one plot shown ten times - is a repeated PATH, and keying on the path still
+    # catches it exactly while no longer reporting distinct figures as duplicates.
+    ids = re.findall(r'src="([^"]+\.png)"', html)
     out = []
 
     declared = declared_exemptions(html)

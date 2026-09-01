@@ -67,7 +67,13 @@ def check(rows):
 
 
 def write(path, rows):
-    """Write the legends for one directory of figures. Refuses a row that fails `check`."""
+    """Write the legends for one directory of figures. Refuses a row that fails `check`.
+
+    THE PLUGIN-SIDE FILE IS NOT WRITTEN HERE. A wrapped tool draws in its own interpreter and
+    writes `captions.tsv` beside its figures, so this writer serves the host and anything
+    running in Python - which is why the same invariant has to be enforced again at READ time,
+    below, rather than trusted to whoever wrote the file.
+    """
     rows = [dict(r) for r in (rows or [])]
     check(rows)
     p = Path(path)
@@ -88,13 +94,22 @@ def read(directory):
     silently loses the legends.
     """
     d = Path(directory)
-    out = {}
+    out, malformed = {}, []
     for cand in (d / NAME, d.parent / NAME):
         if not cand.is_file():
             continue
         try:
             with open(cand, newline="", encoding="utf-8") as fh:
                 for r in csv.DictReader(fh, delimiter="\t"):
+                    # A ROW WITH EXTRA FIELDS IS A CORRUPTED ROW, NOT A ROW TO GUESS AT. The
+                    # file is tab-separated and a writer that does not quote turns one caption
+                    # containing a tab into a row whose columns are all shifted. `DictReader`
+                    # parks the surplus under the key `None`, which is the only signal that
+                    # happens - and dropping such a row silently is how a figure comes to carry
+                    # a neighbouring figure's legend.
+                    if r.get(None):
+                        malformed.append(str(r.get("file", "?")))
+                        continue
                     f = os.path.basename(str(r.get("file", "")).strip())
                     cap = " ".join(str(r.get("caption", "")).split())
                     if f and cap:
@@ -102,6 +117,11 @@ def read(directory):
                                            "drawn_by": str(r.get("drawn_by", "")).strip()})
         except (OSError, ValueError):
             continue
+    if malformed:
+        # SAY IT, DO NOT ONLY SKIP IT. A legend file that lost rows renders as a page whose
+        # figures fall back to their filenames, which is indistinguishable from a plugin that
+        # never wrote legends at all.
+        print(f"  {len(malformed)} malformed legend row(s) in {d}: {', '.join(malformed[:4])}")
     return out
 
 

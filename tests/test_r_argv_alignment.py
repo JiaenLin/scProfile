@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 FAILURES = []
 CHECKED = 0
+COVERED_STATICALLY = set()
 
 def _blocks(src):
     out = {}
@@ -65,6 +66,7 @@ for f in sorted((ROOT / "kernels").glob("*.py")):
         if not body or "commandArgs" not in body:
             continue
         CHECKED += 1
+        COVERED_STATICALLY.add(hit[-1])
         idx = [int(x) for x in re.findall(r"\bargs\[(\d+)\]", body)]
         hi = max(idx) if idx else 0
         if hi > n_passed:
@@ -75,6 +77,29 @@ for f in sorted((ROOT / "kernels").glob("*.py")):
         if missing:
             FAILURES.append(
                 f"{f.name} / {hit[-1]}: argument(s) {missing} are passed and never read")
+
+# EVERY SCRIPT THAT READS ARGV MUST BE COVERED BY SOMETHING. The static count above pairs a
+# caller with the script it writes, and it can only do that where the caller builds its argv as
+# one literal list. Three of this project's four embedded scripts do not - they concatenate a
+# variable number of object paths - so the check silently covered ONE of them and reported
+# success, which is the shape of coverage failure that looks exactly like coverage.
+#
+# A variable-length argv cannot be counted from the call site, so those scripts must assert
+# their own arity at runtime instead. Either route counts as covered; neither present does not,
+# and this names the script rather than reporting a total.
+for f in sorted((ROOT / "kernels").glob("*.py")):
+    for nm, body in _blocks(f.read_text()).items():
+        if "commandArgs" not in body:
+            continue
+        if nm in COVERED_STATICALLY:
+            continue
+        if not re.search(r"stopifnot\s*\(\s*length\(args\)", body):
+            FAILURES.append(
+                f"{f.name} / {nm}: reads positional arguments, is not statically countable "
+                f"from its caller, and asserts no minimum length - reading past the end of "
+                f"argv in R yields NA, so a short call runs against missing values")
+        else:
+            CHECKED += 1
 
 if CHECKED == 0:
     print("FAIL")

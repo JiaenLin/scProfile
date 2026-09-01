@@ -604,6 +604,11 @@ _DOT_PAIRS = 15
 _R_DB = r'''
 suppressMessages(library(CellChat))
 args <- commandArgs(trailingOnly = TRUE)
+# WHAT THIS SCRIPT REQUIRES, SAID OUT LOUD. Reading past the end of argv in R yields NA rather
+# than an error, so a caller that appends one argument too few produces a plausible run against
+# a missing value instead of a failure. Cheap here, and the only thing that turns an off-by-one
+# into a stop.
+stopifnot(length(args) >= 2)
 db_name <- args[1]; out <- args[2]
 
 db <- get(db_name)
@@ -661,6 +666,7 @@ suppressMessages({library(CellChat); library(Matrix)})
 # that draws the river - the tally is what showed it.
 suppressMessages(try(library(ggalluvial), silent = TRUE))
 args <- commandArgs(trailingOnly = TRUE)
+stopifnot(length(args) >= 10)
 mtx <- args[1]; meta_f <- args[2]; db_name <- args[3]
 min_cells <- as.integer(args[4]); trim <- as.numeric(args[5]); out <- args[6]
 mean_type <- args[7]; pop_size <- as.logical(args[8]); nboot <- as.integer(args[9])
@@ -690,6 +696,12 @@ mark <- function(what) {
 }
 
 
+# WHAT HAPPENED BEFORE THE FIRST MARK IS STILL COST. The clock started at the top of the script
+# and the first phase recorded was the matrix read, so interpreter start-up and loading CellChat
+# and its dependencies were charged to nothing - and a cohort's cput then exceeded the sum of its
+# phases by an amount nobody could attribute. It is not a large share per unit; it is eighteen
+# units of it, and an unattributed remainder is indistinguishable from a phase that is lying.
+mark("start up and load the library")
 X <- as(Matrix::readMM(mtx), "CsparseMatrix")
 mark("read the matrix")
 meta <- read.csv(meta_f, row.names = 1, stringsAsFactors = FALSE)
@@ -723,8 +735,26 @@ cat("object store:", if (nzchar(cache_dir)) "cache (survives the run)" else
     "instance only (NO cache offered; every run will re-infer)", "->", store, "\n")
 rds <- file.path(store, "cellchat.rds")
 stampf <- file.path(store, "cellchat.inference.txt")
+# THE STAMP MUST NAME THE CODE, NOT ONLY THE DATA AND THE SETTINGS. It carried the two input
+# digests and the six inference parameters, so an object stayed "valid" across a CellChat
+# upgrade and across every edit to the inference below it - the two changes most likely to alter
+# the result, and the two a reader would never think to suspect, because the cache reports a hit
+# and the run reports success. Two components close it:
+#
+#   the PACKAGE version - what did the inference; and
+#   the md5 of THIS SCRIPT - the recipe, taken from the interpreter's own --file argument, so it
+#   tracks every edit to the inference without anything having to be remembered or passed in.
+#
+# Adding them invalidates every existing entry once. That is the correct cost: those entries
+# cannot say which version made them, so none of them can be trusted to.
+.ccver <- tryCatch(as.character(utils::packageVersion("CellChat")),
+                   error = function(e) "CellChat-version-unknown")
+.recipe <- tryCatch({
+  .f <- sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])
+  if (!is.na(.f) && nzchar(.f) && file.exists(.f)) unname(tools::md5sum(.f)) else "recipe-unknown"
+}, error = function(e) "recipe-unknown")
 stamp <- paste(tools::md5sum(mtx), tools::md5sum(meta_f), db_name, mean_type, trim,
-               pop_size, nboot, thresh, min_cells, sep = "|")
+               pop_size, nboot, thresh, min_cells, .ccver, .recipe, sep = "|")
 
 cc <- NULL
 if (file.exists(rds) && file.exists(stampf) &&
@@ -801,6 +831,15 @@ if (.from_cache) {
   cat("object store: cache hit,", format(round(file.info(rds)$size / 1e6), big.mark = ","),
       "MB not rewritten\n")
 } else {
+  # INVALIDATE FIRST, THEN WRITE. The object and its stamp are two files and the stamp is what
+  # declares the object valid, so the pair must never be observable as "old stamp, new object".
+  # Writing the object first and the stamp second fails closed only while the stamp is CHANGING;
+  # where a run replaces the object under a stamp that later recurs - the same data and settings
+  # seen again - a job killed in between leaves the old stamp standing over the new bytes, and
+  # the next run loads an object that does not match what the stamp says it is. Removing the
+  # stamp before touching the object makes the only reachable partial state "no stamp", which
+  # re-infers.
+  unlink(stampf)
   rds_tmp <- paste0(rds, ".tmp", Sys.getpid())
   saveRDS(cc, rds_tmp)
   if (!file.rename(rds_tmp, rds)) {
@@ -813,6 +852,32 @@ if (.from_cache) {
   }
   cat("saved the CellChat object for reuse:", rds, "\n")
 }
+
+# EVICT ONLY WHAT NOTHING HOLDS. The store keeps one generation per stamp and dropped none, so
+# it grew by a full set of objects on every change of version, parameter or input - measured at
+# 3.07 GB over 54 objects for eighteen units, three generations deep.
+#
+# The safe rule needs no registry, because the filesystem already knows who holds what: a run
+# keeps a HARD LINK to the object it read, so an entry whose object has ONE link is referenced by
+# no run and removing it cannot reach inside anything already sealed. An entry with more links is
+# left exactly where it is however old it looks.
+.evicted <- tryCatch({
+  .here <- normalizePath(store, mustWork = FALSE)
+  .gone <- 0L; .freed <- 0
+  for (.g in list.dirs(dirname(store), recursive = FALSE)) {
+    if (identical(normalizePath(.g, mustWork = FALSE), .here)) next
+    .f <- file.path(.g, "cellchat.rds")
+    if (!file.exists(.f)) next
+    .i <- file.info(.f)
+    if (is.na(.i$nlink) || .i$nlink > 1) next
+    .freed <- .freed + .i$size; .gone <- .gone + 1L
+    unlink(.g, recursive = TRUE)
+  }
+  if (.gone > 0L)
+    cat("cache: evicted", .gone, "generation(s) no run holds,",
+        format(round(.freed / 1e6), big.mark = ","), "MB freed\n")
+  TRUE
+}, error = function(e) { cat("cache eviction skipped:", conditionMessage(e), "\n"); FALSE })
 # AND THE RUN KEEPS ITS OWN HANDLE ON IT. `produces` declares objects/cellchat.rds, so the
 # instance must carry one; a hard link is the same bytes and the same inode, so the run is
 # self-contained without a second copy. Falls back to a copy where the cache is on another
@@ -844,7 +909,12 @@ dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 .legend <- function(fname, text, by) {
   if (!nzchar(text)) return(invisible(NULL))
   .caps$rows[[length(.caps$rows) + 1L]] <-
-    list(file = fname, caption = text, drawn_by = by)
+    # ONE LINE, ALWAYS. The file is tab-separated and written with quote = FALSE, so a caption
+    # carrying a tab or a newline does not corrupt one row - it shifts every column after it, or
+    # splits the row in two, and the reader then drops what it cannot parse WITHOUT SAYING SO.
+    # Collapsing whitespace here matches what the reader does anyway and makes the written file
+    # unable to express the broken shape.
+    list(file = fname, caption = gsub("[[:space:]]+", " ", trimws(text)), drawn_by = by)
   invisible(NULL)
 }
 .write_captions <- function() {
@@ -1021,7 +1091,11 @@ for (pat in c("outgoing", "incoming")) {
 
 # the pathway manifold for this unit alone, CellChat's own embedding plot. The table below
 # computes the same embedding for its coordinates; this draws CellChat's own picture of it.
-emb_ok <- tryCatch({
+# ONLY WHERE THE PICTURES WILL BE DRAWN. This block exists for its two figures and nothing
+# else - the coordinates the table below ships are computed independently, from its own `cc2` -
+# so on an axis `--figures-for` excludes it ran a similarity, a UMAP and a clustering whose
+# entire output was then discarded by the gate inside `npng`.
+emb_ok <- if (!draw_figs) FALSE else tryCatch({
   ccE <- computeNetSimilarity(cc, type = "functional")
   ccE <- netEmbedding(ccE, type = "functional", umap.method = "umap-learn")
   ccE <- netClustering(ccE, type = "functional", do.parallel = FALSE)
@@ -2929,7 +3003,10 @@ def run(ctx):
     # between one copy of the matrix and three.
     Xc = sparse.csr_matrix(X)
     var_names = np.asarray(A.var_names).astype(str)
-    rscript = ctx.params.get("rscript") or "Rscript"
+    # ONE ACCESSOR FOR THE INTERPRETER. `_RS` tolerates a context without `params` - which
+    # `CompareContext` is - and this read it directly, so the two phases resolved the same
+    # setting by two different routes and only one of them survived a context that lacks it.
+    rscript = _RS(ctx)
 
     # ---------------------------------------------------------- what the database can reach
     #
@@ -3264,7 +3341,11 @@ def run(ctx):
             + ". Read that against F2_population_power before calling it biology - CellChat also "
               "requires a population's signalling genes to be over-expressed relative to the "
               "others, so silence is partly a statement about the rest of the object.")
-    if not drew_dot:
+    # A CAVEAT ABOUT AN ABSENT FIGURE ONLY WHERE FIGURES WERE BEING DRAWN AT ALL. `drew_dot`
+    # records whether the DATA allowed the panel; on an axis `--figures-for` excludes, nothing is
+    # drawn and the data had no say - so this explained the absence of a plate by a property of
+    # the interactions, for every unit of an axis that was simply not being drawn.
+    if ctx.draw_figures and not drew_dot:
         want = {"source", "target", "prob", "interaction_name"}
         missing = sorted(want - set(df.columns))
         if not len(df):
@@ -3276,7 +3357,7 @@ def run(ctx):
             dot_why = "no row carried a readable communication probability"
         ctx.caveat(f"No ligand-receptor pair could be drawn: {dot_why}, so F5_dotplot is absent. "
                    f"Read that against the panels above rather than as a figure that failed.")
-    if not drew_coverage:
+    if ctx.draw_figures and not drew_coverage:
         ctx.log("  F1_database_coverage not drawn")
     ctx.caveat("Scores are CellChat's own scale and are not comparable with another method's; "
                "only the ranking can be compared.")
@@ -3289,7 +3370,11 @@ def run(ctx):
             "retained when the cytoplasm is lost, so the interaction classes are not equally "
             "represented here and an absent secreted interaction is as consistent with the "
             "preparation as with the biology. How large that cost is on this tissue is not "
-            "something this run measured: F1_database_coverage counts what is PRESENT in the "
+            "something this run measured: "
+            + ("F1_database_coverage counts what is PRESENT in the "
+               if ctx.was_drawn("F1_database_coverage") else
+               "no coverage panel was drawn for this unit, and nothing here counts what is "
+               "PRESENT in the ")
             "object, not what the preparation removed.")
     elif ctx.assay == "cell":
         ctx.caveat(
@@ -3475,6 +3560,7 @@ if (file.exists(.envpy)) Sys.setenv(RETICULATE_PYTHON = .envpy)
 
 suppressMessages({library(CellChat); library(patchwork); library(ComplexHeatmap)})
 args <- commandArgs(trailingOnly = TRUE)
+stopifnot(length(args) >= 5)
 rds_a <- args[1]; rds_b <- args[2]; name_a <- args[3]; name_b <- args[4]; figdir <- args[5]
 
 # A PHASE CLOCK, DEFINED AT THE TOP BECAUSE R DOES NOT HOIST. Twice the cost of a round has
@@ -3582,7 +3668,12 @@ cat("merged:", name_a, "and", name_b, "\n")
 .legend <- function(fname, text, by) {
   if (!nzchar(text)) return(invisible(NULL))
   .caps$rows[[length(.caps$rows) + 1L]] <-
-    list(file = fname, caption = text, drawn_by = by)
+    # ONE LINE, ALWAYS. The file is tab-separated and written with quote = FALSE, so a caption
+    # carrying a tab or a newline does not corrupt one row - it shifts every column after it, or
+    # splits the row in two, and the reader then drops what it cannot parse WITHOUT SAYING SO.
+    # Collapsing whitespace here matches what the reader does anyway and makes the written file
+    # unable to express the broken shape.
+    list(file = fname, caption = gsub("[[:space:]]+", " ", trimws(text)), drawn_by = by)
   invisible(NULL)
 }
 .write_captions <- function() {
@@ -3911,8 +4002,12 @@ suppressPackageStartupMessages({
   library(patchwork)
 })
 args <- commandArgs(trailingOnly = TRUE)
+stopifnot(length(args) >= 2)
 figdir <- args[1]
 n <- as.integer(args[2])
+# THE LENGTH IS A FUNCTION OF n HERE, so it cannot be counted from the call site and has to be
+# asserted from inside: 2 fixed, then n object paths and n names.
+stopifnot(!is.na(n), n >= 1, length(args) >= 2 + 2 * n)
 rds <- args[seq(3, 2 + n)]
 nms <- args[seq(3 + n, 2 + 2 * n)]
 # args[3 + 2n]: a table of per-sample points, written by the host from this plugin's own edge
@@ -3938,7 +4033,12 @@ m <- mergeCellChat(objs, add.names = nms)
 .legend <- function(fname, text, by) {
   if (!nzchar(text)) return(invisible(NULL))
   .caps$rows[[length(.caps$rows) + 1L]] <-
-    list(file = fname, caption = text, drawn_by = by)
+    # ONE LINE, ALWAYS. The file is tab-separated and written with quote = FALSE, so a caption
+    # carrying a tab or a newline does not corrupt one row - it shifts every column after it, or
+    # splits the row in two, and the reader then drops what it cannot parse WITHOUT SAYING SO.
+    # Collapsing whitespace here matches what the reader does anyway and makes the written file
+    # unable to express the broken shape.
+    list(file = fname, caption = gsub("[[:space:]]+", " ", trimws(text)), drawn_by = by)
   invisible(NULL)
 }
 .write_captions <- function() {
@@ -4059,7 +4159,17 @@ for (ms in c("count", "weight")) {
         ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
       if (!is.null(smp) && ms %in% names(smp) && "cells" %in% names(smp)) {
         sn <- suppressWarnings(as.numeric(smp$cells))
-        sv <- suppressWarnings(as.numeric(smp[[ms]])) / sn * 1000
+        # THE DECOMPOSED VALUE WHERE THE HOST COULD COMPUTE IT. `smp[[ms]]` is the animal's OWN
+        # fit, which is not the arm's fit and cannot share this axis with the bar - measured, the
+        # same cells give 30.56 pooled and 84.28 as separate fits summed, which is why every
+        # point sat above every bar. `<ms>_of_arm` is the ARM's matrix credited to that animal by
+        # its share of the arm's cells: it partitions exactly, so the bar IS the cell-weighted
+        # mean of these points. Falls back to the independent fit where the host could not
+        # compute it, and the legend says which of the two is on the plate.
+        .dcol <- paste0(ms, "_of_arm")
+        .dv <- if (.dcol %in% names(smp)) suppressWarnings(as.numeric(smp[[.dcol]])) else NULL
+        .decomposed <- !is.null(.dv) && any(is.finite(.dv))
+        sv <- (if (.decomposed) .dv else suppressWarnings(as.numeric(smp[[ms]]))) / sn * 1000
         keep <- is.finite(sv)
         if (any(keep)) {
           sd_ <- smp[keep, , drop = FALSE]; sd_$x <- match(sd_$arm, nms); sd_$y <- sv[keep]
@@ -4076,10 +4186,22 @@ for (ms in c("count", "weight")) {
            legend = paste0("The same totals divided by the cells each fit used, per 1,000 cells. ",
                            "A SECOND SCALE, NOT A CORRECTION: the quantity does not rise linearly ",
                            "with cell number, so dividing puts the arithmetic on the page rather ",
-                           "than removing the dependence. Each point is one sample divided by ITS ",
-                           "OWN cells. A pooled arm and a single sample are not comparable on this ",
-                           "scale - a smaller fit finds proportionally more - so read the points ",
-                           "against each other, not against the bar."))
+                           "than removing the dependence. ",
+                           if (.decomposed) paste0(
+                             "Each open point is one animal's share OF THIS ARM'S OWN FIT, ",
+                             "credited by that animal's share of the arm's cells in the two ",
+                             "populations of each pair - half for sending, half for receiving. ",
+                             "That split is exact, so the bar is the cell-weighted mean of its ",
+                             "own points and a point may fall on either side of it. It is a ",
+                             "DERIVED attribution, not something CellChat reports: the method ",
+                             "fits the arm's pooled cells and says nothing about which animal ",
+                             "carried which edge. Each animal's INDEPENDENT fit is the raw panel ",
+                             "beside this one.")
+                           else paste0(
+                             "Each point is one sample's OWN fit divided by ITS OWN cells. A ",
+                             "pooled arm and a single sample are not comparable on this scale - ",
+                             "a smaller fit finds proportionally more - so read the points ",
+                             "against each other, not against the bar.")))
       cat("drew", ms, "per 1,000 cells over", nrow(d), "arm(s)\n")
     } else {
       cat("no cell counts for these arms; the per-1,000-cell panel is not drawn\n")
@@ -4309,15 +4431,34 @@ if (!is.null(inter) && nrow(inter)) {
     # without the size-dependent filter. Nothing is rescaled, downsampled or re-fitted: this is
     # the same fit read before the threshold instead of after it. The price is that no pair here
     # is significant - it is a magnitude, and no test is attached.
+    # WHICH METRICS ARE PER-OBJECT, DECLARED RATHER THAN ASSUMED. A communication probability is
+    # normalised WITHIN its own object - the law of mass action runs over the cells present - so
+    # two arms' weights are not on one scale and differencing them raw reports, in large part,
+    # which arm was smallest. The host's own interaction panel converts to shares before
+    # differencing for exactly this reason, and had measured the consequence: one pathway read
+    # -4.15 against +0.16 raw, an effect that DISAPPEARS, and -8.6 pp against +8.7 pp on shares,
+    # an effect that REVERSES. The two documents were answering one question by two arithmetics.
+    #
+    # A COUNT IS NOT PER-OBJECT. It counts L-R pairs that cleared a threshold, so it is already
+    # comparable and converting it would invent a proportion nothing measured. Hence a table and
+    # not a blanket rule.
+    .per_object <- c(count = FALSE, weight = TRUE, prob_all = TRUE)
     .armmat <- function(k, ms) {
-      if (ms != "prob_all") return(mi@net[[k]][[ms]])
-      p <- mi@net[[k]]$prob
-      if (is.null(p)) stop("this object carries no net$prob")
-      A <- apply(p, c(1, 2), sum)
-      ref <- mi@net[[k]][["count"]]
-      if (!identical(dimnames(A)[[1]], rownames(ref)) ||
-          !identical(dimnames(A)[[2]], colnames(ref)))
-        stop("net$prob and net$count disagree on populations")
+      A <- if (ms != "prob_all") mi@net[[k]][[ms]] else {
+        p <- mi@net[[k]]$prob
+        if (is.null(p)) stop("this object carries no net$prob")
+        B <- apply(p, c(1, 2), sum)
+        ref <- mi@net[[k]][["count"]]
+        if (!identical(dimnames(B)[[1]], rownames(ref)) ||
+            !identical(dimnames(B)[[2]], colnames(ref)))
+          stop("net$prob and net$count disagree on populations")
+        B
+      }
+      if (isTRUE(.per_object[[ms]])) {
+        .tot <- sum(A, na.rm = TRUE)
+        if (!is.finite(.tot) || .tot <= 0) stop("arm total is not positive; no share is defined")
+        A <- 100 * A / .tot
+      }
       A
     }
     for (ms in c("count", "weight", "prob_all")) {
@@ -4337,8 +4478,17 @@ if (!is.null(inter) && nrow(inter)) {
                        paste0("nativecmp_interaction_", ms, "__", safe, ".csv")))
       # A METRIC NAME A READER CAN ACT ON. "prob_all" is a file name, not a quantity - the
       # panel has to say which number it is and, for the balanced one, why it exists.
-      ms_lbl <- switch(ms, prob_all = "probability, no significance filter", ms)
-      ms_short <- switch(ms, prob_all = "prob, all pairs", ms)
+      ms_lbl <- switch(ms, prob_all = "probability share, no significance filter",
+                           weight = "strength share", ms)
+      ms_short <- switch(ms, prob_all = "prob share (pp)", weight = "strength share (pp)", ms)
+      # WHAT A NUMBER ON THIS PANEL IS. Two of the three metrics are shares of their own arm's
+      # total, so a cell is a difference of differences OF PERCENTAGES - percentage points - and
+      # a reader who takes it for a probability is out by the arm total.
+      ms_unit <- if (isTRUE(.per_object[[ms]]))
+        paste0(" Values are PERCENTAGE POINTS: each arm's matrix is expressed as a share of its ",
+               "own total before any difference is taken, because a communication probability is ",
+               "normalised within its own object and two arms' raw weights are not on one scale.")
+        else " Values are counts of ligand-receptor pairs, which are already comparable across arms."
       ms_note <- if (ms == "prob_all") paste0(
         " THIS IS THE SIZE-BALANCED PANEL. count and weight are computed after ",
         "prob[pval >= thresh] <- 0, and that threshold is where population size enters: a ",
@@ -4394,7 +4544,7 @@ if (!is.null(inter) && nrow(inter)) {
                          "Drawn on the ", nrow(M), " populations present in every arm, which is ",
                          "fewer than the two-arm panels carry. Values are the merged object's ",
                          "own matrices; no test applies to a difference of two differences.",
-                         ms_note))
+                         ms_unit, ms_note))
     }
     cat("interaction drawn for framing:", fr, "over", nrow(both), "pathway(s)\n")
   }
@@ -4418,6 +4568,37 @@ _PROFILE_PLOTS = ("signalingRole_scatter", "signalingRole_heatmap_out", "signali
 #: arguments there are - so the list read as one argument longer than it is. The job layer chose
 #: semicolons for the same reason when `-v` split a control list on its commas.
 _PROFILE_SEP = ";"
+
+
+def _read_csv_if(path):
+    """That CSV as a frame, or None. A missing table is a fact, not an error."""
+    try:
+        import pandas as _pd
+        from pathlib import Path as _Pt
+        p = _Pt(path)
+        return _pd.read_csv(p) if p.is_file() else None
+    except Exception:                                                     # noqa: BLE001
+        return None
+
+
+def _sizes_if(path):
+    """{population: cells} from a composition table, or {}.
+
+    The columns are the ones `unit_network` declares as its size table; they are read by name so
+    that a plugin changing what it calls them changes one declaration and not this.
+    """
+    d = _read_csv_if(path)
+    if d is None or not len(d):
+        return {}
+    cols = {str(c).lower(): str(c) for c in d.columns}
+    ec = cols.get("population") or cols.get("group") or cols.get("cell_type")
+    sc = cols.get("cells") or cols.get("n_cells") or cols.get("n")
+    if not ec or not sc:
+        return {}
+    try:
+        return {str(k): float(v) for k, v in zip(d[ec], d[sc])}
+    except Exception:                                                     # noqa: BLE001
+        return {}
 
 
 def _RS(ctx):
@@ -4459,22 +4640,49 @@ def compare(ctx):
         # the points. Both are the host's own numbers, computed from this plugin's declared edge
         # table, so a bar, a point and a normalised bar are three readings of one arithmetic.
         points = ctx.out / "unit_values.tsv"
+        # THE ARM'S OWN FIT, SPLIT OVER THE ANIMALS IT WAS FITTED ON. A member's own row holds its
+        # INDEPENDENT fit, which is a different fit from the arm's and not comparable with it on a
+        # per-cell axis - the arm's bar and its members' points then sat on one axis with every
+        # point above every bar. `decompose_by_member` credits the ARM's matrix to each animal by
+        # its share of the arm's cells, which partitions exactly and makes the bar the
+        # cell-weighted mean of its own points. Derived, and labelled as derived wherever drawn.
+        _dec = {}
+        try:
+            from scprofile import compare_panel as _CP
+            for arm in names:
+                _ad = ctx.dir_of(arm)
+                _ae = _read_csv_if(_ad / "tables" / "ccc_edges.csv")
+                _asz = _sizes_if(_ad / "tables" / "cellchat_composition.csv")
+                if _ae is None or not _asz:
+                    continue
+                for m in (ctx.members.get(arm) or []):
+                    _msz = _sizes_if(_ad.parent / str(m) / "tables" / "cellchat_composition.csv")
+                    if _msz:
+                        _dec[str(m)] = _CP.decompose_by_member(_ae, _asz, _msz, weight="prob")
+            if _dec:
+                ctx.log(f"  decomposed {len(_dec)} member(s) out of their arm's own fit")
+        except Exception as _e:                                           # noqa: BLE001
+            ctx.log(f"  per-member decomposition unavailable ({_e})")
+            _dec = {}
         rows = []
         for arm in names:
             v = ctx.unit_values.get(arm) or {}
-            rows.append((arm, arm, "arm", v.get("edges"), v.get("weight"), v.get("cells")))
+            rows.append((arm, arm, "arm", v.get("edges"), v.get("weight"), v.get("cells"),
+                         v.get("edges"), v.get("weight")))
             for m in (ctx.members.get(arm) or []):
                 mv = ctx.unit_values.get(m) or {}
                 if "edges" in mv:
+                    d = _dec.get(str(m)) or {}
                     rows.append((m, arm, "sample", mv.get("edges"), mv.get("weight"),
-                                 mv.get("cells")))
+                                 mv.get("cells"), d.get("count"), d.get("weight")))
         if rows:
             points.parent.mkdir(parents=True, exist_ok=True)
             with open(points, "w", encoding="utf-8") as fh:
-                fh.write("unit\tarm\trole\tcount\tweight\tcells\n")
-                for u, a, r, c, w, n in rows:
+                fh.write("unit\tarm\trole\tcount\tweight\tcells\t"
+                         "count_of_arm\tweight_of_arm\n")
+                for u, a, r, c, w, n, dc, dw in rows:
                     fh.write("\t".join(str("" if x is None else x)
-                                       for x in (u, a, r, c, w, n)) + "\n")
+                                       for x in (u, a, r, c, w, n, dc, dw)) + "\n")
             ctx.log(f"  {sum(1 for r in rows if r[2] == 'sample')} sample point(s) and "
                     f"{sum(1 for r in rows if r[2] == 'arm')} arm denominator(s) for the bars")
         # THE FRAMINGS, WRITTEN OUT. The host enumerated which arm pairs make which stratum; this

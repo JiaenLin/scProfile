@@ -547,6 +547,26 @@ def _captions(out, plugin=""):
     return caps
 
 
+def _caption_for(out, caps, rel):
+    """The legend for one figure: `panels.json` first, then the legend file beside the figure.
+
+    THE RECORD ONLY COVERS WHAT REACHED A PAGE. `panels.json` lists the panels the reporter
+    placed - cohort, contrast and arm - and a per-unit or profile panel is placed by neither,
+    so a citation of one rendered as "Figure N." followed by nothing. The plugin has already
+    written a real legend beside every figure it drew; this is the second place to look, and it
+    works for any plugin because `captions.tsv` is the declared shape rather than CellChat's.
+    """
+    got = caps.get(rel) or ""
+    if got:
+        return got
+    try:
+        from . import captions as _CAP
+        d = (Path(out) / rel).parent
+        return (_CAP.read(d).get(Path(rel).name) or {}).get("caption") or ""
+    except Exception:                                                     # noqa: BLE001
+        return ""
+
+
 def _figure_index(out, plugin=""):
     """{figure path: number} for this run, or `{}` - the numbering the composed prose cites."""
     import json as _json
@@ -631,6 +651,19 @@ def render(out, *, run_key="", title="Result section", plugin=""):
                     seen.add(f)
                     figs.append(f)
         if figs:
+            # DECLARED, WITH REASONS, RATHER THAN THE CAPS BEING LOWERED. Two criteria are
+            # written against a REPORT page - a reader meeting a wall of plates, and a caption
+            # that has to be skimmable - and this page is neither. It prints one numbered plate
+            # for every figure its own prose cites, so cutting to twelve would delete evidence a
+            # sentence points at; and it prints each legend whole, because a figure legend that
+            # stops at forty-five words is not a legend. Both are properties of the document
+            # class, both are stated here where a reader of the page can see them, and every
+            # other criterion still applies to this page unchanged.
+            out_html.append(
+                '<p class="sub" data-standard-exempt="count">One numbered plate per figure the '
+                'prose above cites; a cap would delete evidence a sentence points at.</p>'
+                '<p class="sub" data-standard-exempt="captions">Legends are printed whole. A '
+                'figure legend truncated to a skimmable length is not a legend.</p>')
             out_html.append("<h2>Figures</h2>")
             for i, f in enumerate(figs, 1):
                 # RELATIVE TO WHERE THE PAGE ACTUALLY IS, computed rather than assumed. The
@@ -646,7 +679,7 @@ def render(out, *, run_key="", title="Result section", plugin=""):
                 # a lead and a disclosure, which is right for a page of a hundred panels and
                 # wrong for a paper: a figure legend that stops at 32 words is not a legend. No
                 # cap and no disclosure here - what the figure was drawn with is what is printed.
-                leg = caps.get(f, "")
+                leg = _caption_for(out, caps, f)
                 out_html.append(
                     f'<figure><img src="{_e(href)}" alt="Figure {n}">'
                     f'<figcaption><b>Figure {n}.</b> {_e(leg) if leg else ""}'
@@ -681,8 +714,14 @@ def _md(text):
         # against a set of CHARACTERS and never matched: `{"---"} <= {"-", ":", " ", "|"}` is
         # false, so every table in every composed section carried a row of `---` under its
         # header. Test the characters of each cell, which is what was meant.
-        head, body = rows[0], [r for r in rows[1:]
-                               if not all(c and set(c) <= set("-: ") for c in r)]
+        # THE DELIMITER ROW IS THE SECOND LINE, AND ONLY THE SECOND LINE. Dropping every row
+        # whose cells are all dashes and colons also deleted DATA - a row that writes "-" in
+        # each column to mean "none here" is a legitimate row and read as a separator, so a
+        # table quietly lost it. Markdown puts the delimiter immediately under the header or
+        # nowhere; check that one position and leave the body alone.
+        head, body = rows[0], list(rows[1:])
+        if body and all(c and set(c) <= set("-: ") for c in body[0]):
+            body = body[1:]
         out.append('<div class="wrap"><table><tr>'
                    + "".join(f"<th>{_inline(c)}</th>" for c in head) + "</tr>"
                    + "".join("<tr>" + "".join(f"<td>{_inline(c)}</td>" for c in r) + "</tr>"
@@ -705,8 +744,12 @@ def _md(text):
             # SPLIT ON AN UNESCAPED PIPE ONLY. A cell may legitimately contain one - a
             # contrast conditioned on a second factor is named `age | diet = chow` - and
             # splitting on every pipe tore those rows into more cells than the header has.
+            # ONE PIPE OFF EACH END, NOT EVERY PIPE. `strip("|")` removes them greedily, so a
+            # row opening or closing with an EMPTY cell - "||b|" - lost that cell entirely and
+            # came back one column short of its header, silently shifting every value left.
+            _inner = st[1:-1] if len(st) >= 2 else ""
             rows.append([c.strip().replace("\\|", "|")
-                         for c in _re.split(r"(?<!\\)\|", st.strip("|"))])
+                         for c in _re.split(r"(?<!\\)\|", _inner)])
             continue
         _flush_table()
         if not st:
@@ -947,6 +990,17 @@ def panel(out, *, run_key="", plugin=""):
                 key = str(f.get("path") or "")
                 if key in placed_at:
                     also.setdefault(placed_at[key], []).append(title)
+                    # A CROSS-REFERENCE, NOT A SILENT SKIP. Placing a plate once is right - one
+                    # cohort-wide panel answering three needs across seven comparisons appeared
+                    # twenty-one times and read as though absence were the finding. But `continue`
+                    # left the LATER comparisons showing neither a plate nor the "no plate" gap
+                    # beside it, so a need that WAS answered looked like a need nobody had routed.
+                    # The note that a plate "also answers" something was written onto the FIRST
+                    # plate only, where the reader of the later comparison never reaches it.
+                    _lab0, _ttl0 = placed_at[key]
+                    H.append(f'<div class="sub"><b>{_e(title)}</b> &mdash; answered by the plate '
+                             f'shown under <b>{_e(_lab0)}</b> ({_e(_ttl0)}); one plate, not '
+                             f'repeated here.</div>')
                     continue
                 placed_at[key] = (label, title)
                 n_plate += 1
@@ -972,7 +1026,14 @@ def panel(out, *, run_key="", plugin=""):
         page = page.replace(f"<!--ALSO:{lab}|{ttl}-->", _e(line) if line else "")
     page = _re_strip_placeholders(page)
     H = [page]
-    H.insert(1, f'<p class="sub"><b>{n_plate}</b> plate(s) over <b>{len(cmps)}</b> comparison(s)'
+    # A CONTRAST AND AN INTERACTION ARE NOT THE SAME KIND OF THING, AND THE COUNT SAID THEY WERE.
+    # `comparisons()` returns the design's two-arm contrasts AND the delta-of-deltas entry, so a
+    # 2x2 reported "7 comparison(s)" where six arm pairs were drawn - a reader checking the six
+    # against the design found one too many and no way to tell which.
+    _n_ix = sum(1 for c in cmps if str(c.get("kind", "")) == "interaction")
+    _n_cmp = len(cmps) - _n_ix
+    H.insert(1, f'<p class="sub"><b>{n_plate}</b> plate(s) over <b>{_n_cmp}</b> comparison(s)'
+                + (f' and <b>{_n_ix}</b> interaction(s)' if _n_ix else '')
                 + (f', and <b>{n_gap}</b> need(s) with no plate' if n_gap else '') + '.</p>')
     H.append(f'<p class="sub"><a href="{_e(page_name(plugin))}">the written section</a> '
              f'&middot; <a href="index.html">the run index</a></p>')

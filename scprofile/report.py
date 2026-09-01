@@ -406,7 +406,10 @@ def _presence_block(payload_all, *, out_dir=None, name=""):
     except Exception:                                                     # noqa: BLE001
         return "", []
     if not got:
-        return ""
+        # TWO VALUES ON EVERY PATH. The caller unpacks a pair, so returning a bare "" here raised
+        # ValueError - and it raised it on the ORDINARY case of the panel drawing nothing, which
+        # is the path least likely to be exercised while something is being developed.
+        return "", []
     return ("<h2>What the method was given</h2>"
             + _arm_figs_html(name, got), got)
 

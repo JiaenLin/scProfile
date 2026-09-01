@@ -1027,3 +1027,52 @@ def write_two_scale(per, design, pairs, out_path, *, group_col=None, weight="pro
         w.writeheader()
         w.writerows(rows)
     return out_path
+
+
+def decompose_by_member(edges, sizes_arm, sizes_member, *, weight="prob"):
+    """Split ONE arm's own fit over the members whose cells it was fitted on.
+
+    THE PROBLEM THIS SOLVES. An arm's network is one fit on its members' pooled cells, and each
+    member also has a fit of its own. Those are different fits, so a panel that draws the arm as
+    a bar and its members as points is putting two incomparable quantities on one axis - and
+    dividing both by cells does not reconcile them. Measured on a real cohort: the same 23,263
+    cells gave 30.56 as one pooled fit and 84.28 as three separate fits summed, so every member
+    point sat above every bar, in every arm, whatever the biology was.
+
+    THE RULE. For an ordered pair of populations (i, j) the arm's own value is credited to member
+    `a` by that member's share of the arm's cells in the two populations involved:
+
+        W_a  =  sum_ij  V(i, j) * [ f_a(i) + f_a(j) ] / 2
+
+    Half for sending, half for receiving. Two properties make it this rule rather than a taste:
+
+      * IT PARTITIONS EXACTLY. Each population's shares sum to one across members, so the members'
+        values sum to the arm's - nothing is created and nothing is lost.
+      * THE BAR BECOMES THE CELL-WEIGHTED MEAN OF ITS OWN POINTS, because the values sum to the
+        arm's total and the cells sum to the arm's cells. Points can then fall on both sides of
+        the bar, which is what a reader already expects of them.
+
+    IT IS A DERIVED QUANTITY AND MUST BE LABELLED ONE. The wrapped method reports nothing per
+    member from a pooled fit; this is an attribution rule chosen here, applied to the method's own
+    matrix. It does not replace the members' independent fits, which stay on the raw panel.
+
+    `edges` is the arm's declared edge table (source, target, and `weight`). `sizes_arm` and
+    `sizes_member` are {population: cells} for the arm and for one member. Returns
+    `{"count": float, "weight": float}` - that member's share of the arm's edge count and total.
+    """
+    if edges is None or not len(edges) or not sizes_arm:
+        return {"count": 0.0, "weight": 0.0}
+    cols = getattr(edges, "columns", ())
+    if "source" not in cols or "target" not in cols:
+        return {"count": 0.0, "weight": 0.0}
+
+    def _f(p):
+        tot = float(sizes_arm.get(p, 0) or 0)
+        return (float((sizes_member or {}).get(p, 0) or 0) / tot) if tot > 0 else 0.0
+
+    src = edges["source"].astype(str).map(_f).to_numpy(dtype=float)
+    tgt = edges["target"].astype(str).map(_f).to_numpy(dtype=float)
+    credit = (src + tgt) / 2.0
+    w = (edges[weight].astype(float).to_numpy() if weight in cols
+         else __import__("numpy").ones(len(edges), dtype=float))
+    return {"count": float(credit.sum()), "weight": float((credit * w).sum())}

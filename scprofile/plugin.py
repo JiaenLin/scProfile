@@ -255,6 +255,11 @@ class Context:
         self._obs, self._obsm, self._layers = {}, {}, {}
         self._tables, self._figures, self._objects = [], [], {}
         self.caveats, self.absent = [], []
+        #: The figure ids `emit_figure` ACTUALLY wrote. A plugin's own `drew_*` variables record
+        #: whether the DATA allowed a panel, which is a different question from whether a file
+        #: exists - `--figures-for` can gate a panel the data was perfectly happy with. A caveat
+        #: phrased off the first kind of flag cites a plate that is not on disk.
+        self.drawn = set()
         #: ONE NUMBER PER INSTANCE, so a per-unit plugin's units can be put on one axis.
         #: A per-unit plugin delivers N single-sample reports; without a scalar the host can
         #: compare, the page is those N reports stapled together and the cohort statement is
@@ -303,6 +308,10 @@ class Context:
         every unit and a page with holes in it is worse than no page.
         """
         return self.draw_figures or str(fid) in self.profile_figures
+
+    def was_drawn(self, fid):
+        """Did this figure actually get written? Ask before naming it in prose."""
+        return str(fid) in self.drawn
 
     @property
     def X(self):
@@ -757,6 +766,7 @@ class Context:
             return None
         png = self.out / "figures" / f"{name}.png"
         pdf = self.out / "figures" / f"{name}.pdf"
+        self.drawn.add(str(name))
         self._stamp_provenance(fig)
         # THE CONVENTION WINS WHERE THERE IS ONE. `figure.use()` sets savefig.dpi to 400 for
         # publication; a hard `dpi=200` here silently overrode it, so a plugin that had asked for
@@ -1046,6 +1056,21 @@ class CompareContext:
         #: design supports no interaction, and then no interaction panel is drawn.
         self.interactions = [dict(x or {}) for x in (interactions or [])]
         self.log = log
+        #: A COMPARISON CAN FAIL, AND SAYING SO IS ITS JOB. `run(ctx)` has had `refuse` from the
+        #: start; `compare(ctx)` had nothing, so the phase exited 0 whatever happened and a pair
+        #: that produced no figure was indistinguishable from one that produced all of them.
+        self.status = "ok"
+        self.absent = []
+
+    def refuse(self, what, why):
+        """Stop, and say what is missing - the same contract `Context.refuse` has.
+
+        NOT an exception: a refusal is a result. The host reads the phase's exit code, so this
+        is what makes a refused comparison visible as one instead of as a silent success.
+        """
+        self.status = "refused"
+        self.absent.append({"what": what, "why": why})
+        self.log(f"  refused: {what} - {why}")
 
     @property
     def names(self):

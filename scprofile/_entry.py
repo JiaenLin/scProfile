@@ -229,6 +229,14 @@ def _compare(plugin_path, spec_path):
         log=print,
     )
     fn(ctx)
+    # THE EXIT CODE IS THE ONLY THING THE HOST READS. This returned 0 unconditionally, so a
+    # comparison that refused - or that a plugin abandoned after writing nothing - reported
+    # success, and the run's tally counted a pair it had not drawn. A refusal is a result and
+    # must arrive as one.
+    if getattr(ctx, "status", "ok") == "refused":
+        for a in (getattr(ctx, "absent", None) or []):
+            print(f"refused: {a.get('what')} - {a.get('why')}")
+        return 1
     return 0
 
 
