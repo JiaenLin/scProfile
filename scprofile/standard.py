@@ -31,6 +31,12 @@ WHY EACH ONE EXISTS. Measured on a real multi-sample, two-factor cohort whose re
                 entropy was at the maximum the three states allow. THE ONLY CRITERION NOT
                 MEASURABLE FROM THE PAGE: an omitted refutation leaves no mark, so what the
                 plugin recorded is read from the payload and looked for on the page.
+  sections      A section of prose citing no figure asserts something a reader cannot check on
+                the page it is made on. It caught a document whose section on the study's own
+                headline question - the interaction - ran to ninety words of arithmetic and
+                pointed at nothing, while every panel drawn for that question was cited by the
+                OTHER sections. No figure count and no word count can see that: the panels
+                existed, were numbered, and were on the page.
 
 EVERY CRITERION CARRIES A PAGE IT MUST REJECT, and `selfcheck()` measures the ruler against
 those pages before the ruler is allowed to measure a report. Five of the ten were at some point
@@ -60,6 +66,11 @@ from pathlib import Path
 #: one: the parent page must exist and must link to them, which is what stops the suffix being
 #: used to move figures out of a reader's way.
 APPENDIX_SUFFIXES = ("_by_sample", "_by_arm", "_panel", "_profile")
+
+#: A section shorter than this is a note, a table caption or a link block, not a claim, and is
+#: not asked to cite a figure. 60 words is about a full paragraph - above it the section is
+#: saying something, and what it says should be checkable against a picture on the same page.
+SECTION_PROSE_FLOOR = 60
 
 #: A page may carry at most this many figures. Above it, a reader stops.
 MAX_FIGURES = 12
@@ -105,7 +116,7 @@ ARM_HINT = re.compile(
 #: them can fail, and the module docstring explains each. All three read this tuple, so a
 #: criterion cannot be documented and not implemented, or implemented and never proven.
 CRITERIA = ("overview", "arms", "repeats", "count", "captions", "prose",
-            "caveats", "hidden", "identifiers", "contradiction")
+            "caveats", "hidden", "identifiers", "contradiction", "sections")
 
 
 def _text(html):
@@ -252,6 +263,29 @@ def check_page(path, *, exempt=(), recorded=()):
        "no cohort overview: a reader meets a number before learning what was compared")
     ck("arms", any(ARM_HINT.search(c) for c in caps),
        "no figure compares the design arms")
+    # EVERY SECTION POINTS AT A PICTURE. A section of prose citing no figure is a paragraph
+    # asserting something the reader cannot check on the same page - and it is how a document
+    # comes to discuss a question whose panels were all filed under other sections, which is
+    # invisible in a figure count and in a word count and in every other criterion here.
+    #
+    # Only sections carrying real prose are checked. A heading over a table, a link block or a
+    # short note is not making a claim; the floor is stated so that lengthening a stub does not
+    # quietly bring it into scope.
+    _secs = re.split(r"(<h2[^>]*>.*?</h2>)", html, flags=re.S)
+    _cur, _mute = None, []
+    for _p in _secs:
+        _m = re.match(r"<h2[^>]*>(.*?)</h2>", _p, flags=re.S)
+        if _m:
+            _cur = _text(_m.group(1)).strip()
+            continue
+        if _cur is None:
+            continue
+        _body = _text(_p)
+        if len(_body.split()) >= SECTION_PROSE_FLOOR and not re.search(r"Figures?\s+\d", _body):
+            _mute.append(_cur[:44])
+        _cur = None
+    ck("sections", not _mute,
+       f"{len(_mute)} section(s) of prose cite no figure: {_mute[:3]}")
     dupes = sorted({i for i in ids if ids.count(i) > 1})
     ck("repeats", not dupes, f"figure id repeated: {dupes[:4]}")
     ck("count", len(figs) <= MAX_FIGURES, f"{len(figs)} figures, cap {MAX_FIGURES}")
@@ -445,6 +479,12 @@ def _mutate(cid):
                                 "factor.</p>", "<h2>Results</h2>")
     if cid == "arms":
         return BASELINE.replace("What it shows, by arm.", "What it shows, per population.")
+    if cid == "sections":
+        # A SECTION OF REAL PROSE THAT POINTS AT NOTHING. Long enough to clear the floor, so it
+        # is making a claim; carrying no figure reference, so the claim cannot be checked on the
+        # page it is made on.
+        return BASELINE + ("<h2>What we conclude</h2><p>"
+                           + " ".join(["word"] * (SECTION_PROSE_FLOOR + 20)) + "</p>")
     if cid == "repeats":
         return BASELINE.replace('src="b.png"', 'src="a.png"')
     if cid == "count":
