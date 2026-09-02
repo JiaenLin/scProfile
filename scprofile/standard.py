@@ -35,6 +35,12 @@ WHY EACH ONE EXISTS. Measured on a real multi-sample, two-factor cohort whose re
                 and was reviewed as one, repeatedly. A page is not finished while it is the
                 skeleton: nothing in it decided what mattered, and no figure in it was looked at
                 before being cited.
+  cited         A page rendered ninety numbered plates and its prose referred to thirty of them.
+                The other sixty were drawn, numbered and captioned, and no sentence pointed at
+                any of them - so a reader could not tell which had been considered and which had
+                merely been produced, and whole comparisons the design supports had no sentence
+                about them at all. Shipping an uncited plate is allowed; doing it silently is not,
+                and naming it in a supporting-material line counts as citing it.
   sections      A section of prose citing no figure asserts something a reader cannot check on
                 the page it is made on. It caught a document whose section on the study's own
                 headline question - the interaction - ran to ninety words of arithmetic and
@@ -147,7 +153,7 @@ ARM_HINT = re.compile(
 #: THE CRITERIA, NAMED ONCE. `check_page` calls `ck` with these ids, `selfcheck` proves each of
 #: them can fail, and the module docstring explains each. All three read this tuple, so a
 #: criterion cannot be documented and not implemented, or implemented and never proven.
-CRITERIA = ("overview", "arms", "repeats", "count", "captions",
+CRITERIA = ("overview", "arms", "repeats", "count", "captions", "cited",
             "caveats", "hidden", "identifiers", "contradiction", "sections", "authored")
 
 
@@ -326,6 +332,33 @@ def check_page(path, *, exempt=(), recorded=()):
        "and no figure was looked at before being cited")
     ck("sections", not _mute,
        f"{len(_mute)} section(s) of prose cite no figure: {_mute[:3]}")
+    # EVERY PLATE THE PAGE SHIPS MUST BE CITED BY THE PROSE.
+    #
+    # `sections` catches a section that cites nothing. It cannot catch the other half: a page that
+    # renders ninety numbered plates and refers to thirty of them. Sixty figures then sit under
+    # the text as decoration - each one drawn, numbered and captioned, and none of them pointed at
+    # by a sentence - and a reader has no way to tell which were considered and which were merely
+    # produced. Measured on a real page: 90 plates, and whole contrasts of the design with no
+    # sentence about them at all, because the section had been written from the contrasts the
+    # author found interesting rather than from the ones the design supports.
+    #
+    # A page may still SHIP an uncited plate; it just may not do so silently. Naming it in an
+    # appendix or supporting-material line is a citation for this purpose - what is refused is the
+    # plate nobody mentions.
+    _nfig = len(figs)
+    # A CITATION IS A LIST OR A RANGE, NOT ONE NUMBER. "(Figures 1, 2)" and "(Figures 13-18)" are
+    # how a section actually cites, and reading only the first integer after the word counted the
+    # second plate of every pair as uncited - the criterion failing its own baseline.
+    _cited = set()
+    for _run in re.findall(r"Figures?\s+([\d\s,–—-]+)", txt):
+        _run = _run.strip(" ,")
+        for _a, _b in re.findall(r"(\d+)\s*[–—-]\s*(\d+)", _run):
+            _cited |= set(range(int(_a), int(_b) + 1))
+        _cited |= {int(x) for x in re.findall(r"\d+", _run)}
+    _missing = [n for n in range(1, _nfig + 1) if n not in _cited]
+    ck("cited", not _missing,
+       f"{len(_missing)} of {_nfig} plate(s) are shown and never cited in the prose: "
+       f"{_missing[:8]}{' ...' if len(_missing) > 8 else ''}")
     dupes = sorted({i for i in ids if ids.count(i) > 1})
     ck("repeats", not dupes, f"figure id repeated: {dupes[:4]}")
     ck("count", len(figs) <= MAX_FIGURES, f"{len(figs)} figures, cap {MAX_FIGURES}")
@@ -507,7 +540,7 @@ def summarise(res, log=print):
 #: when the same ruler passed something.
 BASELINE = (
     "<style>.x{color:red}</style>"
-    "<h2>The cohort</h2><p>Eight units in two arms of one factor.</p>"
+    "<h2>The cohort</h2><p>Eight units in two arms of one factor (Figures 1, 2).</p>"
     '<figure><img src="a.png"><figcaption>What it shows, by arm.</figcaption></figure>'
     '<figure><img src="b.png"><figcaption>What else it shows.</figcaption></figure>'
 )
@@ -516,10 +549,20 @@ BASELINE = (
 def _mutate(cid):
     """BASELINE broken in exactly one way: the page `cid` exists to reject."""
     if cid == "overview":
+        # THE STRING MUST TRACK THE BASELINE. Adding figure citations to BASELINE for the `cited`
+        # criterion left this replace matching nothing, so the mutation returned the baseline
+        # unchanged and `overview` reported that it "does not fire on the page written to break
+        # it" - the harness catching a mutation that had quietly stopped mutating.
         return BASELINE.replace("<h2>The cohort</h2><p>Eight units in two arms of one "
-                                "factor.</p>", "<h2>Results</h2>")
+                                "factor (Figures 1, 2).</p>", "<h2>Results</h2>")
     if cid == "arms":
         return BASELINE.replace("What it shows, by arm.", "What it shows, per population.")
+    if cid == "cited":
+        # THE BASELINE CITES BOTH ITS PLATES; the mutation drops one citation and leaves that
+        # plate on the page. A page citing NONE of its figures would also fail `sections` and
+        # would prove nothing about this criterion, so the counterexample is the realistic one:
+        # a page that mentions some of what it shows.
+        return BASELINE.replace("(Figures 1, 2)", "(Figure 1)")
     if cid == "authored":
         # APPENDED, NOT SUBSTITUTED. BASELINE carries no "Results" heading, so a replace would
         # have matched nothing, left the page clean, and made the criterion look unfalsifiable -

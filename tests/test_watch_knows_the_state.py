@@ -104,6 +104,19 @@ with tempfile.TemporaryDirectory() as td:
     ck("newest_write reports None for a directory it cannot read",
        WT.newest_write(Path(td) / "nope") is None)
 
+print("\nA REMEMBERED JOB IS NOT A RUNNING JOB")
+# `qstat -x` answers for finished jobs too - that is what the flag is for - so reading any reply
+# as "still going" made a cancelled job report RUNNING. That is the worst answer this module can
+# give: a caller waiting on it waits for ever. Measured live before the fix, on job_state=F.
+ck("the live set is stated positively, not as a blacklist", bool(WT.LIVE_STATES))
+for _s in ("R", "Q", "PENDING", "RUNNING"):
+    ck(f"{_s} counts as still going", _s in WT.LIVE_STATES)
+for _s in ("F", "C", "E", "COMPLETED", "FAILED", "CANCELLED", "TIMEOUT"):
+    ck(f"{_s} does not count as still going", _s not in WT.LIVE_STATES)
+# AND AN UNKNOWN STATE IS TREATED AS ENDED, not as running - a blacklist would do the reverse and
+# leave a caller waiting on a state nobody listed.
+ck("an unrecognised state is not treated as live", "ZZZ" not in WT.LIVE_STATES)
+
 print("\nwall-clock and CPU time are named, never taken positionally")
 src = Path(WT.__file__).read_text(encoding="utf-8")
 # THE DOT IS ESCAPED IN THE SOURCE because it is inside a regex, so the check looks for the

@@ -46,6 +46,13 @@ MARK_RUNNING, MARK_SEALED, MARK_FAILED = "RUNNING.txt", "SEALED.txt", "FAILED.tx
 #: is a slower answer, and the cost of not waiting is calling a good run dead.
 SEAL_GRACE_S = 120.0
 
+#: Scheduler states that mean the work has NOT finished. Anything else - PBS `F`/`C`/`E`, Slurm
+#: COMPLETED/FAILED/CANCELLED/TIMEOUT - is a job that has ended, and the run's own markers are
+#: then the authority. Listed positively because the set of end states differs between schedulers
+#: and a blacklist silently treats an unknown one as still running.
+LIVE_STATES = {"R", "Q", "H", "S", "T", "W", "B", "M",
+               "RUNNING", "PENDING", "SUSPENDED", "CONFIGURING", "COMPLETING", "RESIZING"}
+
 
 #: A run with no marker and no reachable scheduler is still observable: something is either
 #: writing to it or it is not. Below this many seconds since the newest write, treat it as alive.
@@ -147,9 +154,21 @@ def _scheduler(jid):
         # about the run - see SEAL_GRACE_S.
         return {"present": False}
     flat = re.sub(r"\n\t", "", txt)
-    return {"present": True,
-            "state": (re.search(r"job_state\s*=\s*(\w+)", flat) or
-                      re.search(r"JobState=(\w+)", flat) or [None, ""])[1],
+    st = (re.search(r"job_state\s*=\s*(\w+)", flat) or
+          re.search(r"JobState=(\w+)", flat) or [None, ""])[1]
+    # A SCHEDULER REMEMBERS A JOB AFTER IT ENDS, AND `present` MUST NOT MEAN `remembered`.
+    #
+    # `qstat -x` answers for finished jobs too - that is what the flag is for - so any state at
+    # all was being read as "still going". Measured live: a job cancelled two minutes earlier
+    # reported `job_state=F` and this module said RUNNING, which is the single worst answer it
+    # can give, because a caller waiting on it waits for ever.
+    #
+    # So the STATE decides, not the reply. Only states that mean the work has not finished count
+    # as present; everything else falls through to the run's own markers, which is where the
+    # truth is once a job has ended.
+    if st and st.upper() not in LIVE_STATES:
+        return {"present": False, "state": st}
+    return {"present": True, "state": st,
             "walltime": (re.search(r"resources_used\.walltime\s*=\s*([\d:]+)", flat) or
                          re.search(r"RunTime=([\d:\-]+)", flat) or [None, ""])[1],
             "cput": (re.search(r"resources_used\.cput\s*=\s*([\d:]+)", flat) or [None, ""])[1]}
