@@ -295,7 +295,7 @@ def outstanding(out, plugin=""):
 SHARD_FLOOR = 12
 
 
-def shards(out, plugin="", n=2):
+def shards(out, plugin="", n=2, only=None):
     """Split the OUTSTANDING figures into `n` disjoint groups. Returns a list of lists.
 
     WHY THE TOOL DOES THE SPLITTING. Opening the figures is the slowest step in the cycle and the
@@ -316,6 +316,17 @@ def shards(out, plugin="", n=2):
     """
     n = max(1, int(n))
     left = [r for r, _st in (outstanding(out, plugin) or [])]
+    # RESTRICTED TO A DECLARED SET, WHEN ONE IS GIVEN. A run holds every figure it drew; the
+    # brief's list holds the ones the PAPER is written from, which is a smaller set and the one
+    # the writing step actually blocks on. Sharding the whole run would send agents to open
+    # appendix panels no sentence will cite, before the panels every sentence will.
+    #
+    # The caller passes the list rather than the tool guessing it: `only` is any iterable of
+    # run-relative paths - `kernels/<plugin>/FIGURES.txt` is the obvious one, and a plugin or a
+    # site may have another.
+    if only is not None:
+        want = {str(x).strip() for x in only if str(x).strip()}
+        left = [r for r in left if r in want]
     if not left:
         return [[] for _ in range(n)]
     groups = {}

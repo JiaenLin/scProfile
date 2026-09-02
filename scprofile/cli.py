@@ -2889,7 +2889,23 @@ def _review(a):
     # told to fan it out - and an agent inventing its own division of the list is how one figure
     # gets two reviews and another gets none.
     if getattr(a, "shards", 0):
-        groups = RV.shards(out, a.plugin, a.shards)
+        only = None
+        src = getattr(a, "from_list", "") or ""
+        if not src and a.plugin:
+            # THE PAPER'S SET BY DEFAULT, when the run wrote one. A run holds every figure it
+            # drew; the brief's list holds the ones the writing step blocks on, and sending
+            # agents to appendix panels first is work before the work.
+            from . import brief as _BR
+            cand = out / "kernels" / a.plugin / _BR.FIGURE_LIST
+            src = str(cand) if cand.is_file() else ""
+        if src:
+            try:
+                only = Path(src).read_text(encoding="utf-8").split()
+            except OSError as e:
+                print(f"scprofile: cannot read the figure list {src}: {e}", file=sys.stderr)
+                return REFUSE
+            print(f"# restricted to the {len(only)} figure(s) in {src}")
+        groups = RV.shards(out, a.plugin, a.shards, only=only)
         want = getattr(a, "shard", 0)
         total = sum(len(g) for g in groups)
         if total < RV.SHARD_FLOOR:
@@ -3606,6 +3622,10 @@ def main(argv=None):
     rv.add_argument("--shard", type=int, default=0, metavar="K",
                     help="print only shard K of --shards N - what ONE agent in the fan-out "
                          "opens")
+    rv.add_argument("--from-list", dest="from_list", default="", metavar="FILE",
+                    help="shard only the figures named in this file, one run-relative path per "
+                         "line. Defaults to the run's own FIGURES.txt for --plugin, which is "
+                         "the set the paper is written from rather than every panel drawn")
     rv.set_defaults(fn=_review)
 
     pa = sub.add_parser("paper",

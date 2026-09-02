@@ -48,6 +48,18 @@ writing**, and the rendered page says so in a banner the exit standard fails on.
 fallback for a run nobody writes up, because every run is written up: the agent that ran it is
 the author. `scprofile write` exists to hand that agent the evidence.
 
+## Run the cycle to the end — there is no point at which you stop and ask
+
+`scprofile agenda` lists six tasks and every one of them is unblocked by the one above it and by
+nothing else. **There is no approval step inside this tool.** A cycle that halts after the
+compute leaves a run with figures nobody opened and a section nobody wrote, which is the state
+the agenda exists to get a run out of, not a state to report back from.
+
+Finish it: submit, watch, collect, open every figure the brief lists (fan it out), write the
+result, carry it back in with `--section`, record the claims. Then say what the result is.
+
+Human review happens outside this tool, on the finished artifacts.
+
 ## One run produces all of its output
 
 **A run is a unit.** Its objects, its figures and its documents all come from ONE tool version,

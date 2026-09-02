@@ -266,6 +266,7 @@ def write_agenda(run, plugin, spec=None, how=None):
             "and its output picked up the moment it seals. That is one run, not three errands."
             if how == PBS else " — the compute runs in front of you."), "",
          "The tool does the measuring, drawing and refusing. **Everything else on this list is the agent's, and none of it waits for anyone.**", "",
+         "**Run this list to the end in one go.** Every task below is unblocked by the one above it and by nothing else, so there is no point in it where the right move is to stop and ask. A cycle that halts after the compute leaves a run with figures nobody opened and a section nobody wrote - which is the state this file exists to get a run out of, not a state to report back from.", "",
          f"**{len(t) - len(left)} of {len(t)} done.**", ""]
     for i, x in enumerate(t, 1):
         mark = {DONE: "x", PENDING: " ", BLOCKED: "-"}[x["state"]]
@@ -277,7 +278,7 @@ def write_agenda(run, plugin, spec=None, how=None):
             L.append(f"       {line}")
         L += [f"       `{x['do']}`", ""]
     if left:
-        L += ["*A blocked task is waiting on an earlier task \u2014 not on the tool, and not on a person.*", ""]
+        L += ["*A blocked task is waiting on an earlier task \u2014 not on the tool, and not on a person. Do the one above it, then come back; do not stop here.*", ""]
     else:
         L += ["*Nothing outstanding. The result is written, carried into a run, and defended.*",
               ""]
