@@ -71,6 +71,19 @@ def execution_task(run, how=PBS):
     disconnected errands.
     """
     run = Path(run)
+    # TWO SEPARATE FACTS, AND THIS TASK USED TO READ ONLY THE LATER ONE.
+    #
+    # `report.json` is the RUN'S own record, written when the kernels have finished. `SEALED.txt`
+    # is the JOB'S marker, written by the batch script's trap on a clean exit. The agenda is
+    # emitted while the report renders - which is BEFORE the trap fires - so a task whose state
+    # was `DONE if sealed` reported "Run the pipeline - pending" on every agenda the tool has
+    # ever delivered, including on runs that went on to seal cleanly seconds later. The one
+    # artifact whose whole purpose is to say what is left said the finished part was not done.
+    #
+    # They are not merged. A run that wrote `report.json` and never sealed is a partial run, and
+    # calling that sealed is the error the batch script's own comment warns about: a false SEALED
+    # tells everything downstream that a partial run is complete. So the compute is DONE once the
+    # run has written its own record, and the note says which of the two facts is in evidence.
     sealed = (run / "SEALED.txt").is_file()
     started = (run / "report.json").is_file()
     if how == PBS:
@@ -84,8 +97,14 @@ def execution_task(run, how=PBS):
     else:
         why = "the compute runs in front of you and finishes before the next step begins"
         do = "scprofile run --h5ad <object> --out <run> ..."
+    if sealed:
+        why = "the job sealed: SEALED.txt is in the run directory"
+    elif started:
+        why = ("the run wrote its own record (report.json). SEALED.txt is the JOB's marker and "
+               "is written AFTER this file, so its absence here is not evidence of failure - "
+               "read the run directory for it before promoting anything")
     return {"id": "run", "title": "Run the pipeline",
-            "state": DONE if sealed else (PENDING if not started else PENDING),
+            "state": DONE if (sealed or started) else PENDING,
             "why": why, "do": do}
 
 

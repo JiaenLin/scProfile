@@ -63,6 +63,21 @@ with tempfile.TemporaryDirectory() as td:
           "local mode tells the agent to watch a job that finishes in front of it")
 
     st = _state(run)
+    # THE COMPUTE STEP IS DONE ONCE THE RUN WROTE ITS OWN RECORD, NOT ONLY ONCE THE JOB SEALED.
+    # The agenda is emitted while the report renders, which is BEFORE the batch script's trap
+    # writes SEALED.txt - so a state read only off SEALED.txt reported "Run the pipeline -
+    # pending" on every agenda the tool ever delivered, including on runs that sealed cleanly
+    # seconds later. There is no SEALED.txt in this fixture, which is exactly that moment.
+    check(not (run / "SEALED.txt").exists(), "fixture is not the pre-seal moment it tests")
+    check(st["run"] == AG.DONE,
+          "a run that has written report.json is reported as not yet run: %r" % st)
+    check("report.json" in AG.execution_task(run, AG.PBS)["why"],
+          "the compute step does not say WHICH fact it read, so a partial run and a sealed one "
+          "are indistinguishable in the agenda")
+    (run / "SEALED.txt").write_text("phase: run\n", encoding="utf-8")
+    check("sealed" in AG.execution_task(run, AG.PBS)["why"].lower(),
+          "a sealed run is not reported as sealed")
+    (run / "SEALED.txt").unlink()
     check(st["brief"] == AG.PENDING, "a run with no brief does not ask for one: %r" % st)
     check(st["look"] == AG.PENDING, "an unreviewed figure is not outstanding: %r" % st)
     check(st["write"] == AG.BLOCKED,

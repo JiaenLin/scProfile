@@ -246,7 +246,48 @@ except OSError as _e:
     _rm = ""
 _t0 = _rm.split("## Tier 0", 1)[-1].split("## Tier 1", 1)[0]
 _listed = set(_re2.findall(r"^\| `([a-z_0-9]+)` \|", _t0, _re2.M))
-_ships = set(_disc())
+# WHAT THE ROADMAP DOCUMENTS IS WHAT THE REPOSITORY SHIPS - NOT WHAT IS ON THE SEARCH PATH.
+#
+# `discover()` deliberately includes $SCPROFILE_KERNELS, because adding a method without forking
+# is the whole point of that variable. Measuring "what ships" through it counts somebody else's
+# plugin as ours, so this check failed on the feature working: the batch job points
+# $SCPROFILE_KERNELS at `tests/smoke/plugins`, whose `silhouette` exists precisely to prove that
+# a plugin dropped in from OUTSIDE the repository loads. It was read as a tenth shipped method
+# and failed this suite in EVERY job, while passing on any machine with the variable unset -
+# which is how it went unnoticed: the workstation said green and the cluster said red about the
+# same commit.
+import os as _os3                                                               # noqa: E402
+
+
+def _repo_ships():
+    """What the REPOSITORY ships, measured with the site search path out of the way."""
+    _keep = _os3.environ.pop("SCPROFILE_KERNELS", None)
+    try:
+        return set(_disc())
+    finally:
+        if _keep is not None:
+            _os3.environ["SCPROFILE_KERNELS"] = _keep
+
+
+_ships = _repo_ships()
+# AND THE CHECK IS FALSIFIABLE ON ANY MACHINE, not only on one where the variable happens to be
+# set. Point it at the smoke plugins deliberately and measure again: the shipped set must not
+# move, and `discover()` must still SEE the site plugin - otherwise this "fix" would have been
+# to break the feature rather than to stop miscounting it.
+_smoke = Path(__file__).resolve().parent / "smoke" / "plugins"
+if _smoke.is_dir():
+    _prev = _os3.environ.get("SCPROFILE_KERNELS")
+    _os3.environ["SCPROFILE_KERNELS"] = str(_smoke)
+    try:
+        ck("a plugin on $SCPROFILE_KERNELS is not counted as one the repository ships",
+           _repo_ships() == _ships, f"the shipped set moved: {sorted(_repo_ships() ^ _ships)}")
+        ck("and discover() still finds it, so the search path still works",
+           bool(set(_disc()) - _ships), "nothing extra was discovered from the site directory")
+    finally:
+        if _prev is None:
+            _os3.environ.pop("SCPROFILE_KERNELS", None)
+        else:
+            _os3.environ["SCPROFILE_KERNELS"] = _prev
 ck("every shipped plugin is in the roadmap's Tier 0",
    not (_ships - _listed), f"ships and unlisted: {sorted(_ships - _listed)}")
 ck("and nothing is listed as shipped that does not ship",
