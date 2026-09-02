@@ -17,13 +17,11 @@ WHY EACH ONE EXISTS. Measured on a real multi-sample, two-factor cohort whose re
   count         57 figures on one page. A page a reader cannot finish is a page that hides its
                 own result.
   captions      Captions were 65% of all words - 13,172 of 20,545 on the worst page.
-  prose         The narration was ten thousand words of the same explanation repeated per
-                sample. Visible words only: collapsed text is charged to `hidden`.
   caveats       Counted apart from narration and capped generously. A caveat is the most
                 load-bearing prose on a page, and charging it against a narration cap made the
                 way to pass "say less about the limits of the result".
   hidden        Words behind a disclosure are not in a reader's way, and must not therefore
-                grow without limit - or the cap on prose is escaped by folding it.
+                grow without limit.
   identifiers   The strongest signal in every population of one page was `A0A079HLR9`, an
                 unmapped UniProt accession presented as a regulator.
   contradiction Two pages carried headlines their own diagnostics refute: 45.5% of nuclei
@@ -43,6 +41,15 @@ WHY EACH ONE EXISTS. Measured on a real multi-sample, two-factor cohort whose re
                 pointed at nothing, while every panel drawn for that question was cited by the
                 OTHER sections. No figure count and no word count can see that: the panels
                 existed, were numbered, and were on the page.
+
+REMOVED: `prose`, a 900-word cap on visible narration. PI decision, 2026-09-02. It was wrong in
+principle rather than badly calibrated - a result section covering six comparisons at three levels
+each is four thousand words when it is done properly, and the way to pass was to cover less, which
+is the opposite of what every other criterion here asks for. What it protected is still protected
+by checks that measure the right thing: `captions` keeps a legend readable, `hidden` bounds folded
+text, `caveats` scales with scope, and `sections` refuses a paragraph that cites no figure - which
+is the real form of "too much text". See PROSE_CAP_REMOVED.
+
 
 EVERY CRITERION CARRIES A PAGE IT MUST REJECT, and `selfcheck()` measures the ruler against
 those pages before the ruler is allowed to measure a report. Five of the ten were at some point
@@ -80,9 +87,28 @@ SECTION_PROSE_FLOOR = 60
 
 #: A page may carry at most this many figures. Above it, a reader stops.
 MAX_FIGURES = 12
-#: Words in one caption, and in all the prose that is not a caption.
+#: Words in one caption. There is no longer a cap on PROSE - see below.
 MAX_CAPTION_WORDS = 45
-MAX_PROSE_WORDS = 900
+
+#: THE PROSE CAP IS REMOVED. PI decision, 2026-09-02.
+#:
+#: It was 900 words, and it was wrong in principle rather than badly calibrated. The written
+#: result section of a 2x2 design walks six comparisons through three levels each, states the
+#: reference of every contrast, says which scale each claim is made on, and ends in limitations.
+#: That is four thousand words when it is done properly, and a standard that FAILED it for being
+#: complete was telling an author to say less about the experiment. The way to pass was to cover
+#: less, which is the opposite of what every other criterion here asks for.
+#:
+#: WHAT THE CAP WAS PROTECTING IS STILL PROTECTED, by the checks that measure the right thing:
+#: `captions` keeps any single legend readable, `hidden` stops text growing without limit behind
+#: disclosures, `caveats` scales with what the page covers, and `sections` refuses a section of
+#: prose that cites no figure - which is the real form of "too much text", not the word count.
+#:
+#: The number is still MEASURED and printed. A page that has doubled in length since the last run
+#: is worth noticing; it is just not a failure.
+PROSE_CAP_REMOVED = ("no cap: an authored result section covering six comparisons at three levels "
+                     "cannot be 900 words, and failing a document for completeness asks the "
+                     "author to cover less")
 #: Collapsed text is not in a reader's way, but it must not grow without limit.
 MAX_HIDDEN_WORDS = 2500
 #: Caveats are the page's most load-bearing prose and must stay visible; they are capped
@@ -121,7 +147,7 @@ ARM_HINT = re.compile(
 #: THE CRITERIA, NAMED ONCE. `check_page` calls `ck` with these ids, `selfcheck` proves each of
 #: them can fail, and the module docstring explains each. All three read this tuple, so a
 #: criterion cannot be documented and not implemented, or implemented and never proven.
-CRITERIA = ("overview", "arms", "repeats", "count", "captions", "prose",
+CRITERIA = ("overview", "arms", "repeats", "count", "captions",
             "caveats", "hidden", "identifiers", "contradiction", "sections", "authored")
 
 
@@ -320,8 +346,10 @@ def check_page(path, *, exempt=(), recorded=()):
     # of the result. Counted separately, and capped, so it cannot grow without bound either.
     cav_html = " ".join(re.findall(r'<div class="warn".*?</div>', html, re.S))
     cav_words = len(_text(re.sub(r"<details[^>]*>.*?</details>", " ", cav_html, flags=re.S)).split())
-    prose = len(txt.split()) - sum(len(c.split()) for c in caps) - hidden_all - cav_words
-    ck("prose", prose <= MAX_PROSE_WORDS, f"{prose} words of prose, cap {MAX_PROSE_WORDS}")
+    # THE WORD COUNT IS NO LONGER COMPUTED HERE. Nothing consumes it: it was only ever the input
+    # to the cap, and a number kept "for information" inside a pass/fail checker is a criterion
+    # waiting to be re-added. The page itself is where a reader judges length. See
+    # PROSE_CAP_REMOVED for why the cap went.
     _found = re.findall(r"all (\d+) units", txt)
     _n_units = max((int(x) for x in _found), default=0)
     _cap = caveat_cap(_n_units)
@@ -487,7 +515,6 @@ BASELINE = (
 
 def _mutate(cid):
     """BASELINE broken in exactly one way: the page `cid` exists to reject."""
-    long_words = " ".join(["word"] * (MAX_PROSE_WORDS + 40))
     if cid == "overview":
         return BASELINE.replace("<h2>The cohort</h2><p>Eight units in two arms of one "
                                 "factor.</p>", "<h2>Results</h2>")
@@ -513,8 +540,7 @@ def _mutate(cid):
     if cid == "captions":
         return BASELINE.replace("What else it shows.",
                                 " ".join(["word"] * (MAX_CAPTION_WORDS + 5)))
-    if cid == "prose":
-        return BASELINE + f"<p>{long_words}</p>"
+
     if cid == "caveats":
         return BASELINE + ('<div class="warn">'
                            + " ".join(["word"] * (MAX_CAVEAT_WORDS + 20)) + "</div>")

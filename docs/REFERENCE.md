@@ -325,7 +325,6 @@ selftest. `install` reports which members passed and refuses the environment oth
 | `arms` | At least one figure compares the design arms. |
 | `count` | At most 12 figures on a page. |
 | `captions` | At most 45 words in a caption's visible lead. |
-| `prose` | At most 900 words of visible narration. |
 | `caveats` | Caveats are capped separately and generously; they must stay visible. |
 | `hidden` | At most 2500 words behind disclosures. |
 | `repeats` | No figure id appears twice. |
