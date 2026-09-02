@@ -224,6 +224,26 @@ echo "live log : $LIVE"
 
 echo "job      : ${PBS_JOBID:-none}"
 echo "node     : $(hostname)"
+
+# A RUNNING MARKER, WRITTEN BEFORE ANY WORK. Without one there is no way to ask a run directory
+# which job owns it while that job is alive: SEALED.txt and FAILED.txt only exist afterwards, and
+# the job id lives in the scheduler and in a log filename. Anyone watching therefore had to be
+# told the id out of band and then guess - and guessed wrong twice in one day, reporting a run
+# that had sealed as a run that had vanished, because a finished job leaves the queue before its
+# trap's write is visible on a network filesystem.
+#
+# Written for every phase and left in place: the trap does not remove it, so a run directory
+# carries its own history - which job wrote it, on which node, from when. `scprofile watch` reads
+# this file and needs nothing passed to it.
+if [ -n "${OUT:-}" ]; then
+  mkdir -p "$OUT" 2>/dev/null || true
+  { echo "phase    : ${PHASE}"
+    echo "job      : ${PBS_JOBID:-none}"
+    echo "node     : $(hostname)"
+    echo "started  : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "live log : $LIVE"
+  } > "$OUT/RUNNING.txt" 2>/dev/null || true
+fi
 echo "phase    : ${PHASE}"
 echo "tool     : $(cut -c1-7 "$TOOL/HEAD.txt" 2>/dev/null || echo unknown)"
 echo "manager  : $(command -v micromamba || command -v mamba || command -v conda || echo NONE)"

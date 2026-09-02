@@ -2875,6 +2875,29 @@ def _write(a):
     return 0 if wrote else REFUSE
 
 
+def _watch(a):
+    """What state is this run in - and, with --wait, block until it is finished.
+
+    THE QUESTION AN AGENT ASKS MOST UNDER A SCHEDULER, and the one that was answered by a fresh
+    shell loop every time. Four wrong answers in one day came out of those loops, two of them
+    reporting a sealed run as vanished. Written once, it cannot be wrong in a new way each time.
+    """
+    from . import watch as WT
+
+    out = Path(a.out)
+    if a.wait:
+        st = WT.wait(out, timeout_s=(a.timeout or None), poll_s=a.poll)
+    else:
+        st = WT.state(out)
+    print(f"  {WT.describe(out)}")
+    if st.get("live_log"):
+        print(f"  live log: {st['live_log']}")
+    # NON-ZERO ONLY FOR A RUN THAT FAILED. `unknown` is not failure - that conflation is the
+    # defect this command exists to remove, and returning non-zero for it would put the same
+    # mistake back in the exit code.
+    return REFUSE if st["state"] == WT.FAILED else 0
+
+
 def _review(a):
     """The figure-review ledger: record a look, or report what has not been looked at.
 
@@ -3639,6 +3662,17 @@ def main(argv=None):
     wr.add_argument("--plugin", default="",
                     help="one plugin's brief. Omit for every plugin the run produced")
     wr.set_defaults(fn=_write)
+
+    wt = sub.add_parser("watch",
+                        help="[agent] what state is this run in, and wait for it to finish")
+    wt.add_argument("--out", required=True, type=Path, help="a run directory")
+    wt.add_argument("--wait", action="store_true",
+                    help="block until the run is sealed or failed, printing each change of state")
+    wt.add_argument("--poll", type=float, default=20.0, metavar="S",
+                    help="seconds between checks while waiting")
+    wt.add_argument("--timeout", type=float, default=0.0, metavar="S",
+                    help="give up waiting after this many seconds and report what is known")
+    wt.set_defaults(fn=_watch)
 
     rv = sub.add_parser("review",
                         help="[agent] which figures have been LOOKED AT, and which have not")

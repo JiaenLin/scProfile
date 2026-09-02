@@ -99,9 +99,11 @@ def execution_task(run, how=PBS):
                "it, then watch it - it is still one run, and the output is picked up the moment "
                "it seals rather than whenever you next think to look. Never run it on a login "
                "node.")
-        do = ("submit as a batch job, then poll its state (`qstat -f <jobid>`) and follow the "
-              "live log the job prints. It has finished when SEALED.txt appears in the run "
-              "directory; the job writes AGENDA.md as its last act, so pick that up immediately.")
+        do = (f"submit as a batch job, then `scprofile watch --out {run} --wait` - it blocks "
+              f"until the run is sealed or failed and reports each change of state. Do NOT "
+              f"hand-roll the poll loop: every hand-rolled version of it in this project got the "
+              f"seal-lags-the-queue rule wrong. The job writes AGENDA.md as its last act, so "
+              f"pick that up the moment it seals.")
         # THE SEAL LAGS THE QUEUE, AND A WATCHER THAT DOES NOT KNOW THAT REPORTS A CLEAN RUN AS
         # A FAILURE. The scheduler drops a finished job from `qstat` before the trap's write to
         # a network filesystem is visible, so `job gone AND no SEALED.txt` is true for a while on

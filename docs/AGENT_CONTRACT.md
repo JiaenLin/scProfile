@@ -81,7 +81,13 @@ Two ordering rules follow, both paid for:
 - **Fix the figures before looking at them.** A review is bound to the image, so redrawing
   destroys it. A sweep taken before a fix round is a sweep thrown away.
 
-And one thing about watching a job: **the seal lags the queue.** A finished job leaves `qstat`
+And one thing about watching a job: **do not hand-roll the poll loop.**
+
+    scprofile watch --out <run>          # what state is it in, right now
+    scprofile watch --out <run> --wait   # block until sealed or failed
+
+The run records its own job id in `RUNNING.txt` before it does any work, so nothing has to be
+passed in. The reason this is a command and not three lines of shell: **the seal lags the queue.** A finished job leaves `qstat`
 before its trap's write to a network filesystem is visible, so "job gone and no `SEALED.txt`" is
 not a failure until you have re-checked. `FAILED.txt` is the marker that means failure.
 
