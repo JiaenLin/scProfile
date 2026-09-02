@@ -62,6 +62,20 @@ with tempfile.TemporaryDirectory() as td:
     check("watch" not in loc["why"].lower(),
           "local mode tells the agent to watch a job that finishes in front of it")
 
+    # AND THE LOOK STEP CARRIES THE MECHANICS OF CROSSING THE MACHINE BOUNDARY, in pbs mode only.
+    # "Open the figures" is not an instruction an agent on another machine can follow, and an
+    # agenda whose step cannot be followed is where a hand-rolled workaround comes from.
+    _look = {t["id"]: t for t in AG.tasks(run, "p", how=AG.PBS)}["look"]
+    _look_l = {t["id"]: t for t in AG.tasks(run, "p", how=AG.LOCAL)}["look"]
+    _how = " ".join(_look.get("how") or [])
+    check("FIGURES.txt" in _how,
+          "the pbs look step does not name the transfer list, so the agent has to parse the "
+          "brief's markdown to find the images: %r" % (_how[:120],))
+    check("--files-from" in _how or "-T " in _how,
+          "the pbs look step names no way to move the set in one operation: %r" % (_how[:120],))
+    check(not (_look_l.get("how") or []),
+          "local mode is told to transfer files that are already in front of it")
+
     st = _state(run)
     # THE COMPUTE STEP IS DONE ONCE THE RUN WROTE ITS OWN RECORD, NOT ONLY ONCE THE JOB SEALED.
     # The agenda is emitted while the report renders, which is BEFORE the batch script's trap

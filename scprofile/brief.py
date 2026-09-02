@@ -33,6 +33,17 @@ from pathlib import Path
 
 NAME = "WRITING_BRIEF.md"
 
+#: THE FIGURE SET AS A TRANSFER LIST, one run-relative path per line, in the order the paper
+#: numbers them.
+#:
+#: The brief NAMES every figure, which is enough for a reader and not enough for an agent whose
+#: image viewer is on a different machine from the run - the normal case under a scheduler. That
+#: agent has to get the set in front of itself before it can look at anything, and with only a
+#: markdown list to work from it writes a throwaway parser, which is the in-house script this
+#: tool exists to make unnecessary. One path per line is what every transfer tool already
+#: accepts: `rsync --files-from`, `tar -T`, `xargs cp`.
+FIGURE_LIST = "FIGURES.txt"
+
 #: Where the agent-facing instructions live. Named in the brief rather than remembered, so an
 #: agent that has never seen this project can find them from the run alone.
 SKILL = ".claude/skills/result-section"
@@ -89,6 +100,10 @@ def write_brief(run, plugin, spec=None, design=None):
          f"   A note is refused if it is too short, or copied from another figure. The record is "
          f"bound to the image, so a figure redrawn since it was looked at comes back onto the "
          f"list.",
+         f"   The same set is written as a transfer list, one run-relative path per line, at "
+         f"`kernels/{plugin}/{FIGURE_LIST}` - so the images can be brought to whatever opens "
+         f"them in ONE operation instead of parsed out of this document. "
+         f"`scprofile agenda --out {run}` prints the command for the mode this run is in.",
          f"3. Write the result against `{SKILL}/SKILL.md`"
          + (f" and the template it names for this method, `{SKILL}/templates/{tmpl}.md`."
             if tmpl else ", which names no template for this plugin - say so rather than "
@@ -143,6 +158,7 @@ def write_brief(run, plugin, spec=None, design=None):
         L.append(f"> **The review ledger could not be read ({_e}), so nothing below is marked "
                  f"as outstanding. Treat every figure as unreviewed.**")
         L.append("")
+    ordered = [path for path, _n in sorted(idx.items(), key=lambda kv: kv[1])]
     for path, n in sorted(idx.items(), key=lambda kv: kv[1]):
         mark = " **(not yet looked at)**" if path in outstanding else ""
         L.append(f"- Figure {n}: `{path}`{mark}")
@@ -162,6 +178,7 @@ def write_brief(run, plugin, spec=None, design=None):
 
     d = run / "kernels" / plugin
     d.mkdir(parents=True, exist_ok=True)
+    (d / FIGURE_LIST).write_text("\n".join(ordered) + "\n", encoding="utf-8")
     p = d / NAME
     p.write_text("\n".join(L) + "\n", encoding="utf-8")
     return p

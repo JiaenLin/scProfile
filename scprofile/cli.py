@@ -2789,6 +2789,8 @@ def _agenda(a):
         for i, t in enumerate(AG.tasks(out, a.plugin or "<plugin>", how=how), 1):
             print(f"  {i}. [{t['state']}] {t['title']}")
             print(f"       {t['why']}")
+            for _h in t.get("how") or []:
+                print(f"       {_h}")
             print(f"       {t['do']}")
         print("\n  Nothing has run yet. The first task is the run itself; everything after it "
               "is blocked until it has produced something.")
@@ -2811,6 +2813,12 @@ def _agenda(a):
         print(f"  {nm}: {len(t) - len(undone)} of {len(t)} done  ->  {p}")
         for x in undone:
             print(f"    [{x['state']}] {x['title']}")
+            # THE MECHANICS BEFORE THE COMMAND. Under a scheduler the figures are on the cluster
+            # and the agent is not, so "open the figures" is not actionable on its own - and an
+            # agenda whose instruction cannot be followed is where an in-house workaround comes
+            # from. This is the line that carries the whole workflow across the machine boundary.
+            for _h in x.get("how") or []:
+                print(f"        {_h}")
             print(f"        {x['do']}")
     if a.strict and left:
         print(f"\n{left} agent task(s) outstanding.", file=sys.stderr)

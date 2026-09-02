@@ -155,6 +155,27 @@ def tasks(run, plugin, spec=None, how=None):
           "state": DONE if (started and not out) else (PENDING if started else BLOCKED),
           "why": "every figure defect found in this project was found by opening the image "
                  "while the suite was green; a table shows none of them",
+          # UNDER A SCHEDULER THE IMAGES ARE NOT WHERE THE AGENT IS, and saying "open the
+          # figures" to an agent that cannot reach them is an instruction it cannot follow. It
+          # then writes a throwaway parser over the brief's markdown to get the paths - the
+          # in-house script this tool exists to make unnecessary - or, worse, writes about the
+          # panels without opening them, which is the exact failure the ledger was built for.
+          #
+          # So the mechanics are part of the task, and they are generic: the run writes the set
+          # as a transfer list, and any tool that reads a file of paths takes it as it stands.
+          # The host does not know the agent's hostname or where it keeps files, and must not
+          # guess - it names the list, the run root and the direction, and leaves the two
+          # endpoints to the agent, which is the only party that knows them.
+          "how": ([f"the figures are on the cluster filesystem; whatever you open images with "
+                   f"usually is not. Bring the whole set across in ONE transfer using the list "
+                   f"this run writes - {run}/kernels/{plugin}/{B.FIGURE_LIST}, one "
+                   f"run-relative path per line, in the order the paper numbers them:",
+                   f"    rsync -a --files-from=<the list> <host>:{run}/ <a local directory>/",
+                   f"    # no rsync: tar -C {run} -T {run}/kernels/{plugin}/"
+                   f"{B.FIGURE_LIST} -czf figures.tgz   (then fetch and unpack that)",
+                   "open every one from the local copy - then record each look AGAINST THE RUN "
+                   "DIRECTORY, not the copy, because the ledger lives with the run and is bound "
+                   "to the image the run holds."] if how == PBS else []),
           "do": f'scprofile review --out {run} --plugin {plugin} --figure <path> --note "..."'},
          {"id": "write", "title": "Write the result",
           # AN EMPTY OUTSTANDING LIST IS NOT A FINISHED ONE. Before the run there are no
@@ -207,8 +228,12 @@ def write_agenda(run, plugin, spec=None, how=None):
     for i, x in enumerate(t, 1):
         mark = {DONE: "x", PENDING: " ", BLOCKED: "-"}[x["state"]]
         L += [f"{i}. [{mark}] **{x['title']}** — {x['state']}",
-              f"       {x['why']}",
-              f"       `{x['do']}`", ""]
+              f"       {x['why']}"]
+        # HOW, WHERE THE MODE CHANGES THE MECHANICS. Printed between the reason and the command
+        # because it is neither: it is what has to be true before the command can be typed.
+        for line in x.get("how") or []:
+            L.append(f"       {line}")
+        L += [f"       `{x['do']}`", ""]
     if left:
         L += ["*A blocked task is waiting on an earlier task \u2014 not on the tool, and not on a person.*", ""]
     else:

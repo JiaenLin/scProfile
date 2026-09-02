@@ -75,6 +75,28 @@ the tool. The tool was fine. The shortcut was not.*
     ...write...                                       # against .claude/skills/result-section
     scprofile run     --section <file>                # carry it back into the run
 
+### Under a scheduler, the figures are not where you are
+
+**PBS-HPC mode.** The run directory is on the cluster filesystem; whatever you open images with
+is usually on another machine. "Open the figures" is then not an instruction you can follow, and
+an agent in that position either writes a throwaway parser over the brief's markdown — the
+in-house script this tool exists to make unnecessary — or writes about panels it never saw.
+
+So the run writes the figure set as a **transfer list**: `kernels/<plugin>/FIGURES.txt`, one
+run-relative path per line, in the order the paper numbers them. Any tool that reads a file of
+paths takes it as it stands.
+
+    rsync -a --files-from=<the list> <host>:<run>/ <a local directory>/
+    # no rsync: tar -C <run> -T <run>/kernels/<plugin>/FIGURES.txt -czf figures.tgz
+
+Bring the whole set across in **one** transfer, open every one from the local copy, and then
+record each look **against the run directory on the cluster** — not against the copy. The ledger
+lives with the run and binds a note to the sha256 of the image the run holds.
+
+`scprofile agenda --out <run>` prints this with the paths filled in, for the mode the run is in.
+The host names the list, the run root and the direction; it does not know your hostname or where
+you keep files, and does not guess.
+
 **Step two is a step, not advice.** Every figure defect ever found in this project was found by
 opening the image while the test suite was green: an encoding that contradicted its legend, a
 ranking that hid the thing the panel was drawn for, labels driven off the axes by a fix for

@@ -56,6 +56,27 @@ with tempfile.TemporaryDirectory() as d:
         check(bool(looked) and "not yet looked at" not in looked[0],
               "a figure that HAS been reviewed is marked outstanding, so the mark means nothing")
 
+    # THE SET IS ALSO WRITTEN AS A TRANSFER LIST, because under a scheduler the figures are on
+    # the cluster and the agent's viewer is not. With only the markdown to work from, an agent
+    # writes a throwaway parser to get the paths out - the in-house script this tool exists to
+    # make unnecessary. One run-relative path per line is what rsync --files-from and tar -T
+    # already take.
+    if p:
+        fl = Path(p).parent / B.FIGURE_LIST
+        check(fl.is_file(), "no transfer list beside the brief, so the figure set cannot be "
+                            "moved to wherever the agent opens images without parsing markdown")
+        if fl.is_file():
+            lines = [x for x in fl.read_text(encoding="utf-8").splitlines() if x.strip()]
+            check(all(not x.startswith("/") for x in lines),
+                  "the transfer list holds absolute paths, which no --files-from can use "
+                  "against a remote run root: %r" % (lines[:3],))
+            named = {l.split("`")[1] for l in txt.splitlines()
+                     if l.startswith("- Figure ") and "`" in l}
+            check(set(lines) == named,
+                  "the transfer list and the brief name different figures, so moving the list "
+                  "brings across a set the document does not describe: %r"
+                  % sorted(set(lines) ^ named))
+
     # A LEDGER THAT CANNOT BE READ MUST SAY SO, not quietly mark nothing.
     def _boom(out, plugin=""):
         raise RuntimeError("ledger unreadable")

@@ -104,6 +104,15 @@ itself, and which template this method declares. Every entry names the file it c
 A note is refused if it is too short to be a look, or copied from another figure. The record is
 bound to the image's sha256, so a redrawn figure loses its review and comes back onto the list.
 
+**If the run is on a cluster and you are not**, you cannot open anything until the images are
+on your side. The run writes the set as a transfer list — `kernels/<plugin>/FIGURES.txt`, one
+run-relative path per line — so it moves in one operation:
+
+    rsync -a --files-from=<the list> <host>:<run>/ <a local directory>/
+
+Open them from the local copy; record the looks **against the run directory**, because the ledger
+lives with the run. `scprofile agenda --out <run>` prints the exact command for this run's mode.
+
 Why this is a step and not a suggestion: **every figure defect found in this project was found
 by opening the image while the suite was green.** An encoding that contradicted its legend. A
 ranking that hid the thing the panel existed to show. Labels driven off the axes by a fix for
