@@ -119,6 +119,16 @@ is computed, and the record is append-only. **So fan it out across several agent
     scprofile review --out <run> --plugin <p> --shards 4            # all four, to dispatch
     scprofile review --out <run> --plugin <p> --shards 4 --shard 1  # one agent's list
 
+**Start with coverage, not volume.** A run draws one kind many times — a circle plot per unit,
+a role heatmap per contrast — and a defect in a kind is present in every instance of it. Reading
+in path order spends the whole budget inside the first few kinds: on one cohort here, 93 looks
+covered 31 kinds and left 50 never opened at all.
+
+    scprofile review --out <run> --plugin <p> --per-kind 2 --shards 4   # every kind, twice
+
+Sweep everything afterwards. Before a fix round, the per-kind sweep is the only one worth doing:
+a review dies when its image changes, so a full sweep before a redraw is thrown away.
+
 **Do not divide the list yourself.** An invented split is how one figure gets two reviews and
 another gets none — and the second is invisible, because the ledger simply goes on reporting it
 as outstanding. The tool's split is disjoint, covers exactly what is still outstanding, and keeps

@@ -113,6 +113,9 @@ run-relative path per line — so it moves in one operation:
 Open them from the local copy; record the looks **against the run directory**, because the ledger
 lives with the run. `scprofile agenda --out <run>` prints the exact command for this run's mode.
 
+**Cover every kind before you look at every figure** — `--per-kind 2` samples across kinds,
+and a defect in how a kind is drawn is in all of its instances.
+
 **This step parallelises, and a large figure set should be split across agents.** Ask the tool
 for the shards rather than dividing the list yourself — an invented split silently leaves figures
 unreviewed:

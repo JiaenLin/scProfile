@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from pathlib import Path
 
@@ -293,6 +294,48 @@ def outstanding(out, plugin=""):
 
 #: Below this many outstanding figures, splitting the work costs more than it saves.
 SHARD_FLOOR = 12
+
+#: A figure's KIND: what it is a picture of, with the unit or contrast it was drawn for stripped
+#: off. `native_circle_weight__Aging1` and `native_circle_weight__young_chow` are one kind drawn
+#: twice; a defect in how that kind is drawn is present in both and in every other instance.
+#:
+#: The stem is cut at the first `__`, which is the separator every figure id here uses between
+#: what a panel is and which unit it is of, and then a trailing unit token is dropped.
+def kind_of(rel):
+    """The figure kind of a run-relative path."""
+    stem = Path(rel).stem
+    stem = stem.split("__", 1)[0]
+    return re.sub(r"_[A-Za-z0-9]*[0-9]$", "", stem)
+
+
+def by_kind(out, plugin="", per_kind=1, only=None):
+    """Up to `per_kind` OUTSTANDING figures of every kind. Coverage before volume.
+
+    A RUN DRAWS ONE KIND MANY TIMES. This cohort has 81 kinds across 819 figures: a circle plot
+    per unit, a role heatmap per contrast, and so on. A defect in how a kind is drawn - a colour
+    bar with no negative half, an absence rendered as a zero, a label over its own node - is in
+    every instance of that kind, so opening one finds it and opening the other eighteen finds it
+    again. Reading in path order spends the whole budget inside the first few kinds and never
+    reaches the rest: here, 31 kinds had been looked at and 50 had never been opened at all.
+
+    So this samples ACROSS kinds first. It is not a substitute for looking at everything - two
+    instances cannot show that the nineteenth is fine - and `shards` still splits the whole
+    outstanding set when that is what is wanted. It is what to do FIRST, and it is what to do
+    when the figures are about to be redrawn: a review dies when its image changes, so a full
+    sweep before a fix round is a sweep that gets thrown away.
+    """
+    left = [r for r, _st in (outstanding(out, plugin) or [])]
+    if only is not None:
+        want = {str(x).strip() for x in only if str(x).strip()}
+        left = [r for r in left if r in want]
+    seen, picked = {}, []
+    for rel in sorted(left):
+        k = kind_of(rel)
+        if seen.get(k, 0) >= max(1, int(per_kind)):
+            continue
+        seen[k] = seen.get(k, 0) + 1
+        picked.append(rel)
+    return picked
 
 
 def shards(out, plugin="", n=2, only=None):

@@ -116,6 +116,44 @@ with tempfile.TemporaryDirectory() as td:
           "restricting the split to a declared list lost the paths with spaces in them: %r"
           % (sorted(set(got) ^ set(r for r in listed if r != made[0]))[:3],))
 
+print("\ncoverage before volume: every kind is reached before any kind is exhausted")
+with tempfile.TemporaryDirectory() as td:
+    # ONE KIND DRAWN MANY TIMES, AND A RARE KIND. Reading in path order spends the budget inside
+    # the first kind and never reaches the last - which is exactly what happened on a real run:
+    # 31 kinds looked at, 50 never opened at all, after 93 looks.
+    run = Path(td) / "runK"
+    d = run / "kernels" / "p" / "figures"
+    d.mkdir(parents=True)
+    made = []
+    for u in range(20):
+        f = d / f"aaa_common_panel__unit{u}.png"
+        f.write_bytes(b"PNG-c" + bytes([u]))
+        made.append(str(f.relative_to(run)))
+    for name in ("zzz_rare_panel__only", "mmm_middle_panel__only"):
+        f = d / f"{name}.png"
+        f.write_bytes(name.encode())
+        made.append(str(f.relative_to(run)))
+    (run / "report.json").write_text('{"kernels": {"p": {}}}', encoding="utf-8")
+
+    one = RV.by_kind(run, "p", 1)
+    kinds = {RV.kind_of(x) for x in one}
+    check(len(one) == 3 and len(kinds) == 3,
+          "one-per-kind did not return exactly one of each of the three kinds: %r" % (one,))
+    check(any("zzz_rare" in x for x in one),
+          "the rare kind was never sampled, which is the whole failure this exists to fix")
+    two = RV.by_kind(run, "p", 2)
+    # 2 from the kind with twenty instances, and 1 each from the two kinds that have only one -
+    # a cap is a maximum, not a quota, and a rare kind must not be padded to reach it.
+    check(len(two) == 4, "two-per-kind returned %d, expected 4 (2 + 1 + 1, capped by supply)"
+          % len(two))
+    check(set(one) <= set(made) and len(set(two)) == len(two),
+          "the sample is not drawn from the run, or repeats a figure")
+    # AND IT SAMPLES ONLY WHAT IS OUTSTANDING, like every other split here.
+    RV.record(run, made[0], "sampled kind check, one common panel recorded before resampling",
+              plugin="p")
+    check(made[0] not in RV.by_kind(run, "p", 2),
+          "a figure already looked at was sampled again")
+
 print("\nconcurrent writers do not corrupt the ledger")
 with tempfile.TemporaryDirectory() as td:
     run, made = _fixture(td, per_dir=(8,))

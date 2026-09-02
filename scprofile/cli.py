@@ -2913,6 +2913,14 @@ def _review(a):
                 print(f"scprofile: cannot read the figure list {src}: {e}", file=sys.stderr)
                 return REFUSE
             print(f"# restricted to the {len(only)} figure(s) in {src}")
+        # COVERAGE BEFORE VOLUME, when asked for. A run draws one kind many times; a defect in a
+        # kind is in every instance of it. Sampling across kinds finds the defect set for a
+        # fraction of the looks - and before a fix round it is the only sweep worth doing, since
+        # redrawing a figure destroys its review.
+        if getattr(a, "per_kind", 0):
+            only = RV.by_kind(out, a.plugin, a.per_kind, only=only)
+            print(f"# {len(only)} figure(s): up to {a.per_kind} per kind, across "
+                  f"{len({RV.kind_of(x) for x in only})} kind(s)")
         groups = RV.shards(out, a.plugin, a.shards, only=only)
         want = getattr(a, "shard", 0)
         total = sum(len(g) for g in groups)
@@ -3630,6 +3638,10 @@ def main(argv=None):
     rv.add_argument("--shard", type=int, default=0, metavar="K",
                     help="print only shard K of --shards N - what ONE agent in the fan-out "
                          "opens")
+    rv.add_argument("--per-kind", dest="per_kind", type=int, default=0, metavar="K",
+                    help="sample up to K outstanding figures of EVERY kind instead of taking "
+                         "them in path order. A run draws one kind many times and a defect in a "
+                         "kind is in all of them, so this finds the defect set first")
     rv.add_argument("--from-list", dest="from_list", default="", metavar="FILE",
                     help="shard only the figures named in this file, one run-relative path per "
                          "line. Defaults to the run's own FIGURES.txt for --plugin, which is "
