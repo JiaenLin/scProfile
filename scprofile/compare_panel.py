@@ -930,7 +930,7 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob", unit_c
         # HOW BIG EACH SIDE'S FIT WAS. A total is not comparable between two arms of different
         # size without it, and a reader who is not given it will assume they were comparable.
         # THE UNIT, NOT ONLY THE LEVEL. `from`/`to` are factor LEVELS - two different contrasts
-        # both say "young" against "aged" - so any consumer resolving a side by that name reads
+        # both name the SAME two levels - so any consumer resolving a side by level name reads
         # the MARGINAL unit even for a conditional contrast. That is the same mistake the native
         # compare phase documents having already made once, and it reached the composition table
         # a reader is told every comparison is read against.

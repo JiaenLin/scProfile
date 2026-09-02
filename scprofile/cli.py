@@ -3282,7 +3282,8 @@ def main(argv=None):
     # control is named in its own field's words declares it here, which is better than being
     # guessed at.
     r.add_argument("--control", action="append", metavar="FACTOR=LEVEL",
-                   help="the control level of a factor, e.g. --control diet=chow. Repeatable. "
+                   help="the control level of a factor, e.g. --control <factor>=<level>. "
+                        "Repeatable. "
                         "Without it the tool recommends one and says on what basis.")
     r.add_argument("--figures-for", metavar="AXIS[,AXIS]", default="",
                    help="draw per-unit figures only for units on these axes, e.g. "

@@ -750,7 +750,7 @@ def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, unit_member
     def _level(u, f):
         """This unit's level of `f`: its own row, or the one its members all share.
 
-        A POOLED ARM HAS NO DESIGN ROW - the table is keyed by sample - so `aged` and `young`
+        A POOLED ARM HAS NO DESIGN ROW - the table is keyed by sample - so a pooled arm name
         both fell to the neutral ink and the arm block could not be read by colour at all. An
         arm's level is the level of its members, and only when they AGREE: a pool spanning two
         levels of a factor genuinely has none, and stays neutral.

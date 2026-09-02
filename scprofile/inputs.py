@@ -526,7 +526,7 @@ def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP, ob
     for fac in sorted(factors or []):
         # THE GROUPING OF SAMPLES, NOT ITS LABELS. Keying on (sample, level) pairs made two
         # factors that split the samples identically look different because one calls its arms
-        # `young`/`aged` and the other `v3`/`v4` - which is precisely the pair this exists to
+        # a biological pair and the other a technical one - which is precisely the pair this exists to
         # catch, since an aliased confounder almost never shares the vocabulary of the factor it
         # is aliased with.
         by_level = {}

@@ -742,7 +742,7 @@ def _md(text):
                 out.append("<p>" + _inline(" ".join(para)) + "</p>")
                 para = []
             # SPLIT ON AN UNESCAPED PIPE ONLY. A cell may legitimately contain one - a
-            # contrast conditioned on a second factor is named `age | diet = chow` - and
+            # contrast conditioned on a second factor is named `<factor> | <other> = <level>` - and
             # splitting on every pipe tore those rows into more cells than the header has.
             # ONE PIPE OFF EACH END, NOT EVERY PIPE. `strip("|")` removes them greedily, so a
             # row opening or closing with an EMPTY cell - "||b|" - lost that cell entirely and

@@ -714,14 +714,14 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         return drawn
     udir = {str(u.get("unit")): u.get("dir") for u in (units or []) if u.get("unit")}
 
-    # A CONTRAST SIDE IS A SET OF SAMPLES, NOT A UNIT NAME. `arm_pairs` returns factor LEVELS -
-    # `aged` against `young` - and the first version looked those up in a dict keyed by unit,
-    # so nothing ever matched and the phase silently drew nothing on a whole run.
+    # A CONTRAST SIDE IS A SET OF SAMPLES, NOT A UNIT NAME. `arm_pairs` returns factor LEVELS,
+    # and the first version looked those up in a dict keyed by unit, so nothing ever matched and
+    # the phase silently drew nothing on a whole run.
     #
     # The rule that does work is general: a side is the set of samples matching its filter, and
     # it can be compared NATIVELY only where some unit pools exactly that set - which is what a
-    # design arm is. The four simple effects each map onto two existing arm units; the marginal
-    # effects do not, because no single object covers `aged` pooled over diet. That is reported
+    # design arm is. A simple effect maps onto two existing arm units; a marginal one does not,
+    # because no single object covers one level pooled over another factor. That is reported
     # rather than skipped, because "the tool's own differential cannot be drawn for this
     # comparison" is a fact about the run, not an omission.
     # MEMBERSHIP COMES FROM `units.membership`, the function that also NAMES the units. Deriving
@@ -1016,7 +1016,7 @@ def _units_by_arm(units, design, declared, *, out_dir=None, name=""):
     A per-unit plugin already records one comparable number per unit, and the units already sit
     on one axis. What was missing was the join: the reporter had the numbers and the arm NAMES
     and no way to put a unit in an arm, so three plugins could show ten dots and not say which
-    four were aged.
+    of them belonged to which arm.
 
     Median per arm, and the units behind it. NOT a test - two arms of five samples compared by
     eye is a description, and the page says so.
