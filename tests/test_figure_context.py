@@ -106,6 +106,28 @@ with tempfile.TemporaryDirectory() as td:
     ck("and omits the key entirely when there is nothing to say",
        "figure_context" not in json.loads(p.read_text()))
 
+print("\nthe plugin side reads it by ACCESSOR, and a host that says nothing changes nothing")
+from scprofile.plugin import Context                                            # noqa: E402
+_c = Context(None, keys={}, out=".", figure_context=ctx)
+# POSITIONAL AGAINST THE CALLER'S OWN LEVEL ORDER. A plotting function takes a colour vector
+# against ITS levels, so the map must come back in the order asked for - handing back sorted keys
+# would colour the wrong labels, which is the defect this exists to fix arriving through the fix.
+_want = [POPS[2], POPS[0]]
+ck("colours come back in the order asked for", list(_c.figure_colours(_want)) == _want,
+   str(list(_c.figure_colours(_want))))
+ck("the stamp is readable by accessor", _c.figure_stamp() == ctx["stamp"])
+ck("the absence note is readable by accessor", _c.figure_absence() == ctx["note"])
+# A HOST THAT SAYS NOTHING MUST LEAVE THE PLUGIN EXACTLY AS IT WAS. Empty, never a block of
+# blanks: a plugin renders "" as no subtitle, and a structure of empty strings as a blank one.
+_n = Context(None, keys={}, out=".")
+ck("no context means no colours", _n.figure_colours() == {})
+ck("no context means no stamp", _n.figure_stamp() == "")
+ck("no context means no absence note", _n.figure_absence() == "")
+# AND A PARTIAL MAP IS REFUSED RATHER THAN RECYCLED. A vector shorter than the level set gets
+# recycled silently by the plotting layer, colouring populations with each other's colours.
+ck("a label with no colour simply does not come back",
+   list(_c.figure_colours(["not-a-label", POPS[0]])) == [POPS[0]])
+
 print("\nnothing here knows about any particular method or project")
 src = Path(FC.__file__).read_text(encoding="utf-8").lower()
 for word in ("cell" + "chat", "cardio" + "myocyte", "path" + "way", "lig" + "and_pair",

@@ -746,6 +746,41 @@ draw_figs <- !(length(args) >= 12 && identical(toupper(args[12]), "FALSE"))
 profile_plots <- if (length(args) >= 13 && nzchar(args[13]))
   strsplit(args[13], ";", fixed = TRUE)[[1]] else character(0)
 
+# args[14]. THE HOST'S FIGURE CONTEXT: the run's stable label->colour map, the line naming this
+# unit with its n, and what is not in the panel set. Read if the file is there and IGNORED if it
+# is not, so this script still runs unchanged against a host that predates it.
+#
+# WHY THE COLOUR MAP MATTERS HERE. CellChat picks its own palette per object, from the order the
+# levels happen to arrive in, so one population is one colour in a per-unit panel and another
+# colour in a comparison panel of the same run. Passing `color.use` makes a label one colour
+# everywhere. The map is the host's - it is the only party that sees every unit - and `color.use`
+# is this plugin's knowledge of CellChat's argument name. Neither could do it alone.
+.fctx <- list(stamp = "", absence = "", colours = character(0))
+if (length(args) >= 14 && nzchar(args[14]) && file.exists(args[14])) {
+  .fc <- tryCatch(utils::read.delim(args[14], header = FALSE, sep = "\t",
+                                    quote = "", comment.char = "",
+                                    stringsAsFactors = FALSE, col.names = c("k", "v")),
+                  error = function(e) NULL)
+  if (!is.null(.fc) && nrow(.fc)) {
+    .fctx$stamp <- paste(.fc$v[.fc$k == "stamp"], collapse = "")
+    .fctx$absence <- paste(.fc$v[.fc$k == "absence"], collapse = "")
+    .cr <- .fc[startsWith(.fc$k, "colour:"), , drop = FALSE]
+    if (nrow(.cr)) .fctx$colours <- stats::setNames(.cr$v, sub("^colour:", "", .cr$k))
+  }
+}
+
+# THE VECTOR CellChat WANTS, IN ITS OWN LEVEL ORDER. A plotting function takes `color.use`
+# POSITIONALLY against the object's factor levels, so handing it the map in any other order
+# colours the wrong populations - which is the defect this exists to fix, arriving through the
+# fix. Returns NULL when the host gave no map or when any level is unmapped, because a partial
+# vector is worse than none: CellChat would recycle it silently.
+.cols_for <- function(levs) {
+  if (!length(.fctx$colours)) return(NULL)
+  levs <- as.character(levs)
+  if (!all(levs %in% names(.fctx$colours))) return(NULL)
+  unname(.fctx$colours[levs])
+}
+
 # A PHASE CLOCK, DEFINED AT THE TOP BECAUSE R DOES NOT HOIST. Twice the cost of a round has
 # been diagnosed by assumption and been wrong: the inference was assumed dominant and was not,
 # then the matrix write was, and it takes one to five seconds. Guessing where a run spends its
@@ -1066,19 +1101,31 @@ mark("downstream quantities")
 groups <- levels(cc@idents)
 ngrp <- length(groups)
 
+# THE RUN'S OWN PALETTE, AND THE UNIT NAMED ON THE PANEL. `.cols_for` returns NULL when the host
+# supplied no map or could not cover every level, and every call below passes that NULL straight
+# through - which is what CellChat receives when the argument is omitted, so the panels are
+# unchanged on a host that says nothing. `.ttl` appends the host's stamp to a title the plugin
+# already writes, so a panel names its unit and its n on its own face rather than only in a
+# caption that does not travel with the image.
+.gcol <- .cols_for(groups)
+.ttl <- function(x) if (nzchar(.fctx$stamp)) paste0(x, "\n", .fctx$stamp) else x
+
 npng("circle_count", {
   netVisual_circle(cc@net$count, vertex.weight = as.numeric(table(cc@idents)),
-                   weight.scale = TRUE, label.edge = FALSE,
-                   title.name = "interactions")
+                   weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
+                   title.name = .ttl("interactions"))
 })
 npng("circle_weight", {
   netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),
-                   weight.scale = TRUE, label.edge = FALSE,
-                   title.name = "interaction strength")
+                   weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
+                   title.name = .ttl("interaction strength"))
 })
-npng("heatmap_count", netVisual_heatmap(cc, measure = "count", color.heatmap = "Blues"))
-npng("heatmap_weight", netVisual_heatmap(cc, measure = "weight", color.heatmap = "Blues"))
-npng("signalingRole_scatter", netAnalysis_signalingRole_scatter(cc),
+npng("heatmap_count", netVisual_heatmap(cc, measure = "count", color.heatmap = "Blues",
+                                        color.use = .gcol, title.name = .ttl("interactions")))
+npng("heatmap_weight", netVisual_heatmap(cc, measure = "weight", color.heatmap = "Blues",
+                                         color.use = .gcol,
+                                         title.name = .ttl("interaction strength")))
+npng("signalingRole_scatter", netAnalysis_signalingRole_scatter(cc, color.use = .gcol),
      legend = paste0("Each population placed by how much inferred signalling it SENDS ",
                      "(horizontal) against how much it RECEIVES (vertical), for this unit ",
                      "alone. Distance from the diagonal is how one-sided a population is. ",
@@ -3057,6 +3104,26 @@ def _log_r(ctx, proc, name):
     ctx.log(f"  R output: {len(out.splitlines())} line(s), {len(fails)} failure(s)"
             + (f", full text in {path.name}" if path else " (could not be written)"))
 
+def _write_figure_context(ctx):
+    """Materialise the host's figure context for R, as a TSV. Returns "" if there is none.
+
+    TWO COLUMNS, key and value, with the colour map as one row per label. A flat file because the
+    R side must be able to read it with `read.delim` and no JSON dependency - this plugin already
+    carries an R dependency graph and should not add one to print a subtitle.
+    """
+    ctx_block = getattr(ctx, "figure_context", None) or {}
+    if not ctx_block:
+        return ""
+    rows = [("stamp", ctx.figure_stamp()), ("absence", ctx.figure_absence())]
+    rows += [(f"colour:{k}", v) for k, v in sorted((ctx.figure_colours() or {}).items())]
+    rows = [(k, str(v).replace("\t", " ").replace("\n", " ")) for k, v in rows if str(v)]
+    if not rows:
+        return ""
+    path = ctx.out / "figure_context.tsv"
+    path.write_text("\n".join(f"{k}\t{v}" for k, v in rows) + "\n", encoding="utf-8")
+    return path
+
+
 def run(ctx):
     import subprocess
     import numpy as np
@@ -3257,7 +3324,19 @@ def run(ctx):
             str(C["type"]), "TRUE" if C["population_size"] else "FALSE",
             str(C["nboot"]), str(C["thresh"]), str(cache or ""),
             "TRUE" if ctx.draw_figures else "FALSE",
-            _PROFILE_SEP.join(_PROFILE_PLOTS)]
+            _PROFILE_SEP.join(_PROFILE_PLOTS),
+            # args[15] is the HOST's figure context, materialised as a two-column TSV.
+            #
+            # WHY A FILE AND NOT MORE POSITIONAL ARGUMENTS. The map is one row per population and
+            # the stamp is a sentence; both would be shell-quoting hazards on a command line, and
+            # this argv is already fifteen long. One path, read if present, absent if the host
+            # said nothing - and R that finds no file behaves exactly as it did before this
+            # existed, which is what keeps the plugin runnable against an older host.
+            #
+            # THE COLOUR MAP IS THE HOST'S AND THE ARGUMENT NAME IS THE PLUGIN'S. The host cannot
+            # know that CellChat calls it `color.use`; the plugin cannot know what colour a label
+            # should be in some other plugin's panels. That split is the whole point.
+            str(_write_figure_context(ctx))]
     ctx.log(f"handing {A.n_obs:,} cells x {A.n_vars:,} genes to {db} via {rscript}")
     ctx.log(f"  type={C['type']} trim={C['trim']} population.size={C['population_size']} "
             f"nboot={C['nboot']} thresh={C['thresh']} min.cells={C['min_cells']}")

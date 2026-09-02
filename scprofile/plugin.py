@@ -184,7 +184,7 @@ class Context:
                  unit_members=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
                  sentinels=(), provenance=None, constraint="", cache_dir=None,
-                 config=None, log=print):
+                 config=None, figure_context=None, log=print):
         self.adata = adata
         #: {role: actual name in THIS object}. `ctx.keys["label"]`, never a literal column.
         self.keys = dict(keys or {})
@@ -224,6 +224,15 @@ class Context:
         #: group needs its few panels for every group, and switching the full set off for an axis
         #: must not switch off the three that page is made of.
         self.profile_figures = frozenset(str(x) for x in (profile_figures or ()))
+        #: WHAT A FIGURE MUST BE ABLE TO SAY ABOUT ITSELF, computed by the host: the stable
+        #: label->colour map, the line naming this unit or contrast with its n, and the named
+        #: absences. Read it through `figure_stamp()` and `figure_colours()` rather than by key,
+        #: so a plugin written outside this repository is not coupled to the block's shape.
+        #:
+        #: EMPTY WHEN THE HOST HAS NOTHING TO SAY, never a block of blanks: a plugin must be able
+        #: to tell "no context" from "context that says nothing", because the second would render
+        #: as a subtitle saying nothing and look like a defect in the plugin.
+        self.figure_context = dict(figure_context or {})
         #: The upstream tool's constraint on use, verbatim, or "" when the object carries none.
         #: `Guard` has had this since it existed and `Context` did not, so a plugin that wanted to
         #: REPRODUCE the constraint in its own caveats - rather than merely be refused by it - had
@@ -295,6 +304,28 @@ class Context:
         on per-unit numbers keeps them. Nothing here knows what the axes are called - it compares
         against whatever the resolver named them.
         """
+    def figure_colours(self, labels=()):
+        """{label: '#rrggbb'} for these labels, or {} if the host supplied no map.
+
+        RESTRICTED TO WHAT IS ASKED FOR, in the order asked for, because a plotting function that
+        takes a colour vector takes it positionally against ITS OWN level order - handing it the
+        whole run's map would colour the wrong populations, which is the defect this exists to
+        fix arriving through its fix.
+        """
+        cmap = (self.figure_context or {}).get("colours") or {}
+        if not cmap:
+            return {}
+        want = [str(x) for x in labels] if labels else sorted(cmap)
+        return {k: cmap[k] for k in want if k in cmap}
+
+    def figure_stamp(self):
+        """One line naming what a panel is OF - unit, size, contrast direction. "" if unknown."""
+        return str((self.figure_context or {}).get("stamp") or "")
+
+    def figure_absence(self):
+        """The sentence naming what is NOT in the panel set, or "" when nothing is missing."""
+        return str((self.figure_context or {}).get("note") or "")
+
         if not self.figures_for:
             return True
         return (self.unit_axis or "") in set(self.figures_for)

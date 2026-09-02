@@ -389,6 +389,11 @@ def main(argv):
                   # while `in.json` listed all three of them, verified, by absolute path.
                   reference_specs=inp.get("reference_specs"), params=inp.get("params"),
                   design=inp.get("design"), sentinels=sentinels, config=config,
+                  # ABSENT WHEN THE HOST SAID NOTHING. `.get` with no default gives None, and the
+                  # Context turns that into {} - so a plugin distinguishes "no context" from
+                  # "context that says nothing", which would otherwise render as a subtitle
+                  # saying nothing and read as a defect in the plugin.
+                  figure_context=inp.get("figure_context"),
                   # The SAME field `Guard` reads. A plugin may be refused by the constraint and
                   # may also need to REPRODUCE it - the cohort-scope fits do - and only Guard
                   # could see it.
