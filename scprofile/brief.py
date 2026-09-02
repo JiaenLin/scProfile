@@ -114,6 +114,53 @@ def write_brief(run, plugin, spec=None, design=None):
          + (", ".join(f"`{k} = {v}`" for k, v in sorted(ctl.items())) if ctl
             else "not declared, so direction cannot be assumed") + ".", ""]
 
+    # WHAT THE DESIGN FORBIDS COMES BEFORE WHAT IT MEASURED.
+    #
+    # The brief listed contrasts, figures and caveats and said NOTHING about the constraint the
+    # upstream object carries or about which factors are aliased - both of which the run holds in
+    # `report.json` and one of which the composer already prints. So a section was written from
+    # the tables alone: it led with a factor's main effect, put the confound in a limitations
+    # sentence at the end, and never mentioned the constraint at all. The author was not careless;
+    # the brief never told them. A constraint that arrives after the argument is written is a
+    # constraint that reorders nothing.
+    #
+    # Generic by construction: the text is the upstream tool's own, the aliasing is computed from
+    # the design table, and neither knows what study this is.
+    _con = str(pay.get("constraint_on_use") or "").strip()
+    _binds = pay.get("constraint_binds") or {}
+    _alias = {}
+    try:
+        from .design_panel import aliased as _aliased
+        _alias = {k: v for k, v in (_aliased(design) or {}).items() if v}
+    except Exception:                                                     # noqa: BLE001
+        _alias = {}
+    if _con or _alias:
+        L += ["## What this design does not let you claim", "",
+              "**Read this before the contrasts, not after.** It changes which of them can carry "
+              "a headline.", ""]
+        if _alias:
+            # `_fac`, NOT `f`. `f` is the findings dict in this scope, and rebinding it in a
+            # loop header made the contrast table below index a string - caught immediately, and
+            # only because the fixture now carries a design with an aliased pair to loop over.
+            for _fac, mates in sorted(_alias.items()):
+                L.append(f"- **`{_fac}` is aliased with "
+                         f"{', '.join('`%s`' % m for m in mates)}** - "
+                         f"they split the samples identically, so every contrast along "
+                         f"`{_fac}` is "
+                         f"equally a contrast along {', '.join(mates)}, and which of them a "
+                         f"difference belongs to is exactly what this data cannot say. Say it "
+                         f"where the contrast is stated, not only in the limitations.")
+            L.append("")
+        if _con:
+            _who = ", ".join(f"`{k}` on {', '.join(v)}" for k, v in sorted(_binds.items())) \
+                if _binds else ""
+            L += [f"- **The object carries a constraint on use"
+                  + (f", binding {_who}" if _who else "") + ".** Verbatim from the upstream tool:",
+                  "", "  > " + _con.replace("\n", "\n  > "), "",
+                  "  A headline this forbids is forbidden however strong the number is. If a "
+                  "section of this result would state one, say instead what the constraint "
+                  "permits and why the stronger claim is not available.", ""]
+
     L += ["## The contrasts, in reading order", "",
           "| contrast | reference | against | ratio | per observation | elements differing |",
           "|---|---|---|---|---|---|"]

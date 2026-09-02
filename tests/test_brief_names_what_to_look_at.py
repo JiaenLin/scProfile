@@ -44,7 +44,15 @@ R.outstanding = lambda out, plugin="": [("figures/never_opened.png", "unreviewed
 import tempfile                                                          # noqa: E402
 
 with tempfile.TemporaryDirectory() as d:
-    p = B.write_brief(d, "plug", spec={"report": {"subject": "widgets"}}, design={})
+    # A DESIGN WITH TWO FACTORS THAT SPLIT THE SAMPLES IDENTICALLY, and an upstream constraint.
+    # Both are things the run holds and the brief used not to pass on.
+    _design = {"s1": {"f1": "a", "f2": "x"}, "s2": {"f1": "a", "f2": "x"},
+               "s3": {"f1": "b", "f2": "y"}, "s4": {"f1": "b", "f2": "y"}}
+    import json as _json
+    (Path(d) / "report.json").write_text(_json.dumps({
+        "constraint_on_use": "no abundance claim across f1 or f2 may be made from this object",
+        "constraint_binds": {"abundance": ["f1", "f2"]}}), encoding="utf-8")
+    p = B.write_brief(d, "plug", spec={"report": {"subject": "widgets"}}, design=_design)
     check(p is not None, "the brief was not written at all")
     if p:
         txt = Path(p).read_text(encoding="utf-8")
@@ -76,6 +84,28 @@ with tempfile.TemporaryDirectory() as d:
                   "the transfer list and the brief name different figures, so moving the list "
                   "brings across a set the document does not describe: %r"
                   % sorted(set(lines) ^ named))
+
+    # WHAT THE DESIGN FORBIDS MUST REACH THE AUTHOR, AND BEFORE THE CONTRASTS.
+    #
+    # The brief once carried none of it. The run held the upstream constraint and the aliased
+    # factors; the brief listed contrasts and figures. A result section was then written that led
+    # with an aliased factor's main effect and mentioned the confound once, at the end, in
+    # limitations - which is the order the brief gave. A constraint that arrives after the
+    # argument is written reorders nothing.
+    if p:
+        _t = Path(p).read_text(encoding="utf-8")
+        _head = _t.split("## The contrasts", 1)[0]
+        ck2 = lambda name, cond: check(cond, name)
+        ck2("the brief never states what the design forbids",
+            "does not let you claim" in _t)
+        ck2("it states it AFTER the contrasts, where it reorders nothing",
+            "does not let you claim" in _head)
+        ck2("the aliased factor is not named",
+            "aliased with" in _t and "`f2`" in _t)
+        ck2("the constraint text is not carried verbatim",
+            "no abundance claim across f1" in _t)
+        ck2("and it does not say a forbidden headline stays forbidden",
+            "forbidden however strong" in _t)
 
     # A LEDGER THAT CANNOT BE READ MUST SAY SO, not quietly mark nothing.
     def _boom(out, plugin=""):
