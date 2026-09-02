@@ -222,6 +222,9 @@ def _default_memory_gb():
         return None
 
 
+from . import figure_context as _FC   # noqa: E402
+
+
 def _run(a):
     from . import compat, inputs, manifest, merge, provenance, refs, report, runner
     from .kernels import (UNDECLARED_GB_PER_100K, ResourcePool, _budget, concurrency,
@@ -705,7 +708,20 @@ def _run(a):
             # un-disposable. `_cache` sits next to the run directories, is scoped per plugin and
             # unit, and deleting it costs time and nothing else.
             cache_dir=(None if getattr(a, "no_cache", False) else
-                       Path(a.out).resolve().parent / "_cache" / name / str(unit or "_")))
+                       Path(a.out).resolve().parent / "_cache" / name / str(unit or "_")),
+            # ONE COLOUR MAP AND ONE STAMP FOR THE WHOLE RUN. Built from the run's OWN label
+            # totals, so every unit and every plugin resolves a label to the same colour - the
+            # defect this fixes was one population drawn blue in the comparison figures and red
+            # in the per-unit figures of the same run, with nothing on either panel to catch it.
+            figure_context=_FC.build(
+                labels=list((label_total or {}).keys()),
+                unit=unit, unit_kind=unit_axis.get(str(unit)) or "",
+                members=unit_members.get(str(unit)) or (),
+                # THE UNIT'S OWN CELL COUNT, summed from its labels rather than taken from a
+                # key nobody writes. `label_by_unit` holds {label: n} per unit; the total is the
+                # sum of that, and an empty dict gives None rather than a confident 0.
+                n_cells=(sum((label_by_unit.get(str(unit)) or {}).values())
+                         or None)))
         return kout
 
     for wi, wave in enumerate(waves, 1):

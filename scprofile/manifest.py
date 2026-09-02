@@ -81,7 +81,7 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
                 upstream_units=None, sentinels=DEFAULT_SENTINELS,
                 provenance=None, resources=None, unit=None, unit_members=None,
                 unit_axis=None, figures_for=None,
-                constraint="", cache_dir=None,
+                constraint="", cache_dir=None, figure_context=None,
                 contract=CONTRACT_VERSION):
     """Write `in.json`. Every path is made ABSOLUTE first.
 
@@ -133,6 +133,13 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
         # figure. The host only says WHERE; what to keep and under what key is the plugin's, and
         # a plugin that needs none ignores it.
         "cache_dir": str(Path(cache_dir).resolve()) if cache_dir else None,
+        # WHAT A FIGURE MUST BE ABLE TO SAY ABOUT ITSELF: the stable label->colour map, the line
+        # naming the unit or the contrast and its direction, and what is not drawn. Computed by
+        # the host in `figure_context.py` because the host is the only party that knows the whole
+        # label set - a plugin sees one unit and cannot make a map that agrees across units.
+        # Absent when the host has nothing to say, so a plugin reads a missing key rather than an
+        # empty structure that looks like an answer.
+        **({"figure_context": figure_context} if figure_context else {}),
         "references": {k: str(Path(v).resolve()) for k, v in (references or {}).items()},
         # THE DECLARATIONS BEHIND THOSE PATHS, so a plugin can ask for one BY ROLE. Without them
         # `ctx.reference_for_role` has nothing to search and returns None for every role, for
