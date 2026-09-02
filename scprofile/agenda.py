@@ -94,15 +94,27 @@ def execution_task(run, how=PBS):
         do = ("submit as a batch job, then poll its state (`qstat -f <jobid>`) and follow the "
               "live log the job prints. It has finished when SEALED.txt appears in the run "
               "directory; the job writes AGENDA.md as its last act, so pick that up immediately.")
+        # THE SEAL LAGS THE QUEUE, AND A WATCHER THAT DOES NOT KNOW THAT REPORTS A CLEAN RUN AS
+        # A FAILURE. The scheduler drops a finished job from `qstat` before the trap's write to
+        # a network filesystem is visible, so `job gone AND no SEALED.txt` is true for a while on
+        # a run that sealed perfectly. Three hand-rolled watchers in one session made exactly
+        # this call twice, on runs that had sealed. The negative marker is FAILED.txt, not the
+        # absence of the positive one.
+        why += (" The seal LAGS the queue: a finished job leaves `qstat` before SEALED.txt is "
+                "visible on a network filesystem, so 'job gone and no seal' is not a failure "
+                "until you have re-checked. FAILED.txt is the marker that means failure.")
     else:
         why = "the compute runs in front of you and finishes before the next step begins"
         do = "scprofile run --h5ad <object> --out <run> ..."
+    # APPENDED, NEVER REPLACED. The first version overwrote `why` with the state sentence, which
+    # deleted the mode's own guidance - including the warning that the seal lags the queue - on
+    # every run that had started, which is every run anyone ever reads this for. Its own suite
+    # caught it. State is one more thing the reader needs, not a substitute for the rest.
     if sealed:
-        why = "the job sealed: SEALED.txt is in the run directory"
+        why += " STATE: the job sealed - SEALED.txt is in the run directory."
     elif started:
-        why = ("the run wrote its own record (report.json). SEALED.txt is the JOB's marker and "
-               "is written AFTER this file, so its absence here is not evidence of failure - "
-               "read the run directory for it before promoting anything")
+        why += (" STATE: the run wrote its own record (report.json); SEALED.txt is the JOB's "
+                "marker and is written after it.")
     return {"id": "run", "title": "Run the pipeline",
             "state": DONE if (sealed or started) else PENDING,
             "why": why, "do": do}
@@ -149,6 +161,63 @@ def _fanout(run, plugin, n_outstanding):
             "cuts them and not you."]
 
 
+def health(run):
+    """What the run says against ITSELF, read off its own records. [] when it says nothing.
+
+    THE CYCLE HAS A FAILURE PATH AND THE AGENDA DID NOT COVER IT. A run that regresses or loses a
+    unit still seals, still writes a report, and still tells an agent that five of six tasks are
+    done - so the agent walks past it into the writing. The two records that would have said
+    otherwise are already on disk and nothing pointed at them.
+
+    Both findings here carry the same warning, because both were misread in the session that
+    produced this function:
+
+    - A REGRESSION IS NOT AUTOMATICALLY A BREAKAGE. Deliberately removing a duplicated figure
+      lowers the figure count, and the guard is right to report it: what it cannot know is whether
+      the drop was intended. Only the agent knows, and it must say which.
+    - ONE FAILED UNIT CAN DOWNGRADE EVERY OTHER UNIT'S VERDICT. A single instance failing produced
+      a run-level diagnosis that marked all seventeen instances suspect, and the count of suspect
+      units then read as seventeen separate failures. Cause and consequence are not distinguished
+      by the number; they are distinguished by reading which unit actually failed.
+    """
+    import json
+    run = Path(run)
+    found = []
+    try:
+        cap = json.loads((run / "CAPACITY.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cap = {}
+    worse = (cap.get("regressions") or cap.get("worse") or [])
+    if worse:
+        found.append({"what": "capacity regression",
+                      "detail": ", ".join(str(w) for w in worse),
+                      "why": "the run produced less than its sibling. A DELIBERATE removal looks "
+                             "exactly like a breakage here and the guard cannot tell them apart - "
+                             "say which each one is, in the run log, before writing anything up."})
+    try:
+        card = json.loads((run / "RUN_CARD.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        card = {}
+    inst = [i for i in (card.get("instances") or []) if isinstance(i, dict)]
+    outright = [str(i.get("unit")) for i in inst
+                if str(i.get("state") or "") in ("empty", "failed")
+                or str(i.get("outcome") or "") == "failed"]
+    suspect = [str(i.get("unit")) for i in inst if i.get("verdict") not in ("ok", None)]
+    if outright:
+        found.append({"what": f"{len(outright)} unit(s) did not produce",
+                      "detail": ", ".join(sorted(outright)),
+                      "why": "these are the units that actually failed. Read their own logs; the "
+                             "rest of the run may be sound."})
+    if suspect and len(suspect) > len(outright):
+        found.append({"what": f"{len(suspect)} unit(s) carry a non-ok verdict",
+                      "detail": ", ".join(sorted(suspect)[:6])
+                                + (" ..." if len(suspect) > 6 else ""),
+                      "why": f"only {len(outright)} of them actually failed. A run-level diagnosis "
+                             f"marks every instance, so this number counts consequence as well as "
+                             f"cause - do not report it as that many broken units."})
+    return found
+
+
 def _authored(run, plugin):
     """(exists, authored) for the plugin's section. Composed is not authored."""
     from . import compose as C
@@ -187,7 +256,23 @@ def tasks(run, plugin, spec=None, how=None):
 
     how = mode(how)
     started = (run / "report.json").is_file()
+    hz = health(run) if started else []
     t = [execution_task(run, how),
+         # ACCOUNT FOR THE RUN BEFORE WRITING IT UP. A run that regressed or lost a unit still
+         # seals, still reports, and still says five of six tasks are done - so an agenda without
+         # this step walks an agent straight past it into the writing. It does NOT block the rest:
+         # a deliberate figure removal shows up here as a regression, and a step that halted the
+         # cycle on correct behaviour is a step that gets switched off.
+         {"id": "account", "title": (f"Account for what the run reports against itself "
+                                     f"({len(hz)} finding(s))" if hz else
+                                     "Account for what the run reports against itself"),
+          "state": (DONE if (started and not hz) else PENDING if started else BLOCKED),
+          "why": "the run's own records say whether it produced less than its sibling and which "
+                 "units failed; both look like breakage and neither necessarily is",
+          "how": [f"{h['what']}: {h['detail']}" for h in hz]
+                 + ([hz[0]["why"]] if hz else []),
+          "do": f"scprofile capacity --out {run}   # then say, in the run log, which findings "
+                f"were intended"},
          {"id": "brief", "title": "Read the writing brief",
           "state": DONE if brief.is_file() else (PENDING if started else BLOCKED),
           "why": "the evidence this result is written from, with every number's file named",
@@ -231,7 +316,14 @@ def tasks(run, plugin, spec=None, how=None):
                  + (f" and the template this plugin declares, "
                     f"{B.SKILL}/templates/{tmpl}.md" if tmpl
                     else ", which names no template for this plugin"),
-          "do": "write it, then carry it in with the next task"},
+          # THE FIGURE SET MUST BE SETTLED BEFORE THE SECTION IS WRITTEN. A section cites figures
+          # by the number the paper gives them, and adding or removing one figure renumbers every
+          # figure after it - so a section written against one figure set and carried into a run
+          # with another cites the wrong plates while reading perfectly. Fix the figures first,
+          # re-run, and write against the set that will ship.
+          "do": "write it, then carry it in with the next task. If any figure is still to be "
+                "added or removed, do THAT first: the paper numbers figures in order, so changing "
+                "the set renumbers the citations of a section already written"},
          {"id": "carry", "title": "Carry the written result into a run",
           "state": DONE if authored else BLOCKED,
           "why": "a section outside a run has no run key and its citations resolve to nothing; "
@@ -278,7 +370,11 @@ def write_agenda(run, plugin, spec=None, how=None):
             L.append(f"       {line}")
         L += [f"       `{x['do']}`", ""]
     if left:
-        L += ["*A blocked task is waiting on an earlier task \u2014 not on the tool, and not on a person. Do the one above it, then come back; do not stop here.*", ""]
+        L += ["*A blocked task is waiting on an earlier task \u2014 not on the tool, and not on "
+              "a person. Do the one above it, then come back; do not stop here.*", "",
+              "**If you are about to change how a figure is drawn, do it BEFORE looking at the "
+              "figures.** A review is bound to the image, so redrawing destroys it: a sweep taken "
+              "before a fix round is a sweep thrown away. Fix, re-run, then look.", ""]
     else:
         L += ["*Nothing outstanding. The result is written, carried into a run, and defended.*",
               ""]

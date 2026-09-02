@@ -60,6 +60,31 @@ result, carry it back in with `--section`, record the claims. Then say what the 
 
 Human review happens outside this tool, on the finished artifacts.
 
+## The failure path is part of the cycle
+
+A run that regressed, or lost a unit, **still seals, still writes a report, and still says most
+of its tasks are done.** `scprofile agenda` reads the run's own records and surfaces two things
+before the writing step, because both were walked past once:
+
+- **A capacity regression is not automatically a breakage.** Deliberately removing a duplicated
+  figure lowers the figure count and the guard reports it, correctly. The guard cannot know which
+  it is; you can. Say which, in the run log, before writing anything up.
+- **One failed unit downgrades every other unit's verdict.** A single instance failing produces a
+  run-level diagnosis that marks all instances suspect, and the suspect count then reads as that
+  many broken units. Read which unit actually failed; the rest of the run may be sound.
+
+Two ordering rules follow, both paid for:
+
+- **Settle the figure set before writing the section.** The paper numbers figures in order, so
+  adding or removing one renumbers every citation after it — and a section written against the
+  old set cites the wrong plates while reading perfectly.
+- **Fix the figures before looking at them.** A review is bound to the image, so redrawing
+  destroys it. A sweep taken before a fix round is a sweep thrown away.
+
+And one thing about watching a job: **the seal lags the queue.** A finished job leaves `qstat`
+before its trap's write to a network filesystem is visible, so "job gone and no `SEALED.txt`" is
+not a failure until you have re-checked. `FAILED.txt` is the marker that means failure.
+
 ## One run produces all of its output
 
 **A run is a unit.** Its objects, its figures and its documents all come from ONE tool version,

@@ -91,6 +91,43 @@ with tempfile.TemporaryDirectory() as td:
           "is how one figure gets two reviews and another none")
     check(_RV.SHARD_FLOOR > 1, "the shard floor is not a floor")
 
+    # THE FAILURE PATH IS PART OF THE CYCLE. A run that regressed or lost a unit still seals and
+    # still reports five of six tasks done, so an agenda that does not read its own records walks
+    # an agent past the problem into the writing.
+    import json as _json
+    ids = [x["id"] for x in AG.tasks(run, "p", how=AG.PBS)]
+    check("account" in ids, "the agenda has no step for what the run reports against itself")
+    check(ids.index("account") < ids.index("write"),
+          "accounting for the run comes after writing it up: %r" % (ids,))
+    clean = {t["id"]: t for t in AG.tasks(run, "p", how=AG.PBS)}["account"]
+    check(clean["state"] == AG.DONE,
+          "a run with nothing against it still shows an outstanding accounting step")
+    (run / "CAPACITY.json").write_text(
+        _json.dumps({"regressions": ["figures: 10 -> 7"]}), encoding="utf-8")
+    (run / "RUN_CARD.json").write_text(_json.dumps({"instances": [
+        {"unit": "u1", "state": "empty", "verdict": "suspect"},
+        {"unit": "u2", "state": "done", "verdict": "suspect"},
+        {"unit": "u3", "state": "done", "verdict": "suspect"}]}), encoding="utf-8")
+    hz = AG.health(run)
+    kinds = " ".join(h["what"] for h in hz)
+    check("regression" in kinds, "a capacity regression is not surfaced: %r" % (kinds,))
+    check("did not produce" in kinds, "the unit that actually failed is not named: %r" % (kinds,))
+    # THE ONE THAT WAS MISREAD: 3 suspect, 1 actually failed. Reporting 3 broken units is wrong.
+    _susp = [h for h in hz if "non-ok verdict" in h["what"]]
+    check(_susp and "only 1 of them actually failed" in _susp[0]["why"],
+          "the agenda does not separate the units that failed from the ones downgraded by them")
+    dirty = {t["id"]: t for t in AG.tasks(run, "p", how=AG.PBS)}["account"]
+    check(dirty["state"] == AG.PENDING, "findings against the run leave the step done")
+    check(dirty["state"] != AG.BLOCKED and
+          {t["id"]: t for t in AG.tasks(run, "p", how=AG.PBS)}["brief"]["state"] != AG.BLOCKED,
+          "an intended removal halts the whole cycle, which is how a step gets switched off")
+    _run_task = AG.execution_task(run, AG.PBS)
+    check("lags the queue" in _run_task["why"].lower(),
+          "the watch recipe does not say the seal lags the queue, which twice made a sealed run "
+          "read as a failure")
+    (run / "CAPACITY.json").unlink()
+    (run / "RUN_CARD.json").unlink()
+
     st = _state(run)
     # THE COMPUTE STEP IS DONE ONCE THE RUN WROTE ITS OWN RECORD, NOT ONLY ONCE THE JOB SEALED.
     # The agenda is emitted while the report renders, which is BEFORE the batch script's trap
