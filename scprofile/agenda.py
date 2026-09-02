@@ -39,6 +39,14 @@ DONE, PENDING, BLOCKED = "done", "pending", "blocked"
 
 NAME = "AGENDA.md"
 
+#: Where the agent records what the run's own findings MEAN. Beside the run, because the finding
+#: is a property of the run and so is the reading of it.
+ACCOUNT = "ACCOUNTING.md"
+
+#: Long enough that "fine" is not an accounting. Same reasoning as a review note: the check cannot
+#: judge whether a sentence is true, so it checks the one thing it can - that somebody wrote one.
+ACCOUNT_WORDS = 20
+
 #: HOW THE COMPUTE HALF EXECUTES, which changes what the agent has to do about it and nothing
 #: else. `pbs` is a scheduler: the work runs detached on another machine and cannot call back.
 #: `local` is a subprocess: it finishes before the next line.
@@ -275,6 +283,12 @@ def tasks(run, plugin, spec=None, how=None):
     how = mode(how)
     started = (run / "report.json").is_file()
     hz = health(run) if started else []
+    # AN ACCOUNTING IS AN ARTIFACT, like every other state here. The step asked an agent to "say
+    # which findings were intended" and gave it nowhere to say it, so the answer lived in a
+    # session and died with it - and the next agent met the same findings with no record that
+    # anyone had ever looked. A task whose result has no home is a task that gets skipped.
+    accounted = (run / ACCOUNT).is_file() and len(
+        (run / ACCOUNT).read_text(encoding="utf-8", errors="replace").split()) >= ACCOUNT_WORDS
     t = [execution_task(run, how),
          # ACCOUNT FOR THE RUN BEFORE WRITING IT UP. A run that regressed or lost a unit still
          # seals, still reports, and still says five of six tasks are done - so an agenda without
@@ -284,13 +298,15 @@ def tasks(run, plugin, spec=None, how=None):
          {"id": "account", "title": (f"Account for what the run reports against itself "
                                      f"({len(hz)} finding(s))" if hz else
                                      "Account for what the run reports against itself"),
-          "state": (DONE if (started and not hz) else PENDING if started else BLOCKED),
+          "state": (DONE if (started and (not hz or accounted))
+                    else PENDING if started else BLOCKED),
           "why": "the run's own records say whether it produced less than its sibling and which "
                  "units failed; both look like breakage and neither necessarily is",
           "how": [f"{h['what']}: {h['detail']}" for h in hz]
                  + ([hz[0]["why"]] if hz else []),
-          "do": f"scprofile capacity --out {run}   # then say, in the run log, which findings "
-                f"were intended"},
+          "do": f"write {run / ACCOUNT} saying which finding was intended and which was not - "
+                f"at least {ACCOUNT_WORDS} words, one line per finding. `scprofile capacity "
+                f"--out {run}` prints the numbers behind them."},
          {"id": "brief", "title": "Read the writing brief",
           "state": DONE if brief.is_file() else (PENDING if started else BLOCKED),
           "why": "the evidence this result is written from, with every number's file named",

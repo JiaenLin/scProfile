@@ -132,6 +132,20 @@ with tempfile.TemporaryDirectory() as td:
     check("lags the queue" in _run_task["why"].lower(),
           "the watch recipe does not say the seal lags the queue, which twice made a sealed run "
           "read as a failure")
+    # AN ACCOUNTING IS AN ARTIFACT. The step used to ask an agent to "say which findings were
+    # intended" and give it nowhere to say it, so the answer lived in a session and died with it,
+    # and the next agent met the same findings with no record that anyone had looked.
+    _acc = run / AG.ACCOUNT
+    check(not _acc.exists(), "fixture already carries an accounting")
+    _acc.write_text("too short", encoding="utf-8")
+    check({t["id"]: t for t in AG.tasks(run, "p", how=AG.PBS)}["account"]["state"] == AG.PENDING,
+          "a two-word accounting closed the step, so 'fine' would count as having looked")
+    _acc.write_text(" ".join(f"word{i}" for i in range(AG.ACCOUNT_WORDS + 5)), encoding="utf-8")
+    check({t["id"]: t for t in AG.tasks(run, "p", how=AG.PBS)}["account"]["state"] == AG.DONE,
+          "a written accounting does not close the step, so it can never be finished")
+    check(str(_acc) in {t["id"]: t for t in AG.tasks(run, "p", how=AG.PBS)}["account"]["do"],
+          "the step does not say WHERE to write the accounting")
+    _acc.unlink()
     (run / "CAPACITY.json").unlink()
     (run / "RUN_CARD.json").unlink()
 
