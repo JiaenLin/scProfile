@@ -34,7 +34,7 @@ def check(ok, msg):
 
 
 def _state(run, plugin="p"):
-    return {t["id"]: t["state"] for t in AG.tasks(run, plugin)}
+    return {t["id"]: t["state"] for t in AG.tasks(run, plugin, how=AG.LOCAL)}
 
 
 with tempfile.TemporaryDirectory() as td:
@@ -42,6 +42,25 @@ with tempfile.TemporaryDirectory() as td:
     (run / "kernels" / "p" / "figures").mkdir(parents=True)
     (run / "report.json").write_text('{"kernels": {"p": {}}}', encoding="utf-8")
     (run / "kernels" / "p" / "figures" / "a.png").write_bytes(b"PNG-A")
+
+    # BEFORE ANYTHING HAS RUN, every step after the run is blocked - including writing, which
+    # an empty outstanding list once made look available on a run that did not exist.
+    nothing = Path(td) / "not-yet"
+    pre = {t["id"]: t["state"] for t in AG.tasks(nothing, "p", how=AG.PBS)}
+    check(pre["run"] == AG.PENDING, "the run itself is not the first task: %r" % pre)
+    check(pre["write"] == AG.BLOCKED,
+          "writing shows as available before anything has run, because an empty figure list "
+          "read as a finished one: %r" % pre)
+    check(all(pre[k] == AG.BLOCKED for k in ("brief", "look", "carry", "defend")),
+          "a step whose input cannot exist yet is not blocked: %r" % pre)
+
+    # AND THE MODE CHANGES WHAT THE COMPUTE STEP TELLS THE AGENT TO DO, and nothing else.
+    pbs = AG.execution_task(nothing, AG.PBS)
+    loc = AG.execution_task(nothing, AG.LOCAL)
+    check("watch" in pbs["why"].lower() and "detached" in pbs["why"].lower(),
+          "pbs mode does not tell the agent the job runs detached and must be watched")
+    check("watch" not in loc["why"].lower(),
+          "local mode tells the agent to watch a job that finishes in front of it")
 
     st = _state(run)
     check(st["brief"] == AG.PENDING, "a run with no brief does not ask for one: %r" % st)

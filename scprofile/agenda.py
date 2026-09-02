@@ -132,7 +132,13 @@ def tasks(run, plugin, spec=None, how=None):
                  "while the suite was green; a table shows none of them",
           "do": f'scprofile review --out {run} --plugin {plugin} --figure <path> --note "..."'},
          {"id": "write", "title": "Write the result",
-          "state": DONE if authored else (BLOCKED if out else PENDING),
+          # AN EMPTY OUTSTANDING LIST IS NOT A FINISHED ONE. Before the run there are no
+          # figures at all, so "nothing outstanding" was read as "all looked at" and writing
+          # showed as available on a run that did not exist yet - which is precisely the order
+          # this list exists to enforce.
+          "state": (DONE if authored
+                    else PENDING if (started and not out)
+                    else BLOCKED),
           "why": f"against {B.SKILL}/SKILL.md"
                  + (f" and the template this plugin declares, "
                     f"{B.SKILL}/templates/{tmpl}.md" if tmpl
