@@ -2884,6 +2884,33 @@ def _review(a):
         print(f"recorded: {rec['figure']}  ({rec['sha256'][:12]})")
         return 0
 
+    # THE SPLIT IS THE TOOL'S TO MAKE, NOT THE AGENT'S TO INVENT. Looking at the figures is the
+    # slowest step in the cycle and the one that parallelises without argument, so an agent is
+    # told to fan it out - and an agent inventing its own division of the list is how one figure
+    # gets two reviews and another gets none.
+    if getattr(a, "shards", 0):
+        groups = RV.shards(out, a.plugin, a.shards)
+        want = getattr(a, "shard", 0)
+        total = sum(len(g) for g in groups)
+        if total < RV.SHARD_FLOOR:
+            print(f"  {total} figure(s) outstanding - below {RV.SHARD_FLOOR}, where splitting "
+                  f"the work costs more than it saves. Take them in one pass.")
+        for i, g in enumerate(groups, 1):
+            if want and i != want:
+                continue
+            print(f"\n# shard {i} of {len(groups)} - {len(g)} figure(s)")
+            for r in g:
+                print(r)
+        if not want:
+            print(f"\n# {total} outstanding, split {len(groups)} ways, siblings kept together.")
+            print("# Each shard is one agent's work. Record every look against THIS run "
+                  "directory:")
+            print(f"#   scprofile review --out {out} --plugin {a.plugin or '<plugin>'} "
+                  f"--figure <path> --note \"...\"")
+            print("# The ledger is append-only and locked per write, so agents may record "
+                  "concurrently.")
+        return 0
+
     rows = RV.status(out, a.plugin)
     counts = RV.summarise(out, a.plugin)
     if not rows:
@@ -3572,6 +3599,13 @@ def main(argv=None):
     rv.add_argument("--strict", action="store_true",
                     help="exit non-zero while any figure is unreviewed or has been redrawn "
                          "since it was reviewed. For a gate, a CI step, or a job script.")
+    rv.add_argument("--shards", type=int, default=0, metavar="N",
+                    help="split the OUTSTANDING figures into N disjoint groups and print them, "
+                         "one per agent. Siblings stay together, because a differential panel "
+                         "means little without the arm networks beside it")
+    rv.add_argument("--shard", type=int, default=0, metavar="K",
+                    help="print only shard K of --shards N - what ONE agent in the fan-out "
+                         "opens")
     rv.set_defaults(fn=_review)
 
     pa = sub.add_parser("paper",

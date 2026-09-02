@@ -187,9 +187,71 @@ def record(out, figure, note, *, reviewer="", plugin=""):
            "reviewer": str(reviewer or ""), "at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                                                 time.gmtime())}
     ledger_path(root, plugin).parent.mkdir(parents=True, exist_ok=True)
-    with open(ledger_path(root, plugin), "a", encoding="utf-8") as fh:
-        fh.write(json.dumps(rec) + "\n")
+    _append_line(ledger_path(root, plugin), json.dumps(rec))
     return rec
+
+
+#: How long to wait for another writer's append, and when to treat its lock as abandoned.
+APPEND_WAIT_S = 20.0
+APPEND_STALE_S = 60.0
+
+
+def _append_line(path, line):
+    """Append one line under an exclusive-create lock, waiting for other writers.
+
+    THE LEDGER HAS MORE THAN ONE WRITER NOW. Looking at figures is the slowest step in the cycle
+    and it parallelises perfectly - the figures are independent and the record is append-only -
+    so the agenda tells an agent to fan the step out. That makes concurrent appends normal rather
+    than exotic, and `open(..., "a")` is not enough for it: O_APPEND atomicity is a guarantee of
+    the LOCAL filesystem, and a run under a scheduler lives on a network filesystem where the
+    client can do its own read-modify-write of the offset. Two agents recording at the same
+    instant would then produce one interleaved line - a ledger that fails to parse, discovered
+    long after the looks that filled it.
+
+    A LOCK THAT REFUSES WOULD BE THE WRONG LOCK. `refs._DirLock` refuses a second writer, which
+    is right for a download that would corrupt a file and wrong here: the second writer has done
+    the work already and only needs its turn. This one waits, and takes over a lock nobody has
+    touched for `APPEND_STALE_S` so an agent killed mid-append cannot block the rest for ever.
+    """
+    import os
+    import socket
+    lock = Path(str(path) + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.time() + APPEND_WAIT_S
+    held = False
+    while True:
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.write(fd, f"{os.getpid()} {socket.gethostname()}\n".encode())
+            os.close(fd)
+            held = True
+            break
+        except FileExistsError:
+            try:
+                age = time.time() - lock.stat().st_mtime
+            except OSError:
+                continue
+            if age > APPEND_STALE_S:
+                # ABANDONED, NOT BUSY. Unlink and go round; whoever wins the next O_EXCL owns it.
+                try:
+                    lock.unlink()
+                except OSError:
+                    pass
+                continue
+            if time.time() > deadline:
+                break
+            time.sleep(0.05)
+    try:
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+    finally:
+        if held:
+            try:
+                lock.unlink()
+            except OSError:
+                pass
 
 
 def status(out, plugin=""):
@@ -227,6 +289,45 @@ def outstanding(out, plugin=""):
     # A CARRIED LOOK IS A LOOK. It was taken on these exact bytes; which run it was taken in is
     # provenance, not a reason to demand it again.
     return [(r, st) for r, st, _w in status(out, plugin) if st not in (REVIEWED, CARRIED_OK)]
+
+
+#: Below this many outstanding figures, splitting the work costs more than it saves.
+SHARD_FLOOR = 12
+
+
+def shards(out, plugin="", n=2):
+    """Split the OUTSTANDING figures into `n` disjoint groups. Returns a list of lists.
+
+    WHY THE TOOL DOES THE SPLITTING. Opening the figures is the slowest step in the cycle and the
+    only one that parallelises without argument: the panels are independent, nothing is computed,
+    and the record is append-only. An agent that wants to fan the step out across several agents
+    otherwise has to invent a split - and an invented split is where the same figure gets two
+    reviews and another gets none, which the ledger then reports as outstanding for ever.
+
+    SIBLINGS STAY TOGETHER. Groups are formed by DIRECTORY first, because every plugin writes one
+    directory per unit or per contrast, and the figures in one are the ones that have to be read
+    against each other: a differential heatmap means little without the two arm networks beside
+    it. Balancing figure counts while cutting a contrast in half would produce even shards and
+    incoherent ones, and the note an agent can write about half a contrast is worth less than the
+    minute the balance saved.
+
+    The split is over what is OUTSTANDING, not over every figure, so a second pass after a partial
+    review divides only what is left.
+    """
+    n = max(1, int(n))
+    left = [r for r, _st in (outstanding(out, plugin) or [])]
+    if not left:
+        return [[] for _ in range(n)]
+    groups = {}
+    for rel in left:
+        groups.setdefault(str(Path(rel).parent), []).append(rel)
+    # Largest directory first into the emptiest bin: greedy, deterministic, and it keeps the
+    # biggest indivisible unit from being the thing that unbalances the last bin.
+    bins = [[] for _ in range(n)]
+    for _d, members in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+        j = min(range(n), key=lambda i: (len(bins[i]), i))
+        bins[j].extend(sorted(members))
+    return [sorted(b) for b in bins]
 
 
 def summarise(out, plugin=""):

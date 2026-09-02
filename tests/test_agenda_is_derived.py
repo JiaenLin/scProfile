@@ -73,8 +73,23 @@ with tempfile.TemporaryDirectory() as td:
           "brief's markdown to find the images: %r" % (_how[:120],))
     check("--files-from" in _how or "-T " in _how,
           "the pbs look step names no way to move the set in one operation: %r" % (_how[:120],))
-    check(not (_look_l.get("how") or []),
+    check(not any("rsync" in h for h in (_look_l.get("how") or [])),
           "local mode is told to transfer files that are already in front of it")
+
+    # AND IT SAYS TO FAN THE STEP OUT - but only when there is enough of it to be worth splitting.
+    # An instruction to parallelise four figures is an instruction ignored along with the ones
+    # that matter, so the floor is part of the mechanism and is tested in both directions.
+    import scprofile.review as _RV
+    _small = " ".join(AG._fanout(run, "p", 3))
+    _big = " ".join(AG._fanout(run, "p", 200))
+    check(not _small, "the agenda tells an agent to split three figures across agents: %r"
+          % (_small[:100],))
+    check("--shards" in _big and "PARALLELISES" in _big.upper(),
+          "a 200-figure look step does not tell the agent it can be split: %r" % (_big[:160],))
+    check("do not divide the list yourself" in _big.lower(),
+          "the agent is told to parallelise without being told the tool cuts the shards, which "
+          "is how one figure gets two reviews and another none")
+    check(_RV.SHARD_FLOOR > 1, "the shard floor is not a floor")
 
     st = _state(run)
     # THE COMPUTE STEP IS DONE ONCE THE RUN WROTE ITS OWN RECORD, NOT ONLY ONCE THE JOB SEALED.

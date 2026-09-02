@@ -113,6 +113,15 @@ run-relative path per line — so it moves in one operation:
 Open them from the local copy; record the looks **against the run directory**, because the ledger
 lives with the run. `scprofile agenda --out <run>` prints the exact command for this run's mode.
 
+**This step parallelises, and a large figure set should be split across agents.** Ask the tool
+for the shards rather than dividing the list yourself — an invented split silently leaves figures
+unreviewed:
+
+    scprofile review --out <run> --plugin <p> --shards 4 --shard 1   # one agent's list
+
+Each agent opens its own shard and records its own looks into the same run; the ledger is
+append-only and locked per write.
+
 Why this is a step and not a suggestion: **every figure defect found in this project was found
 by opening the image while the suite was green.** An encoding that contradicted its legend. A
 ranking that hid the thing the panel existed to show. Labels driven off the axes by a fix for

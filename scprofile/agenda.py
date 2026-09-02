@@ -108,6 +108,47 @@ def execution_task(run, how=PBS):
             "why": why, "do": do}
 
 
+#: One agent's share of the looking. Not a limit on how many agents may run - a size at which a
+#: single agent's notes are still specific, since a note copied across panels is refused and a
+#: reviewer who has just seen sixty figures writes exactly that.
+FIGURES_PER_AGENT = 25
+
+
+def _fanout(run, plugin, n_outstanding):
+    """The lines that tell an agent to SPLIT the looking, when there is enough of it to split.
+
+    LOOKING IS THE ONLY STEP IN THIS CYCLE THAT PARALLELISES WITHOUT ARGUMENT. The panels are
+    independent, nothing is computed, and the record is append-only - so a step that takes one
+    agent an hour takes four agents a quarter of it, with the same ledger at the end. It is also
+    the step that gets skipped, and the two facts are the same fact: a task nobody can finish in
+    one sitting is a task that gets a glance and a summary instead.
+
+    THE TOOL PROVIDES THE SPLIT. An agent dividing the list itself is how one figure gets two
+    reviews and another gets none, which the ledger then reports as outstanding for ever.
+    `review --shards N` cuts the OUTSTANDING set into disjoint groups with each unit's figures
+    kept together, and `--shard K` prints one group - the argument to hand a sub-agent.
+
+    SAID ONLY WHEN IT PAYS. Below the floor the split costs more than it saves, and an
+    instruction to parallelise four figures is an instruction that gets ignored along with the
+    ones that matter.
+    """
+    from . import review as R
+    if n_outstanding < R.SHARD_FLOOR:
+        return []
+    k = max(2, -(-int(n_outstanding) // FIGURES_PER_AGENT))
+    return [f"THIS STEP PARALLELISES. {n_outstanding} figures is roughly {k} agents' work at "
+            f"~{FIGURES_PER_AGENT} each. Do not divide the list yourself - ask the tool for "
+            f"disjoint shards, one per agent:",
+            f"    scprofile review --out {run} --plugin {plugin} --shards {k}          "
+            f"# all of them, to dispatch",
+            f"    scprofile review --out {run} --plugin {plugin} --shards {k} --shard 1 "
+            f"# one agent's list",
+            "each agent opens its own shard and records its own looks; the ledger is append-only "
+            "and locked per write, so they may record at the same time. A note is refused if it "
+            "repeats another figure's, so the shards must not overlap - which is why the tool "
+            "cuts them and not you."]
+
+
 def _authored(run, plugin):
     """(exists, authored) for the plugin's section. Composed is not authored."""
     from . import compose as C
@@ -175,7 +216,8 @@ def tasks(run, plugin, spec=None, how=None):
                    f"{B.FIGURE_LIST} -czf figures.tgz   (then fetch and unpack that)",
                    "open every one from the local copy - then record each look AGAINST THE RUN "
                    "DIRECTORY, not the copy, because the ledger lives with the run and is bound "
-                   "to the image the run holds."] if how == PBS else []),
+                   "to the image the run holds."] if how == PBS else []) + _fanout(run, plugin,
+                                                                                   len(out)),
           "do": f'scprofile review --out {run} --plugin {plugin} --figure <path> --note "..."'},
          {"id": "write", "title": "Write the result",
           # AN EMPTY OUTSTANDING LIST IS NOT A FINISHED ONE. Before the run there are no

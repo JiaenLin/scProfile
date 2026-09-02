@@ -97,6 +97,27 @@ lives with the run and binds a note to the sha256 of the image the run holds.
 The host names the list, the run root and the direction; it does not know your hostname or where
 you keep files, and does not guess.
 
+### The looking parallelises — let the tool cut the shards
+
+Opening every panel is the slowest step in the cycle and the one most often skipped, and those
+are the same fact: a task nobody can finish in one sitting gets a glance and a summary instead.
+It is also the only step that parallelises without argument — the panels are independent, nothing
+is computed, and the record is append-only. **So fan it out across several agents.**
+
+    scprofile review --out <run> --plugin <p> --shards 4            # all four, to dispatch
+    scprofile review --out <run> --plugin <p> --shards 4 --shard 1  # one agent's list
+
+**Do not divide the list yourself.** An invented split is how one figure gets two reviews and
+another gets none — and the second is invisible, because the ledger simply goes on reporting it
+as outstanding. The tool's split is disjoint, covers exactly what is still outstanding, and keeps
+each unit's figures in one shard, because a differential panel means little without the arm
+networks beside it.
+
+Each agent opens its own shard and records its own looks against the same run. The ledger is
+append-only and locked per write, so they may record at the same time. `scprofile agenda` says
+how many shards the outstanding count is worth and stays quiet below the floor, where splitting
+costs more than it saves.
+
 **Step two is a step, not advice.** Every figure defect ever found in this project was found by
 opening the image while the test suite was green: an encoding that contradicted its legend, a
 ranking that hid the thing the panel was drawn for, labels driven off the axes by a fix for
