@@ -759,6 +759,13 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             "units": {lo: str((base / d_lo) if not Path(d_lo).is_absolute() else Path(d_lo)),
                       hi: str((base / d_hi) if not Path(d_hi).is_absolute() else Path(d_hi))},
             "out_dir": str(kdir / "compare" / str(label)),
+            # THE SAME BLOCK THE PER-UNIT SIDE GETS. Wiring the colour map and the stamp into the
+            # per-unit script alone left three mutually inconsistent palettes in one run - the
+            # per-unit natives, the comparison bars, and the host's own F-series - which is the
+            # exact cross-family mismatch the block exists to remove, surviving in the layer where
+            # a reader is most likely to carry a colour across. Found by opening 62 figure kinds
+            # after two panels from one family had been taken as evidence for all of them.
+            "figure_context": _fig_ctx(out_dir),
         }
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
             _json.dump(spec_json, fh)
@@ -911,6 +918,13 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             "members": _mem,
             "unit_values": _vals,
             "out_dir": str(cdir),
+            # THE SAME BLOCK THE PER-UNIT SIDE GETS. Wiring the colour map and the stamp into the
+            # per-unit script alone left three mutually inconsistent palettes in one run - the
+            # per-unit natives, the comparison bars, and the host's own F-series - which is the
+            # exact cross-family mismatch the block exists to remove, surviving in the layer where
+            # a reader is most likely to carry a colour across. Found by opening 62 figure kinds
+            # after two panels from one family had been taken as evidence for all of them.
+            "figure_context": _fig_ctx(out_dir),
         }
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
             _json.dump(spec_json, fh)

@@ -26,6 +26,7 @@ kernels live in pinned environments and this module is imported into all of them
 """
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 #: Journal column widths in inches. Most journals want one or the other, exactly.
@@ -167,9 +168,32 @@ def palette(labels):
     The palette is longer now, and where it still runs out `palette_collisions` names the pairs so
     a caller can say so or label the points directly. It never silently repeats without that being
     answerable.
+
+    AND IT USED TO ROTATE, ALSO SILENTLY, WHICH IS WHAT THE FIRST LINE OF THIS DOCSTRING PROMISED
+    IT DID NOT. The index was the label's POSITION in the sorted list, so two panels of the same
+    run drawn on different population sets disagreed about every colour after the first insertion.
+    Measured by sampling pixels across one run's figures: an eleven-population panel gave
+    Fibroblast the nine-population panel's Smooth-muscle colour, and three more populations each
+    took their neighbour's. Only the labels before the first extra one kept their colours - which
+    is the worst possible shape, because a reader checks two or three and concludes the map holds.
+    The docstring asserted the property; the code took a position.
+
+    The slot is now chosen from the LABEL ITSELF, so a colour depends on its own name and on
+    nothing else. Where two labels hash to one slot the later by sorted name takes the next free
+    one, which is deterministic and touches only the colliding pair - so set-independence is exact
+    everywhere except inside a collision.
     """
     labs = sorted(map(str, labels))
-    return {l: CATEGORY_COLOURS[i % len(CATEGORY_COLOURS)] for i, l in enumerate(labs)}
+    n = len(CATEGORY_COLOURS)
+    taken, out = set(), {}
+    for lab in labs:
+        i = int(hashlib.sha1(lab.encode("utf-8")).hexdigest()[:8], 16) % n
+        if len(taken) < n:
+            while i in taken:
+                i = (i + 1) % n
+        taken.add(i)
+        out[lab] = CATEGORY_COLOURS[i]
+    return out
 
 
 def palette_collisions(labels):

@@ -128,6 +128,43 @@ ck("no context means no absence note", _n.figure_absence() == "")
 ck("a label with no colour simply does not come back",
    list(_c.figure_colours(["not-a-label", POPS[0]])) == [POPS[0]])
 
+print("\nthe HOST's own palette is keyed on the label too, not on its position")
+from scprofile.figure import palette as _pal, CATEGORY_COLOURS as _CC              # noqa: E402
+# THE DEFECT, MEASURED AT PIXEL LEVEL ON A REAL RUN: `palette` indexed by POSITION in the sorted
+# label list, so a panel drawn on eleven populations gave one population the colour a
+# nine-population panel had given another. Its own docstring promised "same label, same colour, in
+# every figure" - the sentence was true of the intent and false of the code.
+_full = [f"Group{i}/Type {c}" for i, c in enumerate("abcdefghijkl")]
+_sub = [x for i, x in enumerate(_full) if i % 3]
+_a, _b = _pal(_full), _pal(_sub)
+_moved = [k for k in _b if _a[k] != _b[k]]
+
+
+def _positional(labels):
+    """What it used to do: index by POSITION in the sorted list."""
+    labs = sorted(map(str, labels))
+    return {x: _CC[i % len(_CC)] for i, x in enumerate(labs)}
+
+
+_oa, _ob = _positional(_full), _positional(_sub)
+_omoved = [k for k in _ob if _oa[k] != _ob[k]]
+# THE CLAIM IS COMPARATIVE, AND DELIBERATELY NOT "NOTHING MOVES". Exact set-independence needs a
+# colour per label with no probing, and measured on this cohort's thirteen real populations that
+# gives SIX collisions - four populations sharing one colour, which is unusable inside a single
+# panel. So a collision takes the next free slot, and the price is that a label colliding with a
+# label that is only sometimes present can move. Measured: the old positional scheme recoloured
+# 9 of 9 populations when four were dropped; this recolours 2.
+ck("the old positional scheme recoloured everything, which is the defect",
+   len(_omoved) == len(_ob), f"only {len(_omoved)} of {len(_ob)} moved under the old scheme")
+ck("keying on the label leaves most of them alone", len(_moved) * 3 < len(_ob),
+   f"{len(_moved)} of {len(_b)} still moved: {_moved[:3]}")
+ck("and it is strictly better than what it replaced", len(_moved) < len(_omoved))
+ck("and colours are still distinct while the palette has room",
+   len(set(_a.values())) == len(_a), f"{len(_a) - len(set(_a.values()))} collision(s)")
+ck("a single label resolves the same alone as in company",
+   _pal([_full[0]])[_full[0]] == _a[_full[0]])
+ck("every colour comes from the curated list", set(_a.values()) <= set(_CC))
+
 print("\nnothing here knows about any particular method or project")
 src = Path(FC.__file__).read_text(encoding="utf-8").lower()
 for word in ("cell" + "chat", "cardio" + "myocyte", "path" + "way", "lig" + "and_pair",

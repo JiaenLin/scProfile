@@ -1062,7 +1062,11 @@ class CompareContext:
     """
 
     def __init__(self, *, pair, units, out, config=None, members=None, unit_values=None,
-                 interactions=None, log=print):
+                 interactions=None, figure_context=None, log=print):
+        #: The host's figure context - the run's stable label->colour map and the stamp. Read it
+        #: through the same accessors the per-unit Context exposes; a comparison needs it MORE, not
+        #: less, because a differential names two arms and a direction that appear nowhere else.
+        self.figure_context = dict(figure_context or {})
         #: A label for this comparison, e.g. `age__aged__young`. Used in filenames.
         self.pair = str(pair)
         #: {unit_name: Path} - the finished units, in the order the contrast names them.
