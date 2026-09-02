@@ -145,6 +145,39 @@ def absence(all_labels, drawn_labels):
                      + ". These are absent from this panel; the panel says nothing about them.")}
 
 
+def caption_suffix(ctx):
+    """The sentence the REPORT adds to every caption, whatever the plugin drew.
+
+    THE PANEL AND ITS CAPTION MUST NOT BE ABLE TO DISAGREE, and the caption is the half the host
+    controls. A wrapped tool's own plotting function will not stamp our unit name into its title
+    and should not be rewritten to - reimplementing an upstream figure layer to add a subtitle is
+    the trade this project has already paid for once. So the panel stays as the tool draws it and
+    the caption carries what the tool could not know: which unit, how big it was, which way a
+    difference runs, and what is not in the picture.
+
+    That is why this is worth having even for panels the host did not draw. It is not a substitute
+    for a title on the image - a PNG opened outside the report still carries none - and the plugin
+    should stamp what it can. It is the floor.
+    """
+    if not isinstance(ctx, dict):
+        return ""
+    bits = []
+    st = str(ctx.get("stamp") or "").strip()
+    if st:
+        bits.append(st + ".")
+    note = str(ctx.get("note") or "").strip()
+    if note:
+        bits.append(note)
+    key = str(ctx.get("colour_key") or "").strip()
+    if key:
+        # A COLOUR MAP IS A PROPERTY OF THE RUN, and two runs with different maps must not be laid
+        # side by side. Printing the digest is what lets a reader notice, rather than trusting that
+        # two figures from two runs share a palette because they look like they might.
+        bits.append(f"Population colours are the run's own map (key {key}); "
+                    f"the same label is the same colour in every panel of this run.")
+    return " ".join(bits)
+
+
 def build(labels=(), unit=None, unit_kind="", members=(), n_cells=None, contrast=None,
           drawn_labels=None):
     """The whole block, as it goes into `in.json` under `figure_context`.

@@ -1005,9 +1005,51 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi):
                  if (lo and hi) else
                  "Every arm the design crosses, on one axis.")
                 + (lifted if has_pops else ""))
-        out.append((f"NC_{label}_{stem}", str(f), (lead, rest), str(label),
+        # THE HOST'S FLOOR ON EVERY CAPTION. A wrapped tool's plotting function will not stamp
+        # our unit name or our contrast direction into its own title, and rewriting its figure
+        # layer to make it would be the trade this project has already paid for once. The caption
+        # is the half the host controls, so it carries what the image could not know.
+        from . import figure_context as _FCx
+        _sfx = _FCx.caption_suffix(_fig_ctx(out_dir, label,
+                                            contrast={"reference": lo, "against": hi}
+                                            if (lo and hi) else None))
+        out.append((f"NC_{label}_{stem}", str(f),
+                    (lead, rest + (f" {_sfx}" if _sfx else "")), str(label),
                     str(f.relative_to(Path(out_dir)))))
     return out
+
+
+_FIG_CTX_CACHE = {}
+
+
+def _fig_ctx(out_dir, unit=None, contrast=None):
+    """The run's figure context for one unit, RECOMPUTED from report.json by the same function.
+
+    NOT A SECOND COPY OF THE DATA. `report.json` already carries the label totals, the unit
+    members and the unit axis; the reporter builds the context from those with the host's own
+    `figure_context.build`, so the caption and the plugin's in.json cannot drift - there is one
+    implementation and two callers, rather than one value written twice.
+    """
+    import json as _json
+    from . import figure_context as _FC
+
+    root = str(Path(out_dir).resolve())
+    if root not in _FIG_CTX_CACHE:
+        try:
+            _FIG_CTX_CACHE[root] = _json.loads(
+                (Path(out_dir) / "report.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            _FIG_CTX_CACHE[root] = {}
+    pay = _FIG_CTX_CACHE[root]
+    lab = pay.get("label_total") or {}
+    if not lab:
+        return {}
+    by_unit = (pay.get("label_by_unit") or {}).get(str(unit)) or {}
+    return _FC.build(labels=list(lab.keys()), unit=unit,
+                     unit_kind=(pay.get("unit_axis") or {}).get(str(unit)) or "",
+                     members=(pay.get("unit_members") or {}).get(str(unit)) or (),
+                     n_cells=sum(by_unit.values()) or None,
+                     contrast=contrast)
 
 
 def _units_by_arm(units, design, declared, *, out_dir=None, name=""):
@@ -1621,6 +1663,8 @@ def _native_unit_panels(out_dir, name, declared, axis):
         if not d.is_dir():
             continue
         legends = _CAP.read(d)
+        from . import figure_context as _FCx
+        _ctx_sfx = _FCx.caption_suffix(_fig_ctx(out_dir, unit))
         for f in sorted(d.glob("*.png")):
             fn = _NAT.function_for(declared, f.name)
             if not fn:
@@ -1634,7 +1678,8 @@ def _native_unit_panels(out_dir, name, declared, axis):
                 "path": str(f.relative_to(Path(out_dir))),
                 "native_function": fn,
                 "caption": f"[{unit}] {body} {prov} "
-                           f"This panel describes {unit} alone and is not a comparison.",
+                           f"This panel describes {unit} alone and is not a comparison."
+                           + (f" {_ctx_sfx}" if _ctx_sfx else ""),
             })
     return out
 

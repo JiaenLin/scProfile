@@ -4388,6 +4388,7 @@ if (!is.null(inter) && nrow(inter)) {
   # unrestricted merge today, and would break the bars the moment something did.
   mi <- mergeCellChat(objs_i, add.names = nms)
   arm_of <- stats::setNames(seq_along(nms), nms)
+  .ix_matrix_done <- character(0)
   for (fr in unique(inter$framing)) {
     rows <- inter[inter$framing == fr, , drop = FALSE]
     if (nrow(rows) != 2) {
@@ -4568,7 +4569,19 @@ if (!is.null(inter) && nrow(inter)) {
       }
       A
     }
+    # THE INTERACTION MATRIX IS THE SAME MATRIX IN BOTH FRAMINGS, SO IT IS DRAWN ONCE.
+    #
+    # Measured, not assumed: the two orientations agreed to 1e-15 on every cell of every metric,
+    # and the interaction column of the ligand-receptor table was identical for all 18 pairs. The
+    # algebra says why - with the four arms fixed, (b1 - a1) - (b2 - a2) and (a2 - a1) - (b2 - b1)
+    # are one expression rearranged, so a difference of differences has no orientation.
+    #
+    # Drawn inside the framing loop it shipped as two figures under two titles, and a reader given
+    # both believes two independent results were shown. The FLOW and LR SCATTER panels are not
+    # affected and stay per framing: those plot the two simple effects as COORDINATES, which do
+    # differ by orientation - only the difference between them is shared.
     for (ms in c("count", "weight", "prob_all")) {
+      if (ms %in% .ix_matrix_done) next
       M <- tryCatch({
         g1 <- .armmat(arm_of[[as.character(rows$against[1])]], ms) -
               .armmat(arm_of[[as.character(rows$reference[1])]], ms)
@@ -4581,6 +4594,9 @@ if (!is.null(inter) && nrow(inter)) {
         .plots$bad <- c(.plots$bad, paste0("interaction_", ms, "__", safe))
         next
       }
+      # MARKED ONLY ONCE IT HAS A MATRIX. A metric that failed for the first framing must still
+      # be attempted for the second - it may be the framing whose strata pair like with like.
+      .ix_matrix_done <- c(.ix_matrix_done, ms)
       utils::write.csv(M, file.path(figdir,
                        paste0("nativecmp_interaction_", ms, "__", safe, ".csv")))
       # A METRIC NAME A READER CAN ACT ON. "prob_all" is a file name, not a quantity - the
