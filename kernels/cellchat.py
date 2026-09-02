@@ -3769,6 +3769,37 @@ args <- commandArgs(trailingOnly = TRUE)
 stopifnot(length(args) >= 5)
 rds_a <- args[1]; rds_b <- args[2]; name_a <- args[3]; name_b <- args[4]; figdir <- args[5]
 
+# args[6]. THE HOST'S FIGURE CONTEXT - the run's stable label->colour map and the line naming this
+# contrast. Read if present, ignored if not, so this script still runs against a host that
+# predates it. Without it CellChat picks a palette per object from whatever order the levels
+# arrive in, and a population drawn orange in a per-unit panel came out red in the comparison of
+# the same run.
+.fctx <- list(stamp = "", absence = "", colours = character(0))
+if (length(args) >= 6 && nzchar(args[6]) && file.exists(args[6])) {
+  .fc <- tryCatch(utils::read.delim(args[6], header = FALSE, sep = "\t", quote = "",
+                                    comment.char = "", stringsAsFactors = FALSE,
+                                    col.names = c("k", "v")),
+                  error = function(e) NULL)
+  if (!is.null(.fc) && nrow(.fc)) {
+    .fctx$stamp <- paste(.fc$v[.fc$k == "stamp"], collapse = "")
+    .cr <- .fc[startsWith(.fc$k, "colour:"), , drop = FALSE]
+    if (nrow(.cr)) .fctx$colours <- stats::setNames(.cr$v, sub("^colour:", "", .cr$k))
+  }
+}
+
+# ORDERED AND NAMED, or NULL. Ordered because `color.use` is positional against the object's own
+# levels; NAMED because netVisual_circle refuses an unnamed vector outright while the heatmap and
+# the scatter accept either - the two upstream functions disagree and this satisfies the stricter.
+# NULL unless every level is covered, since a short vector is recycled silently.
+.cols_for <- function(levs) {
+  if (!length(.fctx$colours)) return(NULL)
+  levs <- as.character(levs)
+  if (!all(levs %in% names(.fctx$colours))) return(NULL)
+  .out <- .fctx$colours[levs]
+  names(.out) <- levs
+  .out
+}
+
 # A PHASE CLOCK, DEFINED AT THE TOP BECAUSE R DOES NOT HOIST. Twice the cost of a round has
 # been diagnosed by assumption and been wrong: the inference was assumed dominant and was not,
 # then the matrix write was, and it takes one to five seconds. Guessing where a run spends its
@@ -3946,15 +3977,23 @@ ndev <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "too
                      legend = c("no counterpart in the other arm,",
                                 "blank here:", paste(absent, collapse = ", ")))
 }
+# THE RUN'S OWN PALETTE FOR THIS CONTRAST. `m` is the merged object; its levels are the union the
+# comparison is drawn on, so the vector is built from those. NULL when the host said nothing or
+# could not cover every level, which is what CellChat receives when the argument is omitted.
+.ccol <- .cols_for(levels(m@idents$joint))
+if (is.null(.ccol)) .ccol <- .cols_for(levels(object.list[[1]]@idents))
+
 ndev("diffInteraction_count", {
-  netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count"); .diffkey()
+  netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count",
+                            color.use = .ccol); .diffkey()
 }, legend = paste0("Which population pairs differ in the NUMBER of inferred interactions. Each ",
                    "node is a population; an edge is drawn where the two arms differ, its width ",
                    "in proportion to the size of that difference. Red is higher in ", name_b,
                    "; blue is higher in ", name_a, ", the reference. An absent edge means the ",
                    "two arms agree, not that the pair does not signal."))
 ndev("diffInteraction_weight", {
-  netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight"); .diffkey()
+  netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight",
+                            color.use = .ccol); .diffkey()
 }, legend = paste0("The same comparison on interaction STRENGTH rather than count. Red is ",
                    "higher in ", name_b, "; blue is higher in ", name_a, ", the reference. ",
                    "Strength and count can disagree: a pair can gain interactions while each is ",
@@ -3968,11 +4007,11 @@ ndev("diffInteraction_weight", {
   paste0(what, ": ", name_b, " against ", name_a,
          "  |  red = higher in ", name_b, ", blue = higher in ", name_a)
 ndev("diff_heatmap_count", ComplexHeatmap::draw(
-  netVisual_heatmap(m, measure = "count",
+  netVisual_heatmap(m, measure = "count", color.use = .ccol,
                     title.name = .diffttl("Differential number of interactions"))),
   w = 2400, h = 1800)
 ndev("diff_heatmap_weight", ComplexHeatmap::draw(
-  netVisual_heatmap(m, measure = "weight",
+  netVisual_heatmap(m, measure = "weight", color.use = .ccol,
                     title.name = .diffttl("Differential interaction strength"))),
   w = 2400, h = 1800)
 
@@ -4010,7 +4049,8 @@ try({
 #    CellChat's own comparison vignette draws it exactly this way: the per-object function,
 #    twice, with a common axis limit computed over both.
 role <- lapply(object.list, function(o)
-  tryCatch(netAnalysis_signalingRole_scatter(o), error = function(e) NULL))
+  tryCatch(netAnalysis_signalingRole_scatter(o, color.use = .cols_for(levels(o@idents))),
+           error = function(e) NULL))
 npng("signalingRole_scatter_pair", {
   gg <- Filter(Negate(is.null), role)
   if (!length(gg)) stop("neither object returned a role scatter")
@@ -5166,8 +5206,12 @@ def compare(ctx):
     with tempfile.NamedTemporaryFile("w", suffix=".R", delete=False) as fh:
         fh.write(_R_COMPARE)
         script = fh.name
+    # args[6] is the HOST's figure context. The per-unit script has read it since the map existed;
+    # the compare scripts did not, so one population was orange in a per-unit panel and red in the
+    # comparison of the same run - the exact cross-family mismatch the map exists to remove,
+    # surviving in the layer where a reader is most likely to carry a colour across.
     cmd = ["Rscript", script, str(rds[0]), str(rds[1]), names[0], names[1],
-           str(ctx.figures())]
+           str(ctx.figures()), str(_write_figure_context(ctx))]
     p = subprocess.run(cmd, capture_output=True, text=True)
     for line in (p.stdout + p.stderr).splitlines():
         if line.strip():
