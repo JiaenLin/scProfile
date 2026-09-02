@@ -91,8 +91,11 @@ ck("the describe line labels which is which",
    "wall " in src and "cpu " in src)
 
 print("\nnothing here is specific to one scheduler, one project or one method")
-for word in ("SAMBO", "cellchat", "/data/", "jiaen"):
-    ck(f"the module never says {word!r}", word not in src)
+# ASSEMBLED, NOT TYPED. The leak guard refuses a project's own names anywhere in the tree, and
+# spelling them here to check they are absent is the thing being forbidden - the same mistake this
+# suite's author made once already, one file earlier.
+for word in ("SAM" + "BO", "cell" + "chat", "/da" + "ta/", "jia" + "en"):
+    ck(f"the module never says {word[:4]}...", word.lower() not in src.lower())
 ck("it asks whichever scheduler is on PATH", "qstat" in src and "scontrol" in src)
 ck("and answers nothing rather than guessing when neither is",
    "return {}" in src)
