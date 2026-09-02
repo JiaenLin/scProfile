@@ -4,7 +4,43 @@
 
 Point it at an annotated single-cell or single-nucleus object and the experiment's design. It
 works out what that experiment can ask, runs the methods that can answer, draws the figures, and
-writes the result section with every claim bound to the figure it was read off.
+hands an agent everything needed to write the result — with every claim bound to the figure it
+was read off.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Methods](https://img.shields.io/badge/methods-9-informational)
+
+```bash
+pip install -e '.[run]'
+
+scprofile plan --h5ad cohort.h5ad --design design.csv --all --report plan/
+scprofile run  --h5ad cohort.h5ad --design design.csv --all --out results/
+open results/report/index.html
+```
+
+Works on any `.h5ad` with counts, a cell-type label and a sample column. Pairs directly with
+[scQC](https://github.com/JiaenLin/scQC) → [scAnno](https://github.com/JiaenLin/scAnno) →
+[scIntegrate](https://github.com/JiaenLin/scIntegrate).
+
+**You never write a wrapper.** Install scProfile, point it at an object, run `plan` then `run`.
+Writing or updating a method is a maintainer job — see
+[docs/MAINTAINING_PLUGINS.md](docs/MAINTAINING_PLUGINS.md).
+
+### What a run leaves behind
+
+```
+results/
+├── report/index.html          the report, and one page per method
+├── kernels/<method>/
+│   ├── figures/               every panel, with its legend and source data
+│   ├── tables/                every number the report quotes
+│   ├── WRITING_BRIEF.md       the evidence to write the result from
+│   └── AGENDA.md              what remains to be done, and in what order
+└── objects/                   the merged object
+```
+
+---
 
 ## The design is the spine
 
@@ -53,24 +89,6 @@ each plugin declares for its own method. `docs/AGENT_CONTRACT.md` states which h
 The boundary between the first two is the plugin runner: everything before it is about getting a
 method to run correctly, everything after it about turning the output into something a reader can
 check. The boundary of the third is the point where judgement starts.
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-
-```bash
-pip install -e '.[run]'
-
-scprofile plan --h5ad cohort.h5ad --design design.csv --all --report plan/
-scprofile run  --h5ad cohort.h5ad --design design.csv --all --out results/
-open results/report/index.html
-```
-
-Works on any `.h5ad` with counts, a cell-type label and a sample column. Pairs directly with
-[scQC](https://github.com/JiaenLin/scQC) → [scAnno](https://github.com/JiaenLin/scAnno) →
-[scIntegrate](https://github.com/JiaenLin/scIntegrate).
-
-**You never write a wrapper.** Install scProfile, point it at an object, run `plan` then `run`.
-Writing or updating a method is a maintainer job — see
-[docs/MAINTAINING_PLUGINS.md](docs/MAINTAINING_PLUGINS.md).
 
 ---
 
