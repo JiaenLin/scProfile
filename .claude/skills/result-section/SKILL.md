@@ -48,6 +48,32 @@ is the difference between their section and yours being comparable.
 You are adding **reading**: what the measurements are about, in the language of the field, in the
 order the design gives. **Write it as a research article, not as a report on a run.**
 
+### Discuss the FACTORS, not the contrast labels
+
+**The design varied something. Say what happened when it did.** A factor is an intervention on a
+system, not a column heading: a reader wants to know what the intervention did, in the language of
+the field, and which processes the changed elements belong to.
+
+*Cost, and it is the reason this section exists: a result section reported that one element rose
+from 1.0 to 17.2 and that another set fell together, named every element correctly, and never once
+said what a rise in those elements IS or what the falling set has in common. It discussed the two
+factors purely as labels on a contrast table. Every input to it — the brief, the tables, the
+figure list — was the run describing itself, so the output described the run. A reader who knows
+the field learned what the network did and nothing about what happened to the system.*
+
+Concretely, for each factor and for the interaction:
+
+- **name the process**, not only the elements. If a coherent set moves together, say what set it
+  is and what it does; that is the finding, and the element list is its evidence.
+- **say what the direction means for the system** — what more of this, or less of it, does.
+- **read the arms as states of the system**, not as cells of a table: what kind of system is each
+  arm, and what does the pattern across them say.
+- **use the field's own vocabulary.** A section whose every term came out of the run's own tables
+  has not been read by anyone who knows the subject.
+
+The caveats have their own paragraph at the end and one sentence where a contrast is stated. They
+are not the frame. A result that leads with what it cannot say has not reported anything.
+
 ### You may state findings, and you may state hypotheses
 
 *Standing instruction from the PI, 2026-08-31, replacing an earlier prohibition on "conclusions

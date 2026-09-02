@@ -91,6 +91,23 @@ as the levels get finer - it already costs populations at level 1 and pathways a
 will cost more at ligand-receptor level. Name what was dropped; a smaller matrix drawn silently
 reads as biology.
 
+## What the reader wants from each comparison
+
+A differential network is evidence for a statement about the system, and the statement is what a
+reader keeps. For every comparison, and for the interaction, answer three things in the field's
+own words before moving on:
+
+- **Which coherent programme moved, and what that programme does.** Elements that rise together
+  and share a function are one finding, not five; name the function.
+- **What the direction means for the tissue.** More of a programme is a change of state, and the
+  reader wants the state, not the number.
+- **What the pattern across arms says about the interventions.** Two factors moving the same
+  populations along the same axis is a result about the two interventions, not a coincidence of
+  two contrasts.
+
+**The intervention is the subject.** A section that discusses only which quantity moved has
+described the measurement.
+
 ## The order to write in
 
 The general skill fixes the document's order. Within it, this method's specifics:

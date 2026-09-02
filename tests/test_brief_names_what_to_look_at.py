@@ -36,7 +36,10 @@ C.findings = lambda run, plugin, spec: {"age": {"ratio": 2.0, "reference": "y", 
                                                 "ratio_per_cell": 1.5, "n_significant": 3,
                                                 "n_tested": 4}}
 C.figure_index = lambda run, plugin, spec=None, design=None: IDX
-C._controls = lambda run: {"age": "y"}
+# THE CONTROLS COVER THE DESIGN'S OWN FACTORS. The stub named a factor the fixture design does
+# not have, so the reference-level clause rendered empty and the check for it failed on correct
+# code - a fixture that does not match its own design tests nothing about the design.
+C._controls = lambda run: {"age": "y", "f1": "a", "f2": "x"}
 C._order = lambda f, design, controls=None: ["age"]
 # ONE reviewed, ONE not - so an implementation that marks all or none fails either way.
 R.outstanding = lambda out, plugin="": [("figures/never_opened.png", "unreviewed")]
@@ -96,16 +99,32 @@ with tempfile.TemporaryDirectory() as d:
         _t = Path(p).read_text(encoding="utf-8")
         _head = _t.split("## The contrasts", 1)[0]
         ck2 = lambda name, cond: check(cond, name)
-        ck2("the brief never states what the design forbids",
-            "does not let you claim" in _t)
-        ck2("it states it AFTER the contrasts, where it reorders nothing",
-            "does not let you claim" in _head)
-        ck2("the aliased factor is not named",
-            "aliased with" in _t and "`f2`" in _t)
-        ck2("the constraint text is not carried verbatim",
-            "no abundance claim across f1" in _t)
-        ck2("and it does not say a forbidden headline stays forbidden",
-            "forbidden however strong" in _t)
+        # THE DESIGN COMES FIRST, AS BIOLOGY. Every input to the writing used to be the run
+        # describing itself, so the section that came back described the run: it reported which
+        # quantity moved and never said what a move in it MEANS, and it treated the factors as
+        # labels on a contrast table rather than as the interventions the experiment performed.
+        ck2("the brief does not state the design it resolved",
+            "design this run resolved" in _t)
+        ck2("the design is not stated BEFORE the contrasts", "design this run resolved" in _head)
+        ck2("the factors and their levels are not named", "`f1`" in _head and "`a`" in _head)
+        ck2("the reference level is not named as what a contrast asks",
+            "goes from" in _head)
+        ck2("the interaction is not named as the reason the design was crossed",
+            "crossed rather than run as two separate" in _head)
+        ck2("the marginals are not placed after the simple effects",
+            "read AFTER the simple effects" in _head)
+        ck2("the brief does not ask for the factors to be written as interventions",
+            "as the interventions they are" in _head)
+        ck2("and does not ask what the change MEANS in the field's language",
+            "in the language of the field" in _head)
+        # THE CAVEATS ARE A FOOTNOTE, NOT THE FRAME. The first version of this block opened the
+        # brief and the section that came back led with its caveats and never said the biology.
+        ck2("what the design cannot separate is missing",
+            "cannot separate" in _t and "aliased with" in _t)
+        ck2("it is placed before the contrasts, where it becomes the frame",
+            "cannot separate" not in _head)
+        ck2("and it does not warn against leading with caveats",
+            "has not reported anything" in _t)
 
     # A LEDGER THAT CANNOT BE READ MUST SAY SO, not quietly mark nothing.
     def _boom(out, plugin=""):

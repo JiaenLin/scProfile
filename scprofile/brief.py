@@ -114,52 +114,55 @@ def write_brief(run, plugin, spec=None, design=None):
          + (", ".join(f"`{k} = {v}`" for k, v in sorted(ctl.items())) if ctl
             else "not declared, so direction cannot be assumed") + ".", ""]
 
-    # WHAT THE DESIGN FORBIDS COMES BEFORE WHAT IT MEASURED.
+    # THE DESIGN THE RUN RESOLVED, FIRST, AND AS BIOLOGY RATHER THAN AS BOOKKEEPING.
     #
-    # The brief listed contrasts, figures and caveats and said NOTHING about the constraint the
-    # upstream object carries or about which factors are aliased - both of which the run holds in
-    # `report.json` and one of which the composer already prints. So a section was written from
-    # the tables alone: it led with a factor's main effect, put the confound in a limitations
-    # sentence at the end, and never mentioned the constraint at all. The author was not careless;
-    # the brief never told them. A constraint that arrives after the argument is written is a
-    # constraint that reorders nothing.
+    # The brief handed over contrasts, figures and caveats - every input to the writing was the
+    # run describing itself - so the section that came back described the run. It reported that a
+    # matrix programme rose from 1.0 to 17.2 without saying what a rise in that programme IS, and
+    # it discussed the factors as labels on a contrast table rather than as the interventions the
+    # experiment performed. A brief whose whole vocabulary is internal produces a result whose
+    # whole vocabulary is internal.
     #
-    # Generic by construction: the text is the upstream tool's own, the aliasing is computed from
-    # the design table, and neither knows what study this is.
-    _con = str(pay.get("constraint_on_use") or "").strip()
-    _binds = pay.get("constraint_binds") or {}
-    _alias = {}
-    try:
-        from .design_panel import aliased as _aliased
-        _alias = {k: v for k, v in (_aliased(design) or {}).items() if v}
-    except Exception:                                                     # noqa: BLE001
-        _alias = {}
-    if _con or _alias:
-        L += ["## What this design does not let you claim", "",
-              "**Read this before the contrasts, not after.** It changes which of them can carry "
-              "a headline.", ""]
-        if _alias:
-            # `_fac`, NOT `f`. `f` is the findings dict in this scope, and rebinding it in a
-            # loop header made the contrast table below index a string - caught immediately, and
-            # only because the fixture now carries a design with an aliased pair to loop over.
-            for _fac, mates in sorted(_alias.items()):
-                L.append(f"- **`{_fac}` is aliased with "
-                         f"{', '.join('`%s`' % m for m in mates)}** - "
-                         f"they split the samples identically, so every contrast along "
-                         f"`{_fac}` is "
-                         f"equally a contrast along {', '.join(mates)}, and which of them a "
-                         f"difference belongs to is exactly what this data cannot say. Say it "
-                         f"where the contrast is stated, not only in the limitations.")
-            L.append("")
-        if _con:
-            _who = ", ".join(f"`{k}` on {', '.join(v)}" for k, v in sorted(_binds.items())) \
-                if _binds else ""
-            L += [f"- **The object carries a constraint on use"
-                  + (f", binding {_who}" if _who else "") + ".** Verbatim from the upstream tool:",
-                  "", "  > " + _con.replace("\n", "\n  > "), "",
-                  "  A headline this forbids is forbidden however strong the number is. If a "
-                  "section of this result would state one, say instead what the constraint "
-                  "permits and why the stronger claim is not available.", ""]
+    # So the design is stated first, in the factors' own names: what was varied, from what to
+    # what, how the arms are made, and what QUESTION each contrast asks. None of it is specific to
+    # a study - it is read from the design table, and the question templates use whatever the
+    # factors happen to be called.
+    _facs = {}
+    for _row in (design or {}).values():
+        for _k, _v in (_row or {}).items():
+            _facs.setdefault(str(_k), set()).add(str(_v))
+    _facs = {k: sorted(v) for k, v in _facs.items() if len(v) > 1}
+    if _facs:
+        _arms = len(set(tuple(sorted((str(k), str(v)) for k, v in (r or {}).items()
+                                     if str(k) in _facs))
+                        for r in (design or {}).values()))
+        L += ["## The design this run resolved", "",
+              f"**{len(_facs)} factor(s), crossed into {_arms} arm(s) over "
+              f"{len(design or {})} sample(s).**", ""]
+        for _k in sorted(_facs):
+            _lv = _facs[_k]
+            _ref = str(ctl.get(_k) or "")
+            _oth = [x for x in _lv if x != _ref] or _lv
+            L.append(f"- **`{_k}`**: {', '.join('`%s`' % x for x in _lv)}"
+                     + (f" — reference `{_ref}`, so every `{_k}` contrast asks what changes when "
+                        f"`{_k}` goes from `{_ref}` to `{_oth[0]}`." if _ref else "."))
+        L += ["", "**The questions the crossing supports, in the order they are worth asking:**",
+              "",
+              "1. *What does each factor do on its own, inside one level of the other?* Those are "
+              "the simple effects, and there is one per level - they are separate results, not "
+              "repeats of each other.",
+              "2. *Does one factor's effect DEPEND on the other?* That is the interaction, the "
+              "deepest question a crossed design answers, and the reason the experiment was "
+              "crossed rather than run as two separate ones.",
+              "3. *What does each factor do on average?* The marginals. They are averages over "
+              "strata that may behave differently, so they are read AFTER the simple effects.",
+              "",
+              "**Write about the factors as the interventions they are, not as labels on a "
+              "table.** The reader wants to know what happened to the system when each was "
+              "applied, in the language of the field - what a change in these elements MEANS "
+              "biologically, which processes they belong to, and what the pattern across the arms "
+              "says about the system. A section that only reports which quantity moved has "
+              "described the measurement and not the result.", ""]
 
     L += ["## The contrasts, in reading order", "",
           "| contrast | reference | against | ratio | per observation | elements differing |",
@@ -187,6 +190,35 @@ def write_brief(run, plugin, spec=None, design=None):
                  f"| {d['n_significant']} of {d['n_tested']} |")
     L += ["", "*Read against both scales. Where a total and a per-observation figure disagree "
               "in size, say which one the claim is made on - the skill states the rule.*", ""]
+
+    _con = str(pay.get("constraint_on_use") or "").strip()
+    _binds = pay.get("constraint_binds") or {}
+    _alias = {}
+    try:
+        from .design_panel import aliased as _aliased
+        _alias = {k: v for k, v in (_aliased(design) or {}).items() if v}
+    except Exception:                                                     # noqa: BLE001
+        _alias = {}
+    if _con or _alias:
+        # AFTER THE DESIGN AND THE CONTRASTS, AND SHORT. The first version of this block opened
+        # the brief, and the section that came back led with caveats and never said the biology -
+        # which is the failure the writing guidance already names. What a design cannot separate
+        # is a sentence the result carries where the contrast is stated and a paragraph at the
+        # end; it is not the frame the argument is built in.
+        L += ["## What the design cannot separate", "",
+              "One line each, said where the contrast is stated and again in the limitations "
+              "paragraph. **Not the frame of the argument** - a result that leads with its "
+              "caveats has not reported anything.", ""]
+        for _fac, mates in sorted(_alias.items()):
+            L.append(f"- `{_fac}` is aliased with {', '.join('`%s`' % m for m in mates)}: they "
+                     f"split the samples identically, so a difference along one is equally a "
+                     f"difference along the others and this data cannot say which.")
+        if _con:
+            _who = ", ".join(f"`{k}` on {', '.join(v)}" for k, v in sorted(_binds.items()))
+            L += [f"- The object carries an upstream constraint on use"
+                  + (f", binding {_who}" if _who else "") + ": " + _con.split(".")[0].strip()
+                  + ". A headline it forbids stays forbidden however strong the number is."]
+        L += [""]
 
     L += ["## Figures to look at", "",
           "Numbered as the paper numbers them. **Open each one before writing about it.**", ""]
