@@ -191,19 +191,30 @@ def health(run):
       by the number; they are distinguished by reading which unit actually failed.
     """
     import json
+    from . import capacity as CAP
+    from . import review as RV
+
     run = Path(run)
     found = []
+    # COMPUTED, NOT READ. CAPACITY.json records this run's own counts and nothing else - the
+    # comparison against a sibling is made at report time and printed, never stored. The first
+    # version of this function read a `regressions` key that has never existed, so it reported
+    # nothing on a run whose report had just printed four of them: a check that silently answers
+    # "all clear" is worse than no check, because it is believed.
+    prev, worse = None, []
     try:
-        cap = json.loads((run / "CAPACITY.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        cap = {}
-    worse = (cap.get("regressions") or cap.get("worse") or [])
+        sibs = [d for d in RV.sibling_runs(run) if d.name < run.name]
+        prev = max(sibs, key=lambda d: d.name) if sibs else None
+        if prev is not None:
+            worse = CAP.regressions(CAP.read(run), CAP.read(prev))
+    except Exception:                                                     # noqa: BLE001
+        worse = []
     if worse:
-        found.append({"what": "capacity regression",
-                      "detail": ", ".join(str(w) for w in worse),
+        found.append({"what": f"{len(worse)} capacity regression(s) against {prev.name}",
+                      "detail": "; ".join(f"{k}: {b} -> {n}" for k, b, n, _v in worse),
                       "why": "the run produced less than its sibling. A DELIBERATE removal looks "
                              "exactly like a breakage here and the guard cannot tell them apart - "
-                             "say which each one is, in the run log, before writing anything up."})
+                             "say which each one is before writing anything up."})
     try:
         card = json.loads((run / "RUN_CARD.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):

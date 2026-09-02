@@ -102,8 +102,20 @@ with tempfile.TemporaryDirectory() as td:
     clean = {t["id"]: t for t in AG.tasks(run, "p", how=AG.PBS)}["account"]
     check(clean["state"] == AG.DONE,
           "a run with nothing against it still shows an outstanding accounting step")
+    # A REGRESSION IS A COMPARISON, so the fixture needs something to compare against. An earlier
+    # SIBLING run - a directory beside this one carrying a report.json - is what the reporter uses
+    # and what health() must use, because CAPACITY.json records only a run's own counts and the
+    # comparison is never stored. An earlier version read a `regressions` key that has never
+    # existed and therefore reported "all clear" on a run with four of them.
+    _sib = run.parent / "runA"
+    (_sib).mkdir(parents=True, exist_ok=True)
+    (_sib / "report.json").write_text("{}", encoding="utf-8")
+    (_sib / "CAPACITY.json").write_text(
+        _json.dumps({"run": "runA", "counts": {"figures": 10, "plots_failed": 0}}),
+        encoding="utf-8")
     (run / "CAPACITY.json").write_text(
-        _json.dumps({"regressions": ["figures: 10 -> 7"]}), encoding="utf-8")
+        _json.dumps({"run": "runX", "counts": {"figures": 7, "plots_failed": 3}}),
+        encoding="utf-8")
     (run / "RUN_CARD.json").write_text(_json.dumps({"instances": [
         {"unit": "u2", "state": "empty", "verdict": "suspect"},
         {"unit": "u3", "state": "done", "verdict": "suspect"}]}), encoding="utf-8")
@@ -118,6 +130,11 @@ with tempfile.TemporaryDirectory() as td:
     check(any("NO record" in h["what"] and "u1" in h["detail"] for h in hz),
           "a scheduled unit with no instance in the card is not named: %r" % (kinds,))
     check("regression" in kinds, "a capacity regression is not surfaced: %r" % (kinds,))
+    _reg = [h for h in hz if "regression" in h["what"]]
+    check(_reg and "figures: 10 -> 7" in _reg[0]["detail"],
+          "the regression does not name the count that fell: %r" % (_reg,))
+    check(_reg and "plots_failed: 0 -> 3" in _reg[0]["detail"],
+          "a rise in something where MORE is worse is not counted as a regression: %r" % (_reg,))
     check("did not produce" in kinds, "the unit that actually failed is not named: %r" % (kinds,))
     # THE ONE THAT WAS MISREAD: 3 suspect, 1 actually failed. Reporting 3 broken units is wrong.
     _susp = [h for h in hz if "non-ok verdict" in h["what"]]
@@ -148,6 +165,8 @@ with tempfile.TemporaryDirectory() as td:
     _acc.unlink()
     (run / "CAPACITY.json").unlink()
     (run / "RUN_CARD.json").unlink()
+    import shutil as _sh
+    _sh.rmtree(_sib, ignore_errors=True)
 
     st = _state(run)
     # THE COMPUTE STEP IS DONE ONCE THE RUN WROTE ITS OWN RECORD, NOT ONLY ONCE THE JOB SEALED.

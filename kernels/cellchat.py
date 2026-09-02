@@ -769,16 +769,25 @@ if (length(args) >= 14 && nzchar(args[14]) && file.exists(args[14])) {
   }
 }
 
-# THE VECTOR CellChat WANTS, IN ITS OWN LEVEL ORDER. A plotting function takes `color.use`
-# POSITIONALLY against the object's factor levels, so handing it the map in any other order
-# colours the wrong populations - which is the defect this exists to fix, arriving through the
-# fix. Returns NULL when the host gave no map or when any level is unmapped, because a partial
-# vector is worse than none: CellChat would recycle it silently.
+# THE VECTOR CellChat WANTS: IN ITS LEVEL ORDER, AND NAMED.
+#
+# Ordered, because a plotting function takes `color.use` positionally against the object's factor
+# levels and any other order colours the wrong populations. NAMED, because netVisual_circle
+# refuses an unnamed one outright - "The input `color.use` should be a named vector!" - while
+# netVisual_heatmap and netAnalysis_signalingRole_scatter accept it either way. The two upstream
+# functions disagree about the contract, so the vector satisfies the stricter of them; `unname()`
+# here cost 36 circle plots across 18 units in one run, and the per-unit tallies reported the
+# failure while the run-level count said nothing until the capacity guard compared the totals.
+#
+# Returns NULL when the host gave no map or when any level is unmapped, because a partial vector
+# is worse than none: CellChat would recycle it silently.
 .cols_for <- function(levs) {
   if (!length(.fctx$colours)) return(NULL)
   levs <- as.character(levs)
   if (!all(levs %in% names(.fctx$colours))) return(NULL)
-  unname(.fctx$colours[levs])
+  .out <- .fctx$colours[levs]
+  names(.out) <- levs
+  .out
 }
 
 # A PHASE CLOCK, DEFINED AT THE TOP BECAUSE R DOES NOT HOIST. Twice the cost of a round has
