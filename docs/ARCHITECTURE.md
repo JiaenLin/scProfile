@@ -16,7 +16,7 @@ plug-and-run: one file each, declared, no host change needed to add one.
 
 **Part two — the agentic figure harness.** Takes the outputs of part one and produces figures and
 a written result section. It decides what figures a design needs, prefers the wrapped tool's own
-plots, checks what was drawn, records what a person saw, and binds every written claim to the
+plots, checks what was drawn, records what the agent saw, and binds every written claim to the
 figures it was read off.
 
 The boundary is the plugin runner. Everything before it is about getting a method to run
@@ -226,7 +226,7 @@ Ten criteria a rendered page must meet: panel count, caption length, arms named,
 caveats present, nothing hidden, no repeats, identifiers resolved, no contradictions, an overview.
 Applied by whatever writes the report, to what it wrote.
 
-## `review.py` — what a person actually saw
+## `review.py` — what the agent actually saw
 
 A note per figure, bound to that image's sha256. Redraw the figure and the review is gone, not
 old. A note must say something: empty, too short, or identical to another figure's note is

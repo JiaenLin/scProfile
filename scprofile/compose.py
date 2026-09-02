@@ -18,11 +18,13 @@ from a measured value, and every value names the file it came from. Nothing is i
 is rounded into a claim, and where a quantity is absent the sentence is not written rather than
 softened.
 
-WHAT THIS IS NOT. It is not a replacement for an author. It states what was measured, in the
-design's own order, with the tool's own statistics - the part that must be reproducible. An
-author who wants to say what it MEANS edits the result and passes it back with `--section`, and
-that authored version wins. What the run guarantees is that a section exists, that its numbers
-are traceable, and that it cannot silently disagree with the panel beside it.
+WHAT THIS IS NOT. IT IS NOT THE RESULT, AND IT IS NOT WAITING FOR A PERSON. It states what was
+measured, in the design's own order, with the tool's own statistics - the part that must be
+reproducible. THE AUTHOR IS THE AGENT RUNNING THIS TOOL: it reads the brief, opens the figures,
+decides what matters, writes what the measurements MEAN, and passes it back with `--section`,
+and that authored version wins. What the run guarantees is that a section exists between sealing
+and writing, that its numbers are traceable, and that it cannot silently disagree with the panel
+beside it.
 """
 
 from __future__ import annotations

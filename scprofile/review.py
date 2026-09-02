@@ -9,7 +9,7 @@ legible only from the legend; and a decluttering fix, correct in itself, applied
 geometry did not need it, which drove ten of twelve labels off the axes and passed every test
 before and after.
 
-Nothing here can verify that a human or an agent moved their eyes. What it CAN do is make the
+Nothing here can verify that the agent moved its eyes. What it CAN do is make the
 unreviewed set impossible to overlook and impossible to keep once it is stale, which is the
 same shape as every other gate in this tool: not a reminder, a refusal.
 

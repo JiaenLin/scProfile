@@ -17,7 +17,7 @@ FOUR CLASSES OF EVIDENCE, GATHERED SEPARATELY BECAUSE THEY FAIL SEPARATELY.
   provenance    plugin, version, unit, input identity, params, keys - the reuse key. Not quality,
                 but without it "the same result" cannot be defined at all.
 
-  inspection    OPTIONAL and recorded separately: whether a person opened the figures
+  inspection    OPTIONAL and recorded separately: whether the agent opened the figures
                 (`scprofile review`). Never required, never invented.
 
 THREE GRADES, AND THE THIRD IS THE HONEST ONE.
@@ -118,7 +118,7 @@ CRITERIA = (
         "inspection",
         "every figure the instance produced has a recorded look",
         "review.read_ledger() against the figures on disk",
-        "that a person opened each panel and wrote down what they saw",
+        "that the agent opened each panel and wrote down what it saw",
         "that what they saw was right"),
 )
 

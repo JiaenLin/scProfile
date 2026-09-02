@@ -188,9 +188,14 @@ talked around:
 3. **The outstanding set is reported as NAMES, not a count.** A number is ignorable; a list of
    filenames is a task.
 
-`--strict` belongs where a human promotes a run. The automated cycle PRINTS the outstanding set
-and does not gate on it: an unattended run has nobody at the screen to satisfy, and a gate that
-fires on correct behaviour gets switched off.
+**Looking is the AGENT'S job, not a person's.** The agent runs the tool end to end and opens
+every figure it draws; nothing here is waiting for a reviewer. `--strict` is the agent's own gate
+before it writes, and where a run is promoted.
+
+The batch job itself PRINTS the outstanding set and does not gate on it, for one reason that is
+about ordering rather than about roles: the job draws the figures and seals, and the looking
+happens after it, so a job that refused to seal on unreviewed figures could never seal at all.
+A gate that fires on correct behaviour gets switched off.
 
 ## Rule minus-one-and-three-quarters — THE GROUP IS THE UNIT. THE SAMPLE IS CONFIDENCE.
 

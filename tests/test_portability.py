@@ -243,12 +243,23 @@ with _tf.TemporaryDirectory() as _d:
     except RuntimeError:
         ck("a lock from another host is not assumed dead", True)
 
-print("\nthe two audiences are distinguishable")
+print("\nthe two audiences are distinguishable, and neither of them is a human operator")
 _cli = inspect.getsource(cli)
 for _c in ("doctor", "install", "fetch", "run", "plan", "report"):
-    ck(f"{_c} is marked for the user", f'"{_c}", help="[you]' in _cli)
+    ck(f"{_c} is marked for the agent", f'"{_c}", help="[agent]' in _cli)
 for _c in ("validate", "selftest", "scaffold"):
     ck(f"{_c} is marked for the maintainer", f'"{_c}", help="[maintainer]' in _cli)
+# NO COMMAND IS ADDRESSED TO A PERSON. The analysis commands used to be marked `[you]`, which
+# reads as a human at a terminal - so the steps a person was assumed to perform (opening the
+# figures above all) were performed by nobody: 120 looks and `run --section` used zero times in
+# this project's whole history. The agent runs scProfile end to end; human review happens
+# outside the tool. This pins that, because a role that is only stated in prose comes back.
+# Read the ROLE TAGS THEMSELVES rather than searching for the retired word: a check written as
+# `"[you]" not in _cli` fails on the comment above that explains why the word is gone, which is
+# a check that punishes the documentation of its own reason.
+_roles = set(re.findall(r'help="\[([a-z]+)\]', _cli))
+ck("every command is tagged for the agent or the maintainer, and nothing else",
+   _roles == {"agent", "maintainer"}, f"role tags in use: {sorted(_roles)}")
 _rt = Path(__file__).resolve().parents[1]
 # A MISSING FILE IS A FAILING CHECK, NOT THE END OF THE SUITE. Module level, so an exception
 # here stops every check below - and it did, in every job, because the tool snapshot did not
@@ -262,8 +273,11 @@ ck("the README tells a user they never write a plugin",
    "never write a wrapper" in _rm.lower() or "you never open a plugin" in _rm.lower())
 ck("and names the maintainer path", "maintainer" in _rm.lower()
    and "MAINTAINING_PLUGINS.md" in _rm)
+# THE INTENT AGAIN, NOT THE WORD. "Users" was the literal heading and it named the wrong party:
+# the reader who runs an analysis is the AGENT. What must stay true is that the documentation is
+# split into running-an-analysis and maintaining-a-plugin, whatever those two halves are called.
 ck("and splits its documentation by audience",
-   "**Users:**" in _rm and "**Maintainers:**" in _rm)
+   "**Running an analysis:**" in _rm and "**Maintaining a plugin:**" in _rm)
 ck("and points maintainers elsewhere", "MAINTAINING_PLUGINS" in _rm)
 _mg = _rt / "docs" / "MAINTAINING_PLUGINS.md"
 ck("the maintainer guide exists", _mg.exists())

@@ -1932,7 +1932,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
         # the section is missing, failed, or was never meant to be here. A section is AUTHORED
         # and enters a run through `--section`; saying so turns a silence into a fact.
         _links.append(f"<b>No written result section in this run.</b> The figures and the panel "
-                      f"are produced by the run; a section is written by a person and carried in "
+                      f"are produced by the run; a section is written by the AGENT running this "
+                      f"tool and carried in "
                       f"with <code>run --section &lt;file&gt;</code>, or added afterwards with "
                       f"<code>scprofile paper --out &lt;run&gt; --plugin {_e(name)} "
                       f"--write &lt;file&gt;</code>. Where a section exists for this analysis it "

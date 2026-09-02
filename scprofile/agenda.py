@@ -21,6 +21,12 @@ THE HOST OWNS THE PHASES; THE PLUGIN OWNS THEIR CONTENT. Read, look, write, carr
 the same sequence whatever the method is. What the brief holds and which template applies are
 declared by the plugin, so a new method gets this interface without the host learning anything
 about it.
+
+EVERY TASK ON THIS LIST IS THE AGENT'S, AND NONE OF THEM WAITS FOR A PERSON. There is no human
+step inside scProfile: the agent submits the job, watches it, opens every figure, writes the
+result and carries it back in. A task marked `blocked` is waiting on an EARLIER TASK, never on
+someone else - and the agenda says so, because a list with an implied human step is a list with
+a step nobody performs. Human review happens outside this tool, on the artifacts a run leaves.
 """
 from __future__ import annotations
 
@@ -177,7 +183,7 @@ def write_agenda(run, plugin, spec=None, how=None):
          + (" — the compute runs detached on another machine, so it is submitted and WATCHED, "
             "and its output picked up the moment it seals. That is one run, not three errands."
             if how == PBS else " — the compute runs in front of you."), "",
-         "The tool does the measuring, drawing and refusing. **The rest is the agent's.**", "",
+         "The tool does the measuring, drawing and refusing. **Everything else on this list is the agent's, and none of it waits for anyone.**", "",
          f"**{len(t) - len(left)} of {len(t)} done.**", ""]
     for i, x in enumerate(t, 1):
         mark = {DONE: "x", PENDING: " ", BLOCKED: "-"}[x["state"]]
@@ -185,7 +191,7 @@ def write_agenda(run, plugin, spec=None, how=None):
               f"       {x['why']}",
               f"       `{x['do']}`", ""]
     if left:
-        L += ["*A blocked task is waiting on an earlier one, not on the tool.*", ""]
+        L += ["*A blocked task is waiting on an earlier task \u2014 not on the tool, and not on a person.*", ""]
     else:
         L += ["*Nothing outstanding. The result is written, carried into a run, and defended.*",
               ""]

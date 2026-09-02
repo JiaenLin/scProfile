@@ -3226,27 +3226,36 @@ def main(argv=None):
         sys.stdout.reconfigure(line_buffering=True)
     except (AttributeError, ValueError):
         pass                       # a stdout that cannot be reconfigured is one to leave alone
-    # WHO EACH COMMAND IS FOR. A user runs doctor/install/fetch/plan/run and nothing else; the
-    # rest are for whoever MAINTAINS a plugin. Marking them is not decoration - a user who cannot
-    # tell which commands are theirs assumes all of them are, and starts scaffolding.
+    # WHO EACH COMMAND IS FOR. THERE ARE TWO ROLES AND NEITHER OF THEM IS A HUMAN OPERATOR.
+    #
+    # The tool used to mark its analysis commands `[you]`, which read as a person at a terminal
+    # and left the agent holding only `agenda` and `write` - so the steps a person was assumed
+    # to do got done by nobody. scProfile is RUN BY AN AGENT, END TO END: the agent installs,
+    # plans, submits, watches, opens every figure, writes the result and carries it back in.
+    # There is no step inside this tool that waits for a person.
+    #
+    # Human review happens OUTSIDE scProfile, on the artifacts a run leaves behind. That is why
+    # nothing here schedules it, gates on it, or holds a run open for it.
     ap = argparse.ArgumentParser(
         prog="scprofile", description=(__doc__ or "") + """
 
-  [you]        commands for running an analysis: doctor, install, fetch, plan, run, report
+  [agent]      the analysis, end to end - doctor, install, fetch, plan, run, report, and the
+               writing cycle: agenda, write, review, paper, standard. All of it is the agent's,
+               including opening the figures. Human review is outside this tool.
   [maintainer] commands for whoever maintains a plugin: validate, selftest, scaffold
-               see docs/MAINTAINING_PLUGINS.md - a user should never need these
+               see docs/MAINTAINING_PLUGINS.md - running an analysis never needs these
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--version", action="version", version=f"scprofile {_v()}")
     sub = ap.add_subparsers(dest="cmd", metavar="COMMAND")
 
-    d = sub.add_parser("doctor", help="[you] what is installed, what is missing, and the exact fix")
+    d = sub.add_parser("doctor", help="[agent] what is installed, what is missing, and the exact fix")
     d.add_argument("--prefix", default=None, help="where kernel environments live")
     d.add_argument("--references", default=None, help="where reference data lives")
     d.add_argument("--organism", default=None)
     d.set_defaults(fn=_doctor)
 
-    i = sub.add_parser("install", help="[you] build the environment a kernel resolves to")
+    i = sub.add_parser("install", help="[agent] build the environment a kernel resolves to")
     i.add_argument("kernel")
     i.add_argument("--prefix", required=True)
     i.add_argument("--force", action="store_true", help="rebuild an existing environment")
@@ -3257,7 +3266,7 @@ def main(argv=None):
                         "only a real resolve proves their transitive closure installs")
     i.set_defaults(fn=_install)
 
-    f = sub.add_parser("fetch", help="[you] download and verify a kernel's declared references")
+    f = sub.add_parser("fetch", help="[agent] download and verify a kernel's declared references")
     f.add_argument("kernel")
     f.add_argument("--to", required=True)
     f.add_argument("--organism", default=None)
@@ -3267,7 +3276,7 @@ def main(argv=None):
                         "is a worse failure than refusing at the start")
     f.set_defaults(fn=_fetch)
 
-    r = sub.add_parser("run", help="[you] run kernels, merge results, write the report")
+    r = sub.add_parser("run", help="[agent] run kernels, merge results, write the report")
     # THE LEVER. A cache with no way to switch it off is a cache you have to trust; the first
     # thing anyone needs when a result looks wrong is to rule it out in one run. Off means the
     # host offers no directory at all, so every plugin recomputes and says so.
@@ -3386,7 +3395,7 @@ def main(argv=None):
                         "itself, and its result would not mean what the report says it means")
     r.set_defaults(fn=_run)
 
-    pl = sub.add_parser("plan", help="[you] what WOULD run, and what stops it. Runs nothing")
+    pl = sub.add_parser("plan", help="[agent] what WOULD run, and what stops it. Runs nothing")
     pl.add_argument("--h5ad", required=True)
     pl.add_argument("--kernel", default=None)
     pl.add_argument("--all", action="store_true")
@@ -3459,7 +3468,7 @@ def main(argv=None):
     sc_.set_defaults(fn=_scaffold)
 
     cp_ = sub.add_parser("capacity",
-                         help="[you] what a run delivered, and whether it delivered less than "
+                         help="[agent] what a run delivered, and whether it delivered less than "
                               "another run")
     cp_.add_argument("--out", required=True, type=Path, help="the run to measure")
     cp_.add_argument("--against", type=Path,
@@ -3470,7 +3479,7 @@ def main(argv=None):
     cp_.set_defaults(fn=_capacity)
 
     ca = sub.add_parser("cache",
-                        help="[you] what the reuse cache holds, and how to clear it")
+                        help="[agent] what the reuse cache holds, and how to clear it")
     ca.add_argument("--out", required=True, type=Path,
                     help="a run directory, or the directory the runs sit in")
     ca.add_argument("--clear", action="store_true",
@@ -3480,7 +3489,7 @@ def main(argv=None):
                     help="with --clear, keep entries touched within this many days")
     ca.set_defaults(fn=_cache)
 
-    p = sub.add_parser("report", help="[you] rebuild the documents from report.json")
+    p = sub.add_parser("report", help="[agent] rebuild the documents from report.json")
     p.add_argument("--out", required=True, type=Path)
     # THE PLUGIN'S ENVIRONMENT IS NEEDED TO REBUILD, not only to run. The reporter invokes a
     # plugin's `compare(ctx)` phase in the plugin's own interpreter; without a prefix that
@@ -3493,7 +3502,7 @@ def main(argv=None):
     p.set_defaults(fn=_report)
 
     ck_ = sub.add_parser("check",
-                         help="[you] one green/red line per element of scProfile")
+                         help="[agent] one green/red line per element of scProfile")
     ck_.add_argument("--out", type=Path, help="a run directory, to check what it produced")
     ck_.add_argument("--deep", action="store_true",
                      help="also BUILD real situations and assert the tool responds correctly - "
@@ -3501,7 +3510,7 @@ def main(argv=None):
     ck_.set_defaults(fn=_check)
 
     lc = sub.add_parser("licence",
-                        help="[you] evaluate a run's results and licence them for reuse")
+                        help="[agent] evaluate a run's results and licence them for reuse")
     lc.add_argument("--out", required=True, type=Path, help="the run to licence")
     lc.add_argument("--kernel", help="plugins, comma separated. Default: all it holds")
     lc.add_argument("--grant", action="store_true", help="write licences, not just report")
@@ -3512,7 +3521,7 @@ def main(argv=None):
     lc.set_defaults(fn=_licence)
 
     ls_ = sub.add_parser("landscape",
-                         help="[you] what EARLIER runs already hold, and what a new run must "
+                         help="[agent] what EARLIER runs already hold, and what a new run must "
                               "actually compute")
     ls_.add_argument("--root", required=True, type=Path,
                      help="a directory of run directories")
@@ -3543,7 +3552,7 @@ def main(argv=None):
     wr.set_defaults(fn=_write)
 
     rv = sub.add_parser("review",
-                        help="[you] which figures have been LOOKED AT, and which have not")
+                        help="[agent] which figures have been LOOKED AT, and which have not")
     rv.add_argument("--out", required=True, type=Path, help="a run directory")
     rv.add_argument("--plugin", default="",
                     help="record against THIS PLUGIN'S ledger, kernels/<plugin>/"
@@ -3558,7 +3567,7 @@ def main(argv=None):
     rv.set_defaults(fn=_review)
 
     pa = sub.add_parser("paper",
-                        help="[you] write the result from these figures, then defend it")
+                        help="[agent] write the result from these figures, then defend it")
     pa.add_argument("--out", required=True, type=Path, help="a run directory")
     pa.add_argument("--claim", help="one sentence you would put in a paper, read off the "
                                     "figures. Refused if it is too short to be checkable")
@@ -3595,13 +3604,13 @@ def main(argv=None):
     pa.set_defaults(fn=_paper)
 
     sv = sub.add_parser("status",
-                        help="[you] what does this run directory already hold, and what is left?")
+                        help="[agent] what does this run directory already hold, and what is left?")
     sv.add_argument("--out", required=True, type=Path, help="a run directory")
     sv.add_argument("--json", action="store_true", help="machine-readable, for a job script")
     sv.set_defaults(fn=_status)
 
     st_ = sub.add_parser("standard",
-                         help="[you] does the rendered report meet the exit standard?")
+                         help="[agent] does the rendered report meet the exit standard?")
     st_.add_argument("--out", required=True, type=Path,
                      help="a run directory, or the report/ inside one")
     st_.set_defaults(fn=_standard)

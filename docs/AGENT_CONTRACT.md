@@ -1,12 +1,27 @@
-# scProfile is run by an agent, and the agent is responsible for these parts
+# scProfile is run by an agent, end to end, and the agent is responsible for all of it
+# except the measuring
 
 This document exists because the division of labour in this tool is not obvious from the code,
 and an agent that does not know it will do the wrong half — usually by writing prose the tool
 should not contain, or by describing figures it never opened.
 
-## The division
+## There are two parties, and neither of them is a person
 
-**The tool measures. The agent reads, looks, and writes.**
+**The tool measures. The agent does everything else, end to end.**
+
+The agent installs, plans, submits the job, watches it, opens every figure, records what it saw,
+writes the result, carries it back into a run, and defends its claims. **There is no step inside
+scProfile that waits for a human.** Any task that reads like a person's job — looking at the
+pictures above all — is the agent's job.
+
+**Human review is outside this tool.** It happens on the artifacts a run leaves behind, when it
+is asked for. Nothing in scProfile schedules it, gates on it, or holds a run open for it, and no
+command is marked for a human operator. The tool used to mark its analysis commands `[you]`,
+which read as a person at a terminal and quietly left those steps to nobody: in this project's
+whole history, 120 figure looks and `run --section` used ZERO times. The steps existed and the
+phase never ran.
+
+## The division
 
 | The TOOL is responsible for | The AGENT is responsible for |
 |---|---|
@@ -28,8 +43,10 @@ traceable, reproducible, and not writing: it could not decide what mattered, syn
 levels, or narrow — which is the one thing the writing guidance asks for, since a section that
 reports every pathway equally reports none.
 
-So the generated section is a **fallback for a run nobody writes up**, and it says so. The real
-result comes from an agent, and `scprofile write` exists to hand that agent the evidence.
+So the generated section is a **placeholder that stands between the run sealing and the agent
+writing**, and the rendered page says so in a banner the exit standard fails on. It is not a
+fallback for a run nobody writes up, because every run is written up: the agent that ran it is
+the author. `scprofile write` exists to hand that agent the evidence.
 
 ## One run produces all of its output
 

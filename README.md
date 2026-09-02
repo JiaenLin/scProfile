@@ -69,11 +69,11 @@ expression.
 
 **An agentic figure harness** — takes those outputs and produces the figures and the written
 result. It enumerates the comparisons, states what evidence each needs, prefers the wrapped
-tool's own plots over reimplementing them, checks what was drawn, records what a person saw, and
+tool's own plots over reimplementing them, checks what was drawn, records what the agent saw, and
 binds every written claim to the figures it was read off. It refuses rather than guesses: a
 question with no panel is reported as a gap, and a claim with no figure behind it is not written.
 
-**An agentic layer** — the interface between a finished run and whoever writes it up. A run
+**An agentic layer** — the interface the agent writes the run up through. A run
 emits a *brief* (the evidence, with every number's file named), an *agenda* (the cycle as an
 ordered list, each step's state read off the run's own artifacts), and a ledger of which figures
 have actually been looked at. The agenda knows how the compute executes: under a scheduler it
@@ -401,7 +401,7 @@ Python 3.10+.
 
 ## Documentation
 
-**Users:** you run scProfile and read its reports. You never write a plugin.
+**Running an analysis:** the agent runs scProfile end to end — plan, run, open every figure, write the result — and never writes a plugin.
 
 | document | what it covers |
 |---|---|
@@ -419,7 +419,7 @@ Python 3.10+.
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Part three describes each element of the agentic layer: the composed fallback, the brief, the review ledger, the agenda and its execution modes, and how the skill and a plugin's template combine |
 | [.claude/skills/result-section/](.claude/skills/result-section/) | The writing skill itself, and the per-method templates it is used with |
 
-**Maintainers:** you write or repair plugins.
+**Maintaining a plugin:** writing or repairing the methods themselves.
 
 | document | what it covers |
 |---|---|

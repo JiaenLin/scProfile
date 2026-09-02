@@ -627,9 +627,10 @@ def render(out, *, run_key="", title="Result section", plugin=""):
             'Every sentence below was assembled by the tool from this run\'s own tables. It is '
             'a truthful skeleton and it is not a reading: nothing here decided what matters, '
             'and no figure below was looked at before it was cited. '
-            'Write the result against <code>.claude/skills/result-section</code> and carry it '
-            'in with <code>run --section</code>; <code>scprofile agenda</code> lists what '
-            'remains.</div>')
+            '<b>The agent running this tool is the author of this section</b> \u2014 open the '
+            'figures, write the result against <code>.claude/skills/result-section</code>, and '
+            'carry it in with <code>run --section</code>; <code>scprofile agenda</code> lists '
+            'what remains. Nothing here is waiting for anyone else.</div>')
     if body:
         out_html.append(_md(body))
     else:
