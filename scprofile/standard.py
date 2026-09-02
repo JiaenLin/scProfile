@@ -31,6 +31,12 @@ WHY EACH ONE EXISTS. Measured on a real multi-sample, two-factor cohort whose re
                 entropy was at the maximum the three states allow. THE ONLY CRITERION NOT
                 MEASURABLE FROM THE PAGE: an omitted refutation leaves no mark, so what the
                 plugin recorded is read from the payload and looked for on the page.
+  authored      The tool composes a result section from the run's own tables so that a run
+                nobody writes up still has a truthful account of itself. That skeleton carries
+                real numbers and cites real figures, so it reads exactly like a written result -
+                and was reviewed as one, repeatedly. A page is not finished while it is the
+                skeleton: nothing in it decided what mattered, and no figure in it was looked at
+                before being cited.
   sections      A section of prose citing no figure asserts something a reader cannot check on
                 the page it is made on. It caught a document whose section on the study's own
                 headline question - the interaction - ran to ninety words of arithmetic and
@@ -116,7 +122,7 @@ ARM_HINT = re.compile(
 #: them can fail, and the module docstring explains each. All three read this tuple, so a
 #: criterion cannot be documented and not implemented, or implemented and never proven.
 CRITERIA = ("overview", "arms", "repeats", "count", "captions", "prose",
-            "caveats", "hidden", "identifiers", "contradiction", "sections")
+            "caveats", "hidden", "identifiers", "contradiction", "sections", "authored")
 
 
 def _text(html):
@@ -284,6 +290,14 @@ def check_page(path, *, exempt=(), recorded=()):
         if len(_body.split()) >= SECTION_PROSE_FLOOR and not re.search(r"Figures?\s+\d", _body):
             _mute.append(_cur[:44])
         _cur = None
+    # A MACHINE-ASSEMBLED SECTION IS NOT A RESULT. The tool composes one so that a run nobody
+    # writes up still has a truthful account of itself, and that skeleton carries real numbers
+    # and real figures - so it reads like a manuscript and was reviewed as one, repeatedly, by
+    # the agent that should have written the real thing. The renderer marks it; this refuses to
+    # call the page finished while the mark is there.
+    ck("authored", 'data-section-composed="1"' not in html,
+       "the result section was assembled by the tool, not written: no one decided what matters "
+       "and no figure was looked at before being cited")
     ck("sections", not _mute,
        f"{len(_mute)} section(s) of prose cite no figure: {_mute[:3]}")
     dupes = sorted({i for i in ids if ids.count(i) > 1})
@@ -479,6 +493,11 @@ def _mutate(cid):
                                 "factor.</p>", "<h2>Results</h2>")
     if cid == "arms":
         return BASELINE.replace("What it shows, by arm.", "What it shows, per population.")
+    if cid == "authored":
+        # APPENDED, NOT SUBSTITUTED. BASELINE carries no "Results" heading, so a replace would
+        # have matched nothing, left the page clean, and made the criterion look unfalsifiable -
+        # which is the one thing every mutation here exists to rule out.
+        return BASELINE + '<div class="bad" data-section-composed="1">skeleton</div>' 
     if cid == "sections":
         # A SECTION OF REAL PROSE THAT POINTS AT NOTHING. Long enough to clear the floor, so it
         # is making a claim; carrying no figure reference, so the claim cannot be checked on the

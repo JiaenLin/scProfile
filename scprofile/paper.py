@@ -610,6 +610,26 @@ def render(out, *, run_key="", title="Result section", plugin=""):
             ' claim(s) in this section are undefended, or cite a figure that has been redrawn '
             'since the claim was made. A section written from pictures that no longer exist '
             'reads exactly like one that is right.</div>')
+    # A COMPOSED SKELETON IS NOT A RESULT, AND THE PAGE MUST SAY SO WHERE A READER IS.
+    #
+    # The only marker was an HTML comment at the top of the markdown - invisible in the rendered
+    # page, so a machine-assembled section carrying real numbers and real figures reads exactly
+    # like a written one. It was reviewed repeatedly, by me, as though it were the manuscript.
+    #
+    # The banner carries a machine-readable attribute as well, because the exit standard has to
+    # be able to fail on it: a warning nobody is obliged to act on is a warning that gets read
+    # past.
+    from . import compose as _CO                                      # noqa: PLC0415
+    composed = bool(body) and body.strip().startswith(_CO.COMPOSED_MARK)
+    if composed:
+        out_html.append(
+            '<div class="bad" data-section-composed="1"><b>THIS IS NOT A WRITTEN RESULT.</b> '
+            'Every sentence below was assembled by the tool from this run\'s own tables. It is '
+            'a truthful skeleton and it is not a reading: nothing here decided what matters, '
+            'and no figure below was looked at before it was cited. '
+            'Write the result against <code>.claude/skills/result-section</code> and carry it '
+            'in with <code>run --section</code>; <code>scprofile agenda</code> lists what '
+            'remains.</div>')
     if body:
         out_html.append(_md(body))
     else:
