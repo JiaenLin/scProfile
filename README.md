@@ -23,7 +23,7 @@ derived from it. That is what
 Nothing in that chain is configured per project. A three-factor design produces more comparisons,
 more units and more sections from the same code.
 
-## The two halves
+## The three parts
 
 **A platform harness** — takes the object and the design, resolves what can run, builds the
 environments, runs plugins, merges the outputs. Plugins are plug-and-run: one file each,
@@ -37,9 +37,22 @@ tool's own plots over reimplementing them, checks what was drawn, records what a
 binds every written claim to the figures it was read off. It refuses rather than guesses: a
 question with no panel is reported as a gap, and a claim with no figure behind it is not written.
 
-The boundary between the two is the plugin runner. Everything before it is about getting a method
-to run correctly; everything after it is about turning the output into something a reader can
-check.
+**An agentic layer** — the interface between a finished run and whoever writes it up. A run
+emits a *brief* (the evidence, with every number's file named), an *agenda* (the cycle as an
+ordered list, each step's state read off the run's own artifacts), and a ledger of which figures
+have actually been looked at. The agenda knows how the compute executes: under a scheduler it
+says to submit the job, watch it, and collect its output the moment it seals, because a batch job
+runs detached and cannot call anyone back.
+
+**The tool measures; the agent writes.** That division is deliberate. The tool used to assemble
+the section itself from format strings, and the result was traceable, reproducible prose that
+could not decide what mattered or narrow to a focus. So the tool now produces the evidence and
+refuses what it cannot support, and the writing is done against a general skill plus the template
+each plugin declares for its own method. `docs/AGENT_CONTRACT.md` states which half is whose.
+
+The boundary between the first two is the plugin runner: everything before it is about getting a
+method to run correctly, everything after it about turning the output into something a reader can
+check. The boundary of the third is the point where judgement starts.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -379,6 +392,14 @@ Python 3.10+.
 | [RESUME.md](docs/RESUME.md) | Resuming a run, and reuse across runs |
 | [REPORTING.md](docs/REPORTING.md) | How the documents are assembled |
 | [REFERENCES.md](docs/REFERENCES.md) | Reference data: declaring, fetching, verifying |
+
+**Agents:** you run scProfile and write up what it produced.
+
+| document | what it covers |
+|---|---|
+| [AGENT_CONTRACT.md](docs/AGENT_CONTRACT.md) | Which half of the work is the tool's and which is yours, why the tool does not write, the order of the writing phase, and what an agent must not do |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Part three describes each element of the agentic layer: the composed fallback, the brief, the review ledger, the agenda and its execution modes, and how the skill and a plugin's template combine |
+| [.claude/skills/result-section/](.claude/skills/result-section/) | The writing skill itself, and the per-method templates it is used with |
 
 **Maintainers:** you write or repair plugins.
 

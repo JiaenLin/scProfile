@@ -232,12 +232,13 @@ A note per figure, bound to that image's sha256. Redraw the figure and the revie
 old. A note must say something: empty, too short, or identical to another figure's note is
 refused.
 
-## `paper.py` — the result section
+## `paper.py` — the result section as a page
 
-`brief()` prints what to write from: the design's questions first, then the panels, then what the
-run delivered against the specification. `claim()` records a sentence with the figures it was read
-off; a claim citing nothing is refused. `review()` records a verdict — standing, narrowed or
-withdrawn. `render()` writes the section, the claims and every cited figure into one page.
+`claim()` records a sentence with the figures it was read off; a claim citing nothing is refused.
+`review()` records a verdict — standing, narrowed or withdrawn. `render()` writes the section, the
+claims and every cited figure into one page, numbering the figures from `compose.figure_index` so
+"Figure 3" in a sentence and the plate printed under Figure 3 are one object. `panel()` builds the
+figure panel: one plate per piece of evidence each comparison needs.
 
 One manuscript per plugin: `PAPER.<plugin>.md`, `PAPER_CLAIMS.<plugin>.jsonl`,
 `report/<plugin>_paper.html`.
@@ -248,3 +249,95 @@ Nine stations run in order against real runs: exists, landscape, licence, adopt,
 drawing, eye, paper, outputs. The loop stops at the first blocked station and names the one thing
 to do next. The goal is the eye scan complete and the manuscript written; the earlier stations go
 green long before the output is worth having.
+
+# Part three: the agentic layer
+
+The first two parts end with a run: numbers, figures, and documents that describe them. The
+result — what the numbers mean — is not in them, and cannot be. This part is the interface
+between the run and whoever writes that.
+
+## `compose.py` — the section the tool can support
+
+Builds a result section from the run's own tables, and nothing else. It walks the design's
+comparisons in reading order, states each contrast's ratio on both scales, names the elements
+that carry it, and cites the figures by the numbers `figure_index` assigns.
+
+Three things in it decide the shape of the document:
+
+**`figure_index`** numbers every figure once, in four passes — the design-wide panels a plugin
+marks `overview`, then the reference group's profile, then each contrast's own panels in the
+design's order, then the design-wide panels marked `conclusion`. A panel drawn across the whole
+design belongs to no single contrast, so without this it was collected by whichever contrast was
+read first, and the document opened with its own conclusion.
+
+**`reference_unit`** is the arm sitting at the control level of every biological factor, named
+with `units.group_label` — the same function that names a crossed arm everywhere else. It is the
+pooled arm, not a sample inside it, because that is what every contrast is measured against.
+
+**`_limitations`** ranks the run's own recorded caveats — a confound the design cannot separate
+first, then a quantity with no test, then a measurement that is not comparable — deduplicates
+what a plugin emitted once per unit, and caps the result.
+
+The section it produces is marked as composed, and it is a fallback. It exists so a run nobody
+writes up still has a truthful account of itself.
+
+## `brief.py` — what an agent writes from
+
+`WRITING_BRIEF.md`, one per plugin, written on every run. The contrasts in reading order with
+their reference arms and both scales; every figure with the number the paper gives it and whether
+it has been looked at; how many caveats the run recorded; and the template this plugin declares.
+Every entry names the file it came from, and nothing in it is a sentence to reuse.
+
+## `review.py` — what has actually been looked at
+
+A review is bound to a figure's sha256, so redrawing a figure destroys its review rather than
+leaving a stale one. A note under four words, or copied from another figure, is refused.
+
+Looks carry between runs by reading the ledgers of sibling run directories — a sibling being a
+directory that carries a `report.json`. Nothing is written outside the run being reviewed. This
+matters because a run that reuses its fitted objects redraws nothing, and without the carry every
+unchanged figure would need looking at again on every run.
+
+## `agenda.py` — the cycle, and the agent's place in it
+
+The whole cycle as an ordered list with the state of each step read off the run's artifacts:
+run, read the brief, look at the figures, write, carry it in, defend the claims. State is derived
+and never stored — a task is done when the thing proving it exists — so nothing here can report a
+result as written after the composer has replaced it.
+
+**Execution mode** changes one step and nothing else. Under `pbs` the compute runs detached on
+another machine and cannot call back, so the agenda says to submit it, watch it, and collect its
+output the moment `SEALED.txt` appears — which is what keeps submit, watch and collect one run
+instead of three errands. Under `local` it runs in front of you. The mode is detected and always
+stated, so a wrong guess is visible rather than silently shaping the instructions.
+
+The agenda answers before a run exists, which is the point: an agent asking what the work is gets
+the shape of all of it, including that the compute is detached, before it submits anything.
+
+## The writing skill and the plugin's template
+
+`.claude/skills/result-section/SKILL.md` is general and applies to every plugin: the document's
+architecture, headings that name the comparison rather than the finding, the rule for which scale
+a claim is made on when two disagree, the limitations cap, and the requirement to open the
+figures before writing about them.
+
+Each plugin **declares** the template it writes with, in `report.writing_template`. The template
+carries what is specific to the method: what it infers, what a result of that kind supports and
+does not, the levels a comparison is walked through, and the sentence patterns. The host never
+maps a plugin name to a template — that is the one place where adding a second method quietly
+stops working.
+
+The two combine into one manuscript. Neither is complete alone: the skill without a template
+knows no method, and the template without the skill has no document to fit into.
+
+## Why the tool does not write
+
+It used to. Headings were built from format strings, the limitations paragraph was ranked and
+joined, a sentence was emitted whenever two scales diverged past a threshold. All of it
+traceable, reproducible, and not writing — it cannot decide what matters, synthesise across
+levels, or narrow to a focus, which is the one thing the guidance asks for.
+
+So the tool measures and the agent writes, and `docs/AGENT_CONTRACT.md` states which half is
+whose. The division is not a style preference: a tool that writes produces prose that reads
+correctly and says nothing, and an agent that writes without the tool produces numbers with no
+file behind them.
