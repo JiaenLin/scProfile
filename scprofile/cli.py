@@ -2891,7 +2891,13 @@ def _review(a):
     if getattr(a, "shards", 0):
         only = None
         src = getattr(a, "from_list", "") or ""
-        if not src and a.plugin:
+        # THE PAPER'S SET IS THE DEFAULT AND IT IS THE WRONG DEFAULT FOR AN AUDIT. Restricting to
+        # FIGURES.txt is right when the job is to write the result; it is wrong when the job is to
+        # check what the run DREW, and silently returning zero because every cited figure is
+        # already reviewed is the worst way to say so. The opt-out is a flag, not a special value.
+        if getattr(a, "all_figures", False):
+            src = ""
+        elif not src and a.plugin:
             # THE PAPER'S SET BY DEFAULT, when the run wrote one. A run holds every figure it
             # drew; the brief's list holds the ones the writing step blocks on, and sending
             # agents to appendix panels first is work before the work.
@@ -3638,6 +3644,10 @@ def main(argv=None):
     rv.add_argument("--shard", type=int, default=0, metavar="K",
                     help="print only shard K of --shards N - what ONE agent in the fan-out "
                          "opens")
+    rv.add_argument("--all-figures", dest="all_figures", action="store_true",
+                    help="shard every figure the run drew, not only the ones the paper cites. "
+                         "The default restriction to FIGURES.txt suits writing the result; an "
+                         "audit of what was drawn wants this")
     rv.add_argument("--per-kind", dest="per_kind", type=int, default=0, metavar="K",
                     help="sample up to K outstanding figures of EVERY kind instead of taking "
                          "them in path order. A run draws one kind many times and a defect in a "
