@@ -166,6 +166,26 @@ say which were dropped and that their signal is not redistributed but absent.
 such as centred log-ratio "convert proportions to an unconstrained space while preserving their
 relationships" (doi:10.17615/m0ws-an52).
 
+## Register, for this method specifically
+
+The general skill fixes the register; two habits are particular to communication results and both
+produce memo prose:
+
+- **Do not narrate the levels.** "At the level of sender and receiver…", "At programme level…",
+  "At ligand-receptor resolution…" as paragraph openers announce the document's own scaffolding.
+  Walk the levels in order and let the content say which one it is: a paragraph about which
+  populations signal to which IS the sender-receiver level, and does not need labelling.
+- **Do not rank your own findings for the reader.** A communication result has an obvious
+  temptation to say which contrast "carries the study" or which module is "the clearest result".
+  Put the strongest finding first in its section and let position do the work.
+
+Subheadings name the comparison plainly - `Effect of <factor> in <stratum>`, `<factor A> x
+<factor B> interaction` - and never state the outcome.
+
+Direction and reference go in the sentence, in the field's own grammar: "signalling from X to Y
+was N-fold higher in <arm> than in <reference arm>", not "<arm> MINUS <reference>". The subtraction
+form belongs on the panel; the prose form belongs in the text.
+
 ## Sentence patterns
 
 Filled from the run's own tables. Never copy the prose; copy the shape.

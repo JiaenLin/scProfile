@@ -48,6 +48,36 @@ is the difference between their section and yours being comparable.
 You are adding **reading**: what the measurements are about, in the language of the field, in the
 order the design gives. **Write it as a research article, not as a report on a run.**
 
+### Register: write it the way a journal prints it
+
+**Read a Results section from any journal in the field before writing one.** The register is
+specific and a draft that misses it reads as a briefing memo however good the science is.
+
+What a Results section does NOT contain, and what a first draft keeps putting in:
+
+- **Commentary about the document.** "The headline is X", "this is the contrast that carries the
+  study", "the point worth holding onto", "what we think is happening". A Results section states
+  results; it does not narrate its own structure or rank its own findings for the reader.
+- **Emphasis.** No bold, no italics for stress. If a sentence needs bolding to land, it is the
+  wrong sentence. Prominence comes from position — the finding goes first in its paragraph.
+- **Bullet lists.** Findings are prose. A list is a table that lost its axes.
+- **Second person, or the author's process.** Not "worth stating", "the honest statement is",
+  "we should note".
+
+What it does contain: past tense for what was observed, present tense only for what is still the
+case; figures cited parenthetically at the end of the clause they support; numbers integrated
+into sentences rather than announced; subheadings that are plain descriptive noun phrases naming the
+factor and the stratum — `Effect of <factor> in <stratum>` — not a sentence arguing what the
+section concludes.
+
+Interpretation is confined to its own short passage and marked by its verbs — *consistent with*,
+*would predict*, *would be required to test* — not scattered through the observations.
+
+*Cost: a full draft was written in memo register — every third clause bolded, section headings
+that argued rather than named, and an opening sentence explaining why the experiment had been
+crossed. The findings and the numbers were right. It did not read as a research article, and a
+reader's first judgement of a Results section is made on register before content.*
+
 ### Discuss the FACTORS, not the contrast labels
 
 **The design varied something. Say what happened when it did.** A factor is an intervention on a
