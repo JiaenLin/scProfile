@@ -199,6 +199,24 @@ def health(run):
     except (OSError, ValueError):
         card = {}
     inst = [i for i in (card.get("instances") or []) if isinstance(i, dict)]
+    # A UNIT THAT FAILS HARD CAN BE MISSING FROM THE CARD ALTOGETHER, and then the card names some
+    # OTHER unit as the failure. Measured: one instance exited on a signal, was absent from the
+    # seventeen instances the card recorded, and the only unit the card called empty was a
+    # different one that had failed for a different reason on an earlier run. An agent reading the
+    # card alone goes to the wrong log. So the scheduled set is compared against the recorded one,
+    # and a unit that was scheduled and left no instance is named as exactly that.
+    try:
+        sched = json.loads((run / "report.json").read_text(encoding="utf-8")).get("units") or []
+    except (OSError, ValueError):
+        sched = []
+    have = {str(i.get("unit")) for i in inst}
+    lost = sorted({str(u) for u in sched} - have) if sched else []
+    if lost:
+        found.append({"what": f"{len(lost)} scheduled unit(s) left NO record in the run card",
+                      "detail": ", ".join(lost),
+                      "why": "these are the units to read first: a unit that fails hard can be "
+                             "absent from the card entirely, so the unit the card calls failed "
+                             "may not be the one that broke."})
     outright = [str(i.get("unit")) for i in inst
                 if str(i.get("state") or "") in ("empty", "failed")
                 or str(i.get("outcome") or "") == "failed"]

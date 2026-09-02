@@ -105,11 +105,18 @@ with tempfile.TemporaryDirectory() as td:
     (run / "CAPACITY.json").write_text(
         _json.dumps({"regressions": ["figures: 10 -> 7"]}), encoding="utf-8")
     (run / "RUN_CARD.json").write_text(_json.dumps({"instances": [
-        {"unit": "u1", "state": "empty", "verdict": "suspect"},
-        {"unit": "u2", "state": "done", "verdict": "suspect"},
+        {"unit": "u2", "state": "empty", "verdict": "suspect"},
         {"unit": "u3", "state": "done", "verdict": "suspect"}]}), encoding="utf-8")
+    _rj = _json.loads((run / "report.json").read_text(encoding="utf-8"))
+    _rj["units"] = ["u1", "u2", "u3"]
+    (run / "report.json").write_text(_json.dumps(_rj), encoding="utf-8")
     hz = AG.health(run)
     kinds = " ".join(h["what"] for h in hz)
+    # THE UNIT THAT BROKE CAN BE MISSING FROM THE CARD, and then the card names a different unit
+    # as the failure. The fixture schedules u1/u2/u3 and records only u2/u3, so u1 is the one that
+    # left no record - which is the unit an agent must read first.
+    check(any("NO record" in h["what"] and "u1" in h["detail"] for h in hz),
+          "a scheduled unit with no instance in the card is not named: %r" % (kinds,))
     check("regression" in kinds, "a capacity regression is not surfaced: %r" % (kinds,))
     check("did not produce" in kinds, "the unit that actually failed is not named: %r" % (kinds,))
     # THE ONE THAT WAS MISREAD: 3 suspect, 1 actually failed. Reporting 3 broken units is wrong.
