@@ -304,6 +304,10 @@ class Context:
         on per-unit numbers keeps them. Nothing here knows what the axes are called - it compares
         against whatever the resolver named them.
         """
+        if not self.figures_for:
+            return True
+        return (self.unit_axis or "") in set(self.figures_for)
+
     def figure_colours(self, labels=()):
         """{label: '#rrggbb'} for these labels, or {} if the host supplied no map.
 
@@ -325,10 +329,6 @@ class Context:
     def figure_absence(self):
         """The sentence naming what is NOT in the panel set, or "" when nothing is missing."""
         return str((self.figure_context or {}).get("note") or "")
-
-        if not self.figures_for:
-            return True
-        return (self.unit_axis or "") in set(self.figures_for)
 
     def draws(self, fid):
         """Whether THIS figure should be drawn for this unit.

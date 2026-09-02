@@ -3319,23 +3319,27 @@ def run(ctx):
     # honours it. Inference, tables and the saved object are unaffected either way.
     # args[13] names the plots drawn on every unit whatever the figure setting says. The profile
     # page is built from them and a page missing the units it describes is worse than no page.
+    # args[14] is the HOST's figure context, materialised as a two-column TSV.
+    #
+    # WHY A FILE AND NOT MORE POSITIONAL ARGUMENTS. The map is one row per population and the
+    # stamp is a sentence; both are shell-quoting hazards on a command line, and this argv is
+    # already fourteen long. One path, read if present, absent if the host said nothing - R that
+    # finds no file behaves exactly as it did before this existed, which is what keeps the plugin
+    # runnable against a host that predates it.
+    #
+    # THE COLOUR MAP IS THE HOST'S AND THE ARGUMENT NAME IS THE PLUGIN'S. The host cannot know
+    # that CellChat calls it color.use; the plugin cannot know what colour a label should be in
+    # another plugin's panels. That split is the whole point of the block.
+    #
+    # AND THIS COMMENT SITS OUTSIDE THE LIST DELIBERATELY: the argv guard parses the literal, and
+    # a multi-line comment inside it made the guard count nineteen arguments where there are
+    # fourteen, reporting five phantom ones as passed and never read.
     argv = [rscript, str(script), str(mtx), str(meta), db,
             str(C["min_cells"]), str(C["trim"]), str(edges_f),
             str(C["type"]), "TRUE" if C["population_size"] else "FALSE",
             str(C["nboot"]), str(C["thresh"]), str(cache or ""),
             "TRUE" if ctx.draw_figures else "FALSE",
             _PROFILE_SEP.join(_PROFILE_PLOTS),
-            # args[15] is the HOST's figure context, materialised as a two-column TSV.
-            #
-            # WHY A FILE AND NOT MORE POSITIONAL ARGUMENTS. The map is one row per population and
-            # the stamp is a sentence; both would be shell-quoting hazards on a command line, and
-            # this argv is already fifteen long. One path, read if present, absent if the host
-            # said nothing - and R that finds no file behaves exactly as it did before this
-            # existed, which is what keeps the plugin runnable against an older host.
-            #
-            # THE COLOUR MAP IS THE HOST'S AND THE ARGUMENT NAME IS THE PLUGIN'S. The host cannot
-            # know that CellChat calls it `color.use`; the plugin cannot know what colour a label
-            # should be in some other plugin's panels. That split is the whole point.
             str(_write_figure_context(ctx))]
     ctx.log(f"handing {A.n_obs:,} cells x {A.n_vars:,} genes to {db} via {rscript}")
     ctx.log(f"  type={C['type']} trim={C['trim']} population.size={C['population_size']} "
