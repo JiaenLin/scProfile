@@ -2892,10 +2892,62 @@ def _watch(a):
     print(f"  {WT.describe(out)}")
     if st.get("live_log"):
         print(f"  live log: {st['live_log']}")
-    # NON-ZERO ONLY FOR A RUN THAT FAILED. `unknown` is not failure - that conflation is the
-    # defect this command exists to remove, and returning non-zero for it would put the same
-    # mistake back in the exit code.
+    # THE HANDOFF. A watcher that reports a seal and stops leaves the agent at a dead end at
+    # exactly the moment the next action becomes available - and an agent at a dead end goes and
+    # does something else, which is how a cycle that the tool can drive end to end turns into a
+    # sequence of errands somebody has to remember. When the job ends, the next task goes on the
+    # screen without being asked for.
+    if st["state"] in (WT.SEALED, WT.FAILED):
+        _print_next(out, getattr(a, "plugin", "") or "")
     return REFUSE if st["state"] == WT.FAILED else 0
+
+
+def _print_next(out, plugin=""):
+    """The single next action for this run, printed after a job ends or on `scprofile next`."""
+    from . import agenda as AG
+
+    try:
+        names = [plugin] if plugin else sorted(
+            (json.loads((Path(out) / "report.json").read_text(encoding="utf-8"))
+             .get("kernels") or {}))
+    except Exception:                                                     # noqa: BLE001
+        names = [plugin] if plugin else []
+    if not names:
+        print("\n  NEXT: nothing to do here - this run records no plugin.")
+        return
+    for nm in names:
+        left = AG.outstanding(out, nm)
+        if not left:
+            print(f"\n  NEXT ({nm}): nothing outstanding. The result is written, carried into a "
+                  f"run, and defended.")
+            continue
+        nxt = left[0]
+        print(f"\n  NEXT ({nm}): {nxt['title']}")
+        print(f"      why: {nxt['why']}")
+        for _h in nxt.get("how") or []:
+            print(f"      {_h}")
+        print(f"      do:  {nxt['do']}")
+        if len(left) > 1:
+            print(f"      then {len(left) - 1} more; `scprofile agenda --out {out}` for all.")
+
+
+def _next(a):
+    """What is the ONE next thing to do on this run? The whole cycle in one question.
+
+    AN AGENT SHOULD NEVER HAVE TO REMEMBER THE ORDER. `agenda` prints the whole list, which is
+    what to read when deciding; this prints the single next action, which is what to read when
+    working. The distinction matters because a list of six invites choosing, and the order is not
+    a matter of choice - each task's input is the one above it.
+    """
+    out = Path(a.out)
+    if not out.is_dir():
+        print(f"scprofile: no such run directory: {out}", file=sys.stderr)
+        return REFUSE
+    from . import watch as WT
+    print(f"  {WT.describe(out)}")
+    _print_next(out, a.plugin or "")
+    return 0
+
 
 
 def _review(a):
@@ -3672,7 +3724,14 @@ def main(argv=None):
                     help="seconds between checks while waiting")
     wt.add_argument("--timeout", type=float, default=0.0, metavar="S",
                     help="give up waiting after this many seconds and report what is known")
+    wt.add_argument("--plugin", default="", help="report the next action for this plugin only")
     wt.set_defaults(fn=_watch)
+
+    nx = sub.add_parser("next",
+                        help="[agent] the ONE next thing to do on this run")
+    nx.add_argument("--out", required=True, type=Path, help="a run directory")
+    nx.add_argument("--plugin", default="")
+    nx.set_defaults(fn=_next)
 
     rv = sub.add_parser("review",
                         help="[agent] which figures have been LOOKED AT, and which have not")

@@ -242,6 +242,10 @@ if [ -n "${OUT:-}" ]; then
     echo "node     : $(hostname)"
     echo "started  : $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "live log : $LIVE"
+    # THE NEXT ACTION, WRITTEN WHERE THE RUN IS. An agent that finds this directory - or comes
+    # back to it after doing something else - should not have to remember what to type. The job
+    # is detached and cannot tell anyone it has finished; this line is how it says how to find out.
+    echo "watch    : scprofile watch --out $OUT --wait"
   } > "$OUT/RUNNING.txt" 2>/dev/null || true
 fi
 echo "phase    : ${PHASE}"

@@ -81,6 +81,16 @@ Two ordering rules follow, both paid for:
 - **Fix the figures before looking at them.** A review is bound to the image, so redrawing
   destroys it. A sweep taken before a fix round is a sweep thrown away.
 
+**You should never have to remember what comes next.** Two commands answer it:
+
+    scprofile next  --out <run>          # the single next action, with its command
+    scprofile agenda --out <run>         # the whole cycle and the state of each step
+
+`watch --wait` prints the next action itself the moment a job seals or fails, so the handoff
+happens without being asked for — a watcher that reports a seal and then stops leaves the agent
+at a dead end at exactly the moment the next step becomes available, and an agent at a dead end
+goes and does something else.
+
 And one thing about watching a job: **do not hand-roll the poll loop.**
 
     scprofile watch --out <run>          # what state is it in, right now

@@ -41,6 +41,7 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | `scprofile licence` | Evaluates a run's results against the licence criteria and, with `--grant`, records licences for reuse. |
 | `scprofile agenda` | What the agent still has to do on this run, in order, each task's state read off the run's own artifacts rather than stored. `--strict` exits non-zero while anything is outstanding. |
 | `scprofile write` | The writing brief: the evidence this run's result is written from, and the order to do it in — read, **look at the figures**, write against the skill and the plugin's declared template, carry it back with `run --section`. The tool gathers; the agent writes. |
+| `scprofile next` | The ONE next thing to do on this run. `agenda` prints the whole list, which is what to read when deciding; this prints the single next action, which is what to read when working. |
 | `scprofile watch` | What state a run is in — running, sealed, failed, or not yet known. `--wait` blocks until it finishes. The run records its own job id, so nothing is passed in; a seal lags the queue, so a job that has left the queue with no marker is UNKNOWN rather than failed. |
 | `scprofile review` | Records that a figure has been looked at, and reports which have not. |
 | `scprofile paper` | The paper test: records a claim written from the figures and what each review round did to it. A claim is bound to the figures it cites, so a redraw makes it stale. `docs/PAPER_TEST.md`. |
