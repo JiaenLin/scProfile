@@ -79,6 +79,31 @@ with tempfile.TemporaryDirectory() as td:
     ck("and points at the live log", "live log" in st2["why"].lower(), st2["why"])
     ck("the grace is generous enough to matter", WT.SEAL_GRACE_S >= 60)
 
+print("\nA RUN WITH NO MARKER IS STILL OBSERVABLE - the failure that made v1 useless")
+with tempfile.TemporaryDirectory() as td:
+    # Every run submitted before RUNNING.txt existed, and every run from a job script this tool
+    # did not write, has no marker. v1 answered UNKNOWN for all of them and the caller went back
+    # to the scheduler by hand - which is the thing this module exists to stop.
+    r = mk(td)
+    (r / "report.json").write_text("{}", encoding="utf-8")
+    st = WT.state(r)
+    ck("a run being written to right now is RUNNING, with no marker at all",
+       st["state"] == WT.RUNNING, f"{st['state']}: {st['why']}")
+    ck("and it says what it is going on", "written to" in st["why"], st["why"])
+    ck("and does not claim a job id it does not have", st["job"] == "")
+    # QUIET IS NOT DEAD, and the answer says which it is rather than guessing.
+    old_t = time.time() - (WT.ACTIVE_S + 120)
+    for q in list(r.rglob("*")) + [r]:
+        os.utime(q, (old_t, old_t))
+    st2 = WT.state(r)
+    ck("a run nothing has written to for a long time is UNKNOWN, not failed",
+       st2["state"] == WT.UNKNOWN, st2["state"])
+    ck("and it is never called failed on that evidence", st2["state"] != WT.FAILED)
+    ck("and it says how long it has been quiet", "s. It has either" in st2["why"], st2["why"])
+    ck("the activity window is long enough to survive one slow step", WT.ACTIVE_S >= 120)
+    ck("newest_write reports None for a directory it cannot read",
+       WT.newest_write(Path(td) / "nope") is None)
+
 print("\nwall-clock and CPU time are named, never taken positionally")
 src = Path(WT.__file__).read_text(encoding="utf-8")
 # THE DOT IS ESCAPED IN THE SOURCE because it is inside a regex, so the check looks for the

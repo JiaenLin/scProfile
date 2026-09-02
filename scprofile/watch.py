@@ -47,6 +47,59 @@ MARK_RUNNING, MARK_SEALED, MARK_FAILED = "RUNNING.txt", "SEALED.txt", "FAILED.tx
 SEAL_GRACE_S = 120.0
 
 
+#: A run with no marker and no reachable scheduler is still observable: something is either
+#: writing to it or it is not. Below this many seconds since the newest write, treat it as alive.
+#:
+#: WHY THIS FALLBACK EXISTS. The first version of this module answered UNKNOWN for any run that
+#: carried no RUNNING.txt - which is every run submitted before that marker existed, and every run
+#: from a job script this tool did not write. Asked about a live job, it said "either the job has
+#: not started or it predates this marker" and the caller went back to the scheduler by hand,
+#: which is the thing the module exists to stop. A watcher that only works on runs it started is
+#: not a watcher.
+#:
+#: Generous, because a run inside one long step can be quiet for minutes: the answer distinguishes
+#: "being written" from "quiet", and never calls quiet dead.
+ACTIVE_S = 300.0
+
+#: How far to look for the newest write. A run directory holds thousands of files and the answer
+#: does not need all of them - it needs to know whether ANY of them is recent.
+_SCAN_CAP = 4000
+
+
+def newest_write(run):
+    """Seconds since the most recent write anywhere under the run, or None if it cannot be read.
+
+    THE ONE SIGNAL THAT NEEDS NOTHING. No marker, no job id, no scheduler, no log path: a run that
+    is progressing is a run whose directory is being written to. It is weaker evidence than a
+    marker and it is never reported as more than it is.
+    """
+    run = Path(run)
+    newest, seen = None, 0
+    marks = {MARK_RUNNING, MARK_SEALED, MARK_FAILED}
+    try:
+        for p in run.rglob("*"):
+            # THE MARKERS ARE NOT EVIDENCE OF WORK. They are written once, at the boundaries, so
+            # counting them makes a run that has done nothing since it started look busy - and,
+            # worse, makes the just-started window indistinguishable from the just-finished one,
+            # which is the window the grace period exists for. Its own suite caught this: the
+            # activity check shadowed the seal-lags-the-queue branch entirely, because a fixture
+            # whose only file is RUNNING.txt always looked freshly written.
+            if p.name in marks:
+                continue
+            seen += 1
+            if seen > _SCAN_CAP:
+                break
+            try:
+                m = p.stat().st_mtime
+            except OSError:
+                continue
+            if newest is None or m > newest:
+                newest = m
+    except OSError:
+        return None
+    return None if newest is None else max(0.0, time.time() - newest)
+
+
 def _read(p):
     try:
         return p.read_text(encoding="utf-8", errors="replace")
@@ -129,10 +182,21 @@ def state(run):
         return dict(base, state=RUNNING,
                     why=f"the scheduler reports job_state={sch.get('state') or '?'}",
                     elapsed=sch.get("walltime") or "", cpu=sch.get("cput") or "")
+    quiet = newest_write(run)
     if not jid:
+        # NO ID TO ASK ABOUT, SO ASK THE DIRECTORY. This is the case that made the first version
+        # useless: a run from a job script that predates RUNNING.txt is still perfectly
+        # observable, because something is either writing to it or it is not.
+        if quiet is not None and quiet < ACTIVE_S:
+            return dict(base, state=RUNNING,
+                        why=f"no job id recorded, but the run directory was written to "
+                            f"{int(quiet)}s ago, so something is still producing it",
+                        elapsed="")
         return dict(base, state=UNKNOWN,
-                    why=f"no {MARK_RUNNING} and no seal: either the job has not started or it "
-                        f"predates this marker")
+                    why=(f"no job id recorded and nothing has been written to the run for "
+                         f"{int(quiet)}s. It has either finished without a marker or stopped."
+                         if quiet is not None else
+                         f"no {MARK_RUNNING}, no seal, and the run directory cannot be read"))
     # THE CASE THAT WAS GOT WRONG TWICE. The job is not in the queue and no marker is on disk.
     # That is not failure; it is the window between the two.
     age = 0.0
@@ -140,6 +204,14 @@ def state(run):
         age = time.time() - (run / MARK_RUNNING).stat().st_mtime
     except OSError:
         pass
+    # THE DIRECTORY OUTRANKS THE QUEUE FOR LIVENESS. A job can be absent from the scheduler this
+    # host can see - a different cluster, a scheduler that ages entries out - while its work is
+    # visibly still landing. Being written to is positive evidence; being missing from a queue is
+    # not evidence of anything.
+    if quiet is not None and quiet < ACTIVE_S:
+        return dict(base, state=RUNNING,
+                    why=f"the scheduler does not report this job, but the run directory was "
+                        f"written to {int(quiet)}s ago, so something is still producing it")
     if age < SEAL_GRACE_S:
         return dict(base, state=UNKNOWN,
                     why=f"the job has left the queue and no marker is visible yet. A seal LAGS "
