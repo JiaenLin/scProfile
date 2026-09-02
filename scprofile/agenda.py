@@ -201,10 +201,12 @@ def health(run):
     # version of this function read a `regressions` key that has never existed, so it reported
     # nothing on a run whose report had just printed four of them: a check that silently answers
     # "all clear" is worse than no check, because it is believed.
+    # THE BASELINE MUST HAVE FINISHED. Comparing against the newest earlier sibling whatever its
+    # state made a run that was cancelled mid-render the baseline for the next one, and produced a
+    # regression in a count the cancelled run had never reached.
     prev, worse = None, []
     try:
-        sibs = [d for d in RV.sibling_runs(run) if d.name < run.name]
-        prev = max(sibs, key=lambda d: d.name) if sibs else None
+        prev = CAP.baseline(run)
         if prev is not None:
             worse = CAP.regressions(CAP.read(run), CAP.read(prev))
     except Exception:                                                     # noqa: BLE001

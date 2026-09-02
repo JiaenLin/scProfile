@@ -108,6 +108,33 @@ def read(run_dir):
     return measure(run_dir)
 
 
+#: The marker a run writes only when its job reached the end cleanly.
+SEAL = "SEALED.txt"
+
+
+def baseline(run):
+    """The newest EARLIER SIBLING that finished, or None. What a regression is measured against.
+
+    A PARTIAL RUN IS NOT A BASELINE. `read()` measures a directory when it holds no CAPACITY.json,
+    which is right for a finished run written before that file existed and wrong for one that was
+    killed: its counts are whatever it had managed to write. Measured live - a run cancelled
+    mid-render became the comparison for the next run and produced a regression in a count it had
+    never reached, which the agent was then asked to account for. An accounting of an artefact is
+    worse than none, because somebody writes it down.
+
+    Sealed only, earlier only, newest first. Run keys sort chronologically, which is what makes
+    "earlier" answerable without reading a clock.
+    """
+    from . import review as RV
+    here = Path(run)
+    try:
+        sibs = [d for d in RV.sibling_runs(here)
+                if d.name < here.name and (d / SEAL).is_file()]
+    except OSError:
+        return None
+    return max(sibs, key=lambda d: d.name) if sibs else None
+
+
 def compare(now, before):
     """[(name, before, now, verdict)] - every count that moved, worst first.
 

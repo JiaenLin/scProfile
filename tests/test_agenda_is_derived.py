@@ -113,6 +113,12 @@ with tempfile.TemporaryDirectory() as td:
     (_sib / "CAPACITY.json").write_text(
         _json.dumps({"run": "runA", "counts": {"figures": 10, "plots_failed": 0}}),
         encoding="utf-8")
+    # A BASELINE MUST HAVE FINISHED. Without the seal this sibling is a partial run, and comparing
+    # against one made a cancelled job the baseline for the next run - producing a regression in a
+    # count the cancelled job had never reached, which the agent was then asked to account for.
+    check(not AG.health(run) or not [h for h in AG.health(run) if "regression" in h["what"]],
+          "an UNSEALED sibling was used as the baseline")
+    (_sib / "SEALED.txt").write_text("phase: run\n", encoding="utf-8")
     (run / "CAPACITY.json").write_text(
         _json.dumps({"run": "runX", "counts": {"figures": 7, "plots_failed": 3}}),
         encoding="utf-8")
