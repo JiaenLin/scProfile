@@ -43,12 +43,21 @@ def check(ok, msg):
         FAILURES.append(msg)
 
 
+#: A UNIT DIRECTORY WITH SPACES AND A PIPE IN ITS NAME, because that is what a contrast is
+#: called: a simple effect is written `<factor> | <other> = <level>`. Reading the transfer list
+#: with `.split()` instead of `.splitlines()` turned 93 paths into 269 tokens, matched none of
+#: them, and silently dropped every figure under a contrast directory from the fan-out. The
+#: counts were the only symptom.
+AWKWARD = "age | diet = chow"
+
+
 def _fixture(td, per_dir=(7, 5, 4, 3)):
     """A run with several figure directories, the way a plugin writes one per unit."""
     run = Path(td) / "runP"
     made = []
+    names = [AWKWARD] + [f"unit{i}" for i in range(1, len(per_dir))]
     for i, n in enumerate(per_dir):
-        d = run / "kernels" / "p" / f"unit{i}" / "figures"
+        d = run / "kernels" / "p" / names[i] / "figures"
         d.mkdir(parents=True)
         for j in range(n):
             f = d / f"panel_{j}.png"
@@ -97,6 +106,15 @@ with tempfile.TemporaryDirectory() as td:
     check(len(again) == len(made) - 1,
           "the split after one review does not cover the remaining figures: %d of %d"
           % (len(again), len(made) - 1))
+
+    # AND A RESTRICTED SHARD KEEPS THE AWKWARD PATHS. The list is one path per line precisely
+    # because paths contain spaces; a reader that splits on whitespace loses exactly the
+    # directories a comparison lives in.
+    listed = [r for r in made if AWKWARD in r]
+    got = [x for g in RV.shards(run, "p", 2, only=listed) for x in g]
+    check(sorted(got) == sorted(r for r in listed if r != made[0]),
+          "restricting the split to a declared list lost the paths with spaces in them: %r"
+          % (sorted(set(got) ^ set(r for r in listed if r != made[0]))[:3],))
 
 print("\nconcurrent writers do not corrupt the ledger")
 with tempfile.TemporaryDirectory() as td:

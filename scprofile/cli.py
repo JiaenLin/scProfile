@@ -2900,7 +2900,15 @@ def _review(a):
             src = str(cand) if cand.is_file() else ""
         if src:
             try:
-                only = Path(src).read_text(encoding="utf-8").split()
+                # SPLITLINES, NEVER split(). A figure path can contain SPACES - a contrast
+                # directory is named for the contrast, and a simple effect is written
+                # `<factor> | <other> = <level>`. `.split()` turned 93 paths into 269 tokens,
+                # none of which matched a real path, so every figure under a contrast directory
+                # was silently dropped from the fan-out and the shard counts quietly stopped
+                # adding up. The list is one path per line because that is what the transfer
+                # tools need; it has to be READ that way too.
+                only = [x for x in Path(src).read_text(encoding="utf-8").splitlines()
+                        if x.strip()]
             except OSError as e:
                 print(f"scprofile: cannot read the figure list {src}: {e}", file=sys.stderr)
                 return REFUSE
