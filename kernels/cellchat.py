@@ -1119,15 +1119,28 @@ ngrp <- length(groups)
 .gcol <- .cols_for(groups)
 .ttl <- function(x) if (nzchar(.fctx$stamp)) paste0(x, "\n", .fctx$stamp) else x
 
+# THE STAMP GOES BESIDE THE CIRCLE, NOT INTO ITS TITLE. `netVisual_circle` draws `title.name` as
+# centred text inside the plot region, so a title long enough to name the unit, the pooling and
+# the cell count runs off both edges and is unreadable - which is what it did: the panel carried
+# the sentence and no one could read a word of it. The heatmap and the scatter place the same
+# string correctly because they are grid graphics with a real title area.
+#
+# So the circle keeps its short title and the stamp is written under the plot with `mtext`, which
+# is the base-graphics margin and always fits. `.stampf` is a no-op when the host said nothing.
+.stampf <- function() if (nzchar(.fctx$stamp))
+  graphics::mtext(.fctx$stamp, side = 1, line = 0, cex = 0.75, col = "grey25")
+
 npng("circle_count", {
   netVisual_circle(cc@net$count, vertex.weight = as.numeric(table(cc@idents)),
                    weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
-                   title.name = .ttl("interactions"))
+                   title.name = "interactions")
+  .stampf()
 })
 npng("circle_weight", {
   netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),
                    weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
-                   title.name = .ttl("interaction strength"))
+                   title.name = "interaction strength")
+  .stampf()
 })
 npng("heatmap_count", netVisual_heatmap(cc, measure = "count", color.heatmap = "Blues",
                                         color.use = .gcol, title.name = .ttl("interactions")))
