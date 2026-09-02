@@ -2779,18 +2779,33 @@ def _agenda(a):
     from . import brief as BR
 
     out = Path(a.out)
-    if not out.is_dir():
-        print(f"scprofile: no such run directory: {out}", file=sys.stderr)
-        return REFUSE
+    # BEFORE THE RUN IS ALSO A PLACE IN THE CYCLE. An agent asking what the work is BEFORE
+    # submitting gets the shape of the whole thing - including that the compute runs detached
+    # and has to be watched. Refusing until a run exists taught the agent nothing until after
+    # the moment the knowledge was needed.
+    if not out.is_dir() or not (out / "report.json").is_file():
+        how = AG.mode(getattr(a, "mode", ""))
+        print(f"  execution mode: {how}")
+        for i, t in enumerate(AG.tasks(out, a.plugin or "<plugin>", how=how), 1):
+            print(f"  {i}. [{t['state']}] {t['title']}")
+            print(f"       {t['why']}")
+            print(f"       {t['do']}")
+        print("\n  Nothing has run yet. The first task is the run itself; everything after it "
+              "is blocked until it has produced something.")
+        return 0
     pay = BR._payload(out)
     names = [a.plugin] if a.plugin else sorted((pay.get("kernels") or {}))
     if not names:
         print("scprofile: this run has no plugin results to write up", file=sys.stderr)
         return REFUSE
     left = 0
+    how = AG.mode(getattr(a, "mode", ""))
+    print(f"  execution mode: {how}"
+          + ("  - the compute runs DETACHED; submit it, watch it, and pick the output up when "
+             "it seals" if how == AG.PBS else "  - the compute runs in front of you"))
     for nm in names:
-        t = AG.tasks(out, nm)
-        p = AG.write_agenda(out, nm)
+        t = AG.tasks(out, nm, how=how)
+        p = AG.write_agenda(out, nm, how=how)
         undone = [x for x in t if x["state"] != AG.DONE]
         left += len(undone)
         print(f"  {nm}: {len(t) - len(undone)} of {len(t)} done  ->  {p}")
@@ -3509,6 +3524,11 @@ def main(argv=None):
                         help="[agent] what remains to be done on this run, in order")
     ag.add_argument("--out", required=True, type=Path, help="a run directory")
     ag.add_argument("--plugin", default="", help="one plugin. Omit for every plugin in the run")
+    ag.add_argument("--mode", default="", choices=("", "pbs", "local"),
+                    help="how the compute executes. `pbs` means it runs DETACHED on another "
+                         "machine, so the agent submits it, watches it, and collects the output "
+                         "when it seals - which is one run, not three errands. Detected from the "
+                         "environment when not given, and the detection is always stated.")
     ag.add_argument("--strict", action="store_true",
                     help="exit non-zero while any agent task is outstanding. For a gate, or for "
                          "a promotion step that must not accept an unwritten result.")
