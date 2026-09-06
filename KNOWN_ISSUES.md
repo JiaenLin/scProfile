@@ -1,3 +1,7 @@
+# Known issues
+
+Defects and open items that reached a run, with what found them and what would close them.
+A record is kept even after the fix, because the way it escaped is the lesson.
 
 ## The network layout is not seeded — OPEN, measured 2026-09-06
 
