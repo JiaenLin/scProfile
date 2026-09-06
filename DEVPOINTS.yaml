@@ -22,6 +22,12 @@ fixture:
        "--kernel", "{name}", "--design", "{design}", "--prefix", "{out}/prefix"]
   products: []
   timeout: 900
+  # `plan` computes the whole plan against the data and then exits 2 where the kernel's own
+  # environment has not been built in this installation. That is the tool being right - the
+  # kernel point already declares it cannot prove the environment installs - so the refusal is
+  # accepted, and `refusal_says` is what makes it a refusal rather than a crash.
+  accepts_refusal: true
+  refusal_says: "are not ready in this installation"
 
 baseline_dir: tests/baselines
 
