@@ -1,17 +1,20 @@
 # What can be added to scProfile. Read by `sch dev map`; see the harness's sch/dev/points.py.
 tool: scprofile
 devpoints: 1
-terms: docs/forbidden_terms.txt
+# The word list this repository must not contain lives OUTSIDE it, in the project that owns
+# the cohort: $SCPROFILE_FORBIDDEN_TERMS, the convention tests/test_portability.py already uses.
+# A tool that ships the vocabulary in order to check that it does not ship the vocabulary
+# has shipped it.
 
 tests:
-  command: ["{python}", "-m", "pytest", "-q", "tests"]
+  command: ["{python}", "tests/run_all.py"]
 
 # `plan` runs nothing and resolves everything: the kernel's manifest, what it injects, what it
 # needs in obs and obsm, whether it is design-aware, and what stops it. It is the cheapest honest
 # exercise of a kernel's declaration, and it is fast enough to run on every edit.
 fixture:
   command:
-    - ["{python}", "-m", "scprofile.cli", "validate", "--kernel", "{name}"]
+    - ["{python}", "-m", "scprofile.cli", "validate", "{name}"]
     - ["{python}", "-m", "scprofile.cli", "plan", "--h5ad", "{observations}",
        "--kernel", "{name}", "--design", "{design}"]
   products: []
