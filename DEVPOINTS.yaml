@@ -15,8 +15,11 @@ tests:
 fixture:
   command:
     - ["{python}", "-m", "scprofile.cli", "validate", "{name}"]
+    # --prefix is where a kernel's environment WOULD go. Without it `plan` plans everything
+    # correctly and then exits 2 saying the plugin is not prepared in this installation, which
+    # is the tool being right and the declaration being incomplete.
     - ["{python}", "-m", "scprofile.cli", "plan", "--h5ad", "{observations}",
-       "--kernel", "{name}", "--design", "{design}"]
+       "--kernel", "{name}", "--design", "{design}", "--prefix", "{out}/prefix"]
   products: []
   timeout: 900
 
