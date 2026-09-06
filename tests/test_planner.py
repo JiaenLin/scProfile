@@ -319,7 +319,7 @@ _rd = {f"s{i}": {"age": a, "diet": t2} for i, (a, t2) in enumerate(
     [(a, t2) for a in ("young", "old") for t2 in ("ctrl", "trt") for _ in range(3)])}
 _plan = {
     "version": "0.1.0", "h5ad": "/x/o.h5ad",
-    "describe": {"n_obs": 100713, "n_vars": 34290},
+    "describe": {"n_obs": 120000, "n_vars": 30000},
     "facts": P.design_facts(_rd, ["age", "diet"], "sample", list(_rd)),
     "waves": [["cellcycle", "liana"], ["pseudotime"]],
     "roots": ["/a", "/b"], "search_incomplete": False,

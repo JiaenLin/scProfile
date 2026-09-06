@@ -173,8 +173,8 @@ def merge_one(adata, out_dir, payload, *, log=print):
             merged.setdefault("obsm_columns", {})[key] = _cols
         if idx is not None:
             # BY BARCODE, like every obs column. The host excludes cells with NaN in a computed
-            # embedding from every plugin, so a plugin handed 98,627 of 100,713 cells returned
-            # 98,627 rows and this refused it for not covering 100,713 - refused a plugin for
+            # embedding from every plugin, so a plugin handed N-2,086 of N cells returned
+            # N-2,086 rows and this refused it for not covering N - refused a plugin for
             # returning exactly the cells the host gave it.
             pend_arr.append(("obsm", key,
                              _align_rows(arr, idx, bc,

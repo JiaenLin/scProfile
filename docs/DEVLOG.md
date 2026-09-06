@@ -151,7 +151,7 @@ found:  [host] `install` read the named plugin's own `lock.yml`. Resolution deci
               completeness rule was stated over every plugin on disk. An audit that cannot be run
               clean on a legitimate invocation is one people learn to silence -> 8ea8c2c
         [host] **"an array carries no barcodes" was a gap, stated as a fact about arrays.** The
-              host excludes NaN-embedding cells from every plugin, so decoupler was handed 98,627
+              host excludes NaN-embedding cells from every plugin, so decoupler was handed N-2,086
               of N cells, returned N-2,086 rows, and the merge refused it for not covering
               N - refused a plugin for returning exactly the cells it was given. `emit_obsm`
               writes the barcodes; the merge aligns by them, and a per-unit plugin's arrays can
@@ -375,7 +375,7 @@ this cycle: the previous attempt's R step failed and `install` raised before any
             visited 20,064 director(ies), found 503 candidate(s)
             mtx  filtered: 13,824/13,824 barcodes matched (100.0%) within sample S1   [x10]
             141 further candidate(s) not opened: every cell was already covered
-            attached from 10 source(s): 98,627/98,627 cells (100.0%) have spliced/unspliced counts
+            attached from 10 source(s): N-2,086/N-2,086 cells (100.0%) have spliced/unspliced counts
 
         ...and velocity then refused, because of a COLUMN INDEX.
 
@@ -451,7 +451,7 @@ diet`: chemistry dropped as aliased with age, and NAMED. Two refusals left, both
 
 **THE THIRD RUN** (PBS 677891). velocity produces a real result on the real cohort for the first
 time in this project's history: `partial - velocity fitted on 2,000 genes (stochastic); median
-confidence 0.42; unspliced 23.9% of counts`, `wrote velocity.h5ad (98,627 x 2,000, velocity graph
+confidence 0.42; unspliced 23.9% of counts`, `wrote velocity.h5ad (N-2,086 x 2,000, velocity graph
 included)`, `transitions: 11 directed label transition(s)`. `partial` is the DECLARED behaviour
 below `min_confidence` 0.5, not a failure.
 
@@ -466,7 +466,7 @@ conversion: **did the two plugins lose behaviour?** No, and what they GAINED is 
         G2M_score]`, two captioned figures with source data, the same headline format - and its
         selftest passes the same assertions with one added. What changed is that it now goes
         through `_entry.py`: `the whole cohort x 34,290 genes` -> `4,225 sentinel-labelled cells
-        kept` -> `excluded 2,086 cells with NaN in X_scanvi` -> scored 98,627. **The directory
+        kept` -> `excluded 2,086 cells with NaN in X_scanvi` -> scored N-2,086. **The directory
         shape read `in.json` itself and applied NONE of that**, which is what "the contract is the
         host's" means in numbers rather than in prose.
 
@@ -559,7 +559,7 @@ fixed cost to the slope. On a fixture with a known 6 GB baseline and 12 GB per 1
 
 Worse, the fix's own first version failed the wrong way: with one point it attributed the whole
 peak to the *baseline* and the docstring called that conservative. It is conservative only at the
-size measured. 7.2 GB at 98,627 cells would charge 7.2 GB for 500,000, where the truth is nearer
+size measured. 7.2 GB at N-2,086 cells would charge 7.2 GB for 500,000, where the truth is nearer
 36 — a five-fold under-request, which is precisely the failure that kills a job at the end of its
 longest step. It now attributes to the rate, which over-charges the smaller instances instead,
 where the error is bounded by the baseline and nothing dies.
@@ -678,7 +678,7 @@ The first probe of the fixed check reported SILENT on the real payload. It was r
 `$RUNDIR/out2/.tool`. Two trees, one name apart, and the stale one answers every question
 plausibly. That is the drift this tool snapshots to prevent, arriving in the check of the check.
 
-clean:  PBS 689055 — velocity and cellcycle on a 100,713-cell object. velocity: 9 declared, 9
+clean:  PBS 689055 — velocity and cellcycle on the whole cohort's object. velocity: 9 declared, 9
         drawn, 0 findings; its page carries five diagnostic panels under their questions, then
         four results. cellcycle declares no block and renders as it always did, which is the
         path a plugin written outside this repository takes. Proven live on the real payload,

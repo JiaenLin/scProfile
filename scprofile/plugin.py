@@ -85,7 +85,7 @@ class Populations(tuple):
     `populations` that returns a boolean mask and a per-cell label array is answering a different
     question from the one its name asks, and the wrong reading is silent: `len(pops)` becomes the
     cell count, `if dropped:` asks the truth value of an array, and one of those raises and the
-    other reports 100,713 populations.
+    other reports N populations.
 
     So it still IS `(mask, groups)` - every correct caller is untouched, because this is a tuple -
     and it now also answers what the wrong callers were asking for:
@@ -634,8 +634,8 @@ class Context:
         barcodes: they are `self.adata.obs_names`, right here.
 
         What it cost: the host itself EXCLUDES cells with NaN in a computed embedding from every
-        plugin, so a plugin handed 98,627 of an object's 100,713 cells returned an array of
-        98,627 rows and the merge refused it for not covering 100,713 - refused the plugin for
+        plugin, so a plugin handed N-2,086 of an object's N cells returned an array of
+        N-2,086 rows and the merge refused it for not covering N - refused the plugin for
         returning exactly the cells the host had given it. Nothing about that is specific to one
         plugin or one dataset; it is every plugin that emits an array on an object with a
         withheld cell in it.

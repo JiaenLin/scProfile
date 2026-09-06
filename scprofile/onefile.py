@@ -23,6 +23,7 @@ TODO — what this method does, in the terms a reader would use in a paper, and 
 PLUGIN = {
     "api": 1,
     "version": "0.1.0",
+    "state_version": 1,
     "summary": "__SUMMARY__",
     "when_to_use": "TODO — the situation in which someone should reach for this",
     "wraps": {"tool": "__TOOL__", "homepage": "TODO", "license": "TODO", "cite": "TODO"},
