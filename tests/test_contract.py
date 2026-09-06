@@ -684,8 +684,10 @@ def test_no_project_data():
     """
     import re
     print("\nno dataset-specific content")
-    pat = re.compile(r"cardiomyo|matrifibro|endocardial|pericyte|celescope|cellbender"
-                     r"|\bsambo\b|wangyb|duke-nus|aging_hfd|young_hfd", re.I)
+    # Cell types and upstream tools of the study this was built against. The site's and the
+    # cohort's NAMES are not spelled here: tests/test_portability.py loads them from a file
+    # outside the repository ($SCPROFILE_FORBIDDEN_TERMS).
+    pat = re.compile(r"cardiomyo|matrifibro|endocardial|pericyte|celescope|cellbender", re.I)
     bad = []
     for f in list(root.glob("*.md")) + list(root.glob("docs/**/*.md")) \
             + list(root.glob("scprofile/*.py")) + list(root.glob("kernels/**/*.py")) \
