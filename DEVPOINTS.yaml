@@ -1,0 +1,47 @@
+# What can be added to scProfile. Read by `sch dev map`; see the harness's sch/dev/points.py.
+tool: scprofile
+devpoints: 1
+terms: docs/forbidden_terms.txt
+
+tests:
+  command: ["{python}", "-m", "pytest", "-q", "tests"]
+
+# `plan` runs nothing and resolves everything: the kernel's manifest, what it injects, what it
+# needs in obs and obsm, whether it is design-aware, and what stops it. It is the cheapest honest
+# exercise of a kernel's declaration, and it is fast enough to run on every edit.
+fixture:
+  command:
+    - ["{python}", "-m", "scprofile.cli", "validate", "--kernel", "{name}"]
+    - ["{python}", "-m", "scprofile.cli", "plan", "--h5ad", "{observations}",
+       "--kernel", "{name}", "--design", "{design}"]
+  products: []
+  timeout: 900
+
+baseline_dir: tests/baselines
+
+points:
+  kernel:
+    what: one method, hosted - its own environment, its own references, its own page
+    lives: kernels
+    must_declare: [api, version, state_version, summary, when_to_use, wraps, sees, needs_obs,
+                   cannot_show, caveats]
+    example: abundance
+    tests: [tests/smoke]
+    proves: >
+      its manifest resolves, its injects and needs are declarable, and the host can plan a run
+      without it - a kernel that cannot be planned cannot be refused for the right reason
+    cannot_prove: >
+      that its numbers are right, or that its environment installs - `scprofile selftest` is the
+      second question and a real run is the third
+    notes: >
+      A KERNEL MUST NEVER NAME ANOTHER KERNEL. It names a capability and the host resolves it;
+      see needs_capabilities in scprofile/kernels.py. `scprofile scaffold` writes the build
+      skeleton for a declared kernel and is the right first command.
+
+  panel:
+    what: a figure the report composes, at one shared scale across kernels
+    lives: scprofile
+    must_declare: [what the panel shows, what it CANNOT show, the scale it shares]
+    example: compare_panel
+    proves: "it draws from the merged tables and scrolls rather than rescaling per panel"
+    cannot_prove: "that it reads correctly to somebody who did not build it"
