@@ -24,6 +24,16 @@ set -euo pipefail
 : "${KERNEL:?pass -v KERNEL=<name>}"
 : "${PREFIX:?pass -v PREFIX=<dir where the env is built>}"
 : "${TOOL:?pass -v TOOL=<path to the scProfile checkout>}"
+SEAL_DIR="${PREFIX}/.scprofile-${KERNEL}"; mkdir -p "${SEAL_DIR}"; echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${SEAL_DIR}/RUNNING.txt"
+
+# THE SEAL, written by an EXIT trap so a crash seals too: SEALED.txt only on exit 0, FAILED.txt
+# otherwise, both naming the exit status, the job and the host. A job that ends without a seal
+# is one nothing downstream can tell from a job that never ran.
+_seal() { s=$?; d="${SEAL_DIR:-.}"; mkdir -p "$d"
+  { echo "exit=$s"; echo "jobid=${PBS_JOBID:-none}"; echo "command=$(basename "$0")"; hostname
+    date -u +%Y-%m-%dT%H:%M:%SZ; } > "$d/$([ "$s" -eq 0 ] && echo SEALED.txt || echo FAILED.txt)"
+  rm -f "$d/RUNNING.txt"; }
+trap _seal EXIT
 
 # An environment manager has to be on PATH. On most clusters that is a module; adjust or preload.
 # If your site has none, build the env yourself from kernels/<KERNEL>/lock.yml and set

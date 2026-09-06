@@ -428,6 +428,11 @@ def check(spec, name="<plugin>"):
                     out.append(("ERROR", f"{at} declares no `question`. A number on a shared "
                                          f"axis with no question attached is a number a reader "
                                          f"must guess the meaning of."))
+    sv = spec.get("state_version")
+    if not isinstance(sv, int) or isinstance(sv, bool):
+        out.append(("WARN", "no `state_version`. It versions the NUMBERS, not the code: it goes up "
+                            "whenever the same inputs would give different output, and a cached "
+                            "materialisation downstream is keyed on it. Assumed 1 until declared."))
     if not spec.get("cannot_show"):
         out.append(("ERROR", "no `cannot_show`. A result whose limits were never written down "
                              "reads exactly as authoritative as one whose limits were thought "

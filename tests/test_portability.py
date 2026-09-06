@@ -12,6 +12,7 @@ Run: python tests/test_portability.py
 """
 import inspect
 import pathlib
+import os
 import re
 import sys
 from pathlib import Path
@@ -61,36 +62,31 @@ def read_or_fail(path, what=""):
 
 
 print("\nno project, person, machine or cohort appears anywhere")
-BAD = re.compile(r"\bsambo\b|wangyb|duke-nus|hn-10-03|aging[_ ]?hfd|young[_ ]?hfd"
-                 # ANY node of any cluster, not one hostname. `hn-10-03` was listed and
-                 # `compute1020` was not, so a machine name sat in a test comment while the
-                 # guard reported the tree clean - the same shape as listing some of a cohort's
-                 # sample names. A site's machines are not ours to publish.
-                 r"|\bcompute[a-z]?\d{3,}\b|\blogin-[\d-]+\b"
-                 r"|/data/wangyb|scratch/2026"
-                 # BARE SAMPLE NAMES. The list above caught `aging_hfd` and missed `Aging1`,
-                 # which is the same cohort's other arm - so a dozen of them reached docs, host
-                 # code and two test files before anyone noticed. A leak guard that covers some
-                 # of a cohort's names is a guard that reports clean while the tree is not.
-                 r"|\b(?:aging|young)[ _]?\d+\b"
-                 # and the tissue the cohort came from: naming it identifies the study as
-                 # surely as naming a sample does.
-                 r"|heart study|myocard|cardiomyocyte"
-                 # AND THE DESIGN ITSELF. A cohort is identified by its shape and vocabulary as
-                 # surely as by its name, and this half was missed entirely while the sample
-                 # names were being guarded: the tool's own prose named the study's two factors
-                 # and their crossing, one of its diet levels, its animal count, and - worst -
-                 # the confound between a biological factor and the reagent lot, which is an
-                 # unpublished analytical finding about somebody's data sitting in a public
-                 # repository. Every lesson those sentences carried survives being told about
-                 # `a` and `b`; none of them needed the study.
-                 r"|\bage\s*(?:x|\u00d7|by)\s*diet\b"
-                 r"|\bhigh[- ]fat\b|\bHFD\b"
-                 r"|\bten (?:animals|mice|hearts)\b", re.I)
+# THE SITE AND THE COHORT ARE NOT SPELLED HERE. A guard that names what it guards against
+# carries the leak it exists to catch, and this one did - the cohort's name, the site's home
+# path, a head node - until the day the harness's own scan flagged the guard. The names now come
+# from a file OUTSIDE the repository, $SCPROFILE_FORBIDDEN_TERMS (one per line, # comments); what
+# is spelled here is the SHAPE of a leak, which is not a name: a home path, a login node, a job
+# id, an e-mail, a dated scratch directory, any node of any cluster - and the design vocabulary
+# of a study, which identifies it as surely as its name does (`a` and `b` carry every lesson).
+_terms_file = os.environ.get("SCPROFILE_FORBIDDEN_TERMS")
+_terms = ([l.strip() for l in Path(_terms_file).read_text(encoding="utf-8").splitlines()
+           if l.strip() and not l.startswith("#")]
+          if _terms_file and Path(_terms_file).exists() else [])
+BAD = re.compile("|".join([
+    r"(?<![\w/])/(?:Users|home)/[A-Za-z][\w.-]*", r"/data/[A-Za-z][\w.-]*/home/",
+    r"\blogin-\d{2}-\d{2}\b", r"\bhn-\d{2}-\d{2}\b", r"\b\d{6}\.hn-\d{2}-\d{2}\b",
+    r"[\w.+-]+@[\w-]+\.(?:edu|com|org|sg|ac\.uk)\b", r"scratch/\d{8}__",
+    r"\bcompute[a-z]?\d{3,}\b",
+    r"\bage\s*(?:x|\u00d7|by)\s*diet\b", r"\bhigh[- ]fat\b", r"\bHFD\b",
+    r"\bten (?:animals|mice|hearts)\b", r"heart study|myocard|cardiomyocyte",
+] + [re.escape(t) for t in _terms]), re.I)
+print(f"  {len(_terms)} site term(s) "
+      f"{'from ' + _terms_file if _terms else 'supplied: none - set SCPROFILE_FORBIDDEN_TERMS to prove more'}")
 #: Two exemptions, both narrow, because a check that fires on correct code is a check somebody
 #: switches off. A repository URL contains its owner's account name and is not a leak; and the
 #: OTHER leak guard has to contain the strings it looks for.
-OK_LINE = re.compile(r"github\.com/|re\.compile|re\.I\)")
+OK_LINE = re.compile(r"github\.com/|re\.compile|re\.I\)|^authors?\s*=|^\s*-?\s*email:")
 root = Path(__file__).resolve().parents[1]
 
 #: SCAN EVERYTHING THAT IS NOT BINARY, rather than listing the languages to scan. The list

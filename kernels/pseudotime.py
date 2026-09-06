@@ -19,6 +19,7 @@ with no eigengap is a picture of a decision rather than a measurement.
 PLUGIN = {
     "api": 1,
     "version": "0.2.0",
+    "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "ordering along a trajectory, oriented by velocity where it exists",
     "when_to_use": "you have a continuum you believe is a progression and want cells ordered "
                    "along it",

@@ -44,6 +44,7 @@ _ACCESSION_PATTERN = r"^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0
 PLUGIN = {
     "api": 1,
     "version": "0.2.0",
+    "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "regulatory activity per cell, from a curated prior",
     "when_to_use": "you want transcription-factor or pathway activity without inferring a "
                    "network from your own data",

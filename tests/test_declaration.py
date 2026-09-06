@@ -27,7 +27,7 @@ def errs(spec):
     return [m for lvl, m in declare.check(spec) if lvl == "ERROR"]
 
 
-GOOD = {"api": 1, "summary": "x", "cannot_show": ["y"],
+GOOD = {"api": 1, "state_version": 1, "summary": "x", "cannot_show": ["y"],
         "inject": {"required": ["counts"], "optional": ["design"]},
         "provides": ["activity"],
         "config": {"n": {"type": "int", "default": 1, "help": "h"}}}
@@ -139,15 +139,15 @@ print("\nthe CONTRACT'S own dependency is declared, not assumed")
 ck("the entrypoint reads with anndata, not scanpy",
    "import anndata as ad" in (Path(__file__).resolve().parents[1]
                               / "scprofile" / "_entry.py").read_text())
-_bad = declare.check({"api": 1, "summary": "x", "cannot_show": ["y"],
+_bad = declare.check({"api": 1, "state_version": 1, "summary": "x", "cannot_show": ["y"],
                       "requires": {"python": ">=3.10", "packages": {"numpy": ">=1"}}})
 ck("a python requirement with no anndata is an ERROR",
    any(l == "ERROR" and "anndata" in m for l, m in _bad), str(_bad))
-_ok = declare.check({"api": 1, "summary": "x", "cannot_show": ["y"],
+_ok = declare.check({"api": 1, "state_version": 1, "summary": "x", "cannot_show": ["y"],
                      "requires": {"python": ">=3.10",
                                   "packages": {"numpy": ">=1", "anndata": ">=0.10,<0.12"}}})
 ck("and with it, it is not", not any("anndata" in m for _l, m in _ok), str(_ok))
-_r = declare.check({"api": 1, "summary": "x", "cannot_show": ["y"],
+_r = declare.check({"api": 1, "state_version": 1, "summary": "x", "cannot_show": ["y"],
                     "requires": {"conda": {"r-base": "4.3"}, "r": ["a/b==1"]}})
 ck("a requirement that brings no python packages is not asked for it",
    not any("anndata" in m for _l, m in _r), str(_r))
@@ -392,7 +392,7 @@ except KeyError:
 ck("report_get REFUSES a key that is not declared", _raised,
    "an undeclared key was read without complaint, which is how the drift starts")
 
-_ok = {"name": "x", "summary": "s", "cannot_show": ["a"], "api": 1, "per_unit": "sample",
+_ok = {"name": "x", "summary": "s", "cannot_show": ["a"], "api": 1, "state_version": 1, "per_unit": "sample",
        "executor": {"memory_gb_per_100k": 1},
        "report": {"figures": [{"id": "f", "question": "q?", "shows": "diagnostic",
                                "source": "t.csv"}],
@@ -419,7 +419,7 @@ def _figs(n):
             for i in range(n)]
 
 
-_base = {"name": "x", "summary": "s", "cannot_show": ["a"], "api": 1,
+_base = {"name": "x", "summary": "s", "cannot_show": ["a"], "api": 1, "state_version": 1,
          "executor": {"memory_gb_per_100k": 1}}
 ck("a cohort plugin at the budget is accepted",
    not errs({**_base, "report": {"figures": _figs(_budget)}}), str(_budget))

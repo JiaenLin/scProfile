@@ -35,7 +35,7 @@ not observed: the repair loop. The deliberate breakage never ran, because the as
         velocity before the environment was touched. The chain diagnose → rebuild → retry-once →
         report-drift remains UNWITNESSED end to end.
 
-clean:  6 suites, validate 0 errors. cellcycle ran to completion on 100,713 cells in 63 s;
+clean:  6 suites, validate 0 errors. cellcycle ran to completion on the whole cohort in 63 s;
         all 6 environments that ship a selftest passed.
 
 format: nothing in the format needed changing to accommodate the third-party plugin. The host had
@@ -152,11 +152,11 @@ found:  [host] `install` read the named plugin's own `lock.yml`. Resolution deci
               clean on a legitimate invocation is one people learn to silence -> 8ea8c2c
         [host] **"an array carries no barcodes" was a gap, stated as a fact about arrays.** The
               host excludes NaN-embedding cells from every plugin, so decoupler was handed 98,627
-              of 100,713 cells, returned 98,627 rows, and the merge refused it for not covering
-              100,713 - refused a plugin for returning exactly the cells it was given. `emit_obsm`
+              of N cells, returned N-2,086 rows, and the merge refused it for not covering
+              N - refused a plugin for returning exactly the cells it was given. `emit_obsm`
               writes the barcodes; the merge aligns by them, and a per-unit plugin's arrays can
               cross units for the same reason -> 16aaf4b. Log: `decoupler obsm['X_tf_activity']:
-              98,627 of 100,713 cells covered; the rest are NaN`
+              N-2,086 of N cells covered; the rest are NaN`
         [host] the 3 GB `input_for_kernels.h5ad` was called "a reusable cached working file" and
               was neither: nothing read it again and nothing named it. A receipt makes it reusable
               and `report.json`/`README` name it as what the plugins ACTUALLY read -> ba9ec53
@@ -194,7 +194,7 @@ found:  nothing.
         (3.14 GB); it was made from this same object` — a 3.14 GB rewrite that every previous run
         into the same `--out` had done. `report.json` carries `input_read_by_kernels` and the
         README says what that file is.
-        merge by barcode, again: `decoupler obsm['X_tf_activity']: 98,627 of 100,713 cells
+        merge by barcode, again: `decoupler obsm['X_tf_activity']: N-2,086 of N cells
         covered; the rest are NaN` -> `merged obsm: X_tf_activity`, on the final code.
         plan: `0 error(s), 0 warning(s)` over all 10 plugins; `wrote .../out/run_plan.html`.
         restricted: `checked: all 2 known plugin(s) appear exactly once`.
@@ -349,7 +349,7 @@ this cycle: the previous attempt's R step failed and `install` raised before any
         forty-four R packages behind CellChat. All three surfaced in a selftest rather than in
         somebody's run, which is what the selftest is for.
 
-**AND THEN THE RUN** (PBS 677677, all ten plugins, `--all`, 100,713 cells, 12-core budget).
+**AND THEN THE RUN** (PBS 677677, all ten plugins, `--all`, the whole cohort, 12-core budget).
 
         `plan --audit --report` over every plugin: `checked: all 10 known plugin(s) appear exactly
         once`, `0 error(s), 0 warning(s)`, `wrote .../out/run_plan.html`. Every plugin `runnable`.
@@ -465,7 +465,7 @@ conversion: **did the two plugins lose behaviour?** No, and what they GAINED is 
         cellcycle's converted form produces the same shape - `status ok`, `obs [phase, S_score,
         G2M_score]`, two captioned figures with source data, the same headline format - and its
         selftest passes the same assertions with one added. What changed is that it now goes
-        through `_entry.py`: `100,713 cells x 34,290 genes` -> `4,225 sentinel-labelled cells
+        through `_entry.py`: `the whole cohort x 34,290 genes` -> `4,225 sentinel-labelled cells
         kept` -> `excluded 2,086 cells with NaN in X_scanvi` -> scored 98,627. **The directory
         shape read `in.json` itself and applied NONE of that**, which is what "the contract is the
         host's" means in numbers rather than in prose.
@@ -491,7 +491,7 @@ clean:  7 suites and `validate` green on the workstation AND on the cluster, at 
 
 ## 2026-08-23 — cycle 6 closed by PBS 679143: ten of ten, every one with a result
 
-The run the whole cycle was for, at `bc4a356`, over 100,713 cells and ten samples:
+The run the whole cycle was for, at `bc4a356`, over the whole cohort and ten samples:
 
     ran : ['abundance', 'cellchat', 'cellcycle', 'de', 'decoupler', 'liana',
            'pseudotime', 'scenic', 'silhouette', 'velocity']

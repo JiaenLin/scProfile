@@ -20,6 +20,7 @@ import sys
 from pathlib import Path
 
 REFUSE = 2
+STATE_VERSION = 1      # the host's numbers, versioned: the merge, the fold, the design resolver
 
 
 def _kernels():
@@ -1254,7 +1255,9 @@ def _run(a):
         print(f"  the constraint binds: "
               + "; ".join(f"{n} on {', '.join(v)}" for n, v in sorted(_binds.items())))
 
-    payload = {"version": _v(), "input": str(a.h5ad), "describe": describe,
+    from . import status as _ST
+    payload = {"version": _v(), "tool_commit": _ST.commit(), "state_version": STATE_VERSION,
+               "input": str(a.h5ad), "describe": describe,
                "by_arm": _by_arm, "concordance": _conc,
                # WHICH ARM EACH SAMPLE IS IN. The reporter had the per-unit numbers and the arm
                # NAMES and no way to join them, so a per-unit plugin's units could be put on one
@@ -3820,7 +3823,70 @@ def main(argv=None):
     if not getattr(a, "fn", None):
         ap.print_help()
         return 0
-    return a.fn(a)
+    return _with_status(a, argv)
+
+
+def _with_status(a, argv):
+    """Run a command inside the status contract, written by the TOOL.
+
+    `run` owns its directory: STATUS.json first as partial, last with the outcome, RUNNING.txt
+    replaced by SEALED.txt or FAILED.txt. Every other command that takes --out writes beside its
+    output under its own name (STATUS.report.json, SEALED.review.txt), so `review` cannot
+    overwrite the run's record. A host refusal - exit 2 with a `scprofile:` line on stderr - is
+    recorded with that line as its reason; a crash is sealed FAILED before it is re-raised.
+    """
+    import io as _io
+    from . import status as _ST
+    out = getattr(a, "out", None)
+    cmd = getattr(a, "cmd", None) or getattr(a, "command", None)
+    if not out or not cmd or cmd in ("cache",):
+        return a.fn(a)
+    out = Path(out)
+    try:
+        version = _v()
+    except Exception:                                                  # noqa: BLE001
+        version = "unknown"
+    _ST.begin(out, cmd, version=version, state_version=STATE_VERSION, sees=[], cannot_show={},
+              argv=list(argv) if argv is not None else None)
+
+    class _Tee(_io.TextIOBase):
+        """stderr, with the last `scprofile:` line kept for the status file."""
+        def __init__(self, real):
+            self.real, self.last = real, ""
+        def write(self, t):
+            for ln in str(t).splitlines():
+                if ln.strip().startswith("scprofile:"):
+                    self.last = ln.strip()[len("scprofile:"):].strip()
+            return self.real.write(t)
+        def flush(self):
+            return self.real.flush()
+        def fileno(self):
+            return self.real.fileno()
+
+    tee = _Tee(sys.stderr)
+    sys.stderr = tee
+    try:
+        rc = a.fn(a)
+    except BaseException as e:                                          # noqa: BLE001
+        sys.stderr = tee.real
+        _ST.finish(out, cmd, status="failed", exit_code=1, headline=f"{type(e).__name__}: {str(e)[:200]}")
+        raise
+    finally:
+        sys.stderr = tee.real
+    expected = ["report.json", "RUN_CARD.json"] if cmd == "run" else []
+    if rc == REFUSE:
+        reason = _ST.LAST_REFUSAL.get("reason") or tee.last or "refused"
+        _ST.finish(out, cmd, status="refused", exit_code=rc, headline=reason,
+                   refusal={"reason": reason, "fix": _ST.LAST_REFUSAL.get("fix") or
+                            "the refusal names what to change; read the scprofile: line above"})
+    elif rc in (0, None):
+        _ST.finish(out, cmd, status="ok", exit_code=0, expected=expected,
+                   headline={"run": "kernels ran, results merged, report written",
+                             "report": "documents rebuilt from report.json"}.get(cmd, f"{cmd} done"))
+    else:
+        _ST.finish(out, cmd, status="failed", exit_code=int(rc), expected=expected,
+                   headline=f"{cmd} returned {rc}: " + (tee.last or "see the log"))
+    return rc
 
 
 if __name__ == "__main__":

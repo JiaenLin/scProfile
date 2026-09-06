@@ -27,6 +27,7 @@ which genes left the answer before it was computed. The result comes after them.
 PLUGIN = {
     "api": 1,
     "version": "0.2.0",
+    "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "which genes change, per cell type, across the design",
     "when_to_use": "you have a design table with replicates and want differential expression",
     "wraps": {"tool": "pydeseq2", "homepage": "https://pydeseq2.readthedocs.io",

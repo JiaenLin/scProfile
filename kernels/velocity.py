@@ -48,6 +48,7 @@ guard.
 PLUGIN = {
     "api": 1,
     "version": "0.2.0",
+    "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "RNA velocity from spliced/unspliced counts - the DIRECTION of transcriptional "
                "change",
     "when_to_use": "your object carries spliced and unspliced layers, or the aligner output is "

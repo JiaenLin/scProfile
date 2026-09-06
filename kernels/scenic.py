@@ -10,6 +10,7 @@ result file, and wrong. That is why the reference data is a required capability.
 PLUGIN = {
     "api": 1,
     "version": "0.1.0",
+    "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "regulon activity per cell, from a network inferred from your own data",
     "when_to_use": "you want a gene regulatory network from this dataset rather than a prior",
     "wraps": {"tool": "pyscenic", "homepage": "https://pyscenic.readthedocs.io",

@@ -77,6 +77,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 PLUGIN = {
     "api": 1,
     "version": "0.19.0",
+    "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",

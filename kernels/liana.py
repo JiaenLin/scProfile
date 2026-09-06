@@ -35,6 +35,7 @@ is a name, not a finding.
 PLUGIN = {
     "api": 1,
     "version": "0.2.0",
+    "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "cell-cell communication, consensus over several scoring methods",
     "when_to_use": "you want a ligand-receptor map and, with a design, how it differs between "
                    "conditions",

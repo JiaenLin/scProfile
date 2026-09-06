@@ -30,6 +30,16 @@ set -uo pipefail
 : "${PY:?pass -v PY=<interpreter>}"
 : "${PKGS:?pass -v PKGS=\"pkg1 pkg2\"}"
 : "${OUT:?pass -v OUT=<dir>}"
+SEAL_DIR="${OUT}"; mkdir -p "${OUT}"; echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "${OUT}/RUNNING.txt"
+
+# THE SEAL, written by an EXIT trap so a crash seals too: SEALED.txt only on exit 0, FAILED.txt
+# otherwise, both naming the exit status, the job and the host. A job that ends without a seal
+# is one nothing downstream can tell from a job that never ran.
+_seal() { s=$?; d="${SEAL_DIR:-.}"; mkdir -p "$d"
+  { echo "exit=$s"; echo "jobid=${PBS_JOBID:-none}"; echo "command=$(basename "$0")"; hostname
+    date -u +%Y-%m-%dT%H:%M:%SZ; } > "$d/$([ "$s" -eq 0 ] && echo SEALED.txt || echo FAILED.txt)"
+  rm -f "$d/RUNNING.txt"; }
+trap _seal EXIT
 
 mkdir -p "${OUT}"
 exec > >(tee -a "${OUT}/resolve.out") 2>&1

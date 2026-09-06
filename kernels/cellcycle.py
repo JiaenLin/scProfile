@@ -51,6 +51,7 @@ ordering the reporter exists to prevent.
 PLUGIN = {
     "api": 1,
     "version": "0.3.1",
+    "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "cell-cycle phase per cell, and the check that a trajectory is not a "
                "cell-cycle axis",
     "when_to_use": "you are about to read a trajectory, or want to know which populations are "

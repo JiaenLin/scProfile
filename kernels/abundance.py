@@ -38,6 +38,7 @@ every share depend on how often they declined; they stay in the object and are n
 PLUGIN = {
     "api": 1,
     "version": "0.2.0",
+    "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "whether a population's share shifts across the design",
     "when_to_use": "you have a design table and want to know whether composition changed",
     "wraps": {"tool": "pertpy", "homepage": "https://pertpy.readthedocs.io",
