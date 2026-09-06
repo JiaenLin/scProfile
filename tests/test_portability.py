@@ -259,7 +259,7 @@ ck("every command is tagged for the agent or the maintainer, and nothing else",
 _rt = Path(__file__).resolve().parents[1]
 # A MISSING FILE IS A FAILING CHECK, NOT THE END OF THE SUITE. Module level, so an exception
 # here stops every check below - and it did, in every job, because the tool snapshot did not
-# copy `README.md`. This suite is the SAMBO-leak guard; aborting here meant the leak scan and
+# copy `README.md`. This suite is the cohort-leak guard; aborting here meant the leak scan and
 # every portability rule after it never ran in a job at all.
 _rm = read_or_fail(_rt / "README.md", "README.md")
 # THE INTENT, NOT ONE SENTENCE. This pinned the literal phrase "for people running an analysis",
