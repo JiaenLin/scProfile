@@ -51,12 +51,18 @@ points:
     # This tool has its own scaffolder and it is better than a generic one - it renders the
     # commented one-file template from the format's own knowledge. `sch dev new` defers to it.
     scaffold_command: "python -m scprofile.cli scaffold {name} --new"
-    # THE REAL ADMISSION GATE, which was enforced by tests/test_declaration.py and written down
-    # nowhere: a kernel must appear as a row in ROADMAP.md's Tier 0 table. A newcomer found it
-    # only by running the suite and watching it go red. It is a markdown table rather than a
-    # Python literal, which is why `register` also accepts a pattern.
+    # THERE IS NO LONGER ANYTHING TO REGISTER. This was the real admission gate and it was
+    # written down nowhere: a kernel had to appear as a row in ROADMAP.md's Tier 0 table, and a
+    # newcomer found that out by running the suite and watching it go red. Two hand edits, in a
+    # document, in both directions - a deleted kernel left its row behind and a count word above
+    # the table with it.
+    #
+    # The table is now RENDERED from the declarations. The row still has to be there, so the
+    # check stays, but the way to satisfy it is a command rather than an edit - which is why the
+    # command is named here as well as in the failure.
     register:
-      - {file: ROADMAP.md, pattern: "^\\| `{name}` \\|"}
+      - {file: ROADMAP.md, pattern: "^\\| `{name}` \\|",
+         fix: "python -m scprofile.cli roadmap --write"}
     tests: [tests/smoke]
     proves: >
       its manifest resolves, its injects and needs are declarable, and the host can plan a run
