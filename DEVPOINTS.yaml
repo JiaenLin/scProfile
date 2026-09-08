@@ -64,6 +64,50 @@ points:
       - {file: ROADMAP.md, pattern: "^\\| `{name}` \\|",
          fix: "python -m scprofile.cli generated --write"}
     tests: [tests/smoke]
+
+    # HOW A RAW TOOL BECOMES ONE OF THESE. Read by `sch dev convert`, which holds no field names
+    # of its own - the stages are general, the fields are this format's, and only this repository
+    # knows which stage fills which.
+    #
+    # THE ORDER IS THE DEPENDENCY. `account` cannot run before `inventory` has said what the tool
+    # exports, and `judgement` is last because every earlier stage is evidence for it.
+    #
+    # `kind: judgement` marks the stages no extractor can do. Keeping them in the same list as the
+    # mechanical ones is the point: a conversion that stopped listing them would look finished
+    # while the plugin still could not say what its result must not be read as.
+    convert:
+      placeholder: "TODO"
+      upstream: wraps.tool
+      stages:
+        - name: contract
+          fills: [inject, produces]
+          why: what the method is given and what it leaves behind
+        - name: defaults
+          fills: [config]
+          why: >
+            the wrapped tool's OWN defaults, declared rather than inherited - decoupler's `min_n`
+            and cellrank's terminal-state method were both being passed silently
+        - name: references
+          fills: [references]
+          why: >
+            every resource consulted that did not come from the user's object, with its tier - a
+            reference nobody declared is one the plan cannot warn about
+        - name: inventory
+          fills: [native_plots]
+          why: >
+            what the wrapped tool already draws. cellchat used 1 of 30 until somebody looked; after
+            the accounting it uses 32 of 35
+        - name: measure
+          fills: [memory_gb_base, memory_gb_per_100k]
+          why: >
+            both terms, from a real run. A rate alone attributes the fixed cost to the cells and
+            the job is sized to be killed on small objects
+        - name: judgement
+          kind: judgement
+          fills: [summary, when_to_use, cannot_show, report, upstream]
+          why: >
+            what no extractor can answer - what this is for, what a reader must not conclude from
+            it, and the question each figure is on the page to settle
     proves: >
       its manifest resolves, its injects and needs are declarable, and the host can plan a run
       without it - a kernel that cannot be planned cannot be refused for the right reason
