@@ -428,11 +428,25 @@ def check(spec, name="<plugin>"):
                     out.append(("ERROR", f"{at} declares no `question`. A number on a shared "
                                          f"axis with no question attached is a number a reader "
                                          f"must guess the meaning of."))
+    # AN ERROR, BECAUSE TWO AUTHORITIES DISAGREED AND THE LENIENT ONE SPOKE FIRST. This was a
+    # WARN saying "assumed 1 until declared", and `validate` ends with "none of them stops a run";
+    # `tests/test_status_contract.py` FAILS on the same field, and `DEVPOINTS.yaml` lists it among
+    # the keys a kernel must declare. A newcomer's kernel therefore validated clean and then went
+    # red in the suite, over a field the tool had just said was optional. The disagreement cost a
+    # cycle, and either answer would have been cheaper than both.
+    #
+    # It is the ERROR that is right. `state_version` keys a downstream cached materialisation, so
+    # ASSUMING 1 is not a neutral default: it is a promise, made on the plugin's behalf, that this
+    # plugin's numbers are the same numbers as the last run's. A plugin that changes what it
+    # computes and never declared the field silently serves a stale cache. Nothing is lost by
+    # requiring it - all nine shipped kernels declare it, and `scprofile/onefile.py` has always
+    # written `"state_version": 1` into the template a newcomer starts from.
     sv = spec.get("state_version")
     if not isinstance(sv, int) or isinstance(sv, bool):
-        out.append(("WARN", "no `state_version`. It versions the NUMBERS, not the code: it goes up "
-                            "whenever the same inputs would give different output, and a cached "
-                            "materialisation downstream is keyed on it. Assumed 1 until declared."))
+        out.append(("ERROR", "no `state_version`. It versions the NUMBERS, not the code: it goes "
+                             "up whenever the same inputs would give different output, and a "
+                             "cached materialisation downstream is keyed on it. Declare "
+                             "`\"state_version\": 1` and raise it when the numbers change."))
     if not spec.get("cannot_show"):
         out.append(("ERROR", "no `cannot_show`. A result whose limits were never written down "
                              "reads exactly as authoritative as one whose limits were thought "
