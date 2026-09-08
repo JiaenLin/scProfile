@@ -675,8 +675,16 @@ ck("no plugin declares another plugin by name",
 _unprov = _FB.unprovidable_capabilities(_K)
 ck("every capability a plugin asks for has an installed provider",
    not _unprov, str([a for a, _ in _unprov]))
-ck("the wave graph has at least one edge, or it is not a graph",
-   bool(_pe(_K)), "producer_edges resolved nothing across the installed set")
+# A FACT ABOUT THIS REPOSITORY, NOT A PROOF OF THE MACHINERY - and it used to be both, which is
+# why deleting one kernel file read as the scheduler breaking. The shipped nine have exactly ONE
+# resolvable edge between them, `velocity -> pseudotime`, and it is optional; four of the five
+# derived capabilities are provided by six plugins and injected by none. The mechanism is proved
+# on sets built for it in tests/test_wave_graph.py - required edges, chains, diamonds, cycles -
+# so what is left here is the claim that this tree still composes at all.
+ck("the shipped set still has an edge to compose",
+   bool(_pe(_K)),
+   "no plugin here reads another's output. The machinery is proved in test_wave_graph.py; this "
+   "says the nine no longer exercise any of it")
 # TWO WAVE BUILDERS, ONE GRAPH. `schedule` orders the run and `order_of_runs` orders the plan,
 # and until both were made to call one edge function they read different things: the run put a
 # consumer in the same wave as its producer while the plan put it in the next one. The first fix
@@ -1705,8 +1713,9 @@ def _literals(node, consts=()):
     return out
 
 
-def _dispatches(tree):
+def _dispatches(tree, names=None):
     """[(lineno, name)] where this module compares a plugin's identity against a plugin's name."""
+    names = _names if names is None else names
     consts = _module_constants(tree)
     hits = []
     for n in _ast_ov.walk(tree):
@@ -1717,13 +1726,13 @@ def _dispatches(tree):
             continue
         for x in sides:
             for lit in _literals(x, consts):
-                if lit in _names:
+                if lit in names:
                     hits.append((n.lineno, lit))
     return hits
 
 
-def _registries(tree):
-    """[(lineno, NAME, [names])] where this module HOLDS a list of shipped plugin names.
+def _registries(tree, names=None):
+    """[(NAME, [names])] where this module HOLDS a list of shipped plugin names.
 
     A SECOND RULE, BECAUSE THE FIRST ONE ASKS THE WRONG QUESTION OF THE WORST CASE. The dispatch
     check catches the host comparing an identity against a name, and `native.py` held eight of
@@ -1739,9 +1748,10 @@ def _registries(tree):
     fitted velocity field is a capability whose name happens to match its only provider today,
     which is a wording problem and not a registry.
     """
+    names = _names if names is None else names
     hits = []
     for name, strings in _module_constants(tree).items():
-        got = sorted(set(strings) & _names)
+        got = sorted(set(strings) & names)
         if len(got) >= 2:
             hits.append((name, got))
     return hits
@@ -1758,15 +1768,21 @@ ck("and no host module HOLDS A LIST of them, however it is later read",
    not _registry, "; ".join(_registry[:5]))
 # AND BOTH ARE PROVED ABLE TO FIRE, on the exact shapes they exist to catch - including the one
 # that got past the first version, which is the only reason the second check exists.
-_inline = _ast_ov.parse('if k.name == "cellchat":\n    pass\n')
-_named = _ast_ov.parse('KNOWN = ("cellchat",)\nif k.name in KNOWN:\n    pass\n')
-_held = _ast_ov.parse('OWED = ("cellchat", "velocity")\nx = [n for n in y if n not in OWED]\n')
-ck("and it fires on a real dispatch", bool(_dispatches(_inline)),
+# THE PROBES CARRY THEIR OWN NAME SET, and the first version of them did not. Written against
+# "cellchat" and "velocity", the two-name probe stopped firing the moment velocity was unplugged:
+# one of its names left `_names`, the pair fell under the threshold, and a guard proved able to
+# fire became a guard proved able to fire ON A TREE THAT STILL SHIPS BOTH. That is the same
+# defect this file exists to catch, in the check that catches it.
+_FAKE = {"alpha_plugin", "beta_plugin"}
+_inline = _ast_ov.parse('if k.name == "alpha_plugin":\n    pass\n')
+_named = _ast_ov.parse('KNOWN = ("alpha_plugin",)\nif k.name in KNOWN:\n    pass\n')
+_held = _ast_ov.parse('OWED = ("alpha_plugin", "beta_plugin")\nx = [n for n in y if n not in OWED]\n')
+ck("and it fires on a real dispatch", bool(_dispatches(_inline, _FAKE)),
    "a guard that has never been seen to fail is not known to work")
-ck("including one hidden behind a named constant", bool(_dispatches(_named)),
+ck("including one hidden behind a named constant", bool(_dispatches(_named, _FAKE)),
    "a variable name defeats the check")
 ck("and the registry check fires on the shape that got past the dispatch check",
-   bool(_registries(_held)) and not _dispatches(_held),
+   bool(_registries(_held, _FAKE)) and not _dispatches(_held, _FAKE),
    "the second check exists precisely because the first one returns nothing here")
 
 ck("NO panel module names a shipped plugin or its method",

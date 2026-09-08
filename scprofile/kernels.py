@@ -771,13 +771,13 @@ def schedule(names, available, *, budget_cores=1, units=None):
     while remaining:
         guard += 1
         if guard > len(names) + 2:
-            raise ValueError(f"cannot schedule {remaining}: a needs_kernels cycle")
+            raise ValueError(cycle_reason(remaining, available, edges))
         ready = [n for n in remaining
                  if all(d in done or d not in names
                         for d in (list(available[n].needs_kernels if n in available else [])
                                   + edges.get(n, [])))]
         if not ready:
-            raise ValueError(f"cannot schedule {remaining}: a needs_kernels cycle")
+            raise ValueError(cycle_reason(remaining, available, edges))
 
         # longest pole first, then by declared cores, then by name so a plan is reproducible
         ready.sort(key=lambda n: (Kernel.COST_ORDER.get(available[n].executor["cost"], 1),
@@ -1333,6 +1333,38 @@ def _who_produces(slot, available=None):
             if d == slot or (bare is not None and d in (f"obs[{bare}]", bare)):
                 return name
     return None
+
+
+def cycle_reason(remaining, available, edges):
+    """Why these plugins cannot be ordered, naming the capabilities that close the loop.
+
+    ONE MESSAGE, BECAUSE THERE WERE TWO BEHAVIOURS. `schedule` raised
+    `ValueError("... a needs_kernels cycle")` and `order_of_runs` appended the remainder as a
+    final wave and broke - so a user with a cyclic pair got a PLAN listing both plugins side by
+    side, which is the notation for "independent by the graph", and then a run that died. Two
+    builders were made to share one edge function for exactly this reason and the agreement was
+    only ever checked against the shipped set, which has no cycle and cannot grow one: the nine
+    have a single edge between them.
+
+    It also named the wrong cause. `needs_kernels` is set by no plugin and should be - a plugin
+    names a capability, never a peer - so the one message a user could reach pointed at a field
+    that was empty in every plugin involved.
+    """
+    stuck = sorted(remaining)
+    caps = []
+    for n in stuck:
+        k = available.get(n)
+        provided = set((getattr(k, "spec", None) or {}).get("provides") or ())
+        for other in stuck:
+            if other == n:
+                continue
+            wanted = set(getattr(available.get(other), "needs_capabilities", None) or ())
+            for c in sorted(provided & wanted):
+                caps.append(f"{n} provides `{c}`, which {other} injects")
+    detail = "; ".join(caps[:4]) if caps else "; ".join(f"{n} <- {edges.get(n, [])}" for n in stuck)
+    return (f"cannot order {stuck}: a capability cycle. {detail}. One of them must stop injecting "
+            f"what the other provides - a plugin may read another's output or be read by it, "
+            f"not both.")
 
 
 def producer_edges(kernels):

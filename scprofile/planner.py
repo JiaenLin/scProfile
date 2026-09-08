@@ -354,7 +354,7 @@ def order_of_runs(names, available):
     saying so leaves the user to discover the ordering from a failure. Plugins in one wave are
     independent BY THE GRAPH - not merely convenient to group.
     """
-    from .kernels import producer_edges
+    from .kernels import cycle_reason, producer_edges
     # DECLARED EDGES PLUS CAPABILITY EDGES. `needs_kernels` is empty for every shipped plugin and
     # should be - a plugin names a capability, not a peer - so honouring it alone gave the
     # scheduler nothing to order and made every run a single wave.
@@ -363,15 +363,16 @@ def order_of_runs(names, available):
     while remaining:
         guard += 1
         if guard > len(names) + 2:
-            waves.append(list(remaining))          # a cycle: report it rather than looping
-            break
+            raise ValueError(cycle_reason(remaining, available, edges))
         ready = [n for n in remaining
                  if all(d in done or d not in names
                         for d in (list(getattr(available.get(n), "needs_kernels", []) or [])
                                   + edges.get(n, [])))]
         if not ready:
-            waves.append(list(remaining))
-            break
+            # A CYCLE IS NOT A WAVE. Appending the remainder here printed the cyclic pair in the
+            # plan's "ORDER OF RUNS" exactly as two independent plugins are printed, and the run
+            # then raised on the same input. Refusing is what a plan that cannot be drawn owes.
+            raise ValueError(cycle_reason(remaining, available, edges))
         waves.append(ready)
         done.update(ready)
         remaining = [n for n in remaining if n not in done]

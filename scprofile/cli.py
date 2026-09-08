@@ -2118,7 +2118,14 @@ def _plan(a):
     print()
     # ---- the prescription: what runs, in what order, with what settings ----------------------
     runs = [v for v in verdicts if v.verdict == PL.RUN]
-    waves = PL.order_of_runs([v.plugin for v in runs], ks)
+    # A PLAN THAT CANNOT BE ORDERED IS NOT A PLAN. `order_of_runs` used to return the cyclic set
+    # as one final wave, which prints in "ORDER OF RUNS" exactly the way two independent plugins
+    # print - and the run then died on the same input. Refused here, before anything is promised.
+    try:
+        waves = PL.order_of_runs([v.plugin for v in runs], ks)
+    except ValueError as e:
+        print(f"scprofile: {e}", file=sys.stderr)
+        return REFUSE
     byname = {v.plugin: v for v in verdicts}
     if waves and runs:
         print("  ORDER OF RUNS - a wave waits only on what the graph says it waits on:")

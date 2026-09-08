@@ -146,8 +146,18 @@ avail = {"a": KO("a", []), "b": KO("b", ["a"]), "c": KO("c", ["b"]), "d": KO("d"
 w = P.order_of_runs(["a", "b", "c", "d"], avail)
 ck("dependents come after what they need", w == [["a", "d"], ["b"], ["c"]], str(w))
 ck("independents share a wave", "d" in w[0])
+# A CYCLE IS REFUSED, NOT RETURNED. This asserted `bool(order_of_runs(...))` and called that
+# "reported" - but what came back was [["x", "y"]], which is the notation for two plugins that
+# are independent by the graph. The plan printed the cyclic pair as a wave and the run raised on
+# the same input; the truthy value the check was satisfied by carried no report at all.
 cyc = {"x": KO("x", ["y"]), "y": KO("y", ["x"])}
-ck("a cycle is reported, not looped on", bool(P.order_of_runs(["x", "y"], cyc)))
+try:
+    _w = P.order_of_runs(["x", "y"], cyc)
+    _cyc_err = ""
+except ValueError as _e:
+    _w, _cyc_err = None, str(_e)
+ck("a cycle is refused, not returned as a wave", bool(_cyc_err), f"returned {_w}")
+ck("and the refusal names both plugins", all(n in _cyc_err for n in ("x", "y")), _cyc_err)
 
 print("\none level is a design fact; a missing table is not")
 d0 = design({f"s{i}": {"diet": "hf"} for i in range(10)})
