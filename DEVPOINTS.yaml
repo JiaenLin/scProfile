@@ -38,9 +38,25 @@ points:
   kernel:
     what: one method, hosted - its own environment, its own references, its own page
     lives: kernels
-    must_declare: [api, version, state_version, summary, when_to_use, wraps, sees, needs_obs,
-                   cannot_show, caveats]
+    # MEASURED, NOT ASPIRED TO. This list was first written from the accessor names on
+    # scprofile/kernels.py, and three of them - needs_obs, caveats and (for four kernels) sees -
+    # are not one-file PLUGIN keys at all: they are accessors on the legacy directory shape,
+    # reading kernel.yml. A newcomer's kernel was reported as complete while missing all three,
+    # and the declaration tier printed their names without checking them. These seventeen are
+    # what all nine shipped kernels actually declare, and they are now checked by parsing.
+    must_declare: [api, version, state_version, summary, when_to_use, wraps, cannot_show,
+                   inject, provides, produces, config, requires, cost, cores,
+                   memory_gb_per_100k, report, upstream]
     example: abundance
+    # This tool has its own scaffolder and it is better than a generic one - it renders the
+    # commented one-file template from the format's own knowledge. `sch dev new` defers to it.
+    scaffold_command: "python -m scprofile.cli scaffold {name} --new"
+    # THE REAL ADMISSION GATE, which was enforced by tests/test_declaration.py and written down
+    # nowhere: a kernel must appear as a row in ROADMAP.md's Tier 0 table. A newcomer found it
+    # only by running the suite and watching it go red. It is a markdown table rather than a
+    # Python literal, which is why `register` also accepts a pattern.
+    register:
+      - {file: ROADMAP.md, pattern: "^\\| `{name}` \\|"}
     tests: [tests/smoke]
     proves: >
       its manifest resolves, its injects and needs are declarable, and the host can plan a run
