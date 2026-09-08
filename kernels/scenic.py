@@ -13,7 +13,11 @@ PLUGIN = {
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "regulon activity per cell, from a network inferred from your own data",
     "when_to_use": "you want a gene regulatory network from this dataset rather than a prior",
-    "wraps": {"tool": "pyscenic", "homepage": "https://pyscenic.readthedocs.io",
+    "wraps": {"tool": "pyscenic",
+              # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
+              # `native_plots` or this; see native.unreviewed.
+              "plots_unreviewed": "nobody has been through pyscenic's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
+              "homepage": "https://pyscenic.readthedocs.io",
               "license": "GPL-3.0",
               "cite": "Aibar et al., Nat Methods 2017 (SCENIC); "
                       "Van de Sande et al., Nat Protoc 2020 (pySCENIC)"},

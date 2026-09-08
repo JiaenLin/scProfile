@@ -48,7 +48,11 @@ PLUGIN = {
     "summary": "regulatory activity per cell, from a curated prior",
     "when_to_use": "you want transcription-factor or pathway activity without inferring a "
                    "network from your own data",
-    "wraps": {"tool": "decoupler", "homepage": "https://github.com/saezlab/decoupler-py",
+    "wraps": {"tool": "decoupler",
+              # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
+              # `native_plots` or this; see native.unreviewed.
+              "plots_unreviewed": "nobody has been through decoupler's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
+              "homepage": "https://github.com/saezlab/decoupler-py",
               "license": "GPL-3.0",
               "cite": "Badia-i-Mompel et al., Bioinformatics Advances 2022"},
 

@@ -39,7 +39,11 @@ PLUGIN = {
     "summary": "cell-cell communication, consensus over several scoring methods",
     "when_to_use": "you want a ligand-receptor map and, with a design, how it differs between "
                    "conditions",
-    "wraps": {"tool": "liana", "homepage": "https://liana-py.readthedocs.io",
+    "wraps": {"tool": "liana",
+              # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
+              # `native_plots` or this; see native.unreviewed.
+              "plots_unreviewed": "nobody has been through liana's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
+              "homepage": "https://liana-py.readthedocs.io",
               "license": "GPL-3.0",
               "cite": "Dimitrov et al., Nat Commun 2022 (LIANA); "
                       "Türei et al., Mol Syst Biol 2021 (OmniPath)"},

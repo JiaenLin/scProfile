@@ -23,7 +23,11 @@ PLUGIN = {
     "summary": "ordering along a trajectory, oriented by velocity where it exists",
     "when_to_use": "you have a continuum you believe is a progression and want cells ordered "
                    "along it",
-    "wraps": {"tool": "cellrank", "homepage": "https://cellrank.readthedocs.io",
+    "wraps": {"tool": "cellrank",
+              # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
+              # `native_plots` or this; see native.unreviewed.
+              "plots_unreviewed": "nobody has been through cellrank's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
+              "homepage": "https://cellrank.readthedocs.io",
               "license": "BSD-3-Clause",
               "cite": "Lange et al., Nat Methods 2022 (CellRank); "
                       "Weiler et al., Nat Methods 2024 (CellRank 2)"},

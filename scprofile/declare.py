@@ -580,6 +580,17 @@ def check(spec, name="<plugin>"):
         out.append(("ERROR", "wraps a tool and records no `upstream.docs`. The record of having "
                              "READ the tool's documentation is the thing that catches a default "
                              "that is wrong rather than absent."))
+    # A WRAPPER INHERITS ITS UPSTREAM'S FIGURES WHETHER IT USES THEM OR NOT, so it says which.
+    # This debt used to be a tuple of eight plugin names in `native.py` - a registry, in the host,
+    # of the one thing the plugin format exists to keep out of it - and a NEW wrapper owed nothing
+    # until somebody noticed and appended its name. Now the admission is the plugin's own, written
+    # by whoever takes the debt on, and a wrapper cannot validate while silent about it.
+    if w.get("tool") and not spec.get("native_plots") and not str(w.get("plots_unreviewed") or "").strip():
+        out.append(("ERROR", f"wraps {w['tool']} and neither accounts for its figures nor admits "
+                             f"that nobody has looked at them. Declare `native_plots`, or say so "
+                             f"in `wraps.plots_unreviewed` - cellchat went from 1 of 30 upstream "
+                             f"plots used to 14 when somebody went through them, and four of the "
+                             f"fourteen answer a design comparison directly."))
     return out
 
 

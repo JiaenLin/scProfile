@@ -56,7 +56,11 @@ PLUGIN = {
                "cell-cycle axis",
     "when_to_use": "you are about to read a trajectory, or want to know which populations are "
                    "cycling before anything else is interpreted",
-    "wraps": {"tool": "scanpy", "homepage": "https://scanpy.readthedocs.io",
+    "wraps": {"tool": "scanpy",
+              # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
+              # `native_plots` or this; see native.unreviewed.
+              "plots_unreviewed": "nobody has been through scanpy's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
+              "homepage": "https://scanpy.readthedocs.io",
               "license": "BSD-3-Clause",
               "cite": "Tirosh et al., Science 2016 (gene sets); "
                       "Wolf et al., Genome Biol 2018 (scanpy)"},

@@ -41,7 +41,11 @@ PLUGIN = {
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "whether a population's share shifts across the design",
     "when_to_use": "you have a design table and want to know whether composition changed",
-    "wraps": {"tool": "pertpy", "homepage": "https://pertpy.readthedocs.io",
+    "wraps": {"tool": "pertpy",
+              # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
+              # `native_plots` or this; see native.unreviewed.
+              "plots_unreviewed": "nobody has been through pertpy's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
+              "homepage": "https://pertpy.readthedocs.io",
               "license": "MIT",
               "cite": "Büttner et al., 2024 (pertpy); "
                       "Büttner et al., Nat Commun 2021 (scCODA)"},

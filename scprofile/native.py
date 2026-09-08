@@ -128,16 +128,6 @@ def report(inventory, declared):
     return "\n".join(L)
 
 
-#: PLUGINS THAT WRAP A TOOL AND DO NOT YET ACCOUNT FOR ITS PLOTS. A ratchet, not an excuse: the
-#: list may SHRINK and never grow, so the practice is locked without pretending the debt is paid.
-#: Every name here is a wrapper whose upstream ships figures nobody has looked at, and the first
-#: one to be worked on will show what that is worth - cellchat went from 1 of 30 used to 14, and
-#: four of the fourteen answer a design comparison directly.
-OWES_ACCOUNTING = (
-    "abundance", "cellcycle", "de", "decoupler", "liana", "pseudotime", "scenic", "velocity",
-)
-
-
 def requires_accounting(spec):
     """True when a plugin wraps an upstream tool and therefore owes an account of its plots.
 
@@ -147,16 +137,34 @@ def requires_accounting(spec):
     return bool(((spec or {}).get("wraps") or {}).get("tool"))
 
 
-def accounting_debt(specs):
-    """(owing, unexpected) - wrappers with no `native_plots`, and any not on the ratchet list.
+def unreviewed(spec):
+    """The plugin's own written admission that nobody has looked at its upstream's plots, or "".
 
-    `specs` is {plugin_name: spec}. `unexpected` is what makes this a ratchet: a NEW wrapper
-    arriving without an accounting is a regression, while the named ones are known debt.
+    THE DEBT BELONGS TO THE PLUGIN THAT OWES IT. This was a tuple of eight plugin names in this
+    module - `OWES_ACCOUNTING` - which is a registry, in the host, of the one thing the one-file
+    format exists to stop the host from holding. It also went unseen by the check written to
+    catch exactly that, twice: the names were behind a constant, and the read was
+    `[n for n in owing if n not in OWES_ACCOUNTING]`, whose left operand is a loop variable.
+
+    Moved into `wraps`, the admission travels with the plugin, is written by the person taking
+    the debt on, and shows up in that plugin's diff rather than as a name appended to a list in
+    somebody else's file. It is also STRICTER than the list was: a new wrapper used to need
+    nothing at all until someone noticed and added it here, and now it cannot validate without
+    either an accounting or an admission in its own words.
+    """
+    return str((((spec or {}).get("wraps") or {}).get("plots_unreviewed") or "")).strip()
+
+
+def accounting_debt(specs):
+    """(owing, undeclared) - wrappers with no `native_plots`, and those admitting to neither.
+
+    `specs` is {plugin_name: spec}. `undeclared` is the regression: a wrapper that neither
+    accounts for its upstream's figures nor says in its own file that nobody has looked at them.
     """
     owing = sorted(n for n, sp in (specs or {}).items()
                    if requires_accounting(sp) and not (sp or {}).get("native_plots"))
-    unexpected = [n for n in owing if n not in OWES_ACCOUNTING]
-    return owing, unexpected
+    undeclared = [n for n in owing if not unreviewed((specs or {}).get(n))]
+    return owing, undeclared
 
 
 def function_for(declared, filename):

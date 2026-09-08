@@ -26,7 +26,12 @@ PLUGIN = {
     "state_version": 1,
     "summary": "__SUMMARY__",
     "when_to_use": "TODO — the situation in which someone should reach for this",
-    "wraps": {"tool": "__TOOL__", "homepage": "TODO", "license": "TODO", "cite": "TODO"},
+    # A WRAPPER INHERITS ITS UPSTREAM'S FIGURES WHETHER IT USES THEM OR NOT, so it must say
+    # which. Leave `plots_unreviewed` here until you have been through the tool's own plotting
+    # API; replace it with `native_plots` once you have. cellchat went from 1 of 30 upstream
+    # plots used to 14 when somebody did, and four of the fourteen answer a design comparison.
+    "wraps": {"tool": "__TOOL__", "homepage": "TODO", "license": "TODO", "cite": "TODO",
+              "plots_unreviewed": "nobody has been through __TOOL__'s own figures yet"},
 
     # READ THE TOOL'S DOCUMENTATION AND RECORD WHAT YOU CHANGED. A default accepted silently is
     # a decision nobody can find later.

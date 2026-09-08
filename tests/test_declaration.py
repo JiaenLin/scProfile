@@ -68,11 +68,23 @@ ck("and it is warned about",
    any("lower bound" in m for lvl, m in declare.check({**GOOD, "env": {"python": "3.11",
                                                                       "pip": ["x>=1"]}})))
 
-print("\nwrapping a tool means recording having read its documentation")
+print("\nwrapping a tool means recording having read its documentation, and its figures")
 ck("wraps with no upstream.docs is an ERROR",
    errs({**GOOD, "wraps": {"tool": "t"}}))
-ck("with docs it passes",
-   not errs({**GOOD, "wraps": {"tool": "t"}, "upstream": {"docs": "http://x"}}))
+# THE SECOND THING A WRAPPER OWES, and it used to be owed to a list in native.py instead.
+_wrapped = {**GOOD, "wraps": {"tool": "t"}, "upstream": {"docs": "u"}}
+ck("a wrapper silent about its upstream's figures is an ERROR", errs(_wrapped))
+ck("admitting nobody has looked is enough",
+   not errs({**_wrapped, "wraps": {"tool": "t", "plots_unreviewed": "nobody has looked"}}))
+ck("and so is accounting for them",
+   not errs({**_wrapped, "native_plots": {"pl.something": {"where": "figures/x.png"}}}))
+# RECORDING THE DOCS CLEARS THE DOCS ERROR, and only that one. This asserted a clean pass until
+# a wrapper also had to say something about its upstream's figures, at which point "passes" and
+# "passes the docs check" stopped being the same sentence - and the looser one would have gone on
+# reading as green while testing something it no longer tested.
+ck("recording the docs clears the docs error",
+   not [m for m in errs({**GOOD, "wraps": {"tool": "t"}, "upstream": {"docs": "http://x"}})
+        if "upstream.docs" in str(m)])
 
 print("\nevery problem is reported, not just the first")
 many = {"api": 99, "provides": ["counts"], "inject": {"required": ["wat"]}}

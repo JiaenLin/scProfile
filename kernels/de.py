@@ -30,7 +30,11 @@ PLUGIN = {
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "which genes change, per cell type, across the design",
     "when_to_use": "you have a design table with replicates and want differential expression",
-    "wraps": {"tool": "pydeseq2", "homepage": "https://pydeseq2.readthedocs.io",
+    "wraps": {"tool": "pydeseq2",
+              # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
+              # `native_plots` or this; see native.unreviewed.
+              "plots_unreviewed": "nobody has been through pydeseq2's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
+              "homepage": "https://pydeseq2.readthedocs.io",
               "license": "MIT",
               "cite": "Muzellec et al., Bioinformatics 2023 (PyDESeq2); "
                       "Love et al., Genome Biol 2014 (DESeq2)"},

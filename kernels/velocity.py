@@ -53,7 +53,11 @@ PLUGIN = {
                "change",
     "when_to_use": "your object carries spliced and unspliced layers, or the aligner output is "
                    "still beside it, and you want direction of change rather than position",
-    "wraps": {"tool": "scvelo", "version": "0.3.4", "homepage": "https://scvelo.readthedocs.io",
+    "wraps": {"tool": "scvelo",
+              # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
+              # `native_plots` or this; see native.unreviewed.
+              "plots_unreviewed": "nobody has been through scvelo's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
+              "version": "0.3.4", "homepage": "https://scvelo.readthedocs.io",
               "license": "BSD-3-Clause", "cite": "Bergen et al., Nat Biotechnol 2020"},
 
     # NOT AN `inject`. The one prerequisite most datasets fail cannot be repaired later - spliced

@@ -93,26 +93,48 @@ def test_a_plugin_that_wraps_a_tool_owes_an_accounting():
     assert not N.requires_accounting({})
 
 
-def test_the_debt_is_a_RATCHET_and_may_only_shrink():
-    """A new wrapper arriving with no accounting is a regression; the named ones are known debt.
+#: HOW MANY WRAPPERS HAVE NOT ACCOUNTED FOR THEIR UPSTREAM'S FIGURES. A NUMBER, NOT A LIST.
+#: The ratchet used to be `native.OWES_ACCOUNTING`, eight plugin names in a host module - which is
+#: a registry of plugins living in the host, the one thing the one-file format exists to abolish,
+#: and it slipped past the guard written to catch exactly that. The debt now lives in each
+#: plugin's own `wraps.plots_unreviewed`, and what stays here is the count: it may go DOWN as
+#: wrappers are worked through and may never go up. A number carries no plugin's identity, so it
+#: cannot go stale when one is renamed and cannot be wrong when one is unplugged.
+UNREVIEWED_TODAY = 8
+
+
+def test_a_wrapper_declares_an_accounting_or_admits_it_has_none():
+    """Neither is a regression, and it is caught in the plugin rather than noticed here.
 
     This is what locks the practice. Without it, 'list the tool's plots and use them' is advice,
-    and advice is followed until somebody is in a hurry.
+    and advice is followed until somebody is in a hurry. The previous version of this could only
+    catch a new wrapper by NOT finding its name on a list in native.py, so the debt was recorded
+    in a file its author never opened.
     """
-    owing, unexpected = N.accounting_debt(_all_specs())
-    assert not unexpected, (
-        "a plugin wraps a tool and does not account for its plots, and is not on the known-debt "
-        f"list: {unexpected}. Either declare native_plots for it, or - if the debt is genuinely "
-        "being taken on - add it to OWES_ACCOUNTING with that decision recorded.")
-    stale = [n for n in N.OWES_ACCOUNTING if n not in owing]
-    assert not stale, (
-        f"these paid their debt but are still listed as owing it: {stale}. Remove them from "
-        "OWES_ACCOUNTING so the ratchet keeps its meaning.")
+    owing, undeclared = N.accounting_debt(_all_specs())
+    assert not undeclared, (
+        f"these wrap a tool, do not account for its figures, and do not say so: {undeclared}. "
+        "Declare native_plots, or write the admission into the plugin's own "
+        "`wraps.plots_unreviewed`.")
 
 
-def test_the_plugin_that_paid_is_no_longer_on_the_list():
-    assert "cellchat" not in N.OWES_ACCOUNTING, (
-        "cellchat declares native_plots; leaving it on the debt list makes the list a decoration")
+def test_the_debt_is_a_RATCHET_and_may_only_shrink():
+    owing, _ = N.accounting_debt(_all_specs())
+    assert len(owing) <= UNREVIEWED_TODAY, (
+        f"{len(owing)} wrappers have not accounted for their upstream's figures, up from "
+        f"{UNREVIEWED_TODAY}. The debt may shrink and may not grow.")
+    assert len(owing) == UNREVIEWED_TODAY, (
+        f"{len(owing)} wrappers owe an accounting, not {UNREVIEWED_TODAY} — the debt shrank, "
+        f"which is the point. Lower UNREVIEWED_TODAY to {len(owing)} so the ratchet holds there.")
+
+
+def test_the_plugin_that_paid_makes_no_admission():
+    specs = _all_specs()
+    paid = [n for n, sp in specs.items() if sp.get("native_plots")]
+    assert paid, "no plugin accounts for its upstream's figures, so the ratchet measures nothing"
+    for n in paid:
+        assert not N.unreviewed(specs[n]), (
+            f"{n} declares native_plots AND admits nobody has looked; one of the two is a leftover")
 
 
 # ---------------------------------------------------------------------------------------------

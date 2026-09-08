@@ -1663,38 +1663,111 @@ def _is_identity(node):
     return False
 
 
-def _literals(node):
+def _strings(node):
+    """Every string literal reachable from this node without leaving the expression."""
     out = []
     if isinstance(node, _ast_ov.Constant) and isinstance(node.value, str):
         out.append(node.value)
     elif isinstance(node, (_ast_ov.Tuple, _ast_ov.List, _ast_ov.Set)):
         for e in node.elts:
-            out += _literals(e)
+            out += _strings(e)
+    elif isinstance(node, _ast_ov.Dict):
+        for k in node.keys:
+            if k is not None:
+                out += _strings(k)
     return out
 
 
-_branch = []
-for _f in sorted((root / "scprofile").glob("*.py")):
-    for _n in _ast_ov.walk(_ast_ov.parse(_f.read_text(encoding="utf-8"))):
-        if not isinstance(_n, _ast_ov.Compare):
+def _module_constants(tree):
+    """{NAME: [strings]} for module-level containers of string literals.
+
+    A NAMED CONSTANT IS STILL A LITERAL, one indirection away. The guard read only inline
+    operands, so `if k.name == "velocity"` was caught and `KNOWN = ("velocity", ...)` /
+    `if k.name in KNOWN` was not - and a guard that a variable name defeats is a guard that only
+    catches the version somebody wrote carelessly.
+    """
+    out = {}
+    for n in tree.body:
+        if not isinstance(n, (_ast_ov.Assign, _ast_ov.AnnAssign)):
             continue
-        sides = [_n.left] + list(_n.comparators)
+        tgt = n.targets[0] if isinstance(n, _ast_ov.Assign) else n.target
+        if isinstance(tgt, _ast_ov.Name) and n.value is not None:
+            got = _strings(n.value)
+            if got:
+                out[tgt.id] = got
+    return out
+
+
+def _literals(node, consts=()):
+    out = _strings(node)
+    if isinstance(node, _ast_ov.Name):
+        out += list((consts or {}).get(node.id, ()))
+    return out
+
+
+def _dispatches(tree):
+    """[(lineno, name)] where this module compares a plugin's identity against a plugin's name."""
+    consts = _module_constants(tree)
+    hits = []
+    for n in _ast_ov.walk(tree):
+        if not isinstance(n, _ast_ov.Compare):
+            continue
+        sides = [n.left] + list(n.comparators)
         if not any(_is_identity(x) for x in sides):
             continue
         for x in sides:
-            for lit in _literals(x):
+            for lit in _literals(x, consts):
                 if lit in _names:
-                    _branch.append(f"{_f.name}:{_n.lineno} dispatches on {lit!r}")
+                    hits.append((n.lineno, lit))
+    return hits
+
+
+def _registries(tree):
+    """[(lineno, NAME, [names])] where this module HOLDS a list of shipped plugin names.
+
+    A SECOND RULE, BECAUSE THE FIRST ONE ASKS THE WRONG QUESTION OF THE WORST CASE. The dispatch
+    check catches the host comparing an identity against a name, and `native.py` held eight of
+    the nine shipped names in `OWES_ACCOUNTING` and slipped past it twice over: the list was a
+    named constant, and it was read as `[n for n in owing if n not in OWES_ACCOUNTING]`, whose
+    left operand is a loop variable called `n` and not an identity by any reading.
+
+    So the rule that matters is not "do not branch on a name". It is: THE HOST MAY NOT HOLD THE
+    LIST. A collection of plugin names in the host is a registry, and abolishing the registry is
+    what the one-file plugin format is for - however the registry is later consulted.
+
+    Two or more, because one is not a list. `declare.CAPABILITIES` has a `velocity` key because a
+    fitted velocity field is a capability whose name happens to match its only provider today,
+    which is a wording problem and not a registry.
+    """
+    hits = []
+    for name, strings in _module_constants(tree).items():
+        got = sorted(set(strings) & _names)
+        if len(got) >= 2:
+            hits.append((name, got))
+    return hits
+
+
+_branch, _registry = [], []
+for _f in sorted((root / "scprofile").glob("*.py")):
+    _tree = _ast_ov.parse(_f.read_text(encoding="utf-8"))
+    _branch += [f"{_f.name}:{ln} dispatches on {lit!r}" for ln, lit in _dispatches(_tree)]
+    _registry += [f"{_f.name}:{nm} holds {got}" for nm, got in _registries(_tree)]
 ck("no host module DISPATCHES on a shipped plugin's name",
    not _branch, "; ".join(_branch[:5]))
-# AND THE CHECK IS PROVED ABLE TO FIRE, on the exact shape it exists to catch.
-_probe = _ast_ov.parse('if k.name == "cellchat":\n    pass\n')
-_fired = any(isinstance(n, _ast_ov.Compare) and any(_is_identity(x) for x in
-             [n.left] + list(n.comparators)) and
-             any(l in _names for x in [n.left] + list(n.comparators) for l in _literals(x))
-             for n in _ast_ov.walk(_probe))
-ck("and it fires on a real dispatch", _fired,
+ck("and no host module HOLDS A LIST of them, however it is later read",
+   not _registry, "; ".join(_registry[:5]))
+# AND BOTH ARE PROVED ABLE TO FIRE, on the exact shapes they exist to catch - including the one
+# that got past the first version, which is the only reason the second check exists.
+_inline = _ast_ov.parse('if k.name == "cellchat":\n    pass\n')
+_named = _ast_ov.parse('KNOWN = ("cellchat",)\nif k.name in KNOWN:\n    pass\n')
+_held = _ast_ov.parse('OWED = ("cellchat", "velocity")\nx = [n for n in y if n not in OWED]\n')
+ck("and it fires on a real dispatch", bool(_dispatches(_inline)),
    "a guard that has never been seen to fail is not known to work")
+ck("including one hidden behind a named constant", bool(_dispatches(_named)),
+   "a variable name defeats the check")
+ck("and the registry check fires on the shape that got past the dispatch check",
+   bool(_registries(_held)) and not _dispatches(_held),
+   "the second check exists precisely because the first one returns nothing here")
 
 ck("NO panel module names a shipped plugin or its method",
    not any(w in _src_all.lower() for w in
