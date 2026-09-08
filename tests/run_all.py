@@ -12,6 +12,19 @@ module and called its `test_*` functions. That was the wrong mechanism twice ove
 `setup/dev_cycle.pbs` step 0 already had it right - one subprocess per file, exit code decides.
 This is that, callable from a workstation, so the gate a change is checked against and the gate
 the cluster runs are the same gate.
+
+WHY `--jobs` EXISTS, AND WHY IT DEFAULTS TO 1
+
+One subprocess per suite is the point of this runner and is not negotiable: an exit code is then
+a fact about one file. But ISOLATION AND SERIALISATION ARE INDEPENDENT, and this ran them one at
+a time. Each subprocess re-imports the whole stack, so the wall clock is dominated by the same
+imports repeated once per suite.
+
+`--jobs N` runs N of those subprocesses at once. Each is still its own process with its own exit
+code, and results are collected in SORTED order rather than completion order, so the report is
+identical to the serial one. It defaults to 1 because suites sharing a temporary path would
+collide, and that is a property of the suites rather than of the runner - the default may only be
+raised for a suite set MEASURED to give the same result both ways.
 """
 import argparse
 import glob
@@ -23,16 +36,26 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def run(pattern=None, python=None):
+def run(pattern=None, python=None, jobs=1):
     """[(name, output)] for every suite that exited non-zero."""
     pat = pattern or str(ROOT / "tests" / "test_*.py")
     py = python or sys.executable
     env = dict(os.environ, PYTHONPATH=str(ROOT))
     bad = []
-    for path in sorted(glob.glob(pat)):
+
+    def one(path):
         p = subprocess.run([py, path], capture_output=True, text=True, env=env, cwd=ROOT)
-        out = (p.stdout + p.stderr).strip()
-        if p.returncode != 0:
+        return path, p.returncode, (p.stdout + p.stderr).strip()
+
+    paths = sorted(glob.glob(pat))
+    if jobs > 1:
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+            outcomes = list(pool.map(one, paths))     # sorted order, not completion order
+    else:
+        outcomes = [one(x) for x in paths]
+    for path, code, out in outcomes:
+        if code != 0:
             bad.append((os.path.basename(path), out))
         elif not out:
             # A SUITE THAT RUNS NOTHING EXITS 0, which is indistinguishable from a suite that
@@ -50,9 +73,11 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--pattern", default=None)
     ap.add_argument("--python", default=None)
+    ap.add_argument("--jobs", type=int, default=1,
+                    help="run this many suites at once; each is still its own process")
     ap.add_argument("--tail", type=int, default=12, help="lines of output per failing suite")
     a = ap.parse_args(argv)
-    bad, files = run(a.pattern, a.python)
+    bad, files = run(a.pattern, a.python, a.jobs)
     if bad:
         print(f"{len(bad)} FAILING of {len(files)} suite(s):")
         for name, out in bad:
