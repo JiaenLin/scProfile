@@ -251,7 +251,12 @@ used, the answer was **one** — and only for its numbers; the R script containe
 `png()` or `pdf()` call at all. After the accounting it is **14**, and four of those answer a
 design comparison directly. The gap was never a decision; it was never counted.
 
-**It is a ratchet.** `native.OWES_ACCOUNTING` names the wrappers that still owe one. The list may
-shrink and never grow: a new wrapper arriving without an accounting fails the suite, while the
-named debt stays visible. Without that, this section is advice, and advice is followed until
-somebody is in a hurry.
+**It is a ratchet, and the debt is written in the plugin that owes it.** A wrapper declares
+either `native_plots` or `wraps.plots_unreviewed` — an admission, in its own words, that nobody has
+been through its upstream's figures yet. `validate` refuses a wrapper that says neither, so a new
+one cannot arrive silently. The count of outstanding admissions may shrink and never grow.
+
+This used to be `native.OWES_ACCOUNTING`, a tuple of eight plugin names in a host module. That is a
+registry of plugins living in the host, which is the one thing the one-file format exists to
+prevent — and a new wrapper owed nothing until somebody noticed and appended its name. Without any
+of this the section is advice, and advice is followed until somebody is in a hurry.

@@ -362,12 +362,14 @@ scprofile scaffold <name> --new        # write a new plugin from the one-file te
 scprofile validate  <name>             # check the declaration without running anything
 scprofile scaffold  <name>             # a declared plugin's build skeleton
 ```
- The host reads the declaration without importing it, resolves the
-environment, and runs it through a shared entrypoint that applies the contract.
+
+The host reads the declaration without importing it, resolves the environment, and runs the plugin
+through a shared entrypoint that applies the contract.
 
 ```python
 PLUGIN = {
     "api": 1,
+    "state_version": 1,      # bump when the same inputs would give different numbers
     "summary": "what it gives you",
     "inject": {"required": ["counts", "label"], "optional": ["sample"]},
     "produces": ["obs[my_score]", "tables/my_result.csv"],
@@ -381,6 +383,11 @@ def selftest(ctx): ...
 def guard(g): ...        # optional: refuse datasets where the result would mislead
 ```
 
+If your plugin wraps an existing tool, say what you did about the figures that tool already draws
+— either account for them in `native_plots`, or write `wraps.plots_unreviewed` to say nobody has
+looked yet. Going through cellchat's took its used count from 1 of 30 to 14, and four of those
+answer a design comparison directly. `validate` will not pass a wrapper that is silent about it.
+
 Methods ask for **capabilities**, not column names, so a plugin never binds itself to one
 project's schema. `produces` may mark an output only some runs make — `"obs[latent_time]?"` — and
 may glob a name chosen at run time — `"obsm[velocity_*]"`. Both are held to.
@@ -392,8 +399,41 @@ plugin written outside Python uses.
 Point `$SCPROFILE_KERNELS` at your own directory to add methods without forking. Site methods
 override shipped ones, and `doctor` reports when that happens.
 
+Adding one to **this repository** takes one more step: `scprofile generated --write`. The shipped
+table in `ROADMAP.md` and the panel catalogue in the figures skill are rendered from the code, so a
+new method is added by adding its file and running that — never by editing a document. Panel kinds
+work the same way: declare the kind once in `scprofile/panels.py`, including what it cannot show
+and why the host must not draw it if the method owns it, and run the same command.
+
 Full contract: [docs/PLUGIN_DESIGN.md](docs/PLUGIN_DESIGN.md) ·
 [docs/MAINTAINING_PLUGINS.md](docs/MAINTAINING_PLUGINS.md).
+
+## Part of a family
+
+Four tools share one contract. Each works on its own, and they fit together:
+
+| tool | does |
+|---|---|
+| [scQC](https://github.com/JiaenLin/scQC) | quality control, and who set each threshold |
+| [scAnno](https://github.com/JiaenLin/scAnno) | cell-type labels, only as deep as the evidence goes |
+| [scIntegrate](https://github.com/JiaenLin/scIntegrate) | whether you need batch integration, and which method |
+| scProfile | communication, velocity, pseudotime, differential expression |
+
+[single-cell-harness](https://github.com/JiaenLin/single-cell-harness) runs them as one stack, so a
+decision made in one can be taken back later and every tool downstream is told what that costs. It
+also carries the development suite the four share:
+
+```bash
+git clone https://github.com/JiaenLin/single-cell-harness.git ../single-cell-harness
+alias sch='PYTHONPATH=../single-cell-harness python3 -m sch'
+
+sch dev map --root .                             # kernels and panels, and what each must declare
+sch dev check --point kernel --name my_method    # checks, cheapest first
+```
+
+Every check prints what it does **not** prove. Two of them run your method against the same
+synthetic cohort written twice, with every column renamed — code that asks for a capability passes
+both shapes, code that knows a column name passes one.
 
 ## Requirements
 

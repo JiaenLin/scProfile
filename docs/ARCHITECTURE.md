@@ -158,8 +158,9 @@ for. The reasons are a closed set:
 - `duplicate_of` — naming the function actually called
 
 `reimplemented`, `not_considered`, `dependency_missing`, `too_slow` and `not_useful` are rejected
-by name, each with the remedy. `OWES_ACCOUNTING` lists wrappers that still owe an accounting; it
-may shrink and never grow.
+by name, each with the remedy. A wrapper that has not done the accounting says so in its own
+`wraps.plots_unreviewed`, and `validate` refuses one that is silent; the number outstanding may
+shrink and never grow.
 
 `function_for(declared, filename)` inverts the declaration: given a file, it names the upstream
 function that drew it. Two things use it. A panel's caption says which function drew it, so a
