@@ -21,6 +21,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+
+import subject                                                            # noqa: E402
 
 from scprofile import captions as C                                       # noqa: E402
 
@@ -88,7 +91,7 @@ finally:
     shutil.rmtree(_tmp, ignore_errors=True)
 
 # 4. the plugin writes them, for every panel it draws itself
-ck = (ROOT / "kernels" / "cellchat.py").read_text()
+ck = subject.source("cellchat", "that its panels carry written legends")
 check(ck.count(".write_captions()") >= 1, "the plugin never writes its legends")
 check(ck.count(".legend(basename(path)") >= 6,
       f"only {ck.count('.legend(basename(path)')} of the plot wrappers record a legend")

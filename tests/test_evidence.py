@@ -5,18 +5,20 @@ already draws. That is how a cell-cell communication section came to rest on thr
 design supporting seven questions.
 """
 import importlib.util
+import sys
 from pathlib import Path
 
 from scprofile import evidence as E
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+
+import subject                                                            # noqa: E402
 
 
 def _plugin(name="cellchat"):
-    sp = importlib.util.spec_from_file_location(name, ROOT / "kernels" / f"{name}.py")
-    m = importlib.util.module_from_spec(sp)
-    sp.loader.exec_module(m)
-    return m.PLUGIN
+    """This plugin's declaration, or NotInstalled - these tests are about ITS behaviour."""
+    return subject.spec(name, "how it resolves and covers an evidence need")
 
 
 def test_the_needs_registry_names_no_method_and_no_panel():
@@ -94,6 +96,9 @@ if __name__ == "__main__":
             try:
                 fn()
                 print(f"  ok   {name}")
+            except subject.NotInstalled as e:
+                # A TEST WHOSE SUBJECT IS ABSENT IS NOT A TEST THAT FAILED.
+                print(f"  skip {name}: {e}")
             except AssertionError as e:
                 bad += 1
                 print(f"  FAIL {name}: {str(e)[:180]}")

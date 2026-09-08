@@ -19,6 +19,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tests"))
+
+import subject                                                            # noqa: E402
 sys.path.insert(0, str(ROOT))
 
 FAILURES = []
@@ -51,10 +54,16 @@ for f in sorted((ROOT / "kernels").glob("*.py")):
                     f"adjacent literals and will not parse the script\n"
                     f"      {a[-58:]}\n      {b[:58]}")
 
+# NOTHING FOUND IS TWO FINDINGS. See tests/subject.nothing_found - this printed FAIL and exited 1
+# on a tree that simply has no R plugin in it.
 if not checked:
-    print("FAIL")
-    print("  - no embedded R script was found; this proved nothing")
-    raise SystemExit(1)
+    _kind, _why = subject.nothing_found('library(', 'embeds an R script')
+    if _kind == "broken":
+        print("FAIL")
+        print("  - " + _why)
+        raise SystemExit(1)
+    print("skipped - " + _why)
+    raise SystemExit(0)
 if FAILURES:
     print("FAIL")
     for x in FAILURES[:6]:

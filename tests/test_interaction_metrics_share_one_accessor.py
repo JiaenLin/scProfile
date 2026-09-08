@@ -19,8 +19,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 
-SRC = (ROOT / "kernels" / "cellchat.py").read_text(encoding="utf-8")
+import subject                                                            # noqa: E402
+
+SRC = subject.source("cellchat", "that its interaction metrics are read through one accessor")
 FAILURES = []
 
 

@@ -22,6 +22,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tests"))
+
+import subject                                                            # noqa: E402
 sys.path.insert(0, str(ROOT))
 
 FAILURES = []
@@ -56,10 +59,16 @@ for f in sorted((ROOT / "kernels").glob("*.py")):
                     f"{f.name} / {name}: `{fn}` is called at line {line} and only defined at "
                     f"line {dline}. R does not hoist; this dies at run time.")
 
+# NOTHING FOUND IS TWO FINDINGS. See tests/subject.nothing_found - this printed FAIL and exited 1
+# on a tree that simply has no R plugin in it.
 if CHECKED == 0:
-    print("FAIL")
-    print("  - no embedded R script defines a helper; this check proved nothing")
-    raise SystemExit(1)
+    _kind, _why = subject.nothing_found('function(', 'embeds an R script defining a helper')
+    if _kind == "broken":
+        print("FAIL")
+        print("  - " + _why)
+        raise SystemExit(1)
+    print("skipped - " + _why)
+    raise SystemExit(0)
 
 # ---------------------------------------------------------------------------------------------
 # CALLED HERE, DEFINED ONLY IN A SIBLING. See the note at the top: this is the copy-paste failure

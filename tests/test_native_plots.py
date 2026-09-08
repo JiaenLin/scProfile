@@ -59,18 +59,6 @@ def test_using_it_is_the_default_path_and_needs_only_where():
     assert u == {"a": "F4_network"} and not p
 
 
-if __name__ == "__main__":
-    import sys
-    bad = 0
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_") and callable(fn):
-            try:
-                fn()
-                print(f"  ok   {name}")
-            except AssertionError as e:
-                bad += 1
-                print(f"  FAIL {name}: {str(e)[:160]}")
-    sys.exit(1 if bad else 0)
 
 
 def _all_specs():
@@ -99,7 +87,8 @@ def test_a_plugin_that_wraps_a_tool_owes_an_accounting():
 #: and it slipped past the guard written to catch exactly that. The debt now lives in each
 #: plugin's own `wraps.plots_unreviewed`, and what stays here is the count: it may go DOWN as
 #: wrappers are worked through and may never go up. A number carries no plugin's identity, so it
-#: cannot go stale when one is renamed and cannot be wrong when one is unplugged.
+#: cannot go stale when one is renamed and cannot be wrong when one is unplugged. A CEILING: see
+#: the test below for why asserting equality against it was a mistake.
 UNREVIEWED_TODAY = 8
 
 
@@ -119,13 +108,24 @@ def test_a_wrapper_declares_an_accounting_or_admits_it_has_none():
 
 
 def test_the_debt_is_a_RATCHET_and_may_only_shrink():
+    """A CEILING, NOT AN EQUALITY, and the equality was mine and it was wrong.
+
+    It failed whenever the count came in under the ceiling, on the theory that a paid debt should
+    force the constant down. But "a wrapper accounted for its figures" and "a wrapper is not
+    installed in this checkout" produce the same number, so removing ANY of the nine made this
+    red - including `abundance`, whose removal broke nothing else in the entire suite. An exact
+    count of the plugin set is exactly the second registry this round has been deleting, and I
+    reintroduced one in the test that replaced it.
+
+    The ceiling alone is weaker in one case: cellchat paying its debt and a new wrapper taking one
+    leaves the count unchanged. That case is caught where it belongs - `declare.check` makes a
+    wrapper that is silent about its upstream's figures an ERROR, so the newcomer cannot arrive
+    without writing the admission into its own file, in its own diff.
+    """
     owing, _ = N.accounting_debt(_all_specs())
     assert len(owing) <= UNREVIEWED_TODAY, (
         f"{len(owing)} wrappers have not accounted for their upstream's figures, up from "
         f"{UNREVIEWED_TODAY}. The debt may shrink and may not grow.")
-    assert len(owing) == UNREVIEWED_TODAY, (
-        f"{len(owing)} wrappers owe an accounting, not {UNREVIEWED_TODAY} — the debt shrank, "
-        f"which is the point. Lower UNREVIEWED_TODAY to {len(owing)} so the ratchet holds there.")
 
 
 def test_the_plugin_that_paid_makes_no_admission():
@@ -216,3 +216,17 @@ if _bad2:
         print("  -", b)
     raise SystemExit(1)
 print("ok: every R block that reaches Python pins its interpreter from R.home()")
+
+
+if __name__ == "__main__":
+    import sys
+    bad = 0
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            try:
+                fn()
+                print(f"  ok   {name}")
+            except AssertionError as e:
+                bad += 1
+                print(f"  FAIL {name}: {str(e)[:160]}")
+    sys.exit(1 if bad else 0)

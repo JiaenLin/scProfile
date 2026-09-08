@@ -17,6 +17,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tests"))
+
+import subject                                                            # noqa: E402
 sys.path.insert(0, str(ROOT))
 from scprofile import native as N                                         # noqa: E402
 
@@ -65,10 +68,18 @@ for f in sorted((ROOT / "kernels").glob("*.py")):
                 FAILURES.append(f"{f.name}: {stem}.png is drawn by {fn}, which is declared "
                                 f"SKIPPED - the accounting says it is unused and it is used")
 
-if CHECKED == 0:
-    print("FAIL")
-    print("  - no plot call was found in any plugin; this check proved nothing")
-    raise SystemExit(1)
+# NOTHING FOUND IS TWO FINDINGS, and this asserted the worse one. It printed FAIL and exited 1
+# when a single plugin was removed, reporting a repository with none of this in it as a fault in
+# the checking. `subject.nothing_found` asks a second, cruder question - is the marker in any
+# kernel's raw text - and only the two answers together are decisive.
+if not CHECKED:
+    _kind, _why = subject.nothing_found('npng(', 'draws a panel from an embedded R script')
+    if _kind == "broken":
+        print("FAIL")
+        print("  - " + _why)
+        raise SystemExit(1)
+    print("skipped - " + _why)
+    raise SystemExit(0)
 if FAILURES:
     print("FAIL")
     for x in FAILURES:

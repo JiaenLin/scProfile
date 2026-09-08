@@ -18,6 +18,9 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import subject                                                            # noqa: E402
 from scprofile import manifest                                            # noqa: E402
 from scprofile.kernels import Kernel, discover, order, undeclared, unmet   # noqa: E402
 
@@ -154,7 +157,7 @@ def test_declared_but_absent_is_refused(tmp):
 def test_velocity_declaration():
     """velocity is ONE FILE now, and everything it used to keep in five must still be true."""
     print("\nvelocity's own declaration")
-    k = discover()["velocity"]
+    k = subject.kernel("velocity", "how the host reads this kernel's declaration")
     check("it is one file", k.path.is_file() and k.path.suffix == ".py", str(k.path))
     slots = k.declared_slots()
     check("declares the side-car object", "velocity_h5ad" in slots.get("objects", set()))
@@ -508,7 +511,7 @@ def test_a_one_file_plugin_can_have_a_guard():
     print("\na guard survives the one-file shape")
     import sys as _sys
     from scprofile.kernels import guard_verdict
-    k = discover()["velocity"]
+    k = subject.kernel("velocity", "how the host reads this kernel's declaration")
     check("the kernel says how its guard is launched", k.guard_argv(_sys.executable) is not None)
     check("through the shared entrypoint, not by executing the plugin",
           "_entry.py" in " ".join(k.guard_argv(_sys.executable)))
@@ -527,7 +530,9 @@ def test_a_one_file_plugin_can_have_a_guard():
     check("with the note a reader needs", "directional" in why.lower(), why[:120])
 
     # A plugin with no guard is allowed without one being invented for it.
-    allow, why, _ = guard_verdict(discover()["decoupler"], describe={}, constraint="", params={})
+    allow, why, _ = guard_verdict(
+        subject.kernel("decoupler", "how its guard verdict reads"),
+        describe={}, constraint="", params={})
     check("a plugin that ships no guard is not gated", allow and not why, why)
 
 
@@ -541,7 +546,7 @@ def test_produces_can_be_conditional_and_globbed():
     """
     print("\nproduces: a glob, and an output only some runs make")
     from scprofile import feedback as FB
-    k = discover()["velocity"]
+    k = subject.kernel("velocity", "how the host reads this kernel's declaration")
     check("the optional entry is marked", "obs[latent_time]" in k.optional_produces(),
           str(k.optional_produces()))
     check("and it is still a declared slot",
@@ -619,7 +624,7 @@ def test_lock_is_read_not_delegated():
 def test_unmet_names_the_fix():
     print("\nunmet prerequisites name their fix")
     ks = discover()
-    k = ks["velocity"]
+    k = subject.kernel("velocity", "how the host reads this kernel's declaration", ks)
 
     # velocity declares can_source_layers, so the HOST must not block it on a missing layer: the
     # kernel goes and looks, and refuses with a list of everywhere it searched. Blocking here
@@ -1076,6 +1081,9 @@ def test_r_lock_section():
     # rather than in a lock.yml. The rule under test is unchanged - an R package must be pinned
     # to a commit or a version - so the test follows the shape and not the file.
     from scprofile.kernels import FileKernel
+    if not (root / "kernels" / "cellchat.py").is_file():
+        raise subject.NotInstalled("`cellchat` is not installed here, so the r: section of a "
+                                   "lock is not checked - it is the only R plugin that ships")
     k = FileKernel(root / "kernels" / "cellchat.py")
     from scprofile import resolve as _RS
     s = _RS.requirement(k)
@@ -1722,7 +1730,8 @@ def test_the_host_answers_the_sentinel_question_once():
     # And the bundled plugin that got it wrong now uses it.
     import inspect
     ks = discover()
-    src = inspect.getsource(_load_module(ks["decoupler"].path).run)
+    src = inspect.getsource(_load_module(
+        subject.kernel("decoupler", "how its run() reads its config", ks).path).run)
     check("decoupler groups through ctx.populations()", "ctx.populations()" in src, src[:200])
 
 
@@ -2212,6 +2221,10 @@ def _guarded(fn, *a):
     """
     try:
         fn(*a)
+    except subject.NotInstalled as e:
+        # A CHECK WHOSE SUBJECT IS NOT INSTALLED IS NOT A CHECK THAT FAILED. Removing one kernel
+        # made eighteen of sixty-six suites red, and none of it was a defect in the tool.
+        print(f"  skip {fn.__name__}: {e}")
     except Exception as e:                                                # noqa: BLE001
         check(f"{fn.__name__} completed", False, f"{type(e).__name__}: {e}")
 

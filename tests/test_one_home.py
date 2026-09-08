@@ -67,6 +67,24 @@ if SKILL.is_file():
 else:
     ck("the figures skill lives in this repository", False, str(SKILL))
 
+print("\nevery test in a suite is a test the suite runs")
+# EIGHT TESTS HAD NEVER EXECUTED. A file ending in `if __name__ == "__main__":` collects its tests
+# from `globals()` at the moment that block runs - so a test function defined BELOW it is not yet
+# defined, is not collected, and is silently not run. Two files had drifted that way, and four of
+# the eight were the ratchet tests added the same morning, reported green on a run that never
+# called them. A test that does not run is worse than a missing test: the count says it is covered.
+import ast as _ast_om                                                           # noqa: E402
+_dead = []
+for _f in sorted((ROOT / "tests").glob("test_*.py")):
+    _t = _ast_om.parse(_f.read_text(encoding="utf-8"))
+    _main = next((n.lineno for n in _t.body if isinstance(n, _ast_om.If)
+                  and _ast_om.unparse(n.test) == "__name__ == '__main__'"), None)
+    if _main is None:
+        continue
+    _dead += [f"{_f.name}:{n.name}" for n in _t.body if isinstance(n, _ast_om.FunctionDef)
+              and n.name.startswith("test_") and n.lineno > _main]
+ck("no test is defined below the runner that collects it", not _dead, str(_dead[:6]))
+
 print("\nevery path a document points at exists")
 missing = []
 for d in sorted((ROOT / "docs").glob("*.md")) + [ROOT / "README.md", ROOT / "DEVELOPMENT.md"]:

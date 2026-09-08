@@ -20,6 +20,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+
+import subject                                                            # noqa: E402
 
 from scprofile.plugin import Context                                      # noqa: E402
 
@@ -64,7 +67,7 @@ check("--figures-for" in cli, "there is no way to ask for this on the command li
 # 5. THE PLUGIN GATES DRAWING AND NOTHING ELSE. Checked on the embedded R: the guard must sit
 #    inside the two plot wrappers, and must NOT appear around anything that writes a table or
 #    runs the inference.
-ck = (ROOT / "kernels" / "cellchat.py").read_text()
+ck = subject.source("cellchat", "that its figures declare the axis they are drawn for")
 check("ctx.draw_figures" in ck, "the plugin never asks whether figures are wanted")
 check("draw_figs <- " in ck, "the embedded R never parses the flag")
 # MATCHED ON THE PROPERTY, NOT THE SPELLING - for the third time in this file's history. The

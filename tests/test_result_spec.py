@@ -9,20 +9,21 @@ The enumeration is not written for a 2x2 or for any project. These tests check t
 from the design table - by giving it designs of other shapes and asserting the count the rules
 imply.
 """
-import importlib.util
+import sys
 from pathlib import Path
 
-from scprofile.design_panel import comparisons
-from scprofile.planner import result_spec, spec_text
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+
+import subject                                                            # noqa: E402
+from scprofile.design_panel import comparisons                            # noqa: E402
+from scprofile.planner import result_spec, spec_text                      # noqa: E402
 
 
 def _plugin(name="cellchat"):
-    sp = importlib.util.spec_from_file_location(name, ROOT / "kernels" / f"{name}.py")
-    m = importlib.util.module_from_spec(sp)
-    sp.loader.exec_module(m)
-    return m.PLUGIN
+    """This plugin's declaration, or NotInstalled - these tests are about ITS declaration."""
+    return subject.spec(name, "the result specification built from its declaration")
 
 
 def _factorial(**levels):
@@ -124,18 +125,6 @@ def test_the_text_form_carries_the_questions_and_the_caveats():
     assert "interaction" in txt.lower()
 
 
-if __name__ == "__main__":
-    import sys
-    bad = 0
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_") and callable(fn):
-            try:
-                fn()
-                print(f"  ok   {name}")
-            except AssertionError as e:
-                bad += 1
-                print(f"  FAIL {name}: {e}")
-    sys.exit(1 if bad else 0)
 
 
 def _figs():
@@ -152,7 +141,11 @@ def _figs():
         "p_C1_diff_count__f2___f1___hi.png", "p_C3_flow__f2___f1___hi.png",
         "p_C4_role_shift__f2___f1___hi.png",
         "p_C5_interaction__f1__x__f2.png",
-        "p_P1_population_presence__cohort.png",
+        # BOTH COHORT PANELS. This list is what "a complete run" means to the two tests below, and
+        # it had only P1 - so `unit_totals`, which the cohort section has served since
+        # network_panels grew P2, was reported as a permanent gap. Nobody saw it: the two tests
+        # that read this list were defined below their file's runner and had never executed.
+        "p_P1_population_presence__cohort.png", "p_P2_unit_totals__cohort.png",
     ]
 
 
@@ -187,3 +180,20 @@ def test_an_empty_run_reports_everything_missing():
     from scprofile.planner import delivered
     secs = delivered(result_spec(_factorial(f1=["lo", "hi"], f2=["p", "q"]), _plugin()), [])
     assert all(not s["have"] for s in secs), "panels were matched against no figures at all"
+
+
+if __name__ == "__main__":
+    import sys
+    bad = 0
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            try:
+                fn()
+                print(f"  ok   {name}")
+            except subject.NotInstalled as e:
+                # A TEST WHOSE SUBJECT IS ABSENT IS NOT A TEST THAT FAILED.
+                print(f"  skip {name}: {e}")
+            except AssertionError as e:
+                bad += 1
+                print(f"  FAIL {name}: {e}")
+    sys.exit(1 if bad else 0)

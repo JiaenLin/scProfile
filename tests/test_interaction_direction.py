@@ -19,6 +19,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+
+import subject                                                            # noqa: E402
 
 from scprofile import units as U                                          # noqa: E402
 from scprofile.design_panel import control_for                            # noqa: E402
@@ -63,7 +66,7 @@ check('"stratum_role"' in rep,
 check("_ctrl_g" in rep and "reference\" if _gl == _ctrl_g" in rep,
       "the role is not derived from the DECLARED control")
 
-ck = (ROOT / "kernels" / "cellchat.py").read_text()
+ck = subject.source("cellchat", "that its interaction panel picks strata by declared role and says which way its colours run")
 check("stratum_role" in ck, "the plugin never receives the role")
 check('rows$stratum_role == "against"' in ck and 'rows$stratum_role == "reference"' in ck,
       "the plugin picks its strata by POSITION rather than by the role it was given - the exact "

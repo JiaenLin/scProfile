@@ -711,6 +711,17 @@ def spec_text(sections):
     return "\n".join(out)
 
 
+def _carries(name, stem, tokens):
+    """Does this filename name every one of these tokens, as whole segments after the stem?
+
+    `p_C3_flow__f1___f2___p.png` carries `f1` and `p`; `p_C3_flow__f1.png` carries `f1` and NOT
+    `p`, though `p` occurs twice in it - once as the panel prefix and once inside `.png`.
+    """
+    import re
+    tail = name[name.index(stem) + len(stem):].rsplit(".", 1)[0]
+    return all(re.search(r"(?:^|_)" + re.escape(t) + r"(?:_|$)", tail) for t in tokens)
+
+
 def delivered(sections, figures, *, prefix=""):
     """Match a specification against the figures a run actually produced.
 
@@ -723,6 +734,23 @@ def delivered(sections, figures, *, prefix=""):
     those names from the same contrast specs this function is given, so a panel for factor F
     within G = g contains F and g in its stem. A tolerant match is right here - a name that gains
     a suffix should not silently unmatch a section and report a false gap.
+
+    TOLERANT IS NOT THE SAME AS UNBOUNDED, and this was unbounded. A token was matched with `in`
+    against the whole filename, so the stratum level `p` matched the `p_` every panel name starts
+    with, and the `.png` every one ends with. Every `C3_flow` figure therefore satisfied every
+    simple-effect section: the marginal panel answered a stratified question, one stratum answered
+    another, and a panel for a different factor entirely answered both. The gap report for simple
+    effects could not report a gap.
+
+    So a token must match a WHOLE `_`-delimited segment, and only in the part of the name that
+    follows the panel stem - which is where the host writes the factor and the stratum, and which
+    excludes both the prefix and the extension that were producing the false matches. A suffix
+    added later is a further segment and still matches, so the tolerance the paragraph above
+    wanted is intact.
+
+    This was found by reviving two tests that had never run: they sat below their file's
+    `__main__` block and were never collected. One of them is the matcher's own falsifiability
+    check - "the matcher must be able to fail, or 20 of 20 means nothing" - and it could not.
 
     `figures` is any iterable of paths or names. Returns the sections with `have` and `missing`
     added to each.
@@ -747,7 +775,7 @@ def delivered(sections, figures, *, prefix=""):
             kid = p["kind"]
             stem = _P_STEM.get(kid, kid)
             hits = [n for n in names
-                    if stem in n and all(t in n for t in toks)
+                    if stem in n and _carries(n, stem, toks)
                     and (not prefix or n.startswith(prefix))]
             if sec["kind"] == "marginal":
                 # a marginal panel must NOT be a stratified one wearing the same factor name

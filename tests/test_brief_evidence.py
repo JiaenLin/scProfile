@@ -10,6 +10,9 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tests"))
+
+import subject                                                            # noqa: E402
 sys.path.insert(0, str(ROOT))
 
 from scprofile import evidence as E, kernels as K                         # noqa: E402
@@ -25,10 +28,18 @@ specs = {n: _spec(k) for n, k in (K.discover() or {}).items()}
 wrappers = {n: s for n, s in specs.items()
             if ((s.get("report") or {}).get("provides_evidence"))}
 
+# NOTHING FOUND IS TWO FINDINGS, and this asserted the worse one. It printed FAIL and exited 1
+# when a single plugin was removed, reporting a repository with none of this in it as a fault in
+# the checking. `subject.nothing_found` asks a second, cruder question - is the marker in any
+# kernel's raw text - and only the two answers together are decisive.
 if not wrappers:
-    print("FAIL")
-    print("  - no plugin declares provides_evidence; this check proved nothing")
-    raise SystemExit(1)
+    _kind, _why = subject.nothing_found('provides_evidence', 'declares `provides_evidence`')
+    if _kind == "broken":
+        print("FAIL")
+        print("  - " + _why)
+        raise SystemExit(1)
+    print("skipped - " + _why)
+    raise SystemExit(0)
 
 for name, spec in sorted(wrappers.items()):
     declared = E.routes(spec) if hasattr(E, "routes") else \

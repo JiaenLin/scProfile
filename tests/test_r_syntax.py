@@ -12,29 +12,22 @@ import importlib.util
 import shutil
 import subprocess
 import tempfile
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tests"))
+
+import subject                                                            # noqa: E402
 
 
 def _r_scripts():
-    """[(plugin, attribute, source)] for every R string a shipped plugin holds."""
-    out = []
-    for f in sorted((ROOT / "kernels").glob("*.py")):
-        sp = importlib.util.spec_from_file_location(f.stem, f)
-        m = importlib.util.module_from_spec(sp)
-        try:
-            sp.loader.exec_module(m)
-        except Exception:                                             # noqa: BLE001
-            continue
-        for attr in dir(m):
-            v = getattr(m, attr)
-            if not isinstance(v, str) or len(v) < 200:
-                continue
-            if "library(" in v and ("<-" in v or "function(" in v):
-                out.append((f.stem, attr, v))
-    return out
+    """[(plugin, attribute, source)] for every R string a shipped plugin holds.
 
+    ONE DETECTOR, in tests/subject.py, because four suites had a copy of it and a fifth kind of
+    R string would have had to be taught to all four.
+    """
+    return subject.r_scripts()
 
 def _rscript():
     for cand in ("Rscript", "R"):
@@ -44,10 +37,21 @@ def _rscript():
     return None
 
 
-def test_at_least_one_r_script_is_found():
-    """If this finds nothing the rest of the file is vacuous."""
+def test_the_detector_finds_the_r_that_is_here():
+    """If this finds nothing the rest of the file is vacuous - but vacuous is not always wrong.
+
+    This asserted `found`, and printed "the detector is not looking correctly" on a tree whose
+    only R plugin had been deleted. It was right that the suite proved nothing and wrong about
+    why, which is the reading that sends somebody to debug a detector that works.
+    """
     found = _r_scripts()
-    assert found, "no R script located in any plugin; the detector is not looking correctly"
+    if found:
+        return
+    assert not subject.any_kernel_embeds_r(), (
+        "a kernel file contains `library(` and the detector found no R script in it, so the "
+        "detector has stopped matching and every check below is vacuously green")
+    print("no plugin here embeds R, so there is nothing to parse. Not a defect - this runs "
+          "again the day an R plugin arrives")
 
 
 def test_every_r_script_parses():
