@@ -83,10 +83,16 @@ PLUGIN = {
     # The interpreter, the imports and the object are paid once whatever n is. Modelling this as
     # a pure rate makes a 15 GB measurement on a 10k-cell instance read as 150 GB per 100k.
     #
-    # MEASURE THEM ONCE AND DECLARE THEM. Left out, the allocator assumes conservative values and
-    # prints that it is guessing — which either wastes memory or, if the guess is low, gets the
-    # job killed. Every run FITS both terms from its own instances and prints them ready to paste.
-    "cost": "medium", "cores": 4, "memory_gb_base": 4, "memory_gb_per_100k": 8,
+    # MEASURE THEM ONCE AND DECLARE THEM, AND THAT IS WHY THEY ARE NOT WRITTEN HERE. Left out,
+    # the allocator assumes conservative values and prints that it is guessing — which is the
+    # signal that nobody has measured this plugin yet, and the only signal there is. This template
+    # used to supply `memory_gb_base: 4, memory_gb_per_100k: 8` directly beneath this paragraph,
+    # which switched that signal off for every plugin ever scaffolded: the numbers were invented,
+    # they looked measured, and the run stopped saying it was guessing.
+    #
+    # Run the plugin once and paste what it prints. Declaring the RATE alone is worse than
+    # declaring neither — see `validate`, which now says so.
+    "cost": "medium", "cores": 4,     # cores is a CLAIM about what the method can use: check it
 
     # REFERENCE DATA DECIDES ANSWERS AS MUCH AS THE ALGORITHM DOES. Declare everything this
     # method consults that did not come from the user's object — including what you cannot

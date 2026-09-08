@@ -349,6 +349,32 @@ def _check_report(spec, out) -> None:
                             f"setting."))
 
 
+#: THE MARKER THE TEMPLATE LEAVES BEHIND. `scprofile scaffold --new` writes a declaration whose
+#: every human-readable field is a TODO, and `validate` used to report it as 0 errors and 0
+#: warnings - so the tool's own answer to "is this plugin ready" was yes, for a file whose `run()`
+#: raises and whose summary reads "TODO — what entropy gives you". A newcomer is entitled to
+#: believe the tool. Thirty-two of them in one generated file, and every one passed.
+PLACEHOLDER = "TODO"
+
+
+def _unfilled(value, path=""):
+    """[field path] for every string in a declaration that still carries the template's marker."""
+    out = []
+    if isinstance(value, str):
+        if PLACEHOLDER in value:
+            out.append(path or "<value>")
+    elif isinstance(value, dict):
+        for k, v in value.items():
+            key = f"{path}.{k}" if path else str(k)
+            if isinstance(k, str) and PLACEHOLDER in k:
+                out.append(key)
+            out += _unfilled(v, key)
+    elif isinstance(value, (list, tuple)):
+        for i, v in enumerate(value):
+            out += _unfilled(v, f"{path}[{i}]")
+    return out
+
+
 def check(spec, name="<plugin>"):
     """Every problem with a declaration, as a list. Empty means it is usable.
 
@@ -357,6 +383,18 @@ def check(spec, name="<plugin>"):
     a maintainer fixing one problem per run is a maintainer who stops running the check.
     """
     out = []
+    # A PLACEHOLDER IS NOT A DECLARATION, and this is checked first because every other message
+    # below is about a field that at least says something. A scaffold reported clean is the tool
+    # telling an author their plugin is ready when its run() raises.
+    _todo = _unfilled(spec)
+    if _todo:
+        _shown = ", ".join(f"`{t}`" for t in _todo[:6])
+        _more = f" and {len(_todo) - 6} more" if len(_todo) > 6 else ""
+        out.append(("ERROR", f"{len(_todo)} field(s) still hold the scaffold's {PLACEHOLDER!r} "
+                             f"marker: {_shown}{_more}. Fill them in - each is a question the "
+                             f"builder, the planner or a reader of the result will ask, and a "
+                             f"declaration that has not answered them is not one the tool can "
+                             f"act on."))
     api = spec.get("api")
     if api is None:
         out.append(("WARN", f"no `api` declared; assuming {API}. Declare it, so a future host "
@@ -371,11 +409,36 @@ def check(spec, name="<plugin>"):
     # plugin rather than the scheduler. WARN and not ERROR: a plugin that cannot yet state its
     # rate is still runnable, and blocking on it would stop people declaring anything at all.
     _ex = spec.get("executor") if isinstance(spec.get("executor"), dict) else {}
-    if _ex.get("memory_gb_per_100k") is None and spec.get("memory_gb_per_100k") is None:
+    _rate = _ex.get("memory_gb_per_100k", spec.get("memory_gb_per_100k"))
+    _base = _ex.get("memory_gb_base", spec.get("memory_gb_base"))
+    if _rate is None:
         out.append(("WARN", "no `memory_gb_per_100k`. The allocator schedules on memory as well "
                             "as cores and will assume a conservative rate for this plugin, which "
                             "either wastes memory or - if the guess is low - gets the job killed. "
                             "Measure it once on a real object and declare it."))
+    elif _base is None:
+        # A PURE RATE IS NOT A SMALLER VERSION OF THE TWO-TERM MODEL. It is a different model,
+        # and it is WRONG IN THE DANGEROUS DIRECTION on small objects: the interpreter, the
+        # imports and the object are paid once whatever n is, so a rate alone predicts almost
+        # nothing at small n and the job is sized to be killed. Six of the nine shipped plugins
+        # declared a rate and no base, clustered at 7.2-7.5, while the two plugins that have
+        # measured both agree on a fixed cost of 3.1 GB - which is where those clustered rates
+        # came from: one fixed cost, divided by whatever n it happened to be measured at.
+        #
+        # WARN and not ERROR, for the same reason the missing-rate case is a WARN: a plugin that
+        # has measured half of this is further along than one that has measured none, and
+        # refusing it would stop people declaring anything.
+        try:
+            _at10k = float(_rate) * 0.1
+            _says = (f" At 10,000 cells this declaration asks for {_at10k:.1f} GB, which is "
+                     f"below the cost of importing the libraries.")
+        except (TypeError, ValueError):
+            _says = ""
+        out.append(("WARN", f"declares `memory_gb_per_100k` and no `memory_gb_base`. Memory is a "
+                            f"fixed cost plus a per-cell one, and a pure rate attributes the "
+                            f"fixed part to the cells - so it under-requests on small objects "
+                            f"and the job is killed at its largest step.{_says} Every run fits "
+                            f"both terms from its own instances and prints them ready to paste."))
 
     if not spec.get("summary"):
         out.append(("ERROR", "no `summary`. It is what a user reads in the plan to decide "

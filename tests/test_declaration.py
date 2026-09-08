@@ -205,11 +205,20 @@ if _Spec is not None:
     ck("and genuine nonsense is still caught, so the check above can fail",
        _rejects("=<0.4") and _rejects("not-a-version") and not _rejects(">=1,<2"))
 
-print("\nthe MAKER produces a plugin the tool accepts, on the first generation")
+print("\nthe MAKER produces a plugin the tool REFUSES, and says exactly what is unfilled")
 # THE PLUGIN IS WRITTEN ONCE AND SHIPS PREBUILT, so what the maker emits decides what the builder
-# and planner get to read for the life of that plugin. A skeleton that starts with gaps is a
-# skeleton whose gaps are inherited: eight of the nine plugins here declared no memory rate, and
-# the allocator guessed for all eight.
+# and planner get to read for the life of that plugin.
+#
+# THIS ASSERTED THE OPPOSITE, AND THE OPPOSITE WAS THE DEFECT. "Passes the declaration check with
+# no ERROR" and "no WARN either - it starts declaration-complete" were true of a 143-line file
+# containing thirty-two TODO markers and a `run()` that raises. The tool's own answer to "is this
+# plugin ready" was yes. Worse, the two assertions BELOW them required the template to declare
+# `memory_gb_per_100k` - so the template wrote an invented 8, which is precisely the value whose
+# absence is the only signal that nobody has measured the plugin, and the check meant to force a
+# measurement was satisfied by a number nobody measured.
+#
+# A maker cannot fill in a summary, a `cannot_show`, or a memory rate. What it can do is leave a
+# marker the tool refuses, and name every field carrying one.
 import ast as _ast                                                             # noqa: E402
 from scprofile.onefile import render as _render                                # noqa: E402
 _src = _render("mymethod", "what it gives you", "mytool")
@@ -218,14 +227,35 @@ _ns = {}
 exec(compile(_src, "generated", "exec"), _ns)                                  # noqa: S102
 _P = _ns.get("PLUGIN") or {}
 ck("the generated plugin is valid Python", bool(_P))
-ck("and passes the declaration check with no ERROR",
-   not [m for lv, m in declare.check(_P, "mymethod") if lv == "ERROR"],
-   str(declare.check(_P, "mymethod")))
-ck("and no WARN either - it starts declaration-complete",
-   not declare.check(_P, "mymethod"), str(declare.check(_P, "mymethod")))
-for _f in ("api", "summary", "cannot_show", "inject", "produces", "requires",
-           "cores", "memory_gb_per_100k"):
+_probs = declare.check(_P, "mymethod")
+_errs = [m for lv, m in _probs if lv == "ERROR"]
+ck("and the tool REFUSES it while its fields are unfilled", bool(_errs),
+   "a scaffold validated clean, so the tool told its author it was ready")
+ck("and the refusal counts them and names them",
+   any("still hold the scaffold" in m for m in _errs), str(_errs))
+_named = [m for m in _errs if "still hold the scaffold" in m]
+ck("including `when_to_use`, which no maker can answer",
+   any("`when_to_use`" in m for m in _named), str(_named))
+# AND THE SUMMARY, when the author did not supply one. `render` takes it as an argument, so the
+# call above fills it; the CLI's `scaffold <name> --new` does not, and writes "TODO — what <name>
+# gives you". That path is the one a newcomer takes.
+_bare = {}
+exec(compile(_render("mymethod", "", "mytool"), "generated", "exec"), _bare)   # noqa: S102
+ck("and `summary` when the author supplied none",
+   any("`summary`" in m for lv, m in declare.check(_bare["PLUGIN"], "mymethod") if lv == "ERROR"),
+   str(declare.check(_bare["PLUGIN"], "mymethod")))
+# THE STRUCTURE IS THERE; ONLY THE ANSWERS ARE MISSING. The skeleton must still carry every key,
+# so filling it in is editing a value and never remembering a field.
+for _f in ("api", "state_version", "summary", "cannot_show", "inject", "produces", "requires",
+           "cores", "report", "upstream"):
     ck(f"the skeleton declares {_f}", _f in _P)
+# AND IT MUST NOT INVENT A MEASUREMENT. Absent, the allocator says it is guessing; supplied, it
+# does not - so a number here silences the only signal that nobody has measured this plugin.
+for _f in ("memory_gb_base", "memory_gb_per_100k"):
+    ck(f"and does NOT invent {_f}", _f not in _P,
+       f"the template supplies {_P.get(_f)!r}, which reads as measured and is not")
+ck("so the maker's own plugin is warned about for unmeasured memory",
+   any("memory_gb_per_100k" in m for lv, m in _probs if lv == "WARN"), str(_probs))
 ck("run and selftest are both present", callable(_ns.get("run")) and callable(_ns.get("selftest")))
 # and they REFUSE rather than returning nothing, so an unfinished plugin cannot look like one
 # that ran and found no result
@@ -452,7 +482,9 @@ ck("report_get REFUSES a key that is not declared", _raised,
    "an undeclared key was read without complaint, which is how the drift starts")
 
 _ok = {"name": "x", "summary": "s", "cannot_show": ["a"], "api": 1, "state_version": 1, "per_unit": "sample",
-       "executor": {"memory_gb_per_100k": 1},
+       # BOTH TERMS, because a rate without a fixed cost is now warned about in its own right -
+       # and this fixture exists to show a COMPLETE declaration drawing no warning.
+       "executor": {"memory_gb_base": 1, "memory_gb_per_100k": 1},
        "report": {"figures": [{"id": "f", "question": "q?", "shows": "diagnostic",
                                "source": "t.csv"}],
                   "unit_metrics": [{"id": "m", "question": "q?"}]}}
