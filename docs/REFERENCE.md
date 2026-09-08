@@ -50,7 +50,7 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | `scprofile scaffold` | With `--new`, writes a new one-file plugin from the template. Without it, writes an already-declared plugin's build skeleton. |
 | `scprofile fetch` | Downloads a plugin's declared reference data. |
 | `scprofile selftest` | Runs one plugin's selftest in its environment. |
-| `scprofile roadmap` | Checks that ROADMAP.md's shipped table is what the kernel declarations say; `--write` rewrites it. The table is generated, so adding a kernel means adding its file and running this — never editing the document. |
+| `scprofile generated` | Checks every document region rendered from the code — ROADMAP.md's shipped table and the figures skill's panel catalogue; `--write` rewrites them. Both are generated, so adding a kernel or a panel kind means adding it in the code and running this — never editing the document. |
 
 ---
 

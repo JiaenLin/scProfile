@@ -95,11 +95,18 @@ RULES = ("R1_one_scale", "R2_absence_split", "R3_cut_names_omitted",
          "R10_provenance_on_face", "R11_share_when_per_object")
 
 
+#: WHO DRAWS A KIND. `host` means: derivable from `report.unit_network` by aggregation alone,
+#: and therefore owed to every plugin that declares one. `plugin` means: needs an analysis the
+#: host may not perform, or information the declaration does not carry.
+HOST, PLUGIN = "host", "plugin"
+
+
 class Kind:
     """One panel kind: what it shows, what it cannot show, and the rules it must obey."""
 
     def __init__(self, kid, title, establishes, does_not_establish, *, rules=(),
-                 levels=(GROUP, SAMPLE), per_contrast=True, needs=(), cohort_only=False):
+                 levels=(GROUP, SAMPLE), per_contrast=True, needs=(), cohort_only=False,
+                 serves=(), plugin_because=""):
         self.id = kid
         self.title = title
         #: WHAT IT ESTABLISHES AND WHAT IT DOES NOT, as a pair. A panel described only by what
@@ -117,6 +124,20 @@ class Kind:
         #: Without this a test asserting "every arm gets every host-owned kind" counts a
         #: cohort-level panel as an arm panel and goes red on correct behaviour.
         self.cohort_only = bool(cohort_only)
+        #: WHICH KINDS OF QUESTION THIS ANSWERS - marginal, simple, interaction, cohort, per_arm.
+        #: Held here rather than in a dict keyed by id, which is what it was: every other property
+        #: of a kind is stated where the kind is, and a parallel table keyed by the same ids is a
+        #: registry that can disagree with the thing it describes.
+        self.serves = tuple(serves)
+        #: WHY THE HOST MUST NOT DRAW THIS, or "" when the host owns it. One field rather than an
+        #: owner plus a reason, because "the host does not draw this" and "the host must not draw
+        #: this" look identical in a table and mean opposite things - so plugin ownership cannot
+        #: be declared without saying why.
+        self.plugin_because = str(plugin_because or "")
+
+    @property
+    def owner(self):
+        return PLUGIN if self.plugin_because else HOST
 
     def __repr__(self):
         return f"<Kind {self.id} {'contrast' if self.per_contrast else 'single'}>"
@@ -130,54 +151,68 @@ KINDS = (
          "which ordered population pairs carry inferred signal, and how much",
          "that a pair is absent for a biological reason - see R2",
          rules=("R2_absence_split", "R5_per_object_scale", "R6_never_gated_on_sample"),
-         per_contrast=False),
+         per_contrast=False,
+         serves=("per_arm",)),
     Kind("diff_matrix", "Change in the sender-by-receiver matrix",
          "which ordered pairs differ between two arms, and in which direction",
          "that any single difference is larger than the noise - no interval is computed",
-         rules=("R5_per_object_scale", "R6_never_gated_on_sample")),
+         rules=("R5_per_object_scale", "R6_never_gated_on_sample"),
+         serves=("marginal", "simple")),
     Kind("circle", "Aggregate network, as a ring",
          "the shape of the network: who signals to whom, at what relative strength",
          "absolute strength, and nothing about the edges the cut removed - see R3",
          rules=("R1_one_scale", "R3_cut_names_omitted", "R5_per_object_scale"),
-         per_contrast=False),
+         per_contrast=False,
+         serves=("per_arm",)),
     Kind("chord", "Aggregate network, as a chord diagram",
          "how one population's outgoing strength is distributed over its partners",
          "anything about a population with no surviving link - it is NOT DRAWN, so R3 applies "
          "with full force",
-         rules=("R1_one_scale", "R3_cut_names_omitted"), per_contrast=False),
+         rules=("R1_one_scale", "R3_cut_names_omitted"), per_contrast=False,
+         serves=("per_arm",)),
     Kind("role_scatter", "Sender against receiver strength",
          "whether a population is a net sender or a net receiver within one arm",
          "that the asymmetry is significant - it is two sums, not a test",
-         rules=("R5_per_object_scale",), per_contrast=False),
+         rules=("R5_per_object_scale",), per_contrast=False,
+         serves=("per_arm",)),
     Kind("role_shift", "How signalling roles move between two arms",
          "the direction and relative size of each population's change in role",
          "that any single arrow is longer than chance; arrows have no interval",
-         rules=("R5_per_object_scale",)),
+         rules=("R5_per_object_scale",),
+         serves=("marginal", "simple")),
     Kind("flow_rank", "Groups ranked by total flow, within one arm",
          "which pathways or groups carry the most inferred signal here",
          "that a bar's HEIGHT is comparable to the same bar in another unit - only rank is",
-         rules=("R5_per_object_scale",), per_contrast=False, needs=("group",)),
+         rules=("R5_per_object_scale",), per_contrast=False, needs=("group",),
+         serves=("per_arm",)),
     Kind("flow_compare", "Group flow in two arms, paired",
          "which groups differ most between two arms, by rank and by relative size",
          "a tested difference - no interval is drawn because none was computed",
-         rules=("R1_one_scale", "R5_per_object_scale"), needs=("group",)),
+         rules=("R1_one_scale", "R5_per_object_scale"), needs=("group",),
+         serves=("marginal", "simple")),
     Kind("role_heatmap", "Group by population role matrix",
          "where in the population set a group acts, as sender and as receiver",
          "how STRONG a group is - rows are scaled to their own maximum by construction",
-         rules=("R1_one_scale",), per_contrast=False, needs=("group",)),
+         rules=("R1_one_scale",), per_contrast=False, needs=("group",),
+         serves=("per_arm",)),
     Kind("patterns", "Latent communication patterns",
          "which populations use which groups together, and at what rank",
          "a cell state, a cluster, or any ordering of the patterns themselves",
-         rules=("R1_one_scale",), per_contrast=False, needs=("group",)),
+         rules=("R1_one_scale",), per_contrast=False, needs=("group",),
+         plugin_because="a latent decomposition is an analysis, and the reporter may not produce a "
+                         "number that first exists at render time"),
     Kind("similarity", "Groups placed by shared partners",
          "which groups act between the same populations as each other",
          "magnitude - the similarity discards it, and unplaceable groups must be NAMED",
-         rules=("R3_cut_names_omitted",), per_contrast=False, needs=("group",)),
+         rules=("R3_cut_names_omitted",), per_contrast=False, needs=("group",),
+         plugin_because="a similarity embedding over groups is an analysis, and the choice of metric "
+                         "belongs to the method rather than to the page"),
     Kind("contribution", "One group decomposed into its members",
          "how a group's total is distributed over the interactions inside it",
          "that a member absent from a panel was tested and returned nothing - see R2",
          rules=("R1_one_scale", "R2_absence_split", "R4_denominator_declared"),
-         per_contrast=False, needs=("group", "member")),
+         per_contrast=False, needs=("group", "member"),
+         serves=("per_arm",)),
     Kind("interaction", "Whether one factor's effect depends on another",
          "which elements respond to a factor differently at each level of a second factor, and "
          "which reverse direction outright",
@@ -185,14 +220,16 @@ KINDS = (
          "computed, and an element absent from any of the four arms is not drawn at all",
          rules=("R1_one_scale", "R2_absence_split", "R5_per_object_scale",
                 "R6_never_gated_on_sample"),
-         per_contrast=False, levels=(GROUP,), cohort_only=True),
+         per_contrast=False, levels=(GROUP,), cohort_only=True,
+         serves=("interaction",)),
     Kind("unit_presence", "Which populations each unit contains",
          "which populations were available to the method in each unit, and how that varies "
          "across the design",
          "WHY a population is absent - too few cells to annotate and genuinely not present are "
          "the same thing in a label column - nor that a present population was well sampled",
          rules=("R2_absence_split", "R4_denominator_declared", "R6_never_gated_on_sample"),
-         per_contrast=False, levels=(GROUP,), cohort_only=True),
+         per_contrast=False, levels=(GROUP,), cohort_only=True,
+         serves=("cohort",)),
     Kind("unit_totals", "How much network each unit carries",
          "how large each unit's network is - edges and total weight - so a difference between "
          "two arms is read against the size of both, and so a reader can see whether the "
@@ -200,11 +237,14 @@ KINDS = (
          "that an arm bar is the sum of its samples - it is one fit on pooled cells and they "
          "are separate fits - nor anything tested: these are totals, with no interval",
          rules=("R5_per_object_scale", "R6_never_gated_on_sample"),
-         per_contrast=False, levels=(GROUP, SAMPLE), cohort_only=True),
+         per_contrast=False, levels=(GROUP, SAMPLE), cohort_only=True,
+         serves=("cohort",)),
     Kind("coverage", "What the reference database offered and what survived",
          "how far the object could see the reference, and how much survived testing",
          "that what survived is biology rather than what the preparation retained",
-         rules=(), per_contrast=False),
+         rules=(), per_contrast=False,
+         plugin_because="the reference funnel is not in an edge list and no declaration carries it; "
+                         "only the plugin knows what its database offered"),
 )
 
 BY_ID = {k.id: k for k in KINDS}
@@ -240,34 +280,12 @@ def expand(kinds, contrasts, levels=(GROUP, SAMPLE)):
 #: declaration can supply. Those three belong to the plugin, which has the method's machinery and
 #: its statistics; a plugin drawing one is complete, not a stopgap.
 #:
-#: So a kind declares an owner. `host` means: derivable from `report.unit_network` by
-#: aggregation alone, and therefore owed to every plugin that declares one. `plugin` means: needs
-#: an analysis the host may not perform, or information the declaration does not carry - with the
-#: reason recorded, because "the host does not draw this" and "the host must not draw this" look
-#: identical in a table and mean opposite things.
-HOST, PLUGIN = "host", "plugin"
-
-OWNER = {
-    "interaction": (HOST, ""),
-    "unit_presence": (HOST, ""),
-    "unit_totals": (HOST, ""),
-    "matrix": (HOST, ""),
-    "diff_matrix": (HOST, ""),
-    "circle": (HOST, ""),
-    "chord": (HOST, ""),
-    "role_scatter": (HOST, ""),
-    "role_shift": (HOST, ""),
-    "flow_rank": (HOST, ""),
-    "flow_compare": (HOST, ""),
-    "role_heatmap": (HOST, ""),
-    "contribution": (HOST, ""),
-    "patterns": (PLUGIN, "a latent decomposition is an analysis, and the reporter may not "
-                         "produce a number that first exists at render time"),
-    "similarity": (PLUGIN, "a similarity embedding over groups is an analysis, and the choice "
-                           "of metric belongs to the method rather than to the page"),
-    "coverage": (PLUGIN, "the reference funnel is not in an edge list and no declaration "
-                         "carries it; only the plugin knows what its database offered"),
-}
+#: So a kind declares an owner, and it declares it WHERE THE KIND IS. This was a dict keyed by
+#: kind id sitting beside the tuple of kinds - a second table naming the same sixteen ids, which
+#: is the shape that lets a kind exist in one and not the other. `Kind.plugin_because` carries it
+#: now, and carrying the reason in the same field as the ownership means plugin ownership cannot
+#: be declared without saying why.
+OWNER = {k.id: (k.owner, k.plugin_because) for k in KINDS}
 
 #: WHICH KINDS A RUN ACTUALLY DRAWS TODAY, and where. A registry nothing consults is a
 #: specification of intent; pairing it with the implemented set turns the difference into a
@@ -306,14 +324,11 @@ IMPLEMENTED = {
 #:
 #: `cohort` kinds answer no contrast - they describe the object every question is asked of, and
 #: belong in a section's opening rather than against any one comparison.
-SERVES = {
-    "marginal": ("diff_matrix", "flow_compare", "role_shift"),
-    "simple": ("diff_matrix", "flow_compare", "role_shift"),
-    "interaction": ("interaction",),
-    "cohort": ("unit_presence", "unit_totals"),
-    "per_arm": ("circle", "chord", "matrix", "role_scatter", "flow_rank",
-                "role_heatmap", "contribution"),
-}
+#:
+#: DERIVED, like OWNER, and for the same reason: this was a third table keyed by the same ids,
+#: and a kind could be added to KINDS while being absent from here with nothing to say so.
+QUESTIONS = ("marginal", "simple", "interaction", "cohort", "per_arm")
+SERVES = {q: tuple(k.id for k in KINDS if q in k.serves) for q in QUESTIONS}
 
 
 def serves(question_kind):

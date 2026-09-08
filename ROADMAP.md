@@ -52,9 +52,10 @@ and the count travelled: a downstream project's index recorded "scProfile ships 
 *shipped* row is read as a statement of fact by people who will not open the source — which is
 the argument for keeping it, and the argument for not letting a human maintain it.
 
-<!-- BEGIN shipped: generated from the kernel declarations by `python -m scprofile.cli roadmap --write` -->
+<!-- BEGIN shipped -->
 
-Nine kernels ship. This table is generated; a kernel is added by adding its file.
+Nine kernels ship. Generated from the kernel declarations by
+`python -m scprofile.cli generated --write` — a kernel is added by adding its file, never by editing this table.
 
 | kernel | answers | needs |
 |---|---|---|

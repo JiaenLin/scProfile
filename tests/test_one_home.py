@@ -39,16 +39,28 @@ doc = set(re.findall(r"\| `scprofile ([a-z_]+)`", REF))
 ck("every registered command is documented", cmds <= doc, str(sorted(cmds - doc)))
 ck("and every documented command is registered", doc <= cmds, str(sorted(doc - cmds)))
 
+# AN INDEPENDENT COUNT, KEPT ON PURPOSE NOW THAT THE SENTENCE IS GENERATED. These read like
+# duplicates of the generated-block check in test_declaration.py and they are not: that one asks
+# whether the document holds what the renderer produces, which is satisfied whenever both are
+# wrong together. This one enumerates from `panels.py` and looks each id up in the file, so it
+# checks the RENDERER as well as the document - and it earned its keep immediately, catching a
+# wrap that silently dropped the first five ids from the description while still reading as a
+# complete sentence. Do not delete it as redundant with the generator; it is the generator's
+# only cross-check.
 print("\nthe counts the documents claim are the counts the code has")
 SKILL = ROOT / ".claude" / "skills" / "plugin-figures" / "SKILL.md"
-WORDS = {6: "six", 11: "eleven", 12: "twelve", 13: "thirteen", 14: "fourteen",
-         15: "fifteen", 16: "sixteen", 17: "seventeen"}
+# THE TOOL'S OWN WORD LIST, not a second one. This was a literal dict covering 6 and 11-17, so a
+# seventeenth panel kind passed and an eighteenth would have failed with "?" - a check whose reach
+# was set by whoever last widened it by hand. The count in the document is rendered from
+# `generated._count`; asking the same function what to look for is what makes this a check of the
+# document rather than a check of two hand-maintained tables agreeing.
+from scprofile.generated import _count as _word                           # noqa: E402
 if SKILL.is_file():
     head = SKILL.read_text(encoding="utf-8").split("---")[1]
     ck("the skill's panel-kind count is right",
-       WORDS.get(len(P.KINDS), "?") in head, f"{len(P.KINDS)} kinds")
+       _word(len(P.KINDS)) in head, f"{len(P.KINDS)} kinds")
     ck("the skill's rule count is right",
-       f"{WORDS.get(len(P.RULES), '?')} rules" in head, f"{len(P.RULES)} rules")
+       f"{_word(len(P.RULES))} rules" in head, f"{len(P.RULES)} rules")
     ck("every registered kind is named in the skill",
        all(k.id in head for k in P.KINDS),
        str([k.id for k in P.KINDS if k.id not in head]))

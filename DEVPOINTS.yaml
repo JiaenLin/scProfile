@@ -62,7 +62,7 @@ points:
     # command is named here as well as in the failure.
     register:
       - {file: ROADMAP.md, pattern: "^\\| `{name}` \\|",
-         fix: "python -m scprofile.cli roadmap --write"}
+         fix: "python -m scprofile.cli generated --write"}
     tests: [tests/smoke]
     proves: >
       its manifest resolves, its injects and needs are declarable, and the host can plan a run

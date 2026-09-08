@@ -254,7 +254,8 @@ print("\nthe roadmap's SHIPPED table is GENERATED, so it cannot be out of step")
 # So the table is RENDERED from the declarations, and what is checked is that the document holds
 # what the renderer produces. The failure names the command that fixes it, and the fix is not an
 # edit.
-from scprofile import roadmap as _RM                                            # noqa: E402
+from scprofile import generated as _RM                                            # noqa: E402
+from scprofile import panels as _RM_P                                           # noqa: E402
 from scprofile.kernels import discover as _disc                                 # noqa: E402
 
 _rmp = _RM.path()
@@ -279,7 +280,7 @@ import os as _os3                                                               
 def _repo_ships():
     """What the REPOSITORY ships, measured with the site search path out of the way.
 
-    ONE IMPLEMENTATION, and it is the tool's: `roadmap.ships()` is what `scprofile roadmap`
+    ONE IMPLEMENTATION, and it is the tool's: `generated.ships()` is what `scprofile generated`
     renders from, so a test with its own copy of this could pass while the command wrote a
     different table.
     """
@@ -313,6 +314,44 @@ ck("the shipped table is what the declarations say",
 ck("and the count in it is the number of rows in it",
    f"{_RM._count(len(_ships)).capitalize()} kernel" in (_RM.current(_rm) or ""),
    f"the block does not say {_RM._count(len(_ships))!r}")
+# THE SKILL'S CATALOGUE IS THE SECOND GENERATED REGION, and the more dangerous one: a frontmatter
+# description is what an agent reads to decide whether a skill applies, so a stale list there
+# misinforms a reader who has no way to check it. It carried a count word and all sixteen panel
+# ids by hand, and adding one kind reddened this suite on both.
+for _name, _path, _check, _ in _RM.blocks():
+    ck(f"generated: {_name}", not _check(_path.read_text(encoding="utf-8")),
+       _check(_path.read_text(encoding="utf-8")))
+# WRAPPING MUST NOT LOSE A WORD, and it did. The first version modelled the column a span starts
+# at by padding the text with spaces, wrapping, and slicing the padding back off - and textwrap
+# drops leading whitespace by default, so the slice took five real panel ids off the front of the
+# skill's description instead. The generated text read as a complete sentence while naming eleven
+# of sixteen kinds. Compared unwrapped, so no future wrapping change can quietly do it again.
+import re as _re3                                                               # noqa: E402
+# AT THE COLUMN THE FILE ACTUALLY USES, and past it. The first version of this test wrapped at
+# column 60 and passed while the real span starts at column 90 - where seven characters remain and
+# textwrap's default splits the word that does not fit. The check must be run where the bug lives.
+_cat = _RM._catalogue(_RM_P.KINDS, column=90)
+ck("wrapping the catalogue loses nothing",
+   " ".join(_cat.split()) == " ".join(_RM._catalogue(_RM_P.KINDS, column=0).split()),
+   "the wrapped and unwrapped renderings differ by more than whitespace")
+ck("and it names every kind", all(k.id in _cat for k in _RM_P.KINDS),
+   str([k.id for k in _RM_P.KINDS if k.id not in _cat]))
+ck("no word is broken at any starting column",
+   all(_RM._count(len(_RM_P.KINDS)) in _RM._catalogue(_RM_P.KINDS, c) for c in (0, 60, 90, 94, 96)),
+   str([c for c in (0, 60, 90, 94, 96)
+        if _RM._count(len(_RM_P.KINDS)) not in _RM._catalogue(_RM_P.KINDS, c)]))
+ck("and every line of it fits the file's width",
+   all(len(l) <= 99 for l in _cat.split("\n")[1:]),
+   str([len(l) for l in _cat.split("\n")[1:]]))
+
+# AND THE ADDRESS SURVIVES A RENAME OF THE COMMAND THAT WRITES IT. The marker used to carry the
+# command, so renaming `roadmap` to `generated` orphaned the block: the tool could not find the
+# region it was meant to rewrite, and the one command that could have repaired the file was the
+# one that could not run.
+ck("an old marker still resolves", bool(_RM.current(
+   _rm.replace(_RM.BEGIN, "<!-- BEGIN shipped: written by some earlier command -->"))),
+   "a block written by a previous version cannot be found, so it cannot be normalised")
+
 # AND THE RENDERER IS FALSIFIABLE: a kernel the repository does not ship changes the block.
 _extra = dict(_ships)
 _extra["__nonesuch"] = type("K", (), {"spec": {"summary": "s"}})()

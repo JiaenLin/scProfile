@@ -10,9 +10,9 @@ description: >-
   and what it removes is a missing figure or a wrong one. In scProfile that test is the `paper`
   command and a ledger, run after `review` and before promoting; its eight named limits are in
   docs/PAPER_TEST.md and are printed every time it runs. Carries a PORTABLE CATALOGUE of sixteen
-  network and per-unit panel kinds - matrix, diff_matrix, circle, chord, role_scatter,
-  role_shift, flow_rank, flow_compare, role_heatmap, patterns, similarity, contribution,
-  interaction, unit_presence, unit_totals, coverage - each with what it establishes and what it
+  network and per-unit panel kinds - matrix, diff_matrix, circle, chord, role_scatter, role_shift,
+  flow_rank, flow_compare, role_heatmap, patterns, similarity, contribution, interaction,
+  unit_presence, unit_totals, coverage - each with what it establishes and what it
   does NOT,
   plus eleven rules paid for by real defects: one scale across a grid, absence is not zero and
   not one thing, a cut must name what it removed, declare a denominator that is not what it
