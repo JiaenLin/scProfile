@@ -7,7 +7,10 @@ devpoints: 1
 # has shipped it.
 
 tests:
-  command: ["{python}", "tests/run_all.py"]
+  # `--jobs {jobs}` is filled from the scheduler's allocation, or the CPU count off a
+  # scheduler. One subprocess per suite either way; only the waiting is removed. Measured
+  # IDENTICAL to the serial report on this suite set (PBS 707231) before being turned on.
+  command: ["{python}", "tests/run_all.py", "--jobs", "{jobs}"]
 
 # `plan` runs nothing and resolves everything: the kernel's manifest, what it injects, what it
 # needs in obs and obsm, whether it is design-aware, and what stops it. It is the cheapest honest
