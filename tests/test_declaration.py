@@ -226,26 +226,31 @@ for _fn in ("run", "selftest"):
     except Exception as _e:                                                    # noqa: BLE001
         ck(f"{_fn} refuses until it is written", False, f"raised {type(_e).__name__}")
 
-print("\nthe roadmap's SHIPPED table is checked against what actually ships")
+print("\nthe roadmap's SHIPPED table is GENERATED, so it cannot be out of step")
 # A COUNT IN A DOCUMENT IS READ AS A FACT BY PEOPLE WHO WILL NOT OPEN THE SOURCE, and this one
 # travelled: `ROADMAP.md` listed two shipped kernels for as long as it took to build the other
 # seven, and a downstream project's index copied "ships `cellcycle` and `velocity` only" and
 # blocked a stage on a plugin that had been shipping for days.
 #
-# So the list is MEASURED rather than maintained. Both directions: a plugin that ships and is
-# not listed understates the tool, and a name listed that does not ship promises what is not
-# there - and the second is the one somebody plans work around.
-import re as _re2                                                               # noqa: E402
+# THE FIRST FIX WAS TO MEASURE THE LIST, AND IT WAS THE WRONG FIX. Measuring turned the table
+# into a second registry: `discover()` admitted a new kernel the moment its file existed, and
+# then this suite refused it until somebody hand-added a row and hand-corrected a count word in
+# the prose above. Two edits, in a document, that no error message named - and symmetrical, so
+# deleting a kernel failed here too. A check that can only be satisfied by editing a document is
+# an admission gate wearing a test's clothes.
+#
+# So the table is RENDERED from the declarations, and what is checked is that the document holds
+# what the renderer produces. The failure names the command that fixes it, and the fix is not an
+# edit.
+from scprofile import roadmap as _RM                                            # noqa: E402
 from scprofile.kernels import discover as _disc                                 # noqa: E402
 
-_rmp = Path(__file__).resolve().parents[1] / "ROADMAP.md"
+_rmp = _RM.path()
 try:
     _rm = _rmp.read_text(encoding="utf-8")
 except OSError as _e:
     ck("ROADMAP.md is readable", False, str(_e))
     _rm = ""
-_t0 = _rm.split("## Tier 0", 1)[-1].split("## Tier 1", 1)[0]
-_listed = set(_re2.findall(r"^\| `([a-z_0-9]+)` \|", _t0, _re2.M))
 # WHAT THE ROADMAP DOCUMENTS IS WHAT THE REPOSITORY SHIPS - NOT WHAT IS ON THE SEARCH PATH.
 #
 # `discover()` deliberately includes $SCPROFILE_KERNELS, because adding a method without forking
@@ -260,13 +265,13 @@ import os as _os3                                                               
 
 
 def _repo_ships():
-    """What the REPOSITORY ships, measured with the site search path out of the way."""
-    _keep = _os3.environ.pop("SCPROFILE_KERNELS", None)
-    try:
-        return set(_disc())
-    finally:
-        if _keep is not None:
-            _os3.environ["SCPROFILE_KERNELS"] = _keep
+    """What the REPOSITORY ships, measured with the site search path out of the way.
+
+    ONE IMPLEMENTATION, and it is the tool's: `roadmap.ships()` is what `scprofile roadmap`
+    renders from, so a test with its own copy of this could pass while the command wrote a
+    different table.
+    """
+    return _RM.ships()
 
 
 _ships = _repo_ships()
@@ -280,25 +285,28 @@ if _smoke.is_dir():
     _os3.environ["SCPROFILE_KERNELS"] = str(_smoke)
     try:
         ck("a plugin on $SCPROFILE_KERNELS is not counted as one the repository ships",
-           _repo_ships() == _ships, f"the shipped set moved: {sorted(_repo_ships() ^ _ships)}")
+           set(_repo_ships()) == set(_ships),
+           f"the shipped set moved: {sorted(set(_repo_ships()) ^ set(_ships))}")
         ck("and discover() still finds it, so the search path still works",
-           bool(set(_disc()) - _ships), "nothing extra was discovered from the site directory")
+           bool(set(_disc()) - set(_ships)), "nothing extra was discovered from the site directory")
     finally:
         if _prev is None:
             _os3.environ.pop("SCPROFILE_KERNELS", None)
         else:
             _os3.environ["SCPROFILE_KERNELS"] = _prev
-ck("every shipped plugin is in the roadmap's Tier 0",
-   not (_ships - _listed), f"ships and unlisted: {sorted(_ships - _listed)}")
-ck("and nothing is listed as shipped that does not ship",
-   not (_listed - _ships), f"listed and absent: {sorted(_listed - _ships)}")
-# AND THE PROSE COUNT BESIDE IT. "All nine" and a table of eight is the same defect one line up.
-_words = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
-          "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
-_claim = _re2.search(r"\*\*All ([a-z]+),", _t0)
-ck("the count claimed in prose matches the table",
-   bool(_claim) and _words.get(_claim.group(1)) == len(_listed),
-   f"prose says {_claim.group(1) if _claim else '?'}, table has {len(_listed)}")
+ck("the shipped table is what the declarations say",
+   not _RM.check(_rm, _ships), _RM.check(_rm, _ships))
+# THE COUNT IS INSIDE THE GENERATED BLOCK, so "All nine" over a table of eight cannot be written.
+# It used to be a separate check because it was a separate thing somebody had to remember.
+ck("and the count in it is the number of rows in it",
+   f"{_RM._count(len(_ships)).capitalize()} kernel" in (_RM.current(_rm) or ""),
+   f"the block does not say {_RM._count(len(_ships))!r}")
+# AND THE RENDERER IS FALSIFIABLE: a kernel the repository does not ship changes the block.
+_extra = dict(_ships)
+_extra["__nonesuch"] = type("K", (), {"spec": {"summary": "s"}})()
+ck("a kernel that is not there would change the block",
+   _RM.render(_extra) != _RM.render(_ships),
+   "the renderer ignores its argument, so matching it proves nothing")
 
 print("\nthe keys a report block may carry are stated once, not twice")
 # THE CHECKER DEMANDED A KEY AND THEN WARNED THAT THE KEY WAS UNKNOWN. The allowed-key set was a

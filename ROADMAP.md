@@ -38,23 +38,37 @@ Two rules that fall out of the gate and are worth stating separately:
 
 ## Tier 0 — shipped
 
-**All nine, as of 2026-08-27, each meeting the exit standard on a rendered report from a real
-run.** This table listed two for as long as it took to build the other seven, and the count
-travelled: a downstream project's index recorded "scProfile ships `cellcycle` and `velocity`
-only" and blocked a stage on a plugin that had been shipping for days. A roadmap's *shipped* row
-is read as a statement of fact by people who will not open the source.
+**Each of them, as of 2026-08-27, meeting the exit standard on a rendered report from a real
+run.** That sentence is written by hand and dated, because no generator can check it. The table
+below is not: it is rendered from the kernel declarations, so a kernel is added to it by adding
+its file and nothing else. It used to be maintained here, and it failed in both directions — a
+new kernel was refused by the suite until somebody added a row, and a deleted one kept its row.
+The count in this paragraph was hand-maintained too, and it is now gone from the prose for the
+same reason.
+
+The table is worth keeping. This one listed two for as long as it took to build the other seven,
+and the count travelled: a downstream project's index recorded "scProfile ships `cellcycle` and
+`velocity` only" and blocked a stage on a plugin that had been shipping for days. A roadmap's
+*shipped* row is read as a statement of fact by people who will not open the source — which is
+the argument for keeping it, and the argument for not letting a human maintain it.
+
+<!-- BEGIN shipped: generated from the kernel declarations by `python -m scprofile.cli roadmap --write` -->
+
+Nine kernels ship. This table is generated; a kernel is added by adding its file.
 
 | kernel | answers | needs |
 |---|---|---|
-| `cellcycle` | phase per cell; the check that a trajectory is not a cell-cycle axis | — |
-| `velocity` | direction of transcriptional change | spliced/unspliced (searched for, not assumed) |
-| `pseudotime` | ordering along a trajectory, and its orientation | an embedding, `cellcycle` |
-| `abundance` | whether a population's share shifts across the design | a design table |
-| `de` | which genes change, per population, across the design | a design table |
-| `scenic` | regulon activity per cell | cisTarget references |
-| `decoupler` | pathway and TF activity per cell | a prior knowledge network |
-| `liana` | ligand–receptor communication, consensus across methods | — |
-| `cellchat` | the same question through the R implementation | R |
+| `abundance` | whether a population's share shifts across the design | `label`, `sample`, `design` |
+| `cellchat` | cell-cell communication, CellChat's own database and scoring | `lognorm`, `label`, `organism`; R; 2 reference files |
+| `cellcycle` | cell-cycle phase per cell, and the check that a trajectory is not a cell-cycle axis | — |
+| `de` | which genes change, per cell type, across the design | `counts`, `label`, `sample`, `design` |
+| `decoupler` | regulatory activity per cell, from a curated prior | `lognorm`, `organism`; 2 reference files |
+| `liana` | cell-cell communication, consensus over several scoring methods | `lognorm`, `label`, `organism`; 2 reference files |
+| `pseudotime` | ordering along a trajectory, oriented by velocity where it exists | `embedding` |
+| `scenic` | regulon activity per cell, from a network inferred from your own data | `counts`, `organism`; 6 reference files |
+| `velocity` | RNA velocity from spliced/unspliced counts - the DIRECTION of transcriptional change | layers `spliced`, `unspliced` |
+
+<!-- END shipped -->
 
 *Not a tenth method:* `tests/smoke/plugins/silhouette.py` also runs, plans, merges and reports
 like any of the above, and meets the same standard. It is deliberately outside `kernels/` — it

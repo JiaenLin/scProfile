@@ -1456,6 +1456,30 @@ def _selftest(a):
     return 0 if (ran and not failed and not blocked and not missing) else REFUSE
 
 
+def _roadmap(a):
+    """Is the shipped table what the declarations say, and rewrite it when it is not.
+
+    A MAINTAINER COMMAND THAT EXISTS SO THERE IS NOTHING TO MAINTAIN. The table was the second
+    place a kernel had to be registered, and the only one a newcomer could not find: `discover()`
+    admitted a new kernel the moment its file existed, and then the suite went red on a markdown
+    table nobody had mentioned. Adding a kernel and deleting one both left it wrong.
+    """
+    from . import roadmap as R
+    ks = R.ships()
+    doc = R.path()
+    text = doc.read_text(encoding="utf-8")
+    problem = R.check(text, ks)
+    if not problem:
+        print(f"{doc.name}: the shipped table is what {len(ks)} declaration(s) say")
+        return 0
+    if not getattr(a, "write", False):
+        print(f"{doc.name}: {problem}", file=sys.stderr)
+        return REFUSE
+    doc.write_text(R.rewrite(text, ks), encoding="utf-8")
+    print(f"{doc.name}: rewritten from {len(ks)} declaration(s)")
+    return 0
+
+
 def _validate(a):
     """Static checks on plugins and their references. Runs nothing."""
     from . import validate as V
@@ -3409,7 +3433,8 @@ def main(argv=None):
   [agent]      the analysis, end to end - doctor, install, fetch, plan, run, report, and the
                writing cycle: agenda, write, review, paper, standard. All of it is the agent's,
                including opening the figures. Human review is outside this tool.
-  [maintainer] commands for whoever maintains a plugin: validate, selftest, scaffold
+  [maintainer] commands for whoever maintains a plugin: validate, selftest, scaffold,
+               roadmap
                see docs/MAINTAINING_PLUGINS.md - running an analysis never needs these
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -3616,6 +3641,12 @@ def main(argv=None):
                          "before trusting them")
     va.add_argument("--organism", default=None)
     va.set_defaults(fn=_validate)
+
+    rm = sub.add_parser("roadmap",
+                        help="[maintainer] check (or rewrite) the shipped table in ROADMAP.md")
+    rm.add_argument("--write", action="store_true",
+                    help="rewrite the generated block from the declarations")
+    rm.set_defaults(fn=_roadmap)
 
     se = sub.add_parser("selftest", help="[maintainer] prove each plugin's environment still works")
     se.add_argument("name", nargs="?", default=None,
