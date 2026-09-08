@@ -99,9 +99,13 @@ points:
             the accounting it uses 32 of 35
         - name: measure
           fills: [memory_gb_base, memory_gb_per_100k]
+          # A COMMAND, LIKE `tests` AND `fixture` ALREADY ARE. The harness must not know what a
+          # run directory of this tool looks like. `{run}` is filled from `--run`.
+          command: ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--memory"]
           why: >
             both terms, from a real run. A rate alone attributes the fixed cost to the cells and
-            the job is sized to be killed on small objects
+            the job is sized to be killed on small objects. Every run already fits this and stores
+            it in report.json; `capacity --memory` is what reads it back out
         - name: judgement
           kind: judgement
           fills: [summary, when_to_use, cannot_show, report, upstream]

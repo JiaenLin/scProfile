@@ -3294,6 +3294,45 @@ def _record_capacity(out):
     except Exception as e:                                                # noqa: BLE001
         print(f"  capacity not recorded: {e}")
 
+def _measured(run):
+    """The fitted memory model a run recorded, as the lines to paste into a declaration.
+
+    WRITTEN AND NEVER READ. `_run` fits both terms from its own instances, prints them once, and
+    stores them under `memory_model` in report.json - and nothing could show them again. So the
+    only way to get a plugin's measured memory into its declaration was to be watching the console
+    of the run that produced it. Six of nine shipped plugins declare a rate and no baseline, and
+    this is a large part of why: the number existed, in a file, unreadable.
+    """
+    import json as _json
+    rj = Path(run) / "report.json"
+    try:
+        doc = _json.loads(rj.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"scprofile: cannot read {rj}: {e}", file=sys.stderr)
+        return REFUSE
+    model = doc.get("memory_model") or {}
+    if not model:
+        print(f"{rj} records no memory model. A run fits one from its own instances, so either "
+              f"this run measured nothing or every instance shared a job - in which case the "
+              f"figures are the job's and not each plugin's. Run one instance in a job.")
+        return REFUSE
+    print(f"# measured in {Path(run).name}, fitted as baseline + per-cell. Paste into the")
+    print(f"# plugin's declaration; a rate without a baseline under-requests on small objects.")
+    for name, m in sorted(model.items()):
+        base, rate, pts = m.get("base_gb"), m.get("gb_per_100k"), m.get("points")
+        basis = ", ".join(m.get("basis") or ()) or "unrecorded"
+        if base is None:
+            print(f"\n# {name}: {pts} point(s) at one size, so the baseline could not be "
+                  f"separated and the")
+            print(f"#   whole peak is charged to the rate. Measure at a second size before "
+                  f"declaring this.")
+            print(f'#   "memory_gb_per_100k": {rate:.1f},')
+            continue
+        print(f"\n# {name}: {pts} point(s), fitted on {basis}")
+        print(f'    "memory_gb_base": {base:.1f}, "memory_gb_per_100k": {rate:.1f},')
+    return 0
+
+
 def _capacity(a):
     """What a run delivered, held against another run.
 
@@ -3306,6 +3345,8 @@ def _capacity(a):
     from . import capacity as _C
 
     run = Path(a.out).resolve()
+    if getattr(a, "memory", False):
+        return _measured(run)
     now = _C.measure(run)
     _C.write(run)
     other = a.against
@@ -3688,6 +3729,9 @@ def main(argv=None):
     cp_.add_argument("--against", type=Path,
                      help="another run to hold it against. Without this, the newest run beside "
                           "it that has a recorded capacity.")
+    cp_.add_argument("--memory", action="store_true",
+                     help="instead: print the memory model this run fitted, ready to paste into "
+                          "the plugin's declaration")
     cp_.add_argument("--strict", action="store_true",
                      help="exit non-zero if this run delivered less than the other")
     cp_.set_defaults(fn=_capacity)
