@@ -108,7 +108,15 @@ with tempfile.TemporaryDirectory() as td:
 
 print("\nthe plugin side reads it by ACCESSOR, and a host that says nothing changes nothing")
 from scprofile.plugin import Context                                            # noqa: E402
-_c = Context(None, keys={}, out=".", figure_context=ctx)
+# A CONTEXT IS A DIRECTORY, NOT A VALUE. `Context.__init__` creates `tables/`, `figures/`, `obs/`
+# and `arrays/` under whatever `out` it is handed, because the writers hanging off it assume those
+# exist. `out="."` therefore made this suite write four directories into whatever directory it
+# happened to be run from - which for the runner is the repository root. Git never reports an
+# EMPTY untracked directory, so the only way to discover it was for somebody to notice one; and a
+# suite that writes outside its own scratch has already stopped being a test only of what it
+# names. The Contexts below are throwaway, so they get a throwaway directory.
+_scratch = tempfile.TemporaryDirectory(prefix="scp_figure_context_")
+_c = Context(None, keys={}, out=_scratch.name, figure_context=ctx)
 # POSITIONAL AGAINST THE CALLER'S OWN LEVEL ORDER. A plotting function takes a colour vector
 # against ITS levels, so the map must come back in the order asked for - handing back sorted keys
 # would colour the wrong labels, which is the defect this exists to fix arriving through the fix.
@@ -119,7 +127,7 @@ ck("the stamp is readable by accessor", _c.figure_stamp() == ctx["stamp"])
 ck("the absence note is readable by accessor", _c.figure_absence() == ctx["note"])
 # A HOST THAT SAYS NOTHING MUST LEAVE THE PLUGIN EXACTLY AS IT WAS. Empty, never a block of
 # blanks: a plugin renders "" as no subtitle, and a structure of empty strings as a blank one.
-_n = Context(None, keys={}, out=".")
+_n = Context(None, keys={}, out=_scratch.name)
 ck("no context means no colours", _n.figure_colours() == {})
 ck("no context means no stamp", _n.figure_stamp() == "")
 ck("no context means no absence note", _n.figure_absence() == "")
@@ -127,6 +135,16 @@ ck("no context means no absence note", _n.figure_absence() == "")
 # recycled silently by the plotting layer, colouring populations with each other's colours.
 ck("a label with no colour simply does not come back",
    list(_c.figure_colours(["not-a-label", POPS[0]])) == [POPS[0]])
+# AND THE DIRECTORY IT MADE IS NOT THE ONE THIS SUITE WAS RUN FROM. The fix above is invisible to
+# every gate that would normally catch it coming back: git does not report an EMPTY untracked
+# directory, so `git status` stays silent, and the suite stayed green throughout the whole time it
+# was writing four of them into the repository root. A fix nothing defends is a fix with a
+# half-life. This pins the invariant rather than scanning the filesystem, so it cannot flake when
+# the suites run concurrently under --jobs.
+ck("a throwaway Context does not make its directories in the runner's cwd",
+   Path(_c.out).resolve() != Path.cwd().resolve(), str(Path(_c.out).resolve()))
+# AND IT GOES AWAY HERE, while the suite is still the only thing that has touched it.
+_scratch.cleanup()
 
 print("\nthe HOST's own palette is keyed on the label too, not on its position")
 from scprofile.figure import palette as _pal, CATEGORY_COLOURS as _CC              # noqa: E402

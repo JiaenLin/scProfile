@@ -890,6 +890,14 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
     # THE PROBE IS A LAUNCH TOO, and it was the one with the third hardcoded limit: 300s that no
     # `--timeout` could lower, in an environment with none of the thread caps. It loads the
     # plugin, so both of those matter.
+    #
+    # BOTH ARE GUARDED, AND THEY ARE GUARDED IN DIFFERENT PLACES, which is worth saying here
+    # because for a while only one of them was. `test_the_compare_phase_is_recorded` section 11
+    # drives both halves of the `min` below on a probe that really is killed; section 10 reads
+    # `cores` off the PROBE CHILD's own environment, with a job script's OMP_NUM_THREADS=64
+    # exported around the drive so a dropped share reads as inheritance and not as absence.
+    # Dropping `cores=cores` from this call is not an equivalent mutation: BLAS sizes its pool
+    # during the plugin import this probe performs.
     _probe_limit = _PROBE_TIMEOUT if not timeout else min(_PROBE_TIMEOUT, timeout)
     try:
         q = subprocess.run([str(exe), str(entry), "--phases", str(plugin_file)],
@@ -1173,6 +1181,12 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         # Said in words as well, for a reader who opens the file rather than the code.
         "is_instance": False,
         "written": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        # THE LIMITS, ON THE PHASE AS WELL AS ON EVERY LAUNCH UNDER IT. Nothing in the host reads
+        # this pair - `resume.phases` returns the record whole and `_schedule_block` renders the
+        # per-launch copies - so it is a receipt for a person, and a receipt no code reads is one
+        # nothing else can contradict. Both fields could be nulled with every suite green until
+        # `test_the_compare_phase_is_recorded` sections 8, 10 and 12 pinned them, the last
+        # against the honest `null` a rebuild with no core share must still write.
         "cores": cores, "timeout": timeout,
         "across_arms_gate": _across_gate,
         "cardinality": {"considered": _considered,

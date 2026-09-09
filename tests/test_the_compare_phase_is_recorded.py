@@ -223,10 +223,25 @@ entry = d3 / "fake_entry.py"
 # and a limit asserted only against the RECORD is satisfied by a launch that ran under a
 # different one. It records itself BEFORE it sleeps and draws AFTER, so a killed launch has the
 # unmistakable signature of one that started and never finished.
+#
+# AND THE PROBE RECORDS ITS ENVIRONMENT TOO, into a SECOND log. `--phases` is a launch of this
+# same plugin file by this same interpreter - it IMPORTS the module, which is where BLAS sizes
+# its pool - so the core share matters in it for exactly the reason it matters in the launch,
+# and `report.py` says so in its own comment at the call site. What was tested there was only
+# the clock: section 11 drives both halves of the probe's `min(_PROBE_TIMEOUT, --timeout)` and
+# nothing drove its ENV, so `env=_phase_env(exe, cores=cores)` could be cut down to
+# `env=_phase_env(exe)` with all 74 suites green while the probe child went from the run's
+# OMP_NUM_THREADS=8 back to the job script's 64 with MKL unset - the inherited thread count
+# this whole file was opened for, arriving through the one launch nobody was measuring.
+# Written BEFORE the sleep, so a probe that section 11 kills still leaves the environment it
+# was killed in.
 entry.write_text(
     "import json, os, sys, time\n"
     "from pathlib import Path\n"
     "if sys.argv[1] == '--phases':\n"
+    "    Path(os.environ['PROBE_ENV_LOG']).write_text(json.dumps(\n"
+    "        {k: os.environ.get(k) for k in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS',\n"
+    "                                        'SCPROFILE_IN')}))\n"
     "    time.sleep(float(os.environ.get('PHASES_SLEEP', '0')))\n"
     "    print('run compare'); raise SystemExit(0)\n"
     "spec = json.loads(Path(sys.argv[3]).read_text())\n"
@@ -242,7 +257,13 @@ entry.write_text(
 launch_log = d3 / "launches.txt"
 launch_log.write_text("0", encoding="utf-8")
 env_log = d3 / "env.json"
+# THE PROBE'S LOG IS ITS OWN FILE, not the launch's. They are two different processes launched
+# with two separately built environments, and one file could only ever hold the last of them -
+# which is the launch, so the probe's would be the one silently lost.
+probe_env_log = d3 / "probe_env.json"
+probe_env_log.write_text("{}", encoding="utf-8")
 os.environ["LAUNCH_LOG"], os.environ["ENV_LOG"] = str(launch_log), str(env_log)
+os.environ["PROBE_ENV_LOG"] = str(probe_env_log)
 
 cdir = k3 / _RS.COMPARE_DIRNAME / "diet"
 spec = {"pair": "diet", "units": {"ctrl": str(k3 / "ctrl"), "treated": str(k3 / "treated")},
@@ -407,6 +428,28 @@ if prec.is_file():
     check([L["cores"] for L in rec4["launches"]] == [8]
           and [L["timeout"] for L in rec4["launches"]] == [900],
           f"the phase must run under the RUN's budget and limit: {rec4['launches']}")
+    # THE PHASE'S OWN HEADER, NOT ONLY THE LAUNCHES UNDER IT. The record states `cores` and
+    # `timeout` a second time, one level up from the per-launch copies the section above pins -
+    # and NOTHING IN THE CODEBASE READS THAT COPY: `resume.phases` hands the record back whole,
+    # and `_schedule_block` renders each row from the per-launch `L.get("cores")` and the run's
+    # own `payload.get("cores")`. So both fields could be nulled with all 74 suites green.
+    #
+    # That makes it a LYING RECEIPT rather than a lying execution - the same failure class
+    # section 7 pins for the PER-LAUNCH record, left unpinned one level up - and being unread is
+    # the reason it needs a guard rather than a reason it does not: the only reader is a person
+    # opening `compare/phase.json` to find out what the phase ran under, and no other document
+    # of the run would contradict it for them.
+    _L4 = (rec4.get("launches") or [{}])[0]
+    check(rec4.get("cores") == 8 and rec4.get("timeout") == 900,
+          f"the phase record's own top-level limits are {rec4.get('cores')!r}/"
+          f"{rec4.get('timeout')!r}; the run declared 8/900 and this file is what says so")
+    # Pinned against the launches beneath it as well as against the run's numbers, because a
+    # header disagreeing with its own launches is two documents of one run disagreeing, which is
+    # the state carrying ONE pair of limits through this phase exists to prevent.
+    check(rec4.get("cores") == _L4.get("cores") and rec4.get("timeout") == _L4.get("timeout"),
+          f"the phase header says {rec4.get('cores')!r}/{rec4.get('timeout')!r} and the launch "
+          f"underneath it says {_L4.get('cores')!r}/{_L4.get('timeout')!r} - one phase, one run, "
+          f"two answers")
     check(rec4.get("is_instance") is False,
           "the record says what the directory is, so a resume does not have to guess from a name")
 check(launch_log.read_text() == "1",
@@ -447,6 +490,9 @@ def _fake_run_tree(root, units=("ctrl", "hi"), table=False):
     shutil.copy(entry, Path(root) / "fake_entry.py")
     launch_log.write_text("0", encoding="utf-8")
     env_log.write_text("{}", encoding="utf-8")
+    # CLEARED PER DRIVE, like the other two. A stale probe env from the previous section would
+    # let a drive whose probe never ran at all read as one that ran under the right share.
+    probe_env_log.write_text("{}", encoding="utf-8")
     return k, rows
 
 
@@ -525,12 +571,24 @@ def _recording_native(*a, **kw):
 
 
 _noise = io.StringIO()
+# WHAT THE SHELL EXPORTS FOR ITSELF, SET FOR THE WHOLE DRIVE. Section 12 measures a job script's
+# `OMP_NUM_THREADS=$NCPUS` reaching a phase that has NO core share; this run HAS one, so every
+# child of this build must see 8 and never this. Without it, a share dropped anywhere along the
+# chain shows up as an ABSENT variable in a clean test environment - which is a true failure but
+# not the one that happens on a node, and not the one the probe's mutation produced: it put 64
+# in the probe child, inherited, exactly as before the phase had a share at all.
+_saved5 = os.environ.get("OMP_NUM_THREADS")
+os.environ["OMP_NUM_THREADS"] = "64"
 try:
     _RP._native_compare = _recording_native
     with _plugin_machinery(d5), contextlib.redirect_stdout(_noise):
         _RP.write_all(d5, payload5)
 finally:
     _RP._native_compare = _real_native
+    if _saved5 is None:
+        os.environ.pop("OMP_NUM_THREADS", None)
+    else:
+        os.environ["OMP_NUM_THREADS"] = _saved5
 
 check(bool(_seen_kw),
       "`write_all` never reached the compare phase at all, so this section measures nothing - "
@@ -546,9 +604,16 @@ check(_seen_kw.get("cores") == 8,
 _rec5 = k5 / _RS.COMPARE_DIRNAME / _RS.PHASE_RECORD
 check(_rec5.is_file(), "a page built by write_all wrote no phase record")
 if _rec5.is_file():
-    _L5 = json.loads(_rec5.read_text()).get("launches") or []
+    _r5 = json.loads(_rec5.read_text())
+    _L5 = _r5.get("launches") or []
     check([L.get("cores") for L in _L5] == [8] and [L.get("timeout") for L in _L5] == [900],
           f"the launches a real page build made do not carry the run's limits: {_L5}")
+    # AND THE RECEIPT AT THE TOP OF THAT RECORD, on the path a report build actually takes.
+    # Section 8 says why an unread field still has to be true; this asserts it on a record left
+    # behind by `write_all` rather than by a test calling the phase directly.
+    check(_r5.get("cores") == 8 and _r5.get("timeout") == 900,
+          f"the phase record a page build wrote gives its own limits as {_r5.get('cores')!r}/"
+          f"{_r5.get('timeout')!r}, not the run's 8/900")
 _env5 = json.loads(env_log.read_text())
 check(_env5.get("OMP_NUM_THREADS") == "8",
       f"the CHILD a page build launched saw OMP_NUM_THREADS={_env5.get('OMP_NUM_THREADS')!r}. "
@@ -556,6 +621,29 @@ check(_env5.get("OMP_NUM_THREADS") == "8",
       f"at import, before any plugin code runs")
 check(_env5.get("SCPROFILE_IN"),
       "the child a page build launched was given no manifest to read")
+
+# THE PROBE'S ENVIRONMENT, WHICH IS THE OTHER PROCESS THIS BUILD STARTED. `--phases` imports the
+# plugin module, and an import is where BLAS reads OMP_NUM_THREADS and builds its pool, so the
+# probe is subject to the core share for precisely the reason the launch is. `report.py` says so
+# at the call site - "THE PROBE IS A LAUNCH TOO... it loads the plugin, so both of those matter"
+# - and then only its clock was ever driven. `env=_phase_env(exe, cores=cores)` cut down to
+# `env=_phase_env(exe)` survived the whole battery while moving these values from 8 to the 64
+# exported above, with MKL unset: the run's declared share silently replaced by the job script's
+# count in a process that loads the plugin. Measured on the CHILD, because an env dict asserted
+# in the parent is not the pool the plugin's numpy actually built.
+_probe5 = json.loads(probe_env_log.read_text())
+check(_probe5.get("OMP_NUM_THREADS") == "8",
+      f"the PROBE child saw OMP_NUM_THREADS={_probe5.get('OMP_NUM_THREADS')!r} on a run "
+      f"declaring `cores: 8`. The probe loads the plugin, so an unshared probe is the node's "
+      f"count reaching an import through the one door the launch was closed against")
+check(_probe5.get("MKL_NUM_THREADS") == "8",
+      f"the probe got one thread cap and not the others: {_probe5!r}. `env_for_kernel` sets the "
+      f"six together or not at all, so one alone means something other than the core share "
+      f"built this environment")
+check(_probe5.get("SCPROFILE_IN") is None,
+      f"the probe was handed SCPROFILE_IN={_probe5.get('SCPROFILE_IN')!r}, naming a manifest it "
+      f"has not got - `--phases` reads no in.json, and a path that is not a file is a worse "
+      f"answer to a plugin than an absent variable")
 check(launch_log.read_text() == "1",
       f"one arm pair through a whole page build should be one launch; the log says "
       f"{launch_log.read_text()}")
@@ -568,6 +656,11 @@ check("NO core share" not in _noise.getvalue(),
 #     slow child rather than an assertion about the constant: a probe allowed to outlive the
 #     limit the run declared is a limit the run does not actually have, and a probe allowed to
 #     outlive 300s is an import hanging a report build with no ceiling of its own.
+#
+#     THE PROBE'S OTHER LIMIT - ITS CORE SHARE - IS MEASURED IN SECTION 10, on the drive that has
+#     a real share to carry and a job script's count in the environment to be confused with it.
+#     For a long time only the clock was here and nothing was there, which is how the probe kept
+#     the second door open onto the inherited thread count.
 # ---------------------------------------------------------------------------------------------
 d6 = Path(tempfile.mkdtemp())
 k6, _ = _fake_run_tree(d6)
@@ -613,6 +706,7 @@ os.environ["OMP_NUM_THREADS"] = "64"                      # what a PBS script ex
 try:
     _drawn8, _said8 = _drive_native(d8, timeout=900, cores=None)
     _env8 = json.loads(env_log.read_text())
+    _probe8 = json.loads(probe_env_log.read_text())
 finally:
     if _saved is None:
         os.environ.pop("OMP_NUM_THREADS", None)
@@ -622,6 +716,11 @@ check(_env8.get("OMP_NUM_THREADS") == "64",
       f"the premise, and the reason the sentence is needed: with no core share the six caps are "
       f"unset and the child INHERITED the job's 64, got {_env8.get('OMP_NUM_THREADS')!r}. If "
       f"this changed, env_for_kernel now has a default and this section should be remeasured")
+check(_probe8.get("OMP_NUM_THREADS") == "64",
+      f"the PROBE inherited {_probe8.get('OMP_NUM_THREADS')!r} rather than the job's 64. The "
+      f"probe goes through the same door as the launch and must fail the same way when there is "
+      f"no share to close it - if it does not, section 10's opposite measurement is testing "
+      f"something other than the share")
 check("NO core share" in _said8,
       f"a rebuild running the phase with NO core share said nothing about it, so the page's "
       f"figures were drawn on an oversubscribed node and no document of the run says so. The "
@@ -631,10 +730,17 @@ check("NO timeout" not in _said8,
 _rec8 = k8 / _RS.COMPARE_DIRNAME / _RS.PHASE_RECORD
 check(_rec8.is_file(), "a phase run with no core share wrote no record, so nothing below is read")
 if _rec8.is_file():
-    check([L.get("cores") for L in (json.loads(_rec8.read_text()).get("launches") or [])]
-          == [None],
+    _r8 = json.loads(_rec8.read_text())
+    check([L.get("cores") for L in (_r8.get("launches") or [])] == [None],
           "the record must state the share the launch ACTUALLY ran under, including when there "
           "was none - a record naming a share nobody applied is worse than no record")
+    # AND THE SAME OF THE HEADER, WHERE THE HONEST ANSWER IS `null`. The two fields are pinned
+    # against real numbers in sections 8 and 10; here the phase genuinely had no share and did
+    # have a limit, so the receipt has to say exactly that - a header reading 900 with no
+    # timeout, or a share where there was none, is the one document a reader has.
+    check(_r8.get("cores") is None and _r8.get("timeout") == 900,
+          f"the phase header claims {_r8.get('cores')!r}/{_r8.get('timeout')!r}; this phase ran "
+          f"with NO core share under `--timeout 900` and the receipt must not improve on that")
 
 # ---------------------------------------------------------------------------------------------
 # 13. THE SECOND LAUNCH SITE. This phase has TWO calls to `_compare_launch` - one per arm pair and
@@ -699,7 +805,8 @@ if fails:
     sys.exit(1)
 print("ok - the compare phase writes its manifest, its record and its cardinality, is DRIVEN "
       "from write_all under the run's own core share and timeout all the way into the child's "
-      "environment at BOTH launch sites, is killed by that timeout rather than merely recording "
-      "it, bounds its probe by both limits, re-runs on a version bump, announces either limit "
-      "when it is missing, does not re-execute on every report build, and is no longer surveyed "
-      "as an instance that died")
+      "environment at BOTH launch sites AND in the probe that precedes them, is killed by that "
+      "timeout rather than merely recording it, bounds its probe by both limits, states those "
+      "limits on the phase record itself and not only on the launches beneath it, re-runs on a "
+      "version bump, announces either limit when it is missing, does not re-execute on every "
+      "report build, and is no longer surveyed as an instance that died")

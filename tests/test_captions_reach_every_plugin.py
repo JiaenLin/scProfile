@@ -313,6 +313,60 @@ try:
             ck("one directory spelled two ways does not truncate away its own first legend",
                sorted(spelled) == ["abs.png", "bare.png"],
                f"read {sorted(spelled)} for 2 panels - the second spelling started the file again")
+
+            # AND AN EXPLICIT open() ON A DIRECTORY THIS PROCESS HAS ALREADY STARTED MUST
+            # TRUNCATE IT. Three branches decide whether the file is started again, and each is a
+            # different defect when it is wrong: a directory this process has never seen truncates
+            # (or a second run appends to the first run's rows); a directory already started does
+            # NOT (or a run filing legends beside its panels erases the rows it wrote a moment
+            # ago); and an explicit `open` on an already-started directory truncates AGAIN,
+            # because `open` is how a script says "these are THIS run's legends". Two of the three
+            # were pinned above and the third was only ASSERTED, by the comment on
+            # `scp_captions_open` - and a re-verifier deleted the two lines that drop the
+            # directory from the started set with this whole suite still green.
+            #
+            # MEASURED with real Rscript, in ONE process, opening the same directory twice and
+            # drawing roles.png after each open:
+            #     with the setdiff:      1 row  - the reader serves "CURRENT: ..."
+            #     with the setdiff cut:  2 rows - the reader serves "STALE: ..."
+            # which is precisely the failure `scp_captions_ensure`'s own comment names: `read`
+            # keys on the basename with `setdefault`, so it keeps the FIRST row for a file name
+            # and serves the superseded legend forever. The panel on disk is this run's and the
+            # sentence under it is the last run's - a caption asserting something it cannot know,
+            # on a page that renders exactly as a correct one does.
+            redir = tmp / "reopen"
+            _stale = "STALE: the draft legend, written on this script's first pass."
+            _fresh = "CURRENT: the corrected legend, written after the panel was redrawn."
+            reo = [f"source({json.dumps(str(src))})",
+                   f"scp_captions_open({json.dumps(str(redir))})",
+                   f"scp_draw(file.path({json.dumps(str(redir))}, 'roles.png'), plot(1:10),"
+                   f" legend = {json.dumps(_stale)}, render = 'force')",
+                   # THE SECOND OPEN IS THE WHOLE FIXTURE, and it must be in the SAME process:
+                   # the started set lives in `scp_captions`, so two Rscript invocations would
+                   # start from an empty set and pass whatever the branch does.
+                   f"scp_captions_open({json.dumps(str(redir))})",
+                   f"scp_draw(file.path({json.dumps(str(redir))}, 'roles.png'), plot(1:10),"
+                   f" legend = {json.dumps(_fresh)}, render = 'force')"]
+            dp5 = tmp / "reopen.R"
+            dp5.write_text("\n".join(reo) + "\n", encoding="utf-8")
+            r5 = subprocess.run([rscript, "--vanilla", str(dp5)],
+                                capture_output=True, text=True, timeout=300)
+            ck("the reopened-directory draw runs", r5.returncode == 0,
+               (r5.stderr or r5.stdout)[-400:])
+            _txt = ((redir / C.NAME).read_text(encoding="utf-8")
+                    if (redir / C.NAME).is_file() else "")
+            # THE ROWS ARE COUNTED ON DISK, not through the reader, because the reader HIDES this
+            # defect by design: two rows for one panel come back as one legend either way, and
+            # only which of the two it is says whether the file was truncated.
+            _rows = [l for l in _txt.split("\n")[1:] if l]
+            ck("an explicit open on an already-started directory truncates it, once, again",
+               len(_rows) == 1,
+               f"{len(_rows)} row(s) on disk for one panel - this run appended to the previous "
+               "run's rows instead of starting the file")
+            ck("so a redrawn panel is served this run's legend and not the superseded draft",
+               C.read(redir).get("roles.png", {}).get("caption") == _fresh,
+               f"served {C.read(redir).get('roles.png', {}).get('caption')!r} - the reader keeps "
+               "the FIRST row for a file name")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
