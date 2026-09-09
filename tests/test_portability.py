@@ -699,6 +699,41 @@ ck("and a consumer is in a later wave than its producer",
        for c, ps in _pe(_K).items() for p in ps),
    str(_pe(_K)))
 
+import pathlib as _pathlib                                                      # noqa: E402
+import re as _re                                                                # noqa: E402
+
+print("\na panel gated on an OPTIONAL input is not a required panel")
+# DRIFT MUST NOT FIRE ON CORRECT BEHAVIOUR. A plugin that requires nothing can be run on an object
+# with no cell-type column - that is a supported run, not a degraded one - and any panel drawn per
+# population then correctly returns without drawing. Declared `required: True`, each of those
+# appears on the page as NOT PRODUCED and `figure_drift` states that the run is incomplete, when
+# the run was complete and the data had no labels. The format's rule is that a required panel that
+# is absent is a defect and an optional one is a property of the data, and `figure_drift`'s own
+# action string names this exact remedy.
+#
+# CHECKED FOR EVERY PLUGIN, not for the one where it was found. Any kernel that injects a role
+# only optionally, and declares a required figure it cannot draw without that role, is the same
+# defect; this is the shape, not the instance.
+_gated = []
+for _n, _k in sorted(_K.items()):
+    _opt = set((_k.spec.get("inject") or {}).get("optional") or ())
+    if "label" not in _opt:
+        continue
+    _src = _pathlib.Path(_k.path).read_text(encoding="utf-8") if _pathlib.Path(_k.path).is_file() else ""
+    for _f in ((_k.spec.get("report") or {}).get("figures") or []):
+        if not _f.get("required", True):
+            continue
+        # the drawing function for this id, if it guards on a missing label
+        _fn = _re.search(r"def (_fig_\w+)\(", _src)
+        _blocks = _re.findall(r"def (_fig_\w+)\(.*?\n(.*?)(?=\ndef |\Z)", _src, _re.S)
+        for _name, _body in _blocks:
+            if _f["id"].split("_", 1)[-1].lower() not in _name.lower():
+                continue
+            if _re.search(r"groups is None|not len\(groups\)|not len\(by_label\)", _body[:600]):
+                _gated.append(f"{_n}:{_f['id']} required but {_name} returns without a label")
+ck("no required figure is gated on an input the plugin only injects optionally",
+   not _gated, "; ".join(_gated[:4]))
+
 print("\nthe plan and the run make the same decisions, by calling the same function")
 _facts = {"has_design": True, "crossed_pairs": [["f1", "f2"]], "testable": ["f1", "f2"]}
 ck("decisions_for is what the planner records",

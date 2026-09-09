@@ -246,14 +246,30 @@ PLUGIN = {
     # `shows` is the whole of the reporter's knowledge. It knows no id here and never will.
     "report": {
         "figures": [
-            {"id": "F1_proportions", "shows": "diagnostic", "required": True,
+            # OPTIONAL BECAUSE `label` IS OPTIONAL, and these two are drawn per population.
+            # This plugin requires nothing - a run on an object with no cell-type column is a
+            # supported run, not a degraded one - and `_fig_proportions` returns on
+            # `groups is None`, `_fig_by_population` on an empty `by_label`. Declared required,
+            # both then appear on the page as NOT PRODUCED, which `feedback.figure_drift` states
+            # as "the run is incomplete" when the run was complete and the data had no labels.
+            # The format's rule: a required panel that is absent is a defect; an optional one is
+            # a property of the data. `figure_drift`'s own remedy is this exact change.
+            {"id": "F1_proportions", "shows": "diagnostic", "required": False,
              "question": "is there enough unspliced signal for the model to fit?",
+             "when_absent": "the object carries no cell-type label, so the spliced/unspliced "
+                            "balance cannot be split by population. The run's log reports the "
+                            "overall fractions; what is missing here is whether one population "
+                            "is short of unspliced counts while the whole looks adequate.",
              "source": "figures/F1_proportions.csv"},
             {"id": "F4_confidence", "shows": "diagnostic", "required": True,
              "question": "do neighbouring cells agree on the direction?",
              "source": "figures/F4_confidence.csv"},
-            {"id": "F9_by_population", "shows": "diagnostic", "required": True,
+            {"id": "F9_by_population", "shows": "diagnostic", "required": False,
              "question": "where is the field trustworthy, population by population?",
+             "when_absent": "the object carries no cell-type label, or no population had a "
+                            "defined velocity confidence, so trustworthiness cannot be reported "
+                            "population by population. `obs[velocity_confidence]` still carries "
+                            "the per-cell value, and F4 shows its distribution.",
              "source": "figures/F9_by_population.csv"},
             # OPTIONAL, AND THE REASON IS THE FINDING. Only a small subset of genes obeys the
             # kinetics these models assume, and where none does the field rests on nothing - so
