@@ -343,6 +343,11 @@ PLUGIN = {
         # direction OVERTURNS between strata, because a reversal is a property of the components
         # and not of the gap between them.
         "interaction_lr": {
+            # `drawn_by: plugin` IS THE FIELD SAYING SO, rather than a comment above it. The
+            # accounting check reads `native_plots` and cannot read English, so it reported this
+            # entry as a function CellChat does not export - correctly, and as though it were a
+            # defect. The same word `report.figures` uses for the same distinction.
+            "drawn_by": "plugin",
             "use": "figures/nativecmp_interaction_lr__<suffix>.png - the largest interactions "
                    "and the largest reversals at ligand-receptor level, with the sender and "
                    "receiver carrying most of each; and figures/nativecmp_interaction_lr_"
@@ -353,6 +358,15 @@ PLUGIN = {
         "identifyCommunicationPatterns": {"use": "figures/native_patterns_{outgoing,incoming}.png"},
         "rankSimilarity": {"use": "figures/nativecmp_rankSimilarity_functional.png, per arm pair"},
         "showDatabaseCategory": {"use": "figures/native_database_category.png"},
+        # FOUND BY A WIDER PATTERN THAN THIS PLUGIN'S OWN. `sch dev convert account` looks for
+        # `gg` among others, and turned up the one CellChat export this accounting had never
+        # seen. It is a false positive of that pattern rather than a plot: ggPalette(n) returns
+        # n colours from ggplot2's default hue scale. Nothing is drawn, so there is no figure to
+        # place and no panel it could supersede.
+        "ggPalette": {"skip": "not_applicable",
+                      "evidence": "returns a character vector of n colours from ggplot2's "
+                                  "default hue scale; it draws nothing. Matched only because "
+                                  "the discovery pattern includes `gg`"},
         "netVisual_aggregate": {"use": "figures/native_aggregate_circle__<pathway>.png per unit, and figures/nativecmp_aggregate_circle__<pathway>.png - both arms, shared edge maximum"},
         "netVisual_chord_gene": {"use": "figures/native_chord_gene__<pathway>.png"},
         "netAnalysis_contribution": {"use": "figures/native_contribution__<pathway>.png"},
@@ -3605,11 +3619,26 @@ def run(ctx):
 #: package rather than against memory. This inventory was first taken by hand, over SSH, and the
 #: numbers went into a declaration - which is the same defect as quoting a hand-computed figure
 #: in a manuscript: nobody else can reproduce it and nothing notices when it drifts.
+#: TWO QUESTIONS, AND THEY ARE NOT THE SAME QUESTION.
+#:
+#: DISCOVERY asks "what might this accounting be missing", and can only ever be a pattern -
+#: CellChat names its plotting functions by convention and a convention is not a definition.
+#: STALENESS asks "is what I already declared still there", and that is exact: a name is in
+#: `getNamespaceExports` or it is not.
+#:
+#: They were one query. `stale` was computed against the PATTERN-FILTERED list, so a declared
+#: function the pattern did not start-match was reported as one "CellChat does not export".
+#: Measured against the installed package: of the five reported that way, FOUR are exported and
+#: were simply unmatched - compareInteractions, identifyCommunicationPatterns, rankNet,
+#: rankSimilarity, none of which begins with `netVisual`, `netAnalysis`, `plot`, `show` or
+#: `StackedVln` - and ONE, interaction_lr, is genuinely gone. Four false alarms standing in
+#: front of one real defect is worse than silence, because the real one reads as more of the same.
 _R_INVENTORY = r"""
 suppressMessages(library(CellChat))
 ex <- sort(getNamespaceExports("CellChat"))
 plotting <- grep("^(netVisual|netAnalysis|plot|show|StackedVln)", ex, value = TRUE)
-cat(paste(plotting, collapse = "\n"), "\n")
+cat("MATCHED\n"); cat(paste(plotting, collapse = "\n"), "\n")
+cat("ALL\n"); cat(paste(ex, collapse = "\n"), "\n")
 """
 
 
@@ -3637,7 +3666,21 @@ def plot_inventory():
     # accounting then reported four DECLARED functions as ones CellChat does not export, when the
     # package exports all four and the filter had hidden them. A check with a filter in it is a
     # check on the filter too.
-    return [l.strip() for l in p.stdout.splitlines() if l.strip()]
+    return _split_inventory(p.stdout)
+
+
+def _split_inventory(text):
+    """(matched by the discovery pattern, every export) out of the probe's two sections."""
+    matched, every, cur = [], [], None
+    for line in (text or "").splitlines():
+        ln = line.strip()
+        if ln in ("MATCHED", "ALL"):
+            cur = ln
+        elif ln and cur == "MATCHED":
+            matched.append(ln)
+        elif ln and cur == "ALL":
+            every.append(ln)
+    return matched, every
 
 
 def check_plot_accounting():
@@ -3646,19 +3689,32 @@ def check_plot_accounting():
     Run from `selftest`, where R is present. On a machine without R the inventory comes back
     empty and this says so rather than passing.
     """
-    inv = plot_inventory()
-    if not inv:
+    matched, every = plot_inventory()
+    if not every:
         return ["could not read CellChat's exports; the plot accounting is unverified here"]
     declared = PLUGIN.get("native_plots") or {}
-    missing = [f for f in inv if f not in declared]
-    stale = [f for f in declared if f not in inv]
+    missing = [f for f in matched if f not in declared]
+    # GONE means gone from the NAMESPACE, asked by membership. Anything else a declaration names
+    # is present and merely outside the discovery pattern, which is a fact about the pattern.
+    # AN ENTRY THE PLUGIN DREW ITSELF IS NOT A MISSING EXPORT. It is filed here because this
+    # is where every panel in the contrast is accounted for, and it says `drawn_by: plugin`.
+    gone = [f for f in declared if f not in every
+            and str((declared.get(f) or {}).get("drawn_by") or "") != "plugin"]
+    unmatched = [f for f in declared if f in every and f not in matched]
     out = []
     if missing:
         out.append(f"{len(missing)} exported plot(s) absent from native_plots: "
                    f"{', '.join(sorted(missing)[:8])}")
-    if stale:
-        out.append(f"{len(stale)} declared plot(s) CellChat does not export: "
-                   f"{', '.join(sorted(stale)[:8])}")
+    if gone:
+        out.append(f"{len(gone)} declared plot(s) CellChat no longer exports: "
+                   f"{', '.join(sorted(gone)[:8])}")
+    if unmatched:
+        # NOT A PROBLEM WITH THE ACCOUNTING, so it is stated and does not fail anything: these
+        # are declared, present, and invisible to discovery - which means anything ELSE named
+        # like them is invisible too, and the missing count above is a floor.
+        out.append(f"note: {len(unmatched)} declared plot(s) are exported but do not match the "
+                   f"discovery pattern, so it would never have found them: "
+                   f"{', '.join(sorted(unmatched)[:8])}")
     return out
 
 
