@@ -78,26 +78,43 @@ points:
     convert:
       placeholder: "TODO"
       upstream: wraps.tool
+      # TWO PHASES, AND THE SPLIT IS NOT COSMETIC. A `build` stage reads SOURCE - this plugin's own
+      # code, or the wrapped tool's signatures and namespace - and touches no data, so it cannot be
+      # shaped around one cohort. A `test` stage needs something to run on, and that is where a
+      # fixture or a dataset you already have belongs.
+      #
+      # Written down because the pull is real: the memory measurement needs a run, the real cohort
+      # is where the data is, and reaching for it during a BUILD is how a plugin ends up fitted to
+      # one dataset. A build that is complete says the plugin is finished as code and was written
+      # with no data in front of it. Whether it is right is the test stage's question.
       stages:
         - name: contract
+          phase: build
           fills: [inject, produces]
           why: what the method is given and what it leaves behind
         - name: defaults
+          phase: build
           fills: [config]
           why: >
             the wrapped tool's OWN defaults, declared rather than inherited - decoupler's `min_n`
             and cellrank's terminal-state method were both being passed silently
         - name: references
+          phase: build
           fills: [references]
           why: >
             every resource consulted that did not come from the user's object, with its tier - a
             reference nobody declared is one the plan cannot warn about
         - name: inventory
+          phase: build
           fills: [native_plots]
+          # PRESENT IS NOT FINISHED. A wrapper part-way through declares some entries AND an
+          # admission naming what is left; without this the field's presence read as done.
+          outstanding_if: wraps.plots_unreviewed
           why: >
             what the wrapped tool already draws. cellchat used 1 of 30 until somebody looked; after
             the accounting it uses 32 of 35
         - name: measure
+          phase: test
           fills: [memory_gb_base, memory_gb_per_100k]
           # A COMMAND, LIKE `tests` AND `fixture` ALREADY ARE. The harness must not know what a
           # run directory of this tool looks like. `{run}` is filled from `--run`.
@@ -107,6 +124,7 @@ points:
             the job is sized to be killed on small objects. Every run already fits this and stores
             it in report.json; `capacity --memory` is what reads it back out
         - name: judgement
+          phase: build
           kind: judgement
           fills: [summary, when_to_use, cannot_show, report, upstream]
           why: >
