@@ -996,7 +996,23 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         byfac.setdefault(str(c.get("factor")), []).append(c.get("label"))
     inter = [(fac, ls) for fac, ls in byfac.items() if len(ls) == 2]
     if inter:
-        L += ["## Whether one factor's effect depends on the other", ""]
+        # THE HEADING NAMES THE FACTORS. It used to read "Whether one factor's effect depends on
+        # the other" over a section whose every sentence names them - so the one heading in the
+        # document that could not say what it was about was the interaction's, which is the
+        # question the design exists to answer. A reader scanning headings learned that there
+        # were two factors and not which two. The body was always specific; only the title was
+        # written once, for every study, by a template that had no study in front of it.
+        _pairs = [(fac, next((str(c.get("other")) for c in simple
+                              if str(c.get("factor")) == fac and c.get("other")), ""))
+                  for fac, _ls in sorted(inter)]
+        _named = "; ".join(f"**{a}** on **{b}**" for a, b in _pairs if b)
+        if len(_pairs) == 1 and _pairs[0][1]:
+            _head = f"Whether the **{_pairs[0][0]}** effect depends on **{_pairs[0][1]}**"
+        elif _named:
+            _head = f"Whether one factor's effect depends on another - {_named}"
+        else:
+            _head = "Whether one factor's effect depends on the other"
+        L += [f"## {_head}", ""]
         for fac, ls in sorted(inter):
             a, b = f[ls[0]], f[ls[1]]
             if not (a["ratio"] and b["ratio"]):
