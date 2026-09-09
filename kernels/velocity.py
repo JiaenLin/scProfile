@@ -149,6 +149,16 @@ PLUGIN = {
     "memory_gb_per_100k": 14.6,
     "design_aware": True,
 
+    # EMPTY, AND THAT IS THE DECLARATION. `{}` says somebody went through this plugin looking for
+    # anything it consults that did not come from the user's object and found nothing; ABSENT says
+    # nobody looked, and those are different claims that read identically in a report. Every number
+    # here comes from the object's own spliced and unspliced layers - no prior, no database, no
+    # gene list - and docs/REFERENCES.md names this plugin among those that consult nothing
+    # external. The neighbouring case is `cellcycle`, which carries 97 Tirosh et al. gene symbols
+    # as a literal and declared no references at all, so its report cannot name what decided the
+    # phase calls.
+    "references": {},
+
     # WHAT IT NEEDS, NOT WHAT TO BUILD. These are exact, and `exact_pins_why` says so once rather
     # than the validator saying it sixteen times: they are the stack scvelo 0.3.4 was released
     # alongside, and its own lower bounds resolve today to a stack released long after its last
