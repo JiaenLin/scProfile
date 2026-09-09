@@ -807,9 +807,14 @@ class Context:
         # it while the person who could write it is still working, rather than three steps later
         # when the report renders a filename in the space a description goes.
         #
-        # FIVE WORDS IS THE SAME BAR THE HOST'S OWN READER APPLIES (`captions.check`), stated
-        # here so a plugin cannot pass a label and have it refused silently at the far end.
-        if len(" ".join(str(caption or "").split()).split()) < 5:
+        # THE SAME BAR THE HOST'S OWN READER APPLIES, so a plugin cannot pass a label here and
+        # have it refused silently at the far end. TAKEN FROM THE CONSTANT, not retyped: three
+        # parties apply this number - `captions.check`, this method, and the R writer the host
+        # generates - and the `5` that used to be typed out here was the copy that would have
+        # drifted first, because it is the one furthest from the definition. `_flat` for the same
+        # reason: one definition of "collapse", so the word count here is the word count there.
+        from . import captions as _CAP
+        if len(_CAP._flat(caption).split()) < _CAP.MIN_LEGEND_WORDS:
             self.unlegended.append(str(name))
             self.log(f"  {name}: emitted with no legend. The report will say so on the page - "
                      f"pass `caption=` where the panel is drawn, where the numbers that describe "

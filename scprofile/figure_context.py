@@ -27,11 +27,21 @@ whatever the plugin did. Neither has to re-derive them, and two panels cannot di
 NOTHING HERE IS ABOUT ANY PARTICULAR METHOD. The input is a list of label strings, a unit name and
 a contrast; a plugin that measures something else entirely gets the same guarantees from the same
 code, which is the test that this belongs in the host.
+
+AND IT IS THE ONLY THING THE HOST HANDS EVERY PLUGIN, which is why `captions` rides in it. The
+legend writer is host code a plugin must be able to RUN, in Python or in R, and a plugin cannot
+import the host - another interpreter, usually another environment. `in.json` is the one thing
+every plugin reads, and this block is the part of `in.json` that is built unconditionally and
+travels to all of them. A second key beside it would be a second channel for the same kind of
+thing: something the host computes once, about how a figure describes itself, that no plugin
+should re-derive. See `captions.block`.
 """
 from __future__ import annotations
 
 import colorsys
 import hashlib
+
+from . import captions as _CAP
 
 #: The palette is generated, not listed, so it does not run out - a fixed list of N breaks at N+1
 #: by REPEATING, which is the very defect this module exists to prevent arriving through its fix.
@@ -199,4 +209,15 @@ def build(labels=(), unit=None, unit_kind="", members=(), n_cells=None, contrast
     # laid side by side, and this is the one value that says so in a glance.
     ctx["colour_key"] = hashlib.sha1(
         "|".join(f"{k}={v}" for k, v in sorted(ctx["colours"].items())).encode()).hexdigest()[:12]
+    # THE LEGEND WRITER, HANDED OVER RATHER THAN DESCRIBED. Measured on a sealed run: 711 panels,
+    # 69 written legends, 642 with none - because the host owned the format and shipped no writer
+    # for it, so the only implementation in the repository was three copies of it embedded in one
+    # plugin's R. A second plugin would have had to read those copies to find out what the four
+    # host read sites parse. This is the same block, going to the same place, for the same reason
+    # as the colour map: the host computes it once and no plugin re-derives it.
+    #
+    # UNCONDITIONAL, INCLUDING FOR A RUN THE HOST CAN SAY NOTHING ELSE ABOUT. A run with no label
+    # totals still gets the writer, because whether a plugin can write a legend must not depend on
+    # whether the host happened to know the cohort's populations.
+    ctx["captions"] = _CAP.block()
     return ctx
