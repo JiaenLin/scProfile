@@ -113,6 +113,24 @@ points:
           why: >
             what the wrapped tool already draws. cellchat used 1 of 30 until somebody looked; after
             the accounting it uses 32 of 35
+        - name: legends
+          phase: build
+          fills: [report.figures]
+          # EVERY ENTRY, NOT THE FIELD. The list exists from the first figure declared, so a
+          # stage that only asked whether `report.figures` is there reported done with eight of
+          # nine panels never ruled on.
+          each_item_declares:
+            drawn_by: [tool, plugin]
+          why: >
+            who drew each panel. `tool` is the wrapped tool's own plotting function, unmodified.
+            `plugin` is this plugin drawing the tool's NUMBERS itself - a second scale, a derived
+            matrix, an annotation layer - which is a different claim about provenance and is
+            exactly what the upstream-plot accounting exists to protect. With this absent the
+            reporter asserted `tool` for every undescribed panel, so a plugin-drawn figure was
+            reported as the tool's own encoding and the accounting was undone at the last step.
+            The LEGEND ITSELF is not declared here: it is written where the figure is drawn, out
+            of numbers no build stage has - the n, the cap that was applied, the populations that
+            were dropped - and is read back from captions.tsv when the plugin runs
         - name: measure
           phase: test
           fills: [memory_gb_base, memory_gb_per_100k]

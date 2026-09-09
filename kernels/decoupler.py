@@ -267,11 +267,13 @@ PLUGIN = {
     "report": {
         "figures": [
             {"id": "F1_prior_coverage", "shows": "diagnostic", "required": True,
+             "drawn_by": "plugin",
              "question": "is this prior about the genes in this object at all - and is a "
                          "regulator's score explained by nothing more than how many targets it "
                          "has?",
              "source": "tables/regulator_coverage.csv"},
             {"id": "F2_detection_depth", "shows": "diagnostic", "required": True,
+             "drawn_by": "plugin",
              "question": "does a cell's activity measure its biology, or how many genes were "
                          "detected in it?",
              "source": "figures/F2_detection_depth.csv"},
@@ -279,6 +281,7 @@ PLUGIN = {
             # thousands of regulators makes the pair table quadratic. Where it cannot be drawn
             # the absence is not neutral, so `when_absent` says what is then unknown.
             {"id": "F3_regulon_overlap", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "are two high-scoring regulators two findings, or one regulon counted "
                          "twice?",
              "source": "figures/F3_regulon_overlap.csv",
@@ -296,7 +299,7 @@ PLUGIN = {
                             "their targets score almost identically by construction, so read any "
                             "pair of names below as possibly one measurement until their target "
                             "lists have been compared."},
-            {"id": "F4_by_population", "shows": "result", "required": False,
+            {"id": "F4_by_population", "drawn_by": "plugin", "shows": "result", "required": False,
              "question": "which regulators separate the populations, and in which direction?",
              "source": "figures/F4_by_population.csv",
              "when_absent": "no population could be formed - either no label column was named, or "
@@ -305,7 +308,7 @@ PLUGIN = {
                             "run's caveats say which. Nothing is missing from the per-cell "
                             "result; tables/activity_by_label.csv holds the cohort-wide mean "
                             "instead of a per-population one."},
-            {"id": "F5_activity_map", "shows": "result", "required": False,
+            {"id": "F5_activity_map", "drawn_by": "plugin", "shows": "result", "required": False,
              "question": "where do the strongest regulators sit on the manifold the rest of the "
                          "report uses?",
              "source": "figures/F5_activity_map.csv",

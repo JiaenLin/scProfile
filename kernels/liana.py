@@ -215,10 +215,12 @@ PLUGIN = {
                          "target": "target", "weight": "lr_means"},
         "figures": [
             {"id": "F1_resource_coverage", "shows": "diagnostic", "required": True,
+             "drawn_by": "plugin",
              "question": "how much of the ligand-receptor resource could this object ever have "
                          "shown, and what removed the rest?",
              "source": "figures/F1_resource_coverage.csv"},
             {"id": "F2_population_support", "shows": "diagnostic", "required": True,
+             "drawn_by": "plugin",
              "question": "did every population have enough cells to be scored, and does a "
                          "population's interaction count just track how many cells it has?",
              "source": "figures/F2_population_support.csv"},
@@ -226,6 +228,7 @@ PLUGIN = {
             # there are several scores to agree; with one, the page must say that rather than
             # show a correlation of a column with itself.
             {"id": "F3_method_agreement", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "do the scoring methods behind the consensus agree on which "
                          "interactions matter?",
              "source": "figures/F3_method_agreement.csv",
@@ -233,11 +236,11 @@ PLUGIN = {
                             "the result with any variation in them, so there was nothing to "
                             "compare. Read the consensus rank below as one method's answer, not "
                             "as agreement between several."},
-            {"id": "F4_dotplot", "shows": "result", "required": True,
+            {"id": "F4_dotplot", "drawn_by": "plugin", "shows": "result", "required": True,
              "question": "which ligand-receptor pairs are inferred, between which populations, "
                          "and are they strong, specific, or both?",
              "source": "figures/F4_dotplot.csv"},
-            {"id": "F5_sender_receiver", "shows": "result", "required": True,
+            {"id": "F5_sender_receiver", "drawn_by": "plugin", "shows": "result", "required": True,
              "question": "which populations are inferred to signal to which, and how one-sided "
                          "is it?",
              "source": "figures/F5_sender_receiver.csv"},

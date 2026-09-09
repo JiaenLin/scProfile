@@ -1004,9 +1004,19 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi):
             lead = ((f"{label}: " if label else "") + _leg["caption"]
                     + (f" {_prov}" if _prov else ""))
         else:
+            # AN ABSENT LEGEND IS STATED, NOT INVENTED. This branch used to print the filename
+            # with its underscores removed - "interaction flow age response by diet" - in the
+            # place a description goes, so a path read as a sentence about the figure. It names
+            # no axis, no encoding, no direction and no caveat, and nothing on the page said it
+            # was a fallback. The clause after it asserted the tool had drawn the panel, which
+            # this branch cannot know and which is exactly the distinction the upstream-plot
+            # accounting exists to keep. Saying nothing is noticed; saying the wrong thing is
+            # believed.
             lead = ((f"{label}: " if label else "")
-                    + f"{stem.replace('_', ' ')}, drawn by "
-                    + (f"the tool's own {fn}()." if fn else "the tool itself."))
+                    + f"{f.name}: NO LEGEND WAS WRITTEN for this panel. "
+                    + (f"It is declared as coming from {fn}(); what it shows, and whether "
+                       f"{fn}() or this plugin drew it, are not recorded."
+                       if fn else "Neither what it shows nor who drew it is recorded."))
         # THE DIRECTION IS THE FIRST THING A READER NEEDS and it is a positive statement, not a
         # caveat: it says what the picture shows. `lo` is the contrast's reference.
         # THE ALIGNMENT SENTENCE BELONGS ONLY ON A PANEL THAT HAS A POPULATION AXIS. It was
@@ -1683,9 +1693,14 @@ def _native_unit_panels(out_dir, name, declared, axis):
             fn = _NAT.function_for(declared, f.name)
             if not fn:
                 continue                  # not the tool's, or not declared: not ours to place
-            stem = f.stem[len("native_"):] if f.stem.startswith("native_") else f.stem
             leg = legends.get(f.name) or {}
-            body = leg.get("caption") or f"{stem.replace('_', ' ')}"
+            # THE FILENAME IS NOT A LEGEND, here either. `drawn_by` still falls back to `tool`
+            # and that is not a guess: the loop above has already skipped every panel the
+            # declaration does not map to an upstream function, so `tool` is what this plugin
+            # DECLARED about this file. A legend written at the draw site overrides it, which is
+            # how a panel the plugin drew from the tool's numbers corrects the declaration.
+            body = (leg.get("caption")
+                    or f"NO LEGEND WAS WRITTEN for this panel; what it shows is not recorded.")
             prov = _CAP.provenance(leg.get("drawn_by") or "tool", fn)
             out.append({
                 "id": f.stem, "unit": str(unit),

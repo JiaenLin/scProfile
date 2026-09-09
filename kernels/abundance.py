@@ -267,15 +267,15 @@ PLUGIN = {
     # samples themselves.
     "report": {
         "figures": [
-            {"id": "F1_shares", "shows": "diagnostic", "required": True,
+            {"id": "F1_shares", "drawn_by": "plugin", "shows": "diagnostic", "required": True,
              "question": "do the replicates within a group agree, or is one sample carrying the "
                          "shift?",
              "source": "figures/F1_shares.csv"},
-            {"id": "F2_reference", "shows": "diagnostic", "required": True,
+            {"id": "F2_reference", "drawn_by": "plugin", "shows": "diagnostic", "required": True,
              "question": "is the population every effect is measured against actually a stable "
                          "one, and did it hold still across the design?",
              "source": "figures/F2_reference.csv"},
-            {"id": "F3_sampling", "shows": "diagnostic", "required": False,
+            {"id": "F3_sampling", "drawn_by": "plugin", "shows": "diagnostic", "required": False,
              "question": "did the sampler settle on the quantity the answer is read off?",
              "source": "figures/F3_sampling.csv",
              # BOTH HALVES HAVE TO GO MISSING. The panel draws two checks that come out of two
@@ -290,6 +290,7 @@ PLUGIN = {
                             "warning pertpy itself raises. The effects below were produced by a "
                             "chain nobody has looked at."},
             {"id": "F4_credibility", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "how close was each call to the threshold that decided it?",
              "source": "tables/abundance_by_population.csv",
              # TWO ABSENCES, AND THEY DO DIFFERENT THINGS TO THE PAGE. This said the same absence
@@ -305,7 +306,7 @@ PLUGIN = {
                             "all: the result panel is absent with it, and the run reports "
                             "`partial` and says in its caveats that nothing was tested either "
                             "way."},
-            {"id": "F5_effects", "shows": "result", "required": True,
+            {"id": "F5_effects", "drawn_by": "plugin", "shows": "result", "required": True,
              "question": "which populations shifted, in which direction, and by how much?",
              "source": "tables/abundance_by_population.csv"},
         ],

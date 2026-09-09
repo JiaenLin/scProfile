@@ -84,9 +84,21 @@ try:
           f"the written legend did not reach the caption; got {a[:90]!r}")
     check("not by someFn() itself" in a,
           f"a plugin-drawn panel is reported as the tool's own work; got {a[:120]!r}")
-    check("thing b" in b,
-          f"a panel with NO written legend lost its fallback, so an undescribed plugin regresses; "
-          f"got {b[:90]!r}")
+    # AN UNDESCRIBED PANEL SAYS IT IS UNDESCRIBED. This used to assert the opposite - that the
+    # filename, underscores removed, still appeared as the caption - on the reasoning that a
+    # plugin nobody had changed should not regress. It is the wrong reasoning: a filename in the
+    # place a description goes does not read as a fallback, it reads as the description, and the
+    # page gives a reader no way to tell those apart. What must not regress is the reader's
+    # ability to FIND the panel, so the file is still named; what must not survive is the
+    # pretence that naming it describes it.
+    check("NO LEGEND WAS WRITTEN" in b,
+          f"a panel with no written legend does not say so, so a filename reads as a "
+          f"description; got {b[:110]!r}")
+    check("nativecmp_thing_b.png" in b,
+          f"an undescribed panel must still name its file, or a reader cannot go and look at "
+          f"it; got {b[:110]!r}")
+    check("thing b," not in b and "thing b." not in b,
+          f"the filename is still being dressed up as a sentence; got {b[:110]!r}")
 finally:
     shutil.rmtree(_tmp, ignore_errors=True)
 

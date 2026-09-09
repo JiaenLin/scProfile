@@ -269,6 +269,10 @@ class Context:
         #: exists - `--figures-for` can gate a panel the data was perfectly happy with. A caveat
         #: phrased off the first kind of flag cites a plate that is not on disk.
         self.drawn = set()
+        #: Panels emitted with no legend, or with too few words to be one. Reported when the run
+        #: ends rather than only at render time: by the time the page shows a filename where a
+        #: description belongs, the plugin has finished and nobody is looking at its log.
+        self.unlegended = []
         #: ONE NUMBER PER INSTANCE, so a per-unit plugin's units can be put on one axis.
         #: A per-unit plugin delivers N single-sample reports; without a scalar the host can
         #: compare, the page is those N reports stapled together and the cohort statement is
@@ -798,6 +802,18 @@ class Context:
         png = self.out / "figures" / f"{name}.png"
         pdf = self.out / "figures" / f"{name}.pdf"
         self.drawn.add(str(name))
+        # A LEGEND IS WRITTEN HERE OR IT IS NOT WRITTEN AT ALL. This is the only place all nine
+        # plugins save a panel, so it is the only place that can see an absent one - and it sees
+        # it while the person who could write it is still working, rather than three steps later
+        # when the report renders a filename in the space a description goes.
+        #
+        # FIVE WORDS IS THE SAME BAR THE HOST'S OWN READER APPLIES (`captions.check`), stated
+        # here so a plugin cannot pass a label and have it refused silently at the far end.
+        if len(" ".join(str(caption or "").split()).split()) < 5:
+            self.unlegended.append(str(name))
+            self.log(f"  {name}: emitted with no legend. The report will say so on the page - "
+                     f"pass `caption=` where the panel is drawn, where the numbers that describe "
+                     f"it still exist.")
         self._stamp_provenance(fig)
         # THE CONVENTION WINS WHERE THERE IS ONE. `figure.use()` sets savefig.dpi to 400 for
         # publication; a hard `dpi=200` here silently overrode it, so a plugin that had asked for

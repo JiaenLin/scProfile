@@ -288,16 +288,18 @@ PLUGIN = {
             # The format's rule: a required panel that is absent is a defect; an optional one is
             # a property of the data. `figure_drift`'s own remedy is this exact change.
             {"id": "F1_proportions", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "is there enough unspliced signal for the model to fit?",
              "when_absent": "the object carries no cell-type label, so the spliced/unspliced "
                             "balance cannot be split by population. The run's log reports the "
                             "overall fractions; what is missing here is whether one population "
                             "is short of unspliced counts while the whole looks adequate.",
              "source": "figures/F1_proportions.csv"},
-            {"id": "F4_confidence", "shows": "diagnostic", "required": True,
+            {"id": "F4_confidence", "drawn_by": "plugin", "shows": "diagnostic", "required": True,
              "question": "do neighbouring cells agree on the direction?",
              "source": "figures/F4_confidence.csv"},
             {"id": "F9_by_population", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "where is the field trustworthy, population by population?",
              "when_absent": "the object carries no cell-type label, or no population had a "
                             "defined velocity confidence, so trustworthiness cannot be reported "
@@ -308,26 +310,27 @@ PLUGIN = {
             # kinetics these models assume, and where none does the field rests on nothing - so
             # the absence of this panel says more than the panel would.
             {"id": "F5_phase_portraits", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "do the driver genes actually obey the kinetics the model assumes?",
              "source": "figures/F5_phase_portraits.csv",
              "when_absent": "no gene passed the dynamical fit, so there is no phase portrait to "
                             "draw. Read the field below as resting on the steady-state "
                             "approximation alone."},
-            {"id": "F8_drivers", "shows": "diagnostic", "required": False,
+            {"id": "F8_drivers", "drawn_by": "plugin", "shows": "diagnostic", "required": False,
              "question": "which genes carry the field?",
              "source": "figures/F8_drivers.csv",
              "when_absent": "the fit produced no ranking column, so the genes driving the field "
                             "cannot be named - only that some do."},
-            {"id": "F2_stream", "shows": "result", "required": True,
+            {"id": "F2_stream", "drawn_by": "plugin", "shows": "result", "required": True,
              "question": "which way is the field pointing?",
              "source": "figures/F2_stream.csv"},
-            {"id": "F3_grid", "shows": "result", "required": True,
+            {"id": "F3_grid", "drawn_by": "plugin", "shows": "result", "required": True,
              "question": "does the field hold without interpolation between cells?",
              "source": "figures/F3_grid.csv"},
-            {"id": "F6_transitions", "shows": "result", "required": True,
+            {"id": "F6_transitions", "drawn_by": "plugin", "shows": "result", "required": True,
              "question": "which populations flow into which?",
              "source": "figures/F6_transitions.csv"},
-            {"id": "F7_pseudotime", "shows": "result", "required": True,
+            {"id": "F7_pseudotime", "drawn_by": "plugin", "shows": "result", "required": True,
              "question": "what ordering does the field imply?",
              "source": "figures/F7_pseudotime.csv"},
         ],

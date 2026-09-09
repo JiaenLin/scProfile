@@ -253,12 +253,14 @@ PLUGIN = {
     "report": {
         "figures": [
             {"id": "F3_panel_detection", "shows": "diagnostic", "required": True,
+             "drawn_by": "plugin",
              "question": "are the panel genes actually detected in these cells, or is a low "
                          "score an empty panel?",
              "source": "figures/F3_panel_detection.csv"},
             # OPTIONAL, AND THE ABSENCE IS A SETTING RATHER THAN A PROPERTY OF THE DATA - which
             # is worth saying, because it is the one panel here a user can turn off.
             {"id": "F4_seed_stability", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "would a different draw of control genes give the same phase call?",
              "source": "figures/F4_seed_stability.csv",
              "when_absent": "stability_seeds was set to 0, so the scoring ran once and nothing "
@@ -266,6 +268,7 @@ PLUGIN = {
                             "the cells. Read every phase count on this page as one realisation "
                             "of a stochastic call."},
             {"id": "F5_score_vs_detection", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "does the cycling call track how many genes were detected per cell?",
              "source": "figures/F5_score_vs_detection.csv",
              "when_absent": "the cells could not be binned by detected-gene count: either they "
@@ -273,10 +276,11 @@ PLUGIN = {
                             "which case a zero is not an absent gene and counting zeros measures "
                             "nothing. The depth confound is untested here, which is not the same "
                             "as absent."},
-            {"id": "F2_scores", "shows": "result", "required": True,
+            {"id": "F2_scores", "drawn_by": "plugin", "shows": "result", "required": True,
              "question": "what did each cell score, and which phase did that make it?",
              "source": "figures/F2_scores.csv"},
             {"id": "F1_phase_by_population", "shows": "result", "required": False,
+             "drawn_by": "plugin",
              "question": "which populations carry the cycling signal?",
              "source": "figures/F1_phase_by_population.csv",
              "when_absent": "the object carries no cell-type or cluster column, so the phase "

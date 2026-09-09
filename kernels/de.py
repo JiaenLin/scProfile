@@ -200,14 +200,14 @@ PLUGIN = {
     # `shows` is the whole of the reporter's knowledge. It knows no id here and never will.
     "report": {
         "figures": [
-            {"id": "F1_replicates", "shows": "diagnostic", "required": True,
+            {"id": "F1_replicates", "drawn_by": "plugin", "shows": "diagnostic", "required": True,
              "question": "how many cells and how many counts went into each pseudobulk sample, "
                          "and is that balanced across the levels being compared?",
              "source": "figures/F1_replicates.csv"},
             # OPTIONAL BECAUSE THE ATTRIBUTE MOVED, not because the fit can fail. PyDESeq2 keeps
             # dispersions in `varm` on 0.4.x and in `var` on 0.5.x, and a reader has to be told
             # which of those happened rather than shown a gap.
-            {"id": "F2_dispersion", "shows": "diagnostic", "required": False,
+            {"id": "F2_dispersion", "drawn_by": "plugin", "shows": "diagnostic", "required": False,
              "question": "did the count model find a mean-variance trend, or shrink every gene "
                          "onto a flat line?",
              "source": "figures/F2_dispersion.csv",
@@ -216,17 +216,19 @@ PLUGIN = {
                             "model's own fit cannot be shown. Read every p-value below as "
                             "resting on a dispersion estimate nobody has looked at."},
             {"id": "F3_pvalue_calibration", "shows": "diagnostic", "required": True,
+             "drawn_by": "plugin",
              "question": "are these p-values calibrated, or is the model misspecified?",
              "source": "figures/F3_pvalue_calibration.csv"},
-            {"id": "F4_untested", "shows": "diagnostic", "required": True,
+            {"id": "F4_untested", "drawn_by": "plugin", "shows": "diagnostic", "required": True,
              "question": "which genes are absent from the answer, and for which of the "
                          "different reasons?",
              "source": "figures/F4_untested.csv"},
-            {"id": "F5_ma", "shows": "result", "required": True,
+            {"id": "F5_ma", "drawn_by": "plugin", "shows": "result", "required": True,
              "question": "which genes change, at what expression level, and how far can a fold "
                          "change be trusted when no shrinkage was applied?",
              "source": "tables/de_by_population.csv"},
             {"id": "F6_hits_by_population", "shows": "result", "required": True,
+             "drawn_by": "plugin",
              "question": "which populations respond to the contrast, in which direction, and "
                          "which were never tested at all?",
              "source": "figures/F6_hits_by_population.csv"},

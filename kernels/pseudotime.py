@@ -182,7 +182,7 @@ PLUGIN = {
             # rendered as NOT PRODUCED - which tells a reader the run is incomplete when the run
             # handled it. `required` is about whether an absence is a defect or a property of the
             # data, and an estimator with no spectrum is the second thing.
-            {"id": "F1_spectrum", "shows": "diagnostic", "required": False,
+            {"id": "F1_spectrum", "drawn_by": "plugin", "shows": "diagnostic", "required": False,
              "question": "does the data support the number of states this run asked for?",
              "source": "figures/F1_spectrum.csv",
              "when_absent": "the estimator came back with no eigendecomposition, so there is NO "
@@ -190,6 +190,7 @@ PLUGIN = {
                             "states that was asked for. Read every count below as a parameter of "
                             "the run rather than as a reading of the data."},
             {"id": "F2_macrostate_stability", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "are the states called terminal actually stable, or did a threshold "
                          "decide?",
              "source": "tables/macrostate_transitions.csv",
@@ -201,6 +202,7 @@ PLUGIN = {
             # annotation among its anchor cells; with no annotation there is no name and no
             # composition, and the states come back as GPCCA's own indices.
             {"id": "F3_macrostate_composition", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "what are these states made of - one population, or several?",
              "source": "figures/F3_macrostate_composition.csv",
              # TWO CAUSES, BOTH NAMED. The sentence used to give only the first, so a run whose
@@ -215,10 +217,11 @@ PLUGIN = {
                             "is then a number, and which cells it holds can only be read off the "
                             "fate map."},
             {"id": "F4_fate_certainty", "shows": "diagnostic", "required": True,
+             "drawn_by": "plugin",
              "question": "does any cell actually have a fate, or are the probabilities evenly "
                          "split?",
              "source": "figures/F4_fate_certainty.csv"},
-            {"id": "F5_fate_map", "shows": "result", "required": False,
+            {"id": "F5_fate_map", "drawn_by": "plugin", "shows": "result", "required": False,
              "question": "where on the map does each fate come from?",
              "source": "figures/F5_fate_map.csv",
              "when_absent": "the object carries no two-column layout, and the representation the "
@@ -228,6 +231,7 @@ PLUGIN = {
                             "`obsm[fate_probabilities]`; computing a UMAP or similar on that "
                             "representation makes this panel drawable."},
             {"id": "F6_ordering_by_population", "shows": "result", "required": False,
+             "drawn_by": "plugin",
              "question": "which populations sit early on this ordering and which sit late?",
              "source": "figures/F6_ordering_by_population.csv",
              "when_absent": "either the object carries no cell-type annotation, or no population "

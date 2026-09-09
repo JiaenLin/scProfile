@@ -164,22 +164,33 @@ def contrasts(per_sample, design, factors=None):
 
 
 def aliased(design, factors=None):
-    """{factor: [factors that split the samples identically]}.
+    """{factor: [columns of the design that split the samples identically]}.
 
     Two factors with the same partition are ONE comparison drawn twice, and which of them a
     difference belongs to is exactly what the data cannot say. Naming them is the honest form;
     drawing both is two pieces of apparent evidence for one split.
+
+    THE CANDIDATES ARE EVERY COLUMN OF THE DESIGN, AND `factors` ONLY CHOOSES WHAT IS REPORTED.
+    They used to be the same list, which made the question unanswerable exactly when it mattered
+    most: a caller that named its two biological factors - the careful thing to do, and what the
+    planner does - was comparing them only against each other, so a factor aliased with a
+    TECHNICAL column came back clean. Measured on a real 2x2 where every aged library was run on
+    one chemistry and every young one on another: asked about all four columns the tool says
+    `age` is aliased with `chemistry`; asked about `age` and `diet` it says nothing is aliased
+    with anything, and every caption then describes an age effect that is equally a chemistry
+    effect. The narrowing silently removed the warning, on the one cohort in this family.
     """
-    factors = list(factors or sorted({f for r in design.values() for f in r}))
+    every = sorted({f for r in design.values() for f in r})
+    factors = list(factors or every)
     sig = {}
-    for f in factors:
+    for f in set(every) | set(factors):
         groups = {}
         for s, r in design.items():
             groups.setdefault(str((r or {}).get(f)), set()).add(s)
         sig[f] = frozenset(frozenset(v) for v in groups.values())
     out = {}
     for f in factors:
-        out[f] = sorted(o for o in factors if o != f and sig[o] == sig[f])
+        out[f] = sorted(o for o in every if o != f and sig[o] == sig[f])
     return out
 
 
@@ -291,6 +302,7 @@ def comparisons(design, factors=None, technical=None, controls=None):
             if any(not v for v in cells.values()):
                 continue                # a missing cell is not an interaction, it is a gap
             out.append({"kind": "interaction", "factor": fa, "other": fb, "stratum": {},
+                        "label": contrast_label(fa, None, other=fb),
                         "arms": {k: len(v) for k, v in cells.items()}, "samples": cells,
                         "aliased_with": list(alias.get(fa) or []),
                         "question": (f"Does the {fa} difference depend on {fb}? Equivalently: is "
@@ -487,15 +499,29 @@ def draw(per_sample, design, path, *, cells=None, width=None):
     return len(con)
 
 
-def contrast_label(factor, stratum=None):
-    """The name of one contrast: `F`, or `F | G = g` when held at a level of another factor.
+def contrast_label(factor, stratum=None, other=None):
+    """The name of one contrast: `F`, `F | G = g` when held at a level of another factor, or
+    `F x G` for the interaction between two.
 
     ONE FUNCTION NAMES A CONTRAST. `arm_pairs` built this string for the directories it writes
     and `comparisons` did not build it at all, so the panel could not match a comparison to the
     figures drawn for it - it looked them up by a name nothing had produced, found none, and
     reported every need as a gap. A name used by two consumers is derived once.
+
+    THE INTERACTION HAD NO NAME AT ALL. Every marginal and every simple effect went through
+    `_entry`, which calls this; the interaction branch built its dict by hand and omitted the
+    key. It is not a cosmetic gap: the label is how a consumer finds the figures drawn for a
+    contrast, and `compose` selects on it - so the one comparison a 2x2 exists to produce could
+    never be matched to a panel, and a figure carrying the empty label was filed as a COHORT
+    figure, which is the opposite of what it is. Found by running this function on a real 2x2;
+    unreachable on a one-factor cohort, which is every fixture this family had.
+
+    `F x G` and not `F` for the interaction, because `F` is already the marginal's name and two
+    contrasts answering different questions under one name is how the wrong panel gets placed.
     """
     st = dict(stratum or {})
+    if other and not st:
+        return f"{factor} x {other}"
     if not st:
         return str(factor)
     k, v = next(iter(st.items()))

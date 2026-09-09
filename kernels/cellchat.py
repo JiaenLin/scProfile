@@ -540,6 +540,7 @@ PLUGIN = {
             # CellChat's database read out interaction by interaction; if that could not be done
             # the run has no way to tell a quiet dataset from a database that never matched it.
             {"id": "F1_database_coverage", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "did CellChat's database match the genes in this object at all?",
              "source": "figures/F1_database_coverage.csv",
              "when_absent": "the database could not be read out gene by gene, so how much of it "
@@ -548,10 +549,12 @@ PLUGIN = {
                             "interaction count below cannot be told apart from a database that "
                             "did not match these gene symbols."},
             {"id": "F2_population_power", "shows": "diagnostic", "required": True,
+             "drawn_by": "plugin",
              "question": "could each population have produced an interaction at all - is what is "
                          "below biology or detection power?",
              "source": "figures/F2_population_power.csv"},
             {"id": "F3_permutation", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "how much evidence is behind each edge, given the test is a permutation "
                          "and there were only nboot of them?",
              "source": "figures/F3_permutation.csv",
@@ -560,27 +563,28 @@ PLUGIN = {
                             "nothing below has been placed against the permutation floor and any "
                             "ranking rests on the communication probability alone. The run's "
                             "caveats say which of the three it was."},
-            {"id": "F4_network", "shows": "result", "required": True,
+            {"id": "F4_network", "drawn_by": "plugin", "shows": "result", "required": True,
              "question": "which populations are inferred to signal to which?",
              "source": "figures/F4_network.csv"},
             {"id": "F6_signaling_roles", "shows": "result", "required": False,
+             "drawn_by": "plugin",
              "question": "which populations are net senders and which are net receivers?",
              "source": "figures/F6_signaling_roles.csv",
              "when_absent": "no population carried any outgoing or incoming probability, so "
                             "there is no plane to place them on. That is the same negative "
                             "result F4_network reports, not a drawing failure."},
-            {"id": "F7_pathway_roles", "shows": "result", "required": False,
+            {"id": "F7_pathway_roles", "drawn_by": "plugin", "shows": "result", "required": False,
              "question": "for each pathway, which populations send it and which receive it?",
              "source": "figures/F7_pathway_roles.csv",
              "when_absent": "fewer than two pathways carried a non-zero network, so a "
                             "pathway-by-population panel would be a single row. The edge list "
                             "still carries whatever was returned."},
-            {"id": "F8_pathway_rank", "shows": "result", "required": False,
+            {"id": "F8_pathway_rank", "drawn_by": "plugin", "shows": "result", "required": False,
              "question": "which pathways carry the most inferred signal in this unit?",
              "source": "figures/F8_pathway_rank.csv",
              "when_absent": "the returned table carries no `pathway_name` column, or every "
                             "pathway summed to zero probability, so there is nothing to rank."},
-            {"id": "F9_patterns", "shows": "result", "required": False,
+            {"id": "F9_patterns", "drawn_by": "plugin", "shows": "result", "required": False,
              "question": "do groups of populations use groups of pathways together?",
              "source": "figures/F9_patterns.csv",
              "when_absent": "the population-by-pathway matrix was smaller than 3x3 after "
@@ -588,12 +592,13 @@ PLUGIN = {
                             "factorisation can be checked at. Nothing was fitted rather than "
                             "fitting something unverifiable."},
             {"id": "F10_pathway_similarity", "shows": "result", "required": False,
+             "drawn_by": "plugin",
              "question": "which pathways act between the same populations as each other?",
              "source": "figures/F10_pathway_similarity.csv",
              "when_absent": "fewer than four pathways, or fewer than three surviving the "
                             "shared-nearest-neighbour mask - too few points for a placement to "
                             "mean anything."},
-            {"id": "F5_dotplot", "shows": "result", "required": False,
+            {"id": "F5_dotplot", "drawn_by": "plugin", "shows": "result", "required": False,
              "question": "which ligand-receptor pairs carry the inferred signal, and between "
                          "which populations?",
              "source": "figures/F5_dotplot.csv",

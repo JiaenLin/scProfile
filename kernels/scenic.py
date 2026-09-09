@@ -314,22 +314,26 @@ PLUGIN = {
         ],
         "figures": [
             {"id": "F1_ranking_depth", "shows": "diagnostic", "required": True,
+             "drawn_by": "plugin",
              "question": "do cells have enough detected genes for the AUC cut-off to mean "
                          "anything, and is the shortfall spread evenly across populations?",
              "source": "figures/F1_ranking_depth.csv"},
             {"id": "F2_pruning_funnel", "shows": "diagnostic", "required": True,
+             "drawn_by": "plugin",
              "question": "how much of the inferred co-expression survived motif pruning - and "
                          "did the reference do any work at all?",
              "source": "figures/F2_pruning_funnel.csv"},
             # OPTIONAL, AND THE ABSENCE IS THE FINDING. One regulon has no pair to overlap with,
             # and a run that returned one regulon is a much bigger caveat than a missing panel.
             {"id": "F3_regulon_overlap", "shows": "diagnostic", "required": False,
+             "drawn_by": "plugin",
              "question": "are these regulons independent measurements, or do they share their "
                          "target genes?",
              "source": "figures/F3_regulon_overlap.csv",
              "when_absent": "fewer than two regulons survived, so there is no pair to overlap. "
                             "Read the single result below as one module, not as a network."},
             {"id": "F4_activity_by_population", "shows": "result", "required": False,
+             "drawn_by": "plugin",
              "question": "which regulons are active in which populations?",
              "source": "figures/F4_activity_by_population.csv",
              "when_absent": "the object carries no cell-type annotation, or only one population "
@@ -337,6 +341,7 @@ PLUGIN = {
                             "be summarised per population. The per-cell AUC is unaffected and is "
                             "beside this page."},
             {"id": "F5_activity_on_layout", "shows": "result", "required": False,
+             "drawn_by": "plugin",
              "question": "is a regulon's activity coherent on the manifold, or scattered across "
                          "it?",
              "source": "figures/F5_activity_on_layout.csv",
