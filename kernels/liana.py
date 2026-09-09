@@ -42,11 +42,79 @@ PLUGIN = {
     "wraps": {"tool": "liana",
               # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
               # `native_plots` or this; see native.unreviewed.
-              "plots_unreviewed": "nobody has been through liana's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
+              # PART-WAY THROUGH, AND SAYING SO. Eight of liana's twelve exported plotting
+              # functions are ruled in `native_plots` below. The four that are not are the four
+              # that draw the SAME KIND of thing this plugin draws itself, and ruling those
+              # needs liana's own panel rendered beside ours - `superseded_by_design` has to
+              # name a defect, and a defect nobody has looked at is `reimplemented`, which is
+              # rejected by name.
+              "plots_unreviewed": "4 of liana's 12 exported plotting functions remain unruled: "
+                                  "pl.dotplot, pl.tileplot, pl.dotplot_by_sample and "
+                                  "pl.circle_plot. Each draws something this plugin also draws, "
+                                  "so each needs liana's own version rendered beside F4_dotplot "
+                                  "or F5_sender_receiver before it can be called superseded - "
+                                  "without that comparison the honest word is `reimplemented`, "
+                                  "and that one is rejected by name.",
               "homepage": "https://liana-py.readthedocs.io",
               "license": "GPL-3.0",
               "cite": "Dimitrov et al., Nat Commun 2022 (LIANA); "
                       "Türei et al., Mol Syst Biol 2021 (OmniPath)"},
+    # WHAT liana ALREADY DRAWS, AND WHAT THIS PLUGIN DOES WITH EACH. Measured from this
+    # plugin's own environment with `sch dev convert account`: liana.pl exports twelve public
+    # callables. Eight of them cannot apply to this plugin at all, and the reason is in the
+    # SIGNATURE rather than in anyone's opinion - five take a `spatial_key` and coordinates,
+    # three take a `MistyData` as their first argument. This plugin's own `cannot_show` opens
+    # with the reason there are no coordinates here: these are co-expression scores on
+    # dissociated tissue, with no spatial information at all.
+    "native_plots": {
+        # --- five need coordinates this plugin never has
+        "pl.annulus_plot": {
+            "skip": "not_applicable",
+            "evidence": "signature takes spatial_key='spatial' and radius_step, and draws "
+                        "concentric annuli around a cell ON A TISSUE SECTION. This plugin scores "
+                        "co-expression on dissociated tissue and declares in cannot_show that it "
+                        "has no spatial information; there are no coordinates to draw annuli in"},
+        "pl.connectivity": {
+            "skip": "not_applicable",
+            "evidence": "plots spatial connectivity weights, from spatial_key and a "
+                        "connectivity_key. Neither exists on the objects this plugin produces"},
+        "pl.feature_by_group": {
+            "skip": "not_applicable",
+            "evidence": "plots inflow scores ACROSS SPATIAL COORDINATES, from spatial_key. "
+                        "Inflow is a spatial quantity this plugin does not compute"},
+        "pl.lric_lineplot": {
+            "skip": "not_applicable",
+            "evidence": "reads uns_key='lric' and draws the g(r) profile of one interaction - a "
+                        "radial distribution over distance, from liana's cross_pcf. This plugin "
+                        "runs no spatial method, so `lric` is never written"},
+        "pl.lric_divergence_plot": {
+            "skip": "not_applicable",
+            "evidence": "reads uns_key='lric' and draws two g(r) curves and the area between "
+                        "them. Same input as pl.lric_lineplot and the same reason: no distance "
+                        "axis exists in this plugin's output"},
+        # --- three need a MISTy model this plugin does not fit
+        "pl.contributions": {
+            "skip": "not_applicable",
+            "evidence": "first parameter is `misty: MistyData`. MISTy is liana's spatial "
+                        "multi-view model; this plugin fits no MISTy model, so there is no "
+                        "object to pass and no view whose contribution could be plotted"},
+        "pl.interactions": {
+            "skip": "not_applicable",
+            "evidence": "first parameter is `misty: MistyData`. `importances` here are a MISTy "
+                        "model's, not the ligand-receptor scores this plugin computes - the "
+                        "shared word `interactions` names two different quantities"},
+        "pl.target_metrics": {
+            "skip": "not_applicable",
+            "evidence": "first parameter is `misty: MistyData`; the metrics are per-target fit "
+                        "statistics of that model. Nothing here fits one"},
+        # --- AND FOUR THAT ARE NOT HERE, deliberately. pl.dotplot, pl.tileplot,
+        #     pl.dotplot_by_sample and pl.circle_plot each draw something this plugin also
+        #     draws, and ruling one needs liana's panel rendered beside ours. An entry holding
+        #     TODO is not a partial accounting, it is an unanswered question wearing an answer's
+        #     shape - `validate` rejects the marker by name. The debt goes in
+        #     `wraps.plots_unreviewed`, which is the field that exists to carry it.
+    },
+
     "upstream": {
         "docs": "https://liana-py.readthedocs.io",
         "read": "2026-08-25",

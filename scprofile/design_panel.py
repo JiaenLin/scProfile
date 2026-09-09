@@ -521,7 +521,12 @@ def contrast_label(factor, stratum=None, other=None):
     """
     st = dict(stratum or {})
     if other and not st:
-        return f"{factor} x {other}"
+        # THE MULTIPLICATION SIGN, because `compare_panel.draw_interaction` has been returning
+        # that form as this panel's label all along and `compose` matches on the string. The
+        # first version of this returned an ASCII `x` and so agreed with neither the panel
+        # already on disk nor the function that drew it - a third spelling for one contrast,
+        # added by a fix whose entire purpose was that it had none.
+        return f"{factor} \u00d7 {other}"
     if not st:
         return str(factor)
     k, v = next(iter(st.items()))

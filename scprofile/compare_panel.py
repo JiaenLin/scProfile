@@ -698,6 +698,12 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     identity line responds to A the same way in both; a point off it is an interaction. The
     quadrants are the readable part: opposite sides of the diagonal means the direction itself
     flips, which a marginal contrast averages to nothing.
+
+    THE LABEL IS DERIVED, NOT SPELLED HERE. `arm_pairs` names every other contrast through
+    `design_panel.contrast_label`; this one built its own string, and `comparisons()` built no
+    string at all - so one contrast had two spellings and a gap between them, and `compose`
+    matches on the string. It calls the same function now, and the multiplication sign it
+    returns is the one this panel has been writing all along.
     """
     import numpy as np
     import matplotlib.pyplot as plt
@@ -880,7 +886,13 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
               "SHARE OF ITS ARM in percentage points, not a raw sum: the four arms' totals are "
               "not comparable and a raw difference between them would mostly report which arm "
               "is smallest." if rel else ""))
-    return [(f"C5_interaction__{slug}", path, cap, f"{fa} × {fb}")]
+    # ONE FUNCTION NAMES A CONTRAST - this module's own rule, and the interaction was the one
+    # place that did not follow it. The SLUG stays hand-built: the generic rule replaces every
+    # non-alphanumeric character, so deriving it from the label would give a different filename
+    # from every interaction panel already written, and renaming files to tidy a label orphans
+    # a run's whole figure set.
+    from .design_panel import contrast_label as _label
+    return [(f"C5_interaction__{slug}", path, cap, _label(fa, None, other=fb))]
 
 
 def _unit_for(um, members):

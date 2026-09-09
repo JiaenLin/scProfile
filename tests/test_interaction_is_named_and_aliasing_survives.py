@@ -55,13 +55,16 @@ check(len(inter) == 1, f"a 2x2 with every cell filled produced {len(inter)} inte
 if inter:
     lab = inter[0].get("label")
     check(bool(lab), "the interaction carries no label, so no consumer can find its figures")
-    check(lab == "f1 x f2", f"the interaction is named {lab!r}")
+    check(lab == "f1 \u00d7 f2",
+          f"the interaction is named {lab!r} - it must be the same string "
+          f"`compare_panel.draw_interaction` returns, because `compose` matches on it")
     marg = {c.get("label") for c in got if c["kind"] == "marginal"}
     check(lab not in marg,
           f"the interaction shares the name {lab!r} with a marginal, so one contrast's panels "
           f"will be placed under the other's question")
 
-check(contrast_label("f1", None, other="f2") == "f1 x f2", "contrast_label cannot name a pair")
+check(contrast_label("f1", None, other="f2") == "f1 \u00d7 f2",
+      "contrast_label cannot name a pair")
 check(contrast_label("f1") == "f1", "contrast_label changed how it names a marginal")
 check(contrast_label("f1", {"f2": "base"}) == "f1 | f2 = base",
       "contrast_label changed how it names a simple effect")
