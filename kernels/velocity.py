@@ -56,7 +56,12 @@ PLUGIN = {
     "wraps": {"tool": "scvelo",
               # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
               # `native_plots` or this; see native.unreviewed.
-              "plots_unreviewed": "nobody has been through scvelo's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
+              "plots_unreviewed": "18 of scvelo's 20 exported plotting functions remain unruled. "
+                                  "Two are accounted for below with a measured defect; the rest "
+                                  "are drawn here by hand and NOT yet justified. Each needs the "
+                                  "upstream panel rendered beside ours before it can be called "
+                                  "superseded_by_design - `reimplemented` is rejected by name, "
+                                  "and without that comparison that is what these are.",
               "version": "0.3.4", "homepage": "https://scvelo.readthedocs.io",
               "license": "BSD-3-Clause", "cite": "Bergen et al., Nat Biotechnol 2020"},
 
@@ -148,6 +153,34 @@ PLUGIN = {
     # is bounded, rather than under-requesting a larger one, which is what kills a job.
     "memory_gb_per_100k": 14.6,
     "design_aware": True,
+
+    # PARTIAL, AND THE ADMISSION ABOVE SAYS SO. Two of scvelo's twenty, each with the defect
+    # MEASURED against the installed package rather than asserted - `sch dev convert account`
+    # produced the inventory, and the signatures below were read from scvelo 0.3.4 itself.
+    #
+    # This plugin calls NONE of scvelo's twenty plotting functions; git history shows
+    # `velocity_embedding_stream`, `velocity_embedding_grid` and `scatter` were live until
+    # 4d2d8df. Replacing a tool's plot with your own is `reimplemented`, which
+    # `scprofile/native.py` rejects BY NAME, and the only legitimate form is
+    # `superseded_by_design` naming the panel AND the defect it corrects. The eighteen without one
+    # are not accounted for here, and writing them in would say they were.
+    "native_plots": {
+        "velocity_embedding_stream": {
+            "skip": "superseded_by_design",
+            "panel": "F2_stream",
+            "defect": "scvelo's stream and grid each call compute_velocity_on_grid with their own "
+                      "defaults - density 2 against None, and autoscale absent against True - so "
+                      "the two panels are not the same field and a difference between them can be "
+                      "the drawing rather than the computation. Measured from scvelo 0.3.4's own "
+                      "signatures. F2 and F3 share one grid, one kernel and one set of axes, "
+                      "which is what makes showing both worth anything."},
+        "velocity_embedding_grid": {
+            "skip": "superseded_by_design",
+            "panel": "F3_grid",
+            "defect": "the same defect from the other side: called with its defaults this "
+                      "autoscales its arrows while the stream does not, so arrow length is not "
+                      "comparable between the pair the caption asks a reader to compare."},
+    },
 
     # EMPTY, AND THAT IS THE DECLARATION. `{}` says somebody went through this plugin looking for
     # anything it consults that did not come from the user's object and found nothing; ABSENT says

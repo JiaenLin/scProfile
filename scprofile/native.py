@@ -161,8 +161,18 @@ def accounting_debt(specs):
     `specs` is {plugin_name: spec}. `undeclared` is the regression: a wrapper that neither
     accounts for its upstream's figures nor says in its own file that nobody has looked at them.
     """
+    # PARTIAL IS A STATE, and until now it was not one. The debt was discharged by the PRESENCE of
+    # `native_plots`, so a wrapper that had ruled on two of its upstream's twenty read exactly like
+    # one that had ruled on all twenty - and writing those two in would have stopped it being
+    # counted as owing at all. Faced with that, the only honest move was to write nothing, which is
+    # how an accounting stays at zero for months.
+    #
+    # Three states now. A complete accounting is `native_plots` and no admission. A partial one is
+    # `native_plots` AND `plots_unreviewed` saying what is left - still owing, and progress is
+    # recorded rather than discarded. None is the admission alone.
     owing = sorted(n for n, sp in (specs or {}).items()
-                   if requires_accounting(sp) and not (sp or {}).get("native_plots"))
+                   if requires_accounting(sp)
+                   and (unreviewed(sp) or not (sp or {}).get("native_plots")))
     undeclared = [n for n in owing if not unreviewed((specs or {}).get(n))]
     return owing, undeclared
 

@@ -128,13 +128,33 @@ def test_the_debt_is_a_RATCHET_and_may_only_shrink():
         f"{UNREVIEWED_TODAY}. The debt may shrink and may not grow.")
 
 
-def test_the_plugin_that_paid_makes_no_admission():
+def test_an_accounting_and_an_admission_together_mean_PARTIAL():
+    """Both at once is a wrapper part-way through, and it stays counted as owing.
+
+    This used to assert that no plugin had both, which made the accounting all-or-nothing: a
+    wrapper that had ruled on two of its upstream's twenty could not record those two without
+    reading as finished. The only honest move was then to write nothing, which is how an
+    accounting stays at zero for months.
+    """
     specs = _all_specs()
     paid = [n for n, sp in specs.items() if sp.get("native_plots")]
     assert paid, "no plugin accounts for its upstream's figures, so the ratchet measures nothing"
+    owing, _ = N.accounting_debt(specs)
     for n in paid:
-        assert not N.unreviewed(specs[n]), (
-            f"{n} declares native_plots AND admits nobody has looked; one of the two is a leftover")
+        if N.unreviewed(specs[n]):
+            assert n in owing, f"{n} is part-way through and is not being counted as owing"
+        else:
+            assert n not in owing, f"{n} has a complete accounting and is still counted as owing"
+
+
+def test_a_partial_admission_says_what_is_left():
+    """An admission beside an accounting must name the remainder, or it is a leftover."""
+    specs = _all_specs()
+    for n, sp in specs.items():
+        if sp.get("native_plots") and N.unreviewed(sp):
+            said = N.unreviewed(sp).lower()
+            assert any(w in said for w in ("remain", "left", "still", "of the", "outstanding")), (
+                f"{n} declares both and its admission does not say what is left: {said[:90]}")
 
 
 # ---------------------------------------------------------------------------------------------
