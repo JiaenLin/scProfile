@@ -19,6 +19,15 @@ where the method ran correctly and returned nothing is finished, and re-running 
 same nothing at full price. A resume that retries empty units silently converts a negative
 result into an unstable one, because the next run may differ for unrelated reasons and nobody
 will know which run the emptiness came from.
+
+AND A PHASE IS NOT AN INSTANCE. The four rows above describe an INSTANCE - one plugin over one
+unit, planned, scheduled and resumable. A plugin also has phases that take no unit at all: the
+reporter re-launches `compare(ctx)` under `kernels/<plugin>/compare/`, once per arm pair and
+once over every arm. `discover` walked into that directory, found it non-empty and reported it
+as an instance - so a run in which EVERY instance succeeded and the reporting worked reported
+`1 died`, and `check --out` answered "every instance finished" with FALSE and "1 outstanding".
+The states above were being applied to a directory they were never about. `phase_of` below is
+where the two are told apart, and it is told apart at the level `discover` actually enumerates.
 """
 
 from __future__ import annotations
@@ -35,6 +44,86 @@ ABSENT = "absent"
 
 #: States that need no recomputation. `EMPTY` is here deliberately - see the module docstring.
 FINISHED = (DONE, EMPTY)
+
+#: The subdirectory of a plugin's output that holds a PHASE of the run rather than an INSTANCE
+#: of it. The reporter re-launches the plugin's `compare(ctx)` in here, once per arm pair and
+#: once over every crossed arm; none of those launches is a unit. Named here rather than in the
+#: reporter because two sides have to agree on the word - the side that creates the directory
+#: and the side that has to not mistake it for work left undone.
+COMPARE_DIRNAME = "compare"
+
+#: What a phase writes at the level `discover` enumerates, so a phase directory can SAY what it
+#: is instead of being recognised only by its name. A directory written before this file existed
+#: is still recognised - see `phase_of`.
+PHASE_RECORD = "phase.json"
+
+#: Directories under a plugin that hold the plugin's own cohort output, not one instance's.
+_PLUGIN_OUTPUT_DIRS = ("figures", "tables")
+
+
+def phase_of(d):
+    """The phase this directory records, or None when it is an instance directory.
+
+    DECIDED ON THE DIRECTORY'S OWN NAME, AT THE LEVEL `discover` ACTUALLY ENUMERATES. The first
+    guard proposed for this tested whether the PARENT directory was named `compare` and read a
+    manifest to confirm it, and reproducing it showed it could never fire: `discover` walks
+    exactly two levels - `kernels/<plugin>/<child>` - so the row it produces for the reporter's
+    phase IS `kernels/<plugin>/compare`. That directory's parent is the PLUGIN name, and it holds
+    neither `in.json` nor `out.json`, because both are written one level deeper under
+    `compare/<label>/`. A guard keyed on either of those facts is a guard written against a
+    directory shape that never occurs. The reproduction is the FIRST assertion in
+    `tests/test_the_compare_phase_is_recorded.py` for exactly that reason.
+
+    THE NAME ALONE IS NOT ENOUGH EITHER, because a unit may legitimately be called `compare` -
+    nothing stops a sample being named that, and hiding a real instance would be the same defect
+    facing the other way. An instance directory is staged with its own `in.json` and finishes
+    with its own `out.json`; a phase directory has neither AT THIS LEVEL. So: a directory is a
+    phase when it carries the phase record, or when it is named for a phase and carries no
+    manifest of its own.
+    """
+    d = Path(d)
+    rec = d / PHASE_RECORD
+    if rec.is_file():
+        try:
+            got = (json.loads(rec.read_text(encoding="utf-8")) or {}).get("phase")
+        except (OSError, ValueError):
+            got = None
+        return str(got) if got else d.name
+    if (d.name == COMPARE_DIRNAME
+            and not (d / "in.json").exists() and not (d / "out.json").exists()):
+        return COMPARE_DIRNAME
+    return None
+
+
+def phases(out):
+    """[(plugin, phase, record)] - every phase a run directory holds and what it recorded.
+
+    KEPT APART FROM `discover`, DELIBERATELY. These are launches of a plugin that took no unit:
+    they are not in the plan, a resume does not iterate them, and a survey must not count them.
+    They are still executions the run paid for, so they belong in the run's execution record -
+    the reporter renders them into its schedule table from here, and `record["cardinality"]`
+    says how many launches the phase declared, ran, reused and skipped.
+
+    A phase directory written before the record existed comes back with an empty record rather
+    than being dropped: "this ran and left no receipt" is the thing worth being able to see.
+    """
+    root = Path(out) / "kernels"
+    if not root.is_dir():
+        return []
+    rows = []
+    for pdir in sorted(p for p in root.iterdir() if p.is_dir()):
+        for c in sorted(x for x in pdir.iterdir() if x.is_dir()):
+            ph = phase_of(c)
+            if not ph:
+                continue
+            rec, f = {}, c / PHASE_RECORD
+            if f.is_file():
+                try:
+                    rec = json.loads(f.read_text(encoding="utf-8")) or {}
+                except (OSError, ValueError):
+                    rec = {}
+            rows.append((pdir.name, ph, rec))
+    return rows
 
 
 def unit_dir(out, plugin, unit=None):
@@ -111,14 +200,24 @@ def discover(out):
     So `status` can be pointed at a directory alone. A resume that can only describe a run it
     can re-plan is useless in the case that matters most - the object moved, the plan cannot be
     rebuilt, and the question is precisely what survived.
+
+    INSTANCES ONLY. What this returns is fed to `survey`, `outstanding`, `licence` and the
+    landscape, every one of which reasons about work a resume could finish. A plugin's PHASE
+    directories are excluded here and enumerated by `phases` instead; see `phase_of`.
     """
     root = Path(out) / "kernels"
     if not root.is_dir():
         return []
     found = []
     for pdir in sorted(p for p in root.iterdir() if p.is_dir()):
-        subs = sorted(c for c in pdir.iterdir() if c.is_dir() and c.name != "figures"
-                      and c.name != "tables")
+        subs = sorted(c for c in pdir.iterdir() if c.is_dir()
+                      and c.name not in _PLUGIN_OUTPUT_DIRS
+                      # A PHASE IS NOT AN INSTANCE, and this is the line where that has to be
+                      # said. `any(c.iterdir())` below accepts ANY non-empty subdirectory, and
+                      # the reporter's compare phase creates one - so a run whose every instance
+                      # SUCCEEDED reported `1 died` because the reporting had worked. The state
+                      # was real; the row it was attached to was not an instance at all.
+                      and not phase_of(c))
         # A COHORT PLUGIN WRITES AT THE PLUGIN LEVEL and a per-unit plugin writes one level
         # down. Which it is, is visible from the files rather than declared here.
         if (pdir / "out.json").exists():

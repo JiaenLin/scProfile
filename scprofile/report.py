@@ -415,7 +415,7 @@ def _presence_block(payload_all, *, out_dir=None, name=""):
 
 
 def _arm_content(units, design, spec, *, native_plots=None, out_dir=None, name="", prefix=None,
-                 controls=None, unit_axis=None, unit_members=None):
+                 controls=None, unit_axis=None, unit_members=None, timeout=None, cores=None):
     """({"contrast": [...], "arm": [...]}) - every between-arm and per-arm figure, drawn.
 
     THE COHORT PAGE CARRIED ONE FIGURE while the per-sample appendix carried a hundred. On a
@@ -517,7 +517,10 @@ def _arm_content(units, design, spec, *, native_plots=None, out_dir=None, name="
                           # that no declaration is allowed to carry there.
                           controls=controls, unit_members=unit_members or {},
                           unit_cells=unit_cells or {},
-                          prefix=prefix, declared=dict(native_plots or {}))
+                          prefix=prefix, declared=dict(native_plots or {}),
+                          # THE RUN'S OWN LIMIT AND ITS OWN BUDGET. This phase launches the same
+                          # plugin the run phase launches, and had neither.
+                          timeout=timeout, cores=cores)
 
     # THE TWO-SCALE TABLE, WRITTEN EVERY RUN. A result section quotes changes per element, and
     # where the weight is normalised within each unit those changes differ - sometimes in SIGN -
@@ -656,9 +659,180 @@ def _arm_appendix(name, content, plugin_arm_figs=()):
     return "".join(b)
 
 
+#: How long the `--phases` PROBE may take. It loads the plugin module and prints the phases it
+#: implements, so this bounds an IMPORT and not a computation. The run's own `--timeout` lowers
+#: it where it is shorter: a probe allowed to outlive the limit the run declared is a limit the
+#: run does not actually have.
+_PROBE_TIMEOUT = 300
+
+
+def _phase_env(exe, *, inp=None, cores=None):
+    """The environment ONE plugin phase is launched in - the RUN PHASE'S, not a bare os.environ.
+
+    WHY THIS IS NOT `with_env_bin(exe)` ALONE, which is what this phase used. That call puts the
+    plugin's own `bin` on PATH and stops there, so the six thread-pool variables
+    `manifest.env_for_kernel` exists to set were absent for this entire phase - and absent means
+    INHERITED. A job script exporting `OMP_NUM_THREADS=$NCPUS` for its own sake therefore handed
+    the node's count to every compare launch, which is the exact oversubscription the core share
+    exists to prevent, arriving through the one door a plugin cannot close: BLAS sizes its pool
+    at import, before any plugin code runs. `runner.run` closed that door for the run phase; the
+    reporter, which launches the same plugin with the same entry point, did not - the same door,
+    one room over.
+
+    One env object was also built once and reused for all three launches. It is built per launch
+    now, because `SCPROFILE_IN` names THIS launch's manifest and a shared one can only name at
+    most one of them.
+    """
+    from . import manifest as _M
+    from .runner import with_env_bin as _envbin
+
+    e = _M.env_for_kernel(inp if inp is not None else "", cores=cores)
+    if inp is None:
+        # THE PROBE HAS NO MANIFEST. `--phases` imports the plugin and prints a word; it reads
+        # no `in.json`. Leaving `SCPROFILE_IN` set to "" would hand a plugin a path that is not
+        # a file, which is a worse answer than the variable being absent.
+        e.pop("SCPROFILE_IN", None)
+    return _envbin(exe, e)
+
+
+def _phase_inputs_digest(spec, unit_dirs):
+    """One string for everything this launch is computed FROM.
+
+    THE SPEC ALONE IS NOT IT. The spec carries PATHS, so a unit recomputed between two report
+    builds leaves it byte-identical while the numbers underneath it change - and a launch skipped
+    on that evidence would place last build's figures over this build's units. Each side's own
+    `out.json` is hashed in with it, which is the evidence `resume` already trusts for an
+    instance, and which carries the same limit stated here rather than discovered later: a plugin
+    that rewrites a figure without changing its `out.json` is not detected.
+
+    THE PATHS ARE RESOLVED BEFORE HASHING, and only for hashing - the spec the plugin is handed
+    is untouched. `run` and `scprofile report` may address the same run directory differently
+    (one absolute, one as typed on the command line), and a digest that changed with the spelling
+    would make the skip fire on neither. A run directory that has actually MOVED does change it,
+    and redoing the phase is the safe direction for that.
+    """
+    import hashlib
+    import json as _json
+
+    norm = dict(spec)
+    norm["units"] = {k: str(Path(v).resolve()) for k, v in (spec.get("units") or {}).items()}
+    if spec.get("out_dir"):
+        norm["out_dir"] = str(Path(spec["out_dir"]).resolve())
+    h = hashlib.sha256()
+    h.update(_json.dumps(norm, sort_keys=True, default=str).encode("utf-8"))
+    for d in sorted(str(x) for x in unit_dirs):
+        try:
+            h.update((Path(d) / "out.json").read_bytes())
+        except OSError:
+            h.update(b"\0no out.json\0")
+    return h.hexdigest()
+
+
+def _read_json(path):
+    """A JSON file, or {} - used where absence and corruption mean the same thing: redo it."""
+    import json as _json
+    try:
+        return _json.loads(Path(path).read_text(encoding="utf-8")) or {}
+    except (OSError, ValueError):
+        return {}
+
+
+def _compare_launch(*, exe, entry, plugin_file, cdir, spec, kernel, version, kind, label,
+                    cores=None, timeout=None, log=print):
+    """ONE launch of a plugin's compare phase, and the record that proves it happened.
+
+    THE RECORD IS THE POINT, AND IT DID NOT EXIST. This phase re-launches the plugin - the same
+    executable, the same entry point, the same environment as the run phase - once per arm pair
+    and once over every crossed arm, and it left behind a directory of PNGs and nothing else: no
+    `in.json` saying what it was handed, no `out.json` saying it finished, no duration, no core
+    share, no row in the schedule. `18 instances in 1 wave` is what the RUN phase did; the
+    reporter then launched the plugin again, three more times on a 2x2 design, and the run's own
+    execution record was short by exactly those launches.
+
+    Three separate defects followed from the missing `out.json` alone:
+
+      - the phase re-executed UNCONDITIONALLY - a plain run, a `--resume` and every `scprofile
+        report` rebuild alike - because nothing on disk could say it had already run;
+      - it was invisible to the resume machinery, which iterates plan instances only;
+      - and the directory it created, holding files and no `out.json`, was read back by
+        `resume.discover` as an instance that DIED, so a run in which everything succeeded
+        reported `1 died` BECAUSE the reporting had worked.
+
+    `spec` is written as this launch's `in.json` in the launch directory rather than to a
+    temporary file. A manifest in /tmp is a manifest that is gone by the time anyone asks what
+    the phase was given, and it is the only reason this phase had no input record at all.
+
+    Returns the record it wrote (or the one it reused).
+    """
+    import json as _json
+    import subprocess
+    import time as _time
+
+    from . import resume as _RS
+
+    cdir = Path(cdir)
+    # THE COMPARE PHASE GETS ITS OWN WORKING DIRECTORY for the same reason the run phase does:
+    # a wrapped tool that writes to the current directory must not write into the project.
+    cdir.mkdir(parents=True, exist_ok=True)
+    inp = cdir / "in.json"
+    digest = _phase_inputs_digest(spec, (spec.get("units") or {}).values())
+    prev = _read_json(cdir / "out.json")
+    what = label or kind
+    # AND THE FIGURES IT RECORDED ARE STILL THERE. A record is a claim about a directory, and
+    # the reason to reuse a launch is that its panels can be PLACED without re-drawing them - so
+    # a record whose figures have been deleted is a record that would silently cost the page its
+    # panels. Checked rather than trusted, because it is two stats and a lost figure is a lost
+    # citation.
+    _kept = all((cdir / "figures" / f).is_file() for f in (prev.get("figures") or []))
+    if (prev.get("status") == "ok" and prev.get("inputs_digest") == digest
+            and str(prev.get("version") or "") == str(version or "") and _kept):
+        # ALREADY RUN, ON THESE INPUTS, UNDER THIS VERSION - the same three questions a resume
+        # asks of an instance, asked of a launch. Without them this ran again on every report
+        # rebuild, which is the cost that decides whether a caption fix is checked against the
+        # real figures or against none.
+        log(f"  native compare {what}: reusing the launch recorded here "
+            f"({prev.get('seconds')}s, {len(prev.get('figures') or [])} figure(s)). Its units "
+            f"and the plugin version are unchanged; delete {cdir / 'out.json'} to force it.")
+        return dict(prev, reused=True)
+    inp.write_text(_json.dumps(spec, indent=1, default=str), encoding="utf-8")
+    t0 = _time.perf_counter()
+    rc, err = None, None
+    try:
+        r = subprocess.run([str(exe), str(entry), "--compare", str(plugin_file), str(inp)],
+                           capture_output=False, timeout=timeout,
+                           env=_phase_env(exe, inp=inp, cores=cores), cwd=str(cdir))
+        rc = r.returncode
+    except Exception as e:                                                # noqa: BLE001
+        err = str(e)
+    secs = round(_time.perf_counter() - t0, 1)
+    figdir = cdir / "figures"
+    figs = sorted(f.name for f in figdir.glob("*.png")) if figdir.is_dir() else []
+    rec = {"phase": _RS.COMPARE_DIRNAME, "kernel": str(kernel), "version": str(version or ""),
+           "kind": kind, "pair": str(label), "units": sorted(spec.get("units") or {}),
+           "status": "ok" if (err is None and rc == 0) else "failed",
+           "exit": rc, "error": err, "seconds": secs,
+           # THE SHARE AND THE LIMIT THIS LAUNCH ACTUALLY RAN UNDER, recorded rather than
+           # implied. Both were literals in this file - a core share that was never set at all
+           # and a 3600s ceiling nobody asked for - so no document of the run could state either.
+           "cores": cores, "timeout": timeout,
+           "inputs_digest": digest,
+           # NAMED `figures` DELIBERATELY: `resume.state` counts exactly this key, so a launch
+           # record answers the manifest's own vocabulary rather than inventing a second one.
+           "figures": figs}
+    (cdir / "out.json").write_text(_json.dumps(rec, indent=1, default=str), encoding="utf-8")
+    if rec["status"] != "ok":
+        # LOUD, AND THE PANELS IT DID DRAW ARE STILL PLACED. An abort part-way leaves real
+        # figures on disk; discarding them would lose work the run paid for, and silence would
+        # let a half-drawn comparison read as a complete one.
+        log(f"  native compare {what} FAILED ({'exit ' + str(rc) if err is None else err}) "
+            f"after {secs:.0f}s; the {len(figs)} panel(s) it drew before failing are placed, "
+            f"and the rest are missing from this page")
+    return rec
+
+
 def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=None,
                     unit_members=None, unit_cells=None, prefix=None,
-                    declared=None):
+                    declared=None, timeout=None, cores=None):
     """Invoke a plugin's `compare(ctx)` once per arm pair, in the plugin's own environment.
 
     The host knows the pairs and where each unit wrote; the plugin knows what its upstream can do
@@ -667,12 +841,20 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
 
     Failures are logged and never raised: a comparison figure that will not draw must not take
     the report down with it.
+
+    THIS IS A SECOND EXECUTION PHASE OF THE RUN, and it is now recorded as one. `timeout` and
+    `cores` are the run's own - `--timeout` and the core budget, carried in `report.json` and
+    read back by `write_all` - because this launches the same plugin as the run phase and two
+    limits for one run is two documents of one run disagreeing. Every launch writes its manifest
+    and its record through `_compare_launch`; the phase writes `compare/phase.json` saying how
+    many launches it comprises and why. Nothing here is a plan INSTANCE, and `resume.phase_of`
+    is what keeps a resume from offering to finish one.
     """
     import json as _json
     import subprocess
-    import tempfile
 
     from . import kernels as _K
+    from . import resume as _RS
 
     drawn = []
     entry = _K.SHARED_ENTRY
@@ -691,11 +873,12 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
     # compare phase in the host environment, where the wrapped tool is not installed and `Rscript`
     # is not on PATH - so every comparison failed the moment it tried to call R, and the run
     # sealed with no comparison figures and nothing in the log to say why. `runner.interpreter`
-    # is the same resolution the run phase uses, and `with_env_bin` puts that environment's own
-    # bin first so the tool's binaries resolve.
+    # is the same resolution the run phase uses, and `_phase_env` below builds the same
+    # environment - that environment's own bin first, and the run phase's thread caps.
     from . import kernels as _KK
-    from .runner import interpreter as _interp, with_env_bin as _envbin
+    from .runner import interpreter as _interp
 
+    _k = None
     try:
         _k = _KK.discover().get(name)
         exe, _why = _interp(_k, prefix) if _k is not None else (None, "no such kernel")
@@ -704,14 +887,50 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
     if not exe:
         print(f"  native compare: no interpreter resolved for {name}; skipped")
         return drawn
-    env = _envbin(exe)
+    # THE PROBE IS A LAUNCH TOO, and it was the one with the third hardcoded limit: 300s that no
+    # `--timeout` could lower, in an environment with none of the thread caps. It loads the
+    # plugin, so both of those matter.
+    _probe_limit = _PROBE_TIMEOUT if not timeout else min(_PROBE_TIMEOUT, timeout)
     try:
         q = subprocess.run([str(exe), str(entry), "--phases", str(plugin_file)],
-                           capture_output=True, text=True, timeout=300, env=env)
+                           capture_output=True, text=True, timeout=_probe_limit,
+                           env=_phase_env(exe, cores=cores))
         if "compare" not in (q.stdout or ""):
             return drawn
     except Exception:                                                     # noqa: BLE001
         return drawn
+    # FROM HERE ON THE PLUGIN HAS THE PHASE, so the phase exists and gets a record whatever
+    # happens next - including the case where every pair turns out to be unlaunchable, which is
+    # a fact about the design and was previously indistinguishable from the phase not existing.
+    _launches, _considered, _unlaunchable = [], 0, []
+    _version = str(((_k.spec if _k is not None else None) or {}).get("version") or "")
+    if timeout is None:
+        # THE SAME SENTENCE THE RUN PHASE PRINTS, because it is now the same policy. A 3600s
+        # ceiling that only this phase had, and that `--timeout 60` could not lower, meant a run
+        # declaring a limit did not have one here.
+        print(f"  native compare {name}: NO timeout on this phase; --timeout bounds it, as it "
+              f"bounds the run phase.")
+    if not cores:
+        # AND THE SAME SENTENCE FOR THE OTHER LIMIT, WHICH FAILS SILENTLY AND WORSE. The two
+        # limits are not symmetric in their consequences: a missing timeout only removes a
+        # ceiling, while a missing core share removes THE THREAD CAPS THEMSELVES.
+        # `manifest.env_for_kernel` sets the six variables under `if cores:` - it must, because
+        # "the caller passed nothing" and "the caller asked for zero" have to mean leave the
+        # environment alone - so `cores=None` here sets NONE of them, and absent means
+        # INHERITED. That is not a degraded core share; it is exactly the state this phase was
+        # in before it had one, with a job script's `OMP_NUM_THREADS=$NCPUS` reaching every
+        # launch. It was the only way back to that state, and it was the one that said nothing.
+        #
+        # A LIVE RUN CANNOT REACH HERE: `cli` writes `"cores": budget` into report.json on every
+        # run, and `write_all` reads it back. A `scprofile report` REBUILD can - from a
+        # report.json written before that key existed, or hand-edited - and the rebuild is
+        # precisely the case where nobody is watching a queue and the oversubscription would go
+        # unnoticed until the node did. So this is printed, not raised: the phase's figures are
+        # still worth drawing, and the reader is told what they were drawn under.
+        print(f"  native compare {name}: NO core share on this phase - this report.json records "
+              f"no `cores`, so the six thread caps are UNSET and each launch INHERITS whatever "
+              f"the shell exports (a job script's OMP_NUM_THREADS=$NCPUS reaches it). Rebuild "
+              f"from a report.json that records `cores`, or cap the threads in the environment.")
     udir = {str(u.get("unit")): u.get("dir") for u in (units or []) if u.get("unit")}
 
     # A CONTRAST SIDE IS A SET OF SAMPLES, NOT A UNIT NAME. `arm_pairs` returns factor LEVELS,
@@ -741,24 +960,30 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         return None
 
     for sp in pairs:
+        _considered += 1
         label, _factor, lo, hi = sp[0], sp[1], sp[2], sp[3]
         f_lo = sp[4] if len(sp) > 4 else None
         f_hi = sp[5] if len(sp) > 5 else None
         u_lo, u_hi = _side(f_lo), _side(f_hi)
         if not (u_lo and u_hi):
+            _unlaunchable.append({"pair": str(label), "why": (
+                f"no single unit pools each side ({lo} / {hi}); the tool's differential needs "
+                f"one object per side")})
             print(f"  native compare {label}: no single unit pools each side "
                   f"({lo} / {hi}); the tool's differential needs one object per side")
             continue
         lo, hi = u_lo, u_hi
         d_lo, d_hi = udir.get(lo), udir.get(hi)
         if not (d_lo and d_hi):
+            _unlaunchable.append({"pair": str(label),
+                                  "why": f"no output directory recorded for {lo} or {hi}"})
             continue
         base = Path(out_dir)
         spec_json = {
             "pair": str(label),
             "units": {lo: str((base / d_lo) if not Path(d_lo).is_absolute() else Path(d_lo)),
                       hi: str((base / d_hi) if not Path(d_hi).is_absolute() else Path(d_hi))},
-            "out_dir": str(kdir / "compare" / str(label)),
+            "out_dir": str(kdir / _RS.COMPARE_DIRNAME / str(label)),
             # THE SAME BLOCK THE PER-UNIT SIDE GETS. Wiring the colour map and the stamp into the
             # per-unit script alone left three mutually inconsistent palettes in one run - the
             # per-unit natives, the comparison bars, and the host's own F-series - which is the
@@ -767,26 +992,11 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             # after two panels from one family had been taken as evidence for all of them.
             "figure_context": _fig_ctx(out_dir),
         }
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
-            _json.dump(spec_json, fh)
-            spath = fh.name
-        cdir = kdir / "compare" / str(label)
-        try:
-            # THE COMPARE PHASE GETS ITS OWN WORKING DIRECTORY for the same reason the run
-            # phase does: a wrapped tool that writes to the current directory must not write
-            # into the project.
-            cdir.mkdir(parents=True, exist_ok=True)
-            _r = subprocess.run([str(exe), str(entry), "--compare", str(plugin_file), spath],
-                                capture_output=False, timeout=3600, env=env, cwd=str(cdir))
-            if _r.returncode != 0:
-                # LOUD, AND THE PANELS IT DID DRAW ARE STILL PLACED. An abort part-way leaves
-                # real figures on disk; discarding them would lose work the run paid for, and
-                # silence would let a half-drawn comparison read as a complete one.
-                print(f"  native compare {label} FAILED (exit {_r.returncode}); any panels it "
-                      f"drew before failing are placed, and the rest are missing from this page")
-        except Exception as e:                                            # noqa: BLE001
-            print(f"  native compare {label} failed: {e}")
-            continue
+        cdir = kdir / _RS.COMPARE_DIRNAME / str(label)
+        _launches.append(_compare_launch(
+            exe=exe, entry=entry, plugin_file=plugin_file, cdir=cdir, spec=spec_json,
+            kernel=name, version=_version, kind="arm_pair", label=str(label),
+            cores=cores, timeout=timeout))
         # A FIGURE THE HOST DRAWS AND NEVER PLACES CANNOT BE CITED. These were written into
         # compare/<contrast>/figures/ and left there - absent from the page, from panels.json,
         # from the review ledger and therefore from every writing brief, so a manuscript could
@@ -836,9 +1046,18 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
     _cross.sort(key=lambda g: tuple(
         (0 if str((_rows.get(g) or {}).get(f, "")) == _ctrl.get(f) else 1,
          str((_rows.get(g) or {}).get(f, ""))) for f in _facs))
+    # THE GATE, STATED. A compare over every arm is launched only where the design crosses MORE
+    # THAN TWO arms: with two, the per-pair launch above already puts both objects in front of
+    # the plugin and this would be the same figure a second time. The rule was a bare
+    # `len(_cross) > 2` and appeared in no document of the run, so a two-arm run and a plugin
+    # with no N-way comparison produced the same page and the same silence. It is written into
+    # the phase record either way.
+    _across_gate = (f"launched only where the design crosses more than two arms; this design "
+                    f"crosses {len(_cross)}" + (f" ({', '.join(_cross)})" if _cross else ""))
     if len(_cross) > 2:
+        _considered += 1
         base = Path(out_dir)
-        cdir = kdir / "compare" / _COHORT_COMPARE
+        cdir = kdir / _RS.COMPARE_DIRNAME / _COHORT_COMPARE
         # WHO IS INSIDE EACH ARM, AND WHAT EACH ONE CARRIES. An axis of four arm bars says
         # nothing about whether the animals inside an arm agree, and on a real cohort one animal
         # carried more of its arm's network than the whole of the opposite arm. The host already
@@ -926,25 +1145,45 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             # after two panels from one family had been taken as evidence for all of them.
             "figure_context": _fig_ctx(out_dir),
         }
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
-            _json.dump(spec_json, fh)
-            spath = fh.name
-        try:
-            cdir.mkdir(parents=True, exist_ok=True)
-            print(f"  native compare across {len(_cross)} crossed arm(s): "
-                  + ", ".join(_cross))
-            _r = subprocess.run([str(exe), str(entry), "--compare", str(plugin_file), spath],
-                                capture_output=False, timeout=3600, env=env, cwd=str(cdir))
-            if _r.returncode != 0:
-                print(f"  native compare across arms FAILED (exit {_r.returncode}); any panels "
-                      f"it drew before failing are placed, and the rest are missing")
-        except Exception as e:                                            # noqa: BLE001
-            print(f"  native compare across arms failed: {e}")
-        else:
-            # NO LABEL. A panel drawn over every arm answers its question for EVERY contrast,
-            # so it is not filed under one of them - the same rule the host's own cohort panels
-            # already follow, and the consumers match an unlabelled panel against any contrast.
-            drawn += _native_panels(cdir / "figures", "", declared, out_dir, "", "")
+        print(f"  native compare across {len(_cross)} crossed arm(s): " + ", ".join(_cross))
+        _launches.append(_compare_launch(
+            exe=exe, entry=entry, plugin_file=plugin_file, cdir=cdir, spec=spec_json,
+            kernel=name, version=_version, kind="across_arms", label=_COHORT_COMPARE,
+            cores=cores, timeout=timeout))
+        # NO LABEL. A panel drawn over every arm answers its question for EVERY contrast,
+        # so it is not filed under one of them - the same rule the host's own cohort panels
+        # already follow, and the consumers match an unlabelled panel against any contrast.
+        drawn += _native_panels(cdir / "figures", "", declared, out_dir, "", "")
+    else:
+        _unlaunchable.append({"pair": _COHORT_COMPARE, "why": _across_gate})
+    # ---------------------------------------------------------------------------------------
+    # WHAT THIS PHASE COMPRISES, WRITTEN DOWN. Its cardinality was stated nowhere: the run's plan
+    # says "18 instances in 1 wave" about the run phase, and this phase then launched the plugin
+    # again once per launchable arm pair plus, on a design crossing more than two arms, once more
+    # over all of them. Nothing said how many that was, whether they ran, or why one did not.
+    _phase_dir = kdir / _RS.COMPARE_DIRNAME
+    _phase_dir.mkdir(parents=True, exist_ok=True)
+    (_phase_dir / _RS.PHASE_RECORD).write_text(_json.dumps({
+        # THE FIELD THAT KEEPS THIS DIRECTORY OUT OF THE INSTANCE SURVEY. `resume.phase_of`
+        # reads `phase` here, and falls back to the directory's own name when this file is
+        # absent - which is what every run directory written before today looks like.
+        "phase": _RS.COMPARE_DIRNAME,
+        "kernel": name,
+        "version": _version,
+        # Said in words as well, for a reader who opens the file rather than the code.
+        "is_instance": False,
+        "written": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "cores": cores, "timeout": timeout,
+        "across_arms_gate": _across_gate,
+        "cardinality": {"considered": _considered,
+                        "launched": len(_launches),
+                        "ran": sum(1 for r in _launches if not r.get("reused")),
+                        "reused": sum(1 for r in _launches if r.get("reused")),
+                        "failed": sum(1 for r in _launches if r.get("status") != "ok"),
+                        "not_launched": len(_unlaunchable)},
+        "launches": _launches,
+        "not_launched": _unlaunchable,
+    }, indent=1, default=str), encoding="utf-8")
     return drawn
 
 
@@ -1715,8 +1954,15 @@ def _native_unit_panels(out_dir, name, declared, axis):
 
 def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, prefix=None,
                  spec=None, constraint="", binds=(), by_arm=None, aware=False,
-                 concordance=(), payload_all=None):
-    """One kernel's own page. Ends in its own limits, not a shared block."""
+                 concordance=(), payload_all=None, timeout=None, cores=None):
+    """One kernel's own page. Ends in its own limits, not a shared block.
+
+    THIS FUNCTION EXECUTES CODE, which is not what its name says and is worth stating where a
+    reader will meet it: building a page runs the plugin's `compare` phase (see
+    `_native_compare`). `timeout` and `cores` are the RUN'S - `--timeout` and the core budget -
+    and reach here from `report.json` rather than from a literal, so the phase runs under the
+    limits the run declared instead of under two that nobody chose.
+    """
     p = payload or {}
     # THE PLUGIN'S UPSTREAM-PLOT DECLARATION, bound once. `spec` in this function is the REPORT
     # BLOCK; `native_plots` is a TOP-LEVEL key, and reading it off `spec` gave `{}` to everything
@@ -1805,7 +2051,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                                   out_dir=out_dir, name=name))
         _arms = _arm_content(units, (payload_all or {}).get("design") or {}, spec,
                              native_plots=_decl_native,
-                             prefix=prefix,
+                             prefix=prefix, timeout=timeout, cores=cores,
                              out_dir=out_dir, name=name,
                              unit_axis=(payload_all or {}).get("unit_axis") or {},
                              unit_members=(payload_all or {}).get("unit_members") or {},
@@ -2116,16 +2362,22 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     return f
 
 
-def _schedule_block(payload):
+def _schedule_block(payload, phases=()):
     """What ran, in what order, on how many cores, and how long it took.
 
     Every other tool in this family records its own run cost. Without it the provenance cannot
     answer how long, on what, or in what order - and a schedule that was printed but not recorded
     is a claim nobody can check afterwards.
+
+    AND THE SECOND EXECUTION PHASE, WHICH THIS TABLE DID NOT HAVE A ROW FOR. `payload["schedule"]`
+    is the RUN phase: the waves the planner sized and `run` executed. The reporter then launches
+    the same plugins again for their `compare` phase, and those launches were nowhere - so a page
+    headed "How this ran" answered the question with 18 of the run's 21 launches, and the three
+    it omitted were the ones nobody had budgeted, timed or bounded. `phases` comes from
+    `resume.phases`, which reads the records those launches now write, so this works on a
+    rebuild months later exactly as it does on the run itself.
     """
     waves = payload.get("schedule") or []
-    if not waves:
-        return ""
     secs = payload.get("seconds") or {}
     rows = []
     for i, w in enumerate(waves, 1):
@@ -2145,12 +2397,39 @@ def _schedule_block(payload):
             rows.append(f"<tr><td>{i}</td><td><code>{_e(n)}</code></td>"
                         f"<td>{_e(inst.get('unit') or '—')}</td>"
                         f"<td>{_e(inst.get('cores'))}</td><td>{_e(took)}</td></tr>")
+    # THE COMPARE PHASE, ONE ROW PER LAUNCH. Its wave is named rather than numbered because it
+    # is not one: every launch happens after every wave, while this page is being built, and
+    # they run one at a time - which is also why each gets the whole core budget.
+    n_phase = 0
+    for plugin, phase, rec in (phases or ()):
+        for L in (rec.get("launches") or []):
+            n_phase += 1
+            took = (f"{L['seconds']:.0f}s" if isinstance(L.get("seconds"), (int, float))
+                    else "did not run")
+            if L.get("reused"):
+                took += " (reused)"
+            if L.get("status") != "ok":
+                took += " (failed)"
+            rows.append(f"<tr><td>{_e(phase)}</td><td><code>{_e(plugin)}</code></td>"
+                        f"<td>{_e(L.get('pair') or '—')}</td>"
+                        f"<td>{_e(L.get('cores'))}</td><td>{_e(took)}</td></tr>")
+        for miss in (rec.get("not_launched") or []):
+            rows.append(f"<tr><td>{_e(phase)}</td><td><code>{_e(plugin)}</code></td>"
+                        f"<td>{_e(miss.get('pair') or '—')}</td><td>—</td>"
+                        f"<td>not launched — {_e(miss.get('why') or '')}</td></tr>")
+    if not rows:
+        return ""
     return ("<h2>How this ran</h2><p class='sub'>Instances in one wave are independent and run "
             "concurrently; a wave waits only on what the dependency graph says it waits on. The "
             f"core budget was {_e(payload.get('cores'))}"
             + (f", per-instance timeout {_e(payload.get('timeout'))}s"
                if payload.get("timeout") else ", with NO per-instance timeout")
-            + ".</p><div class='wrap'><table><tr><th>wave</th><th>plugin</th><th>unit</th>"
+            + "."
+            + (f" The <code>compare</code> rows are a SECOND execution phase: {n_phase} further "
+               f"launch{'' if n_phase == 1 else 'es'} of the same plugins, made while this page "
+               f"was being built, one at a time and after every wave. Each has its own manifest "
+               f"and record beside its figures." if n_phase else "")
+            + "</p><div class='wrap'><table><tr><th>wave</th><th>plugin</th><th>unit</th>"
               "<th>cores</th><th>time</th></tr>" + "".join(rows) + "</table></div>")
 
 
@@ -2324,13 +2603,27 @@ def write_index(out_dir, payload):
         print(f"      figure panel not written: {_panel_err}")
 
     f = dd / "index.html"
-    body.append(_schedule_block(payload))
+    # READ FROM THE RECORDS ON DISK, not from the payload: `report.json` is written BEFORE the
+    # compare phase runs, so the payload cannot know what that phase did. The same reason the
+    # README describes the directory by inspecting it.
+    from . import resume as _RS
+
+    body.append(_schedule_block(payload, phases=_RS.phases(out_dir)))
     f.write_text(_page("scProfile", "".join(body)), encoding="utf-8")
     return f
 
 
 def write_all(out_dir, payload, *, prefix=None):
-    """Every kernel page plus the index. Returns the index path."""
+    """Every kernel page plus the index. Returns the index path.
+
+    AND IT RUNS THE PLUGINS' COMPARE PHASE, which is why the two limits below are read here. The
+    parameter chain that would have carried `--timeout` from the command line to that phase did
+    not exist, so the phase used a 3600s literal that no flag could lower and a core share it
+    never set at all. It is not taken from the command line even now: `report.json` already
+    carries the run's `timeout` and its core budget, and a rebuild months later must run the
+    phase under the limits of the RUN, not of whoever is rebuilding - the same reason
+    `report_spec` and `constraint_on_use` are read from the payload two lines down.
+    """
     cs = payload.get("cannot_show") or {}
     sm = payload.get("summaries") or {}
     mg = payload.get("merged") or {}
@@ -2343,9 +2636,15 @@ def write_all(out_dir, payload, *, prefix=None):
     # reporter re-deriving that months later would be re-deciding it against a different design.
     con = payload.get("constraint_on_use") or ""
     cb = payload.get("constraint_binds") or {}
+    # THE RUN'S PER-INSTANCE TIMEOUT AND CORE BUDGET, as `run` recorded them. A `None` timeout
+    # is the run phase's own "no limit" and is carried through as one rather than replaced by a
+    # number nobody asked for; the compare phase says so out loud when it starts.
+    _timeout = payload.get("timeout")
+    _cores = payload.get("cores")
     for name, p in (payload.get("kernels") or {}).items():
         write_kernel(out_dir, name, p, cs.get(name, []), sm.get(name, ""), prefix=prefix,
                      merged=mg.get(name), spec=rs.get(name),
+                     timeout=_timeout, cores=_cores,
                      constraint=con, binds=cb.get(name) or [],
                      by_arm=(payload.get("by_arm") or {}).get(name),
                      aware=bool((payload.get("design_aware") or {}).get(name)),
