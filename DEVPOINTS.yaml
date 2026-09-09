@@ -78,6 +78,12 @@ points:
     convert:
       placeholder: "TODO"
       upstream: wraps.tool
+      # WHAT TO PUT IN FRONT OF SOMEBODY RULING ON AN UPSTREAM PLOT. Both halves of the decision
+      # come from this declaration and the worksheet was showing only the tool's: on liana,
+      # eight of twelve rulings turned on one line of `cannot_show` saying the method has no
+      # spatial information, and `superseded_by_design` cannot be written at all without the
+      # id of the panel that supersedes.
+      ruling_context: [report.figures, cannot_show]
       # TWO PHASES, AND THE SPLIT IS NOT COSMETIC. A `build` stage reads SOURCE - this plugin's own
       # code, or the wrapped tool's signatures and namespace - and touches no data, so it cannot be
       # shaped around one cohort. A `test` stage needs something to run on, and that is where a
