@@ -206,6 +206,25 @@ def env_state(kernel, prefix=None):
     for p, g in tried:
         st = state_at(p, kernel, g, prefix)
         if st[0] != "missing":
+            # BUILT IS NOT PROVED, AND THIS PLUGIN IS THE ONE BEING ASKED ABOUT. The directory
+            # can be complete, current and shared by seven plugins and still be an environment
+            # nothing has ever run THIS one in - which is the case `install` used to prevent by
+            # refusing to finish until every member passed, and now prevents here instead. The
+            # word is `missing` rather than a sixth state because the vocabulary is read by
+            # `doctor`, by `plan` and by `planner.build_state`, and a state they have not been
+            # taught is a KeyError in one of them and silence in another; what is missing is the
+            # proof that this environment is this plugin's, and the repair `missing` names is the
+            # cheap one - an install that re-proves a member, not a --force that rebuilds a
+            # shared environment for everybody.
+            if st[0] == "installed":
+                ps, pwhy, pfix = proof_state(kernel, prefix)
+                if ps in UNPROVED:
+                    # AND WHAT THE SELFTEST SAID, HERE ONLY. `doctor` and `plan` print this
+                    # sentence and nothing classifies it; `run` raises its own, which
+                    # `feedback.diagnose` reads - see the note in `proof_state` for why a
+                    # recorded `ImportError` must not travel into that path.
+                    said = read_proof(proof_home(kernel, prefix) or p, kernel.name).get("why", "")
+                    return ("missing", pwhy + (f"  It said: {said}" if said else ""), pfix)
             shared = [m for m in (g.members if g is not None else []) if m != kernel.name]
             if st[0] == "installed" and shared:
                 return ("installed", f"{p}, shared with {', '.join(shared)}", "")
@@ -235,6 +254,229 @@ def state_at(p, kernel, group, prefix):
         return ("stale", f"built from {word} {got or 'unknown'}, current {word} is {want}",
                 f"scprofile install {kernel.name} --prefix {prefix} --force")
     return ("installed", str(p), "")
+
+
+# ------------------------------------------------------------------ the proof, one per member
+#
+# WHY A PER-MEMBER RECORD AND NOT A GROUP CLAIM
+#
+# The safety property has not changed and is not negotiable: an environment shared by four
+# plugins and proved by one is an environment three of them meet for the first time inside a run.
+# What changed is WHERE it is enforced, and the reason is a measurement.
+#
+# Reproduced on the cluster: `install liana` into scprofile-env-0242f5f3d1 ran all seven members'
+# selftests. liana PASSED. The job still failed, because abundance hit a pertpy/statsmodels
+# ImportError that is not liana's to fix and de and decoupler were SIGKILLed by the node. Three
+# plugins nobody had asked about sank the one that was asked for, and the environment liana can
+# demonstrably run in was reported as not built. A group claim can only ever be all-or-nothing,
+# so the one member with a real answer is worth exactly as much as the worst member's.
+#
+# So the verdict is recorded PER MEMBER, beside the environment it is about, and the refusal
+# moves to the point of use: `run` and `plan` refuse the plugin whose own record is absent,
+# stale or failed, by name, with the command that would prove it. Nobody meets an unproved
+# environment inside a run, and nobody is sunk by somebody else's plugin.
+#
+# `.scprofile_selftest_<name>.log` already says what a selftest PRINTED. This says what it
+# CONCLUDED and what it concluded it about, which is the half a log cannot carry.
+PROOF_NAME = ".scprofile_proof_{kernel}"
+
+#: The recorded states that must stop a plugin being run or planned. `unrecorded` - an
+#: environment carrying no record for ANYONE - is deliberately not among them, and it is the one
+#: judgement call here. Absence of the whole record is absence of evidence: every environment
+#: built before this file existed carries none, and refusing them all would invalidate every
+#: installation on disk for a reason its owner did not cause - the same rule `resolved_prefix`
+#: and `env_state` already follow one function up. Absence of ONE record among several IS
+#: evidence of absence: this host writes a record for every member it proves, so a member with
+#: none in an environment that has them is a member that install did not prove. The first
+#: install after this change records every member, which closes the gap where it matters.
+UNPROVED = ("failed", "stale", "absent")
+
+
+def env_home(exe):
+    """The environment an interpreter BELONGS TO: the directory its `bin/` sits in.
+
+    THE PREFIX THE INTERPRETER WAS FOUND AT, NOT THE ONE IT POINTS AT. This was
+    `Path(exe).resolve().parent.parent` in both callers below, and on a CONDA-built environment
+    those are the same directory: `bin/python` is a symlink to `bin/python3.11` lying beside it,
+    so resolving the executable stays inside the prefix and the old expression was right by
+    accident. On a VENV-built environment they are not the same directory at all. `python -m
+    venv` makes `bin/python` a symlink to the interpreter it was built FROM, so resolving walks
+    straight out of the environment into the base python's prefix. Measured on this host, on the
+    venv route `install` takes whenever no conda-family manager is on PATH (see `machine`):
+
+        <prefix>/scprofile-env-0242f5f3d1/bin/python
+            -> /Library/Developer/.../Python3.framework/Versions/3.9/bin/python3.9
+        .resolve().parent.parent = /Library/Developer/.../Versions/3.9   <- NOT the environment
+
+    That INVERTED the property this whole section exists to defend, and it did so in two
+    different ways depending on one thing the host does not control - whether the base python's
+    prefix happens to be writable:
+
+      - WRITABLE base (a pyenv, a homebrew python, a `module load`ed one on the cluster - all of
+        them user-owned): the record is written outside the environment, so it survives
+        `rm -rf <env>` and every rebuild after it. The environment the proof is a claim about is
+        gone, the record is still there, its fingerprint still matches because the group name is
+        content-addressed, and `proof_state` reads it as `proved`. That is precisely the
+        stale-proof-accepted-as-fresh failure the fingerprint was added to prevent, arriving
+        through the one path the fingerprint cannot see. Worse, that one directory is shared by
+        EVERY venv on the machine built from that base python, so a proof earned under one
+        --prefix answers for a different --prefix where nothing has ever run.
+      - READ-ONLY base (a system python, which is the common case and the one measured above):
+        `record_proof` cannot write at all. It never raises - deliberately - so every install
+        succeeds, every member stays `unrecorded`, `unrecorded` is deliberately NOT in `UNPROVED`,
+        and `run` and `plan` stop refusing anybody. The safety property is simply off.
+
+    Taking the parent of the `bin/` the interpreter was FOUND in gives the same answer as before
+    on the conda route and the right one on the venv route, so the proof lives with the
+    environment it is a claim about on every build path this host supports. The DIRECTORY is
+    resolved and the executable is not: a prefix reached through a symlinked path (`/tmp` ->
+    `/private/tmp` on macOS, a symlinked scratch on the cluster) still writes and reads one record
+    in one place, which is the only thing `.resolve()` was ever needed for here.
+    """
+    p = Path(exe)
+    try:
+        return p.parent.parent.resolve()
+    except OSError:                        # a resolve can still fail on a broken mount
+        return p.parent.parent
+
+
+def proof_home(kernel, prefix=None):
+    """The directory this member's proof record lives in, or None if there is nowhere for one.
+
+    DERIVED FROM THE INTERPRETER, exactly as the selftest log is - and through the SAME function,
+    so a record cannot be written beside one environment and read beside another. That is the bug
+    `env_state` and `interpreter` already had once, in this file, about this question, and it came
+    back here as two copies of one expression that were only ever correct on one build route.
+
+    A site override is a real environment and gets a record where it lives. A plugin running in
+    the HOST interpreter has no environment of its own, and writing a stamp into whatever prefix
+    `sys.executable` happens to sit in is not this tool's to do.
+    """
+    if not kernel.needs_env:
+        return None
+    exe, _why = interpreter(kernel, prefix)
+    if not exe:
+        return None
+    return env_home(exe)
+
+
+def read_proof(home, name):
+    """One member's recorded verdict as a dict, or {} when there is no record."""
+    f = Path(home) / PROOF_NAME.format(kernel=name)
+    try:
+        text = f.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+    out = {}
+    for line in text.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+def any_proof(home):
+    """Whether this environment carries a record for ANYONE. See `UNPROVED`."""
+    try:
+        return any(Path(home).glob(PROOF_NAME.format(kernel="*")))
+    except OSError:
+        return False
+
+
+def record_proof(kernel, prefix=None, *, verdict, why="", log=None):
+    """Write what this member's selftest concluded, and what it concluded it about.
+
+    NEVER RAISES. A record that could not be written is not an install that failed - a site
+    override can live in a read-only tree, and a disk can be full - so this reports and returns
+    None rather than turning the absence of a receipt into the absence of the thing.
+
+    The fingerprint is the environment's own, the same value `.scprofile_lock` carries: a
+    content-addressed group name, or the lock digest for a plugin building alone. NOT the
+    plugin's source, deliberately - a proof is a claim about an ENVIRONMENT, and re-proving every
+    member on every prose edit to a plugin would make the record noise, which is the failure
+    `jobs/inventory_all.pbs` Q1 is written to catch one layer up.
+    """
+    home = proof_home(kernel, prefix)
+    if home is None:
+        return None
+    grp, _gp = env_for(kernel, prefix) if prefix else (None, None)
+    f = Path(home) / PROOF_NAME.format(kernel=kernel.name)
+    body = [f"verdict={verdict}",
+            f"fingerprint={env_fingerprint(kernel, grp)}",
+            f"when={time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}"]
+    if why:
+        # ONE LINE, and the log holds the rest. A record nobody can read at a glance is a record
+        # that gets skipped, and the whole file already sits beside the full log.
+        body.append("why=" + " ".join(str(why).split())[:300])
+    try:
+        f.write_text("\n".join(body) + "\n", encoding="utf-8")
+    except OSError as e:                                                  # noqa: BLE001
+        if log:
+            log(f"  note: could not record {kernel.name}'s verdict at {f}: {e}")
+        return None
+    return f
+
+
+def proof_state(kernel, prefix=None):
+    """Has this environment been proved FOR THIS PLUGIN? A state, a sentence and a fix.
+
+        proved      a record, matching this environment's fingerprint, saying its selftest passed
+        none        the plugin ships no selftest, so this is as proved as it can be
+        failed      a record saying its selftest did not pass here. Refused.
+        stale       a record made against a different environment than the one now here. Refused.
+        absent      no record for this member, in an environment that carries records for others.
+                    Refused - see `UNPROVED` for why this is not the same as `unrecorded`.
+        unrecorded  this environment carries no record for anyone: it predates them, or was built
+                    by hand. Not refused, and said out loud rather than assumed away.
+        na          there is nothing to ask - no prefix, no interpreter, or a plugin that runs in
+                    the host interpreter and has no environment to prove.
+    """
+    home = proof_home(kernel, prefix)
+    if home is None:
+        return ("na", f"{kernel.name}: no environment of its own to prove", "")
+    fix = (f"scprofile install {kernel.name} --prefix {prefix}"
+           if prefix else f"scprofile selftest {kernel.name}")
+    rec = read_proof(home, kernel.name)
+    if not rec:
+        if not any_proof(home):
+            return ("unrecorded", f"{home} carries no proof record for any of its members; it "
+                                  f"was built before they existed or by hand", fix)
+        others = sorted(p.name.split(PROOF_NAME.format(kernel=""), 1)[-1]
+                        for p in Path(home).glob(PROOF_NAME.format(kernel="*")))
+        return ("absent",
+                f"{home} is built and has never been proved for {kernel.name}. It records "
+                f"{len(others)} other member(s) ({', '.join(others[:6])}), so this one was not "
+                f"skipped by an older host - nothing has run {kernel.name} there at all",
+                fix)
+    grp, _gp = env_for(kernel, prefix) if prefix else (None, None)
+    want = env_fingerprint(kernel, grp)
+    got = rec.get("fingerprint", "")
+    if want and got != want:
+        return ("stale",
+                f"{home} was proved for {kernel.name} against {got or 'something unrecorded'}, "
+                f"and the environment it would run in now is {want}. A proof of one environment "
+                f"is not a proof of another",
+                fix)
+    verdict = rec.get("verdict", "")
+    if verdict == "ok":
+        when = rec.get("when") or "an unrecorded date"
+        return ("proved", f"{home}, proved for {kernel.name} on {when}", "")
+    if verdict == "none":
+        return ("none", f"{kernel.name} ships no selftest, so nothing can prove {home} for it",
+                "")
+    # WHAT IT SAID IS NOT IN THIS SENTENCE, and that is deliberate. `run` raises this text and
+    # `feedback.diagnose` classifies whatever `run` raises: a recorded `ImportError: cannot
+    # import name ...` quoted here matches the ENVIRONMENT signature, which is marked REPAIRABLE,
+    # and the run loop's repair edge is a `--force` rebuild - hours of solving for a seven-member
+    # environment, triggered by a refusal whose whole point is that a selftest costs a minute.
+    # The record and the log are named instead, and `env_state` - which nothing diagnoses -
+    # appends the reason for `doctor` and `plan`.
+    return ("failed",
+            f"{home} is built, and {kernel.name}'s own selftest FAILED there"
+            + (f" on {rec['when']}" if rec.get("when") else "")
+            + f".  Recorded in {PROOF_NAME.format(kernel=kernel.name)}; what it printed is in "
+              f".scprofile_selftest_{kernel.name}.log, both beside the environment",
+            fix)
 
 
 #: Sections `lock.yml` may carry at indent 0. Anything else RAISES rather than being skipped: a
@@ -619,10 +861,15 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
 
     THE UNIT OF INSTALLATION IS THE RESOLVED ENVIRONMENT, NOT THE PLUGIN. The resolver decides how
     few environments satisfy every plugin's requirement; an environment shared by four of them is
-    built once, from the merged requirement, and PROVED FOR ALL FOUR - because an environment that
-    only one of its members has ever run is an environment the other three will discover inside
-    somebody's run. That is also why installing one member costs what it costs: a shared
-    environment is not divisible.
+    BUILT once, from the merged requirement - a shared environment is not divisible, and building
+    one member's slice into it would leave a directory whose name claims four requirements and
+    satisfies one.
+
+    THE UNIT OF PROOF IS THE PLUGIN. An environment that only one of its members has ever run is
+    still an environment the other three will discover inside somebody's run - but that is a fact
+    about each of those three, and enforcing it as a group claim made abundance's unfixable
+    ImportError into liana's failed install (see PROOF_NAME). So the build is shared, the proof is
+    per member and recorded, and the refusal happens where the plugin is actually used.
 
     Two kinds of plugin have nothing to install and are refused HERE rather than allowed to fall
     through to a message about a missing file. "no lock.yml" is true of both and explains neither,
@@ -671,7 +918,20 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
         for field in ("channels", "conda", "pip", "r"):
             for item in spec[field]:
                 log(f"      {field:<9} {item}")
-        log(f"      selftests that would run: {', '.join(members)}")
+        # THE ONES THAT WOULD ACTUALLY RUN, not every member. An install proves the plugin it was
+        # asked about plus anyone with no standing record; a member already recorded - passed or
+        # failed - is not re-proved by somebody else's install, and a dry run that said otherwise
+        # would be describing the version of this function that this one replaced.
+        from .kernels import discover as _discover
+        _known = dict(_discover())
+        _known[kernel.name] = kernel
+        would = [n for n in members
+                 if n == kernel.name or n not in _known
+                 or proof_state(_known[n], prefix)[0] not in ("proved", "none", "failed")]
+        log(f"      selftests that would run: {', '.join(would)}"
+            + (f"   (already recorded, not re-proved: "
+               f"{', '.join(n for n in members if n not in would)})"
+               if len(would) < len(members) else ""))
         return p
     if p.exists() and not force:
         # AN ENVIRONMENT THAT EXISTS IS NOT AN ENVIRONMENT THAT WAS FINISHED. `.scprofile_lock` is
@@ -791,34 +1051,73 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
         else:
             (p / ".scprofile_lock").write_text(env_fingerprint(kernel, grp), encoding="utf-8")
 
-    # PROVE IT FOR EVERY MEMBER. An environment shared by four plugins and proved by one is an
-    # environment three of them meet for the first time inside a run - and the whole reason
-    # `install` ends in a selftest is that an environment nothing proved fails there instead.
+    # PROVE THE MEMBER THAT WAS ASKED FOR, AND ANY MEMBER NOTHING HAS PROVED YET.
     #
-    # A member whose selftest fails does not make this a partial success: the directory's name is
-    # a claim to satisfy every member's requirement, so it is not built until it does.
+    # The property being defended has not changed: an environment shared by four plugins and
+    # proved by one is an environment three of them meet for the first time inside a run. What
+    # changed is that this enforced it as a GROUP CLAIM - every member proved or nobody
+    # installed - and a group claim is worth what its worst member is worth.
+    #
+    # Measured on the cluster: `install liana` here ran seven selftests, liana PASSED, and this
+    # function raised because abundance could not import statsmodels through pertpy and de and
+    # decoupler were SIGKILLed by the node. The environment liana had just demonstrably run in
+    # was reported as not built, to a job that had asked about liana and nothing else.
+    #
+    # So each member's verdict is RECORDED (see PROOF_NAME) and the refusal moved to `run` and
+    # `plan`, which know which plugin is actually being asked for. A member that fails here fails
+    # in its own record; it does not sink the member that was asked for, and it cannot be run or
+    # planned until something proves it.
     from .kernels import discover
     known = {kernel.name: kernel}
     for n, k in discover().items():
         known.setdefault(n, k)
-    proved, unproved, failed = [], [], []
+    # WHAT IS PROVED NOW. The one asked for, always - re-proving it is the whole reason somebody
+    # ran this command, and drift is real. Plus every member that has no standing record: an
+    # environment nothing has recorded is one where absence means nothing was asked, so the first
+    # install after this change still proves the whole group and costs exactly what it did
+    # before. A member whose record already says it FAILED is not re-proved for somebody else's
+    # install - that is the seven-selftest bill this change exists to stop - and `install <that
+    # member>` is what asks the question again.
+    to_prove = {kernel.name}
+    for m in members:
+        if m == kernel.name or known.get(m) is None:
+            continue
+        if proof_state(known[m], prefix)[0] not in ("proved", "none", "failed"):
+            to_prove.add(m)
+    proved, unproved, failed, standing = [], [], [], []
     for m in members:
         mk = known.get(m)
         if mk is None:
             unproved.append(f"{m} (not discoverable from here)")
+            log(f"  recorded: {m} not discoverable from here, so nothing can prove it")
+            continue
+        if m not in to_prove:
+            # ONE VOCABULARY FOR A VERDICT, whether it was reached a second ago or last week. A
+            # reader scanning `recorded:` lines - and `jobs/inventory_all.pbs` puts them in its
+            # seal - must not have to know which install produced which word.
+            st, _why, _fx = proof_state(mk, prefix)
+            standing.append(m)
+            log(f"  recorded: {m} "
+                + {"proved": "ok", "none": "ships no selftest",
+                   "failed": "FAILED"}.get(st, st)
+                + f" already - not re-proved by an install asked about {kernel.name}")
             continue
         try:
             if selftest(mk, prefix=prefix, log=log):
                 proved.append(m)
+                log(f"  recorded: {m} ok")
             else:
                 unproved.append(f"{m} (ships none)")
+                log(f"  recorded: {m} ships no selftest")
         except RuntimeError as e:                                         # noqa: PERF203
             failed.append(m)
             log(f"  {m}: SELFTEST FAILED\n{e}")
+            log(f"  recorded: {m} FAILED - refused at run and plan time by name, not here")
     if len(members) > 1:
         log(f"  proved for {len(proved)} of {len(members)} member(s): "
             + (", ".join(proved) or "none")
-            + (f";  unproven: {', '.join(unproved)}" if unproved else ""))
+            + (f";  unproven: {', '.join(unproved)}" if unproved else "")
+            + (f";  already recorded: {', '.join(standing)}" if standing else ""))
 
     # THE ONE QUESTION A SELFTEST CANNOT ASK. A selftest proves the plugin's own imports resolve
     # in this environment. It says nothing about whether the HOST can hand it an object - and that
@@ -854,11 +1153,24 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
             f"anyway"
             + (f", and {', '.join(failed)} could not" if failed else "")
             + ".\n  Fix what the build step named above, then install again with --force.")
-    if failed:
+    # THE MEMBER THAT WAS ASKED FOR IS THE ONE THAT CAN FAIL THIS COMMAND. Anyone else's failure
+    # is recorded and reported, and is refused where it belongs: at that plugin's own run or
+    # plan. This used to raise for any member, so `install liana` failed on abundance's
+    # unfixable pertpy/statsmodels ImportError and on two members the node had SIGKILLed.
+    if kernel.name in failed:
         raise RuntimeError(
-            f"{p} was built, and {', '.join(failed)} could not run in it. A shared environment "
-            f"is not built until every plugin that resolves to it can run there - the directory's "
-            f"name is a claim about all {len(members)}, not about the one that was asked for.")
+            f"{p} was built, and {kernel.name} - the plugin this install was asked about - could "
+            f"not run in it. Its selftest failure is above and recorded at "
+            f"{PROOF_NAME.format(kernel=kernel.name)} beside the environment, so nothing will "
+            f"plan or run it until something proves it.")
+    others = [m for m in failed if m != kernel.name]
+    if others:
+        log(f"  {len(others)} other member(s) of this environment recorded a FAILED selftest: "
+            f"{', '.join(others)}.")
+        log(f"      They do not make {kernel.name}'s environment unbuilt - it was proved for "
+            f"{kernel.name} above - and none of them will run or plan until it is proved:")
+        for m in others:
+            log(f"      scprofile install {m} --prefix {prefix}")
     return p
 
 
@@ -881,12 +1193,21 @@ def selftest(kernel, *, prefix=None, log=print, timeout=None):
     exactly how a forbidden keyword reached a real cohort.
 
     Returns True if it ran, False if the plugin ships no selftest.
+
+    IT RECORDS ITS VERDICT, and this is the only function that does. Whatever route asked for the
+    proof - `install`, `scprofile selftest`, a repair inside a run - the environment ends up
+    carrying one statement of what happened, so `run` and `plan` cannot disagree with each other
+    or with the log sitting beside it. See PROOF_NAME above for why the record is per member.
     """
     # THE KERNEL ANSWERS. This looked for `kernel.path / "selftest.py"`, which for a ONE-FILE
     # plugin is a path inside a file and can never exist - so every one-file plugin was reported
     # as shipping no selftest, and the one check that would have caught the launch bug above was
     # skipped for exactly the shape that had it.
     if not kernel.has_selftest:
+        # RECORDED AS A VERDICT OF ITS OWN. "ships no selftest" is not "was not proved": there is
+        # nothing that could prove it, and refusing to run it would ban a whole legal shape. The
+        # record says so rather than leaving a hole a reader has to interpret.
+        record_proof(kernel, prefix, verdict="none", log=log)
         return False
     exe, why = interpreter(kernel, prefix)
     if not exe:
@@ -899,7 +1220,12 @@ def selftest(kernel, *, prefix=None, log=print, timeout=None):
     # plugin that takes an hour and prints nothing looked like a plugin that had stopped. Here it
     # was not hypothetical: decoupler's selftest blocked on a published prior it fetches, with no
     # output and no timeout, and there was nothing to look at while it did.
-    logf = Path(exe).resolve().parent.parent / f".scprofile_selftest_{kernel.name}.log"
+    # BESIDE THE ENVIRONMENT, through the same derivation the record uses. `proof_state` tells a
+    # reader both files are "beside the environment"; with `.resolve().parent.parent` here that
+    # sentence was false on a venv-built one, and the log went to the base python's prefix - where
+    # a system python makes this `open` raise PermissionError and take down a selftest that had
+    # nothing wrong with it. See `env_home`.
+    logf = env_home(exe) / f".scprofile_selftest_{kernel.name}.log"
     log(f"  selftest: {Path(cmd[-1]).name}  ({why})")
     log(f"      live: {logf}")
     try:
@@ -908,6 +1234,8 @@ def selftest(kernel, *, prefix=None, log=print, timeout=None):
                                env=with_env_bin(exe))
     except subprocess.TimeoutExpired:
         tail = "".join(logf.read_text(encoding="utf-8", errors="replace").splitlines(True)[-15:])
+        record_proof(kernel, prefix, verdict="failed",
+                     why=f"its selftest did not finish within {limit}s", log=log)
         raise RuntimeError(
             f"{kernel.name}'s selftest did not finish within {limit}s, so nothing has proved this "
             f"environment. A selftest proves a CALL is well-formed and is seconds to minutes by "
@@ -935,9 +1263,18 @@ def selftest(kernel, *, prefix=None, log=print, timeout=None):
                   if ln.strip() and "Warning" not in ln and not ln.startswith("  ")]:
             note = (f"\n  Exit {r.returncode}, and the log holds nothing but warnings - the "
                     f"process stopped without saying why.")
+        # THE VERDICT IS RECORDED BEFORE IT IS RAISED. The caller may well swallow this - a
+        # shared environment's other members are none of this member's business - and the whole
+        # point of the record is that a failure nobody re-reads still refuses at the point of use.
+        record_proof(kernel, prefix, verdict="failed",
+                     why=(f"exit {r.returncode}"
+                          + (f", killed by signal {-r.returncode}" if r.returncode < 0 else "")
+                          + (": " + " ".join(out.split())[-160:] if out.strip() else "")),
+                     log=log)
         raise RuntimeError(
             f"{kernel.name}'s selftest FAILED (exit {r.returncode}), so the environment is not "
             f"usable:{note}\n" + out)
+    record_proof(kernel, prefix, verdict="ok", log=log)
     # Print it on SUCCESS too. "selftest ok" tells you a check passed and not which versions it
     # passed against, and the versions are the thing anyone debugging this later needs - a lock is
     # a claim about an environment, and this is the receipt.
@@ -957,6 +1294,26 @@ def run(kernel, *, inp, out_dir, prefix=None, log=print, timeout=None):
     exe, src = interpreter(kernel, prefix)
     if not exe:
         raise RuntimeError(f"{kernel.name}: {src}")
+    # THE POINT OF USE IS WHERE THE PROOF IS DEMANDED. `install` used to enforce it for the whole
+    # group at once - every member proved or nobody installed - and that made three plugins
+    # nobody asked about able to sink the one that was asked for (see PROOF_NAME). The property it
+    # was protecting is real and survives here, one plugin at a time: a plugin whose own record is
+    # absent, stale or failed does not start, because a run is exactly where an unproved
+    # environment must not be met for the first time. Ten minutes of queue is cheaper than an
+    # hour of compute reporting NOT RUN.
+    pstate, pwhy, pfix = proof_state(kernel, prefix)
+    if pstate in UNPROVED:
+        raise RuntimeError(
+            f"{kernel.name} will not be run: {pwhy}\n"
+            f"  An environment is proved for one plugin at a time, and nothing has proved this "
+            f"one for {kernel.name}. That proof is what stops a run from being the first thing "
+            f"to find out.\n"
+            f"  Fix: {pfix}")
+    if pstate == "unrecorded":
+        # SAID, NOT ASSUMED AWAY. This environment predates the per-member record or was built by
+        # hand, so there is nothing here that can be called a proof either way - and a silence
+        # that reads as a pass is the shape of failure this whole file is about.
+        log(f"  note: {pwhy}. `{pfix}` writes one, and costs a selftest rather than a build.")
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     # THE KERNEL SAYS HOW IT IS LAUNCHED. The runner used to build `[exe, path/entry, inp]`
