@@ -915,8 +915,29 @@ def selftest(kernel, *, prefix=None, log=print, timeout=None):
             f"is the usual reason.\n  Last lines of {logf.name}:\n{tail}") from None
     out = logf.read_text(encoding="utf-8", errors="replace")
     if r.returncode != 0:
+        # THE STATUS, AND WHETHER THE LOG SAYS ANYTHING. This printed the log and nothing else,
+        # and the case it kept meeting was a process KILLED BY A SIGNAL: the log then holds three
+        # FutureWarnings from an import and no error at all, so "SELFTEST FAILED" arrived with no
+        # diagnosis and read as a broken plugin. Measured across three submissions of the same
+        # environment on two nodes, the same members passed, then failed, then passed - which is
+        # a machine, not a package, and nothing in the message could distinguish them.
+        #
+        # A NEGATIVE RETURN CODE IS A SIGNAL, and -9 is a kill. Named, because a reader who sees
+        # it should look at the node and its limits rather than at the plugin.
+        note = ""
+        if r.returncode < 0:
+            note = (f"\n  Killed by signal {-r.returncode}"
+                    + (" (SIGKILL - on a batch node that is usually the memory cgroup, and the "
+                       "job's own limit is the first thing to check)" if r.returncode == -9 else "")
+                    + ". The plugin never got to report anything, so nothing below is its "
+                      "diagnosis.")
+        elif not [ln for ln in out.splitlines()
+                  if ln.strip() and "Warning" not in ln and not ln.startswith("  ")]:
+            note = (f"\n  Exit {r.returncode}, and the log holds nothing but warnings - the "
+                    f"process stopped without saying why.")
         raise RuntimeError(
-            f"{kernel.name}'s selftest FAILED, so the environment is not usable:\n" + out)
+            f"{kernel.name}'s selftest FAILED (exit {r.returncode}), so the environment is not "
+            f"usable:{note}\n" + out)
     # Print it on SUCCESS too. "selftest ok" tells you a check passed and not which versions it
     # passed against, and the versions are the thing anyone debugging this later needs - a lock is
     # a claim about an environment, and this is the receipt.
