@@ -206,8 +206,21 @@ try:
     ck("a supported organism still runs, case-insensitively", True)
 except refs.UnsupportedOrganism:
     ck("a supported organism still runs, case-insensitively", False)
-refs.require_supported(ks["cellcycle"], "zebrafish")
+# THE EXAMPLE MOVED, AND THAT IS THE POINT OF THE GATE. This asked cellcycle, which needed no
+# references because its 97 Tirosh symbols sat in the file undeclared - so the plugin that most
+# needed the organism check was the one used to prove the check does not fire. It declares them
+# now, for human and mouse, and refuses anything else. `velocity` genuinely consults nothing.
+refs.require_supported(ks["velocity"], "zebrafish")
 ck("a plugin that needs no references is not refused", True)
+for _org in ("human", "mouse"):
+    refs.require_supported(ks["cellcycle"], _org)
+ck("and a panel declared for two species runs on both", True)
+try:
+    refs.require_supported(ks["cellcycle"], "zebrafish")
+    ck("a species the panel was never curated for is refused", False,
+       "it ran, and a low score from a panel that did not match reads as `not cycling`")
+except refs.UnsupportedOrganism as _e:
+    ck("a species the panel was never curated for is refused", "human, mouse" in str(_e))
 ck("the host asks reference_organisms, not references(organism)",
    "k.reference_organisms()" in src and "if k.references(organism[0]) else {}" not in src)
 

@@ -136,6 +136,60 @@ PLUGIN = {
     # THE SAME STACK four other plugins already declare, so this joins their resolved environment
     # rather than adding one. Constraints, not pins: scanpy tolerates any patch of 1.10 for this
     # call, and claiming otherwise would force an environment nobody can share.
+    # THE 97 SYMBOLS THAT DECIDE EVERY PHASE CALL, named at last. They sat in this file as two
+    # string literals and were declared nowhere, so the report could not say what the calls were
+    # made from - `velocity` records this plugin as the counterexample in its own declaration.
+    #
+    # THE ORTHOLOGY CAVEAT IS THE POINT OF DECLARING THEM. The panel is HUMAN symbols and `_match`
+    # bridges a mouse object by CASING - `Mcm5` for `MCM5` - which is a spelling convention, not
+    # an orthology table. Where it fails the plugin scores on whatever did match and returns a low
+    # score rather than refusing, and a low score reads as "not cycling". That is a property of
+    # the reference, not of the code, which is why it belongs here where a plan can warn about it.
+    "references": {
+        # FOUR ENTRIES FOR TWO LISTS, because `organism` is one value per entry and this
+        # plugin serves two species from one panel. cellchat and liana declare a human and a
+        # mouse database because they HAVE two; here the mouse entries are the SAME 97 human
+        # symbols read through `_match`'s casing, and saying so is the point - a reader
+        # comparing this declaration with theirs must not conclude a mouse panel was curated.
+        #
+        # DECLARING THE ORGANISMS IS WHAT MAKES THE GATE WORK. With none declared the host
+        # cannot tell "needs no reference data" from "has none for your species", and the
+        # second one runs: on a zebrafish object `_match` still matches whatever symbols
+        # happen to share a spelling, the score comes out low, and a low score reads as
+        # `not cycling`. That is the failure this plugin's own source warns about, and it is
+        # now a refusal that names the two species it does serve.
+        "tirosh_s_phase_human": {
+            "tier": "bundled", "organism": "human", "role": "gene set",
+            # THE PACKAGE IS THIS ONE, and that is the unusual part worth stating rather than
+            # hiding. CellChatDB is pinned by CellChat's commit; these 97 symbols are pinned by
+            # nothing but scProfile's own version, because they are a literal in this file.
+            "package": "scprofile", "cite": "Tirosh et al., Science 2016",
+            "source": "S_GENES in this file; the list Seurat distributes as cc.genes$s.genes",
+            "note": "43 human symbols, the de-facto S-phase panel. Genes that do not match "
+                    "lower the score silently, and a low score reads as `not cycling`"},
+        "tirosh_s_phase_mouse": {
+            "tier": "bundled", "organism": "mouse", "role": "gene set",
+            "package": "scprofile", "cite": "Tirosh et al., Science 2016",
+            "source": "S_GENES in this file - the same 43 HUMAN symbols, not a mouse list",
+            "note": "no mouse panel was curated: `_match` tries the symbol, its capitalisation "
+                    "and its upper case, so `MCM5` reaches `Mcm5`. That is a spelling "
+                    "convention, not an orthology table, and a gene whose mouse orthologue is "
+                    "named differently is simply absent from the score"},
+        "tirosh_g2m_phase_human": {
+            "tier": "bundled", "organism": "human", "role": "gene set",
+            "package": "scprofile", "cite": "Tirosh et al., Science 2016",
+            "source": "G2M_GENES in this file; Seurat distributes it as cc.genes$g2m.genes",
+            "note": "54 human symbols. FAM64A and HN1 are the pre-rename symbols for PIMREG "
+                    "and JPT1, so an object indexed by current HGNC symbols matches 52 of the "
+                    "54 and nothing says so"},
+        "tirosh_g2m_phase_mouse": {
+            "tier": "bundled", "organism": "mouse", "role": "gene set",
+            "package": "scprofile", "cite": "Tirosh et al., Science 2016",
+            "source": "G2M_GENES in this file - the same 54 HUMAN symbols, not a mouse list",
+            "note": "reached by casing, as above. Two of the 54 also carry pre-rename symbols, "
+                    "so the mouse path inherits that gap on top of the orthology one"},
+    },
+
     "requires": {
         "python": ">=3.10,<3.13",
         "packages": {

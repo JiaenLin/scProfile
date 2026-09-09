@@ -61,7 +61,7 @@ Nine kernels ship. Generated from the kernel declarations by
 |---|---|---|
 | `abundance` | whether a population's share shifts across the design | `label`, `sample`, `design` |
 | `cellchat` | cell-cell communication, CellChat's own database and scoring | `lognorm`, `label`, `organism`; R; 2 reference files |
-| `cellcycle` | cell-cycle phase per cell, and the check that a trajectory is not a cell-cycle axis | — |
+| `cellcycle` | cell-cycle phase per cell, and the check that a trajectory is not a cell-cycle axis | 4 reference files |
 | `de` | which genes change, per cell type, across the design | `counts`, `label`, `sample`, `design` |
 | `decoupler` | regulatory activity per cell, from a curated prior | `lognorm`, `organism`; 2 reference files |
 | `liana` | cell-cell communication, consensus over several scoring methods | `lognorm`, `label`, `organism`; 2 reference files |

@@ -165,6 +165,13 @@ PLUGIN = {
                                           "the posterior is the prior"},
     },
 
+    # NOTHING IS CONSULTED, AND THAT IS DECLARED RATHER THAN LEFT ABSENT. Every number this
+    # plugin produces comes from the user's own object - no prior, no database, no bundled gene
+    # list. The only URLs in this file are the wrapped tool's documentation, in `upstream`, which
+    # nothing reads at run time. An empty container says somebody looked; an absent field says
+    # nobody has, and the plan cannot tell those apart.
+    "references": {},
+
     "requires": {
         "python": ">=3.10,<3.13",
         "packages": {

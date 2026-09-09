@@ -307,7 +307,9 @@ from scprofile import refs as _refs                                            #
 from scprofile.kernels import discover as _disc                                # noqa: E402
 _ks = _disc()
 _out = []
-_refs.fetch(_ks["cellcycle"], "/tmp/__noref", log=_out.append, dry_run=True)
+# cellcycle DECLARES references now (the Tirosh panel, for human and mouse), so it is no longer
+# the example of a plugin that has none. velocity consults nothing and says so.
+_refs.fetch(_ks["velocity"], "/tmp/__noref", log=_out.append, dry_run=True)
 ck("a plugin with no references is not called 'all present'",
    any("declares no reference data" in x for x in _out), "; ".join(_out))
 ck("and does not claim anything is present",

@@ -187,9 +187,11 @@ PLUGIN = {
     # nobody looked, and those are different claims that read identically in a report. Every number
     # here comes from the object's own spliced and unspliced layers - no prior, no database, no
     # gene list - and docs/REFERENCES.md names this plugin among those that consult nothing
-    # external. The neighbouring case is `cellcycle`, which carries 97 Tirosh et al. gene symbols
-    # as a literal and declared no references at all, so its report cannot name what decided the
-    # phase calls.
+    # external. The neighbouring case was `cellcycle`, which carries 97 Tirosh et al. gene
+    # symbols as a literal and declared no references at all, so its report could not name what
+    # decided the phase calls. It declares them now, with the casing caveat that makes a mouse
+    # object score low rather than refuse - which is the sentence an empty container here is
+    # asserting does not apply to this plugin.
     "references": {},
 
     # WHAT IT NEEDS, NOT WHAT TO BUILD. These are exact, and `exact_pins_why` says so once rather
