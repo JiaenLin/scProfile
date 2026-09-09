@@ -84,6 +84,25 @@ for _f in sorted((ROOT / "tests").glob("test_*.py")):
     _dead += [f"{_f.name}:{n.name}" for n in _t.body if isinstance(n, _ast_om.FunctionDef)
               and n.name.startswith("test_") and n.lineno > _main]
 ck("no test is defined below the runner that collects it", not _dead, str(_dead[:6]))
+# AND NO CODE AT ALL BELOW A MODULE-LEVEL `sys.exit`, which is the same defect in a second shape.
+# The check above looks for test FUNCTIONS under `if __name__ == "__main__"`. Hours after writing
+# it I appended a check to this very file below its own `sys.exit(...)`, where it was unreachable,
+# and only noticed because I tried to prove it could fail. A guard that catches one spelling of a
+# defect teaches you the defect is handled.
+_after = []
+for _f in sorted((ROOT / "tests").glob("test_*.py")):
+    _t = _ast_om.parse(_f.read_text(encoding="utf-8"))
+    _exit = next((n.lineno for n in _t.body if isinstance(n, _ast_om.Expr)
+                  and isinstance(n.value, _ast_om.Call)
+                  and _ast_om.unparse(n.value.func) in ("sys.exit", "exit")), None)
+    if _exit is None:
+        continue
+    _live = [n for n in _t.body if n.lineno > _exit
+             and not (isinstance(n, _ast_om.If)
+                      and _ast_om.unparse(n.test) == "__name__ == '__main__'")]
+    if _live:
+        _after.append(f"{_f.name}: {len(_live)} statement(s) after sys.exit on line {_exit}")
+ck("and no statement sits below a module-level sys.exit", not _after, str(_after[:4]))
 
 print("\nevery path a document points at exists")
 missing = []
@@ -153,4 +172,23 @@ ck("no module hard-codes a temp path", not bad, "; ".join(bad[:4]))
 
 print("\n" + ("one home, and the documents match the code" if not FAIL
               else f"{len(FAIL)} FAILED: {FAIL}"))
+print("\na citation into the source is an anchor somebody can find")
+# A LINE NUMBER IS NOT AN ANCHOR. The figures skill cited `velocity.py:1624` for a comment about
+# plotting imports and `velocity.py:1359` for a UMAP computation; both line numbers still resolved,
+# because the file is long enough, and both pointed at unrelated code. Existence proves nothing
+# here - the failure is drift, and only a quoted phrase can be checked.
+#
+# So a citation names a file and a string to search for, and this asserts the string is there.
+import re as _re_cite                                                           # noqa: E402
+_cites = []
+for _doc in sorted((ROOT / ".claude" / "skills").rglob("*.md")) + sorted((ROOT / "docs").glob("*.md")):
+    for _m in _re_cite.finditer(r"\(`([\w/]+\.(?:py|R))`, search `([^`]+)`\)", _doc.read_text(encoding="utf-8")):
+        _f, _needle = ROOT / _m.group(1), _m.group(2)
+        if not _f.is_file():
+            _cites.append(f"{_doc.name}: no such file {_m.group(1)}")
+        elif _needle not in _f.read_text(encoding="utf-8"):
+            _cites.append(f"{_doc.name}: {_m.group(1)} does not contain {_needle!r}")
+ck("every searchable citation finds its text", not _cites, str(_cites[:4]))
+
+
 sys.exit(1 if FAIL else 0)

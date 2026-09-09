@@ -1522,10 +1522,26 @@ def _validate(a):
                       f"re-inventing a worse version of something that already ships. See "
                       f"scprofile/native.py for the three reasons one may go unused.")
         if _np:
+            # THIS COMPARED THE DECLARATION AGAINST ITSELF, and printed the result as a
+            # measurement. `account(inventory, declared)` was called `account(sorted(_np), _np)` -
+            # the declaration handed in as its own inventory - so "0 unaccounted" was a tautology
+            # that could never read otherwise, and cellchat's reassuring
+            # "32 used, 3 validly skipped, 0 unaccounted" said only that its declaration is
+            # internally consistent. `native.py` is explicit that the inventory is "the plotting
+            # functions the wrapped tool exports, MEASURED FROM ITS ENVIRONMENT", and `validate`
+            # runs in the host interpreter, which does not have that environment.
+            #
+            # So it now reports what it can actually see and names what would measure it. The
+            # internal checks - a skip reason from the closed vocabulary, with the evidence that
+            # reason requires - are real and still run; what is gone is the claim about coverage.
             from . import native as _NAT
             _u, _sk, _pr = _NAT.account(sorted(_np), _np)
-            print(f"  upstream plots: {len(_u)} used, {len(_sk)} validly skipped, "
-                  f"{len(_pr)} unaccounted")
+            print(f"  upstream plots: {len(_np)} declared - {len(_u)} used, {len(_sk)} skipped "
+                  f"with a valid reason, {len(_pr)} malformed. NOT A COVERAGE FIGURE: nothing "
+                  f"here read {(k.spec.get('wraps') or {}).get('tool')}, so what it exports and "
+                  f"is NOT declared cannot be counted from the host interpreter.")
+            print(f"    to measure it:  sch dev convert account --point kernel --name {k.name} "
+                  f"--python <the interpreter this plugin runs in>")
             for _fn, _why in _pr[:6]:
                 print(f"    {_fn}: {_why[:150]}")
             if len(_pr) > 6:

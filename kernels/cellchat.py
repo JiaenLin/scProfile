@@ -3676,6 +3676,19 @@ def selftest(ctx):
 
     rscript = shutil.which("Rscript")
     assert rscript, "no Rscript on PATH - this plugin's environment did not provide R"
+
+    # THE ACCOUNTING, MEASURED. `check_plot_accounting` existed and NOTHING CALLED IT - not this
+    # selftest, not validate, not a test - so the one accounting in this family that could be
+    # measured against the package never was, and its 35 entries were only ever compared against
+    # themselves. Here is the one place with R present, which is the only place the comparison can
+    # be made.
+    #
+    # REPORTED, NOT ASSERTED, and the difference is deliberate. An entry CellChat no longer exports
+    # is a real finding and it is also what a version bump looks like on the day it happens;
+    # failing the selftest would block the environment build that is the only way to investigate
+    # it. `sch dev convert account` turns it into a worksheet.
+    for _problem in check_plot_accounting():
+        ctx.log(f"  plot accounting: {_problem}")
     probe = r'''
 suppressMessages(library(CellChat))
 cat("CellChat", as.character(packageVersion("CellChat")), "\n")

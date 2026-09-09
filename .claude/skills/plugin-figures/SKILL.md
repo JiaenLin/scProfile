@@ -441,7 +441,7 @@ applies unchanged.
 **That is the normal case, not the awkward one, and this document is not a retrospective about a
 tool with a big plot catalogue.** Across the 51 shipped figures, **not one calls an upstream
 plotting function.** `velocity` used to call one and says in-line why it stopped: the call "proved
-the tool's plotting imports and nothing about the code that actually draws" (`velocity.py:1624`). A
+the tool's plotting imports and nothing about the code that actually draws" (`kernels/velocity.py`, search `proved the tool's plotting imports`). A
 catalogue of upstream plots tells you what somebody else chose to show; the return contract is what
 your panels are made of either way. So **Step 1a is required of every plugin, and Step 1b only of a
 plugin whose upstream publishes plots.**
@@ -1526,7 +1526,7 @@ from an upstream plot.
 |---|---|---|
 | per-population power strip | 7 | count on a log axis beside what that count bought, same axis and sort order, exclusion threshold drawn, populations below it in a second colour, Spearman ρ of size against result-count |
 | attrition funnel | 5 | stages drawn against the full reference set in grey so the grey *is* the loss; count and % on each bar; the delta in the wedge between bars; the source table naming which step lost each item |
-| manifold panel | 3 | **`required: False`**, never computes its own layout, and every `when_absent` refuses the "first two columns of a wider representation" substitute in the same words. `velocity`'s two field panels are the deliberate exception — `required: True`, and they compute a UMAP when the object has none (`velocity.py:1359`) |
+| manifold panel | 3 | **`required: False`**, never computes its own layout, and every `when_absent` refuses the "first two columns of a wider representation" substitute in the same words. `velocity`'s two field panels are the deliberate exception — `required: True`, and they compute a UMAP when the object has none (`kernels/velocity.py`, search `sc.tl.umap(A, min_dist=`) |
 | model-fit diagnostic | 6 | the check made on the **derived quantity the answer is read off**, not a generic convergence statistic |
 | threshold-margin panel | 4 | the quantity the call was made on, threshold drawn, numbered and named on the panel; filled = called, hollow = measured-and-not-called |
 | population × population matrix | 4 | same order on both axes, diagonal outlined and called out, silent pairs in flat grey **off** the colour scale rather than at its bottom |

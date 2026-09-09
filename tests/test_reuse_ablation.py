@@ -31,7 +31,7 @@ ok_hl, why_hl = selfcheck.adoption_is_a_hardlink()
 check("adoption shares the inode rather than copying", ok_hl, why_hl)
 
 print("\n" + ("reuse holds" if not FAILED else f"{len(FAILED)} FAILED: {FAILED}"))
-sys.exit(1 if FAILED else 0)
+
 
 
 # ============================================================================================
@@ -73,3 +73,5 @@ check("and the render-time panel modules are NOT",
       "cached result on every commit for no gain")
 check("and it is stable when nothing changes",
       _LS.host_version() == _LS.host_version())
+
+sys.exit(1 if FAILED else 0)

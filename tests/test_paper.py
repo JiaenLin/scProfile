@@ -98,7 +98,7 @@ _doc = (Path(__file__).resolve().parents[1] / "docs" / "PAPER_TEST.md")
 ck("and there is a document to point at", _doc.is_file(), str(_doc))
 
 print("\n" + ("the paper test holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
-sys.exit(1 if FAIL else 0)
+
 
 
 def test_a_plugin_section_never_touches_the_run_root():
@@ -232,3 +232,5 @@ def test_the_status_line_agrees_with_itself():
     assert "NO CLAIMS RECORDED" not in text, (
         "summarise reports an empty ledger for a plugin that has claims")
     assert rec["id"] in text, "the claim is not listed in its own plugin's summary"
+
+sys.exit(1 if FAIL else 0)
