@@ -1155,18 +1155,36 @@ npng("circle_count", {
                    weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
                    title.name = "interactions")
   .stampf()
-})
+},
+     legend = paste0("Every population is a node on a ring and every inferred interaction an edge. Node ",
+                     "size is the number of cells in that population; edge width is HOW MANY ligand-receptor ",
+                     "interactions were inferred from the sender to the receiver, and edge colour is the sender. ",
+                     "The ring is a layout and nothing more - a node position on it carries no meaning, and ",
+                     "neither does the distance between two nodes. Inferred from expression, not measured."))
 npng("circle_weight", {
   netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),
                    weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
                    title.name = "interaction strength")
   .stampf()
-})
+},
+     legend = paste0("The same network drawn on STRENGTH rather than count: edge width is the summed ",
+                     "communication probability from sender to receiver, not the number of pairs behind it. ",
+                     "Count and strength disagree freely - a population can send many weak interactions or one ",
+                     "strong one - which is why both are drawn. Node size is the number of cells, and the ring ",
+                     "is a layout that carries no meaning."))
 npng("heatmap_count", netVisual_heatmap(cc, measure = "count", color.heatmap = "Blues",
-                                        color.use = .gcol, title.name = .ttl("interactions")))
+                                        color.use = .gcol, title.name = .ttl("interactions")),
+     legend = paste0("Senders down the rows, receivers across the columns, colour is the NUMBER of inferred ",
+                     "interactions for that ordered pair. The bars above and beside are the column and row ",
+                     "totals. Read it directionally: the cell at row i, column j is i signalling to j, and is ",
+                     "not the cell opposite it."))
 npng("heatmap_weight", netVisual_heatmap(cc, measure = "weight", color.heatmap = "Blues",
                                          color.use = .gcol,
-                                         title.name = .ttl("interaction strength")))
+                                         title.name = .ttl("interaction strength")),
+     legend = paste0("The same matrix on interaction STRENGTH - colour is the summed communication ",
+                     "probability for that ordered pair rather than the number of pairs behind it. A pair can ",
+                     "be dark here and pale in the count panel, or the reverse. Senders down the rows, ",
+                     "receivers across the columns, and the direction is not symmetric."))
 npng("signalingRole_scatter", netAnalysis_signalingRole_scatter(cc, color.use = .gcol),
      legend = paste0("Each population placed by how much inferred signalling it SENDS ",
                      "(horizontal) against how much it RECEIVES (vertical), for this unit ",
@@ -1188,8 +1206,17 @@ npng("signalingRole_heatmap_in",
                      "NOT how strong one programme is against another. One unit, no ",
                      "comparison."))
 npng("bubble", netVisual_bubble(cc, sources.use = seq_len(ngrp), targets.use = seq_len(ngrp),
-                                remove.isolate = TRUE), w = 2600, h = 2000)
-npng("database_category", showDatabaseCategory(cc@DB))
+                                remove.isolate = TRUE), w = 2600, h = 2000,
+     legend = paste0("Every inferred ligand-receptor pair worth drawing, across all ", ngrp, " populations. ",
+                     "Rows are pairs, columns are sender to receiver; colour is the communication probability ",
+                     "and DOT SIZE IS THE PERMUTATION P-VALUE, so a large dot is a confident one and not a ",
+                     "strong one. Pairs with nothing to show are dropped, so an absent row was not tested and ",
+                     "found empty."))
+npng("database_category", showDatabaseCategory(cc@DB),
+     legend = paste0("What is in the DATABASE, not what is in this object. The composition of the reference ",
+                     "by interaction category - secreted signalling, extracellular-matrix receptor, and ",
+                     "cell-cell contact. It describes the prior every inference on this page was drawn from, ",
+                     "and it would look the same on any dataset."))
 
 # per-pathway, on the strongest pathway this unit has - `netVisual_aggregate` and
 # `netAnalysis_contribution` are pathway-scoped, so they need one named
@@ -1200,13 +1227,29 @@ pw <- tryCatch({
 }, error = function(e) NA_character_)
 if (!is.na(pw)) {
   cat("native pathway-scoped plots use:", pw, "\n")
-  npng(paste0("aggregate_circle__", pw), netVisual_aggregate(cc, signaling = pw, layout = "circle"))
+  npng(paste0("aggregate_circle__", pw), netVisual_aggregate(cc, signaling = pw, layout = "circle"),
+       legend = paste0("The inferred network for the ", pw, " pathway alone, aggregated over every ",
+                       "ligand-receptor pair in it. Nodes are populations, edge width is the summed communication ",
+                       "probability from sender to receiver, and the ring is a layout that carries no meaning. ",
+                       "One pathway, one unit, no comparison."))
   npng(paste0("chord_gene__", pw),
-       netVisual_chord_gene(cc, signaling = pw, lab.cex = 0.6, legend.pos.y = 30))
-  npng(paste0("contribution__", pw), netAnalysis_contribution(cc, signaling = pw))
+       netVisual_chord_gene(cc, signaling = pw, lab.cex = 0.6, legend.pos.y = 30),
+       legend = paste0("The ", pw, " pathway opened up to the GENES behind it: each ribbon runs from a ligand ",
+                       "on the sending side to its receptor on the receiving side, and ribbon width is that ",
+                       "pair inferred communication probability. The ordering around the circle is a layout. ",
+                       "This is the gene-level view of the numbers the aggregate circle sums."))
+  npng(paste0("contribution__", pw), netAnalysis_contribution(cc, signaling = pw),
+       legend = paste0("Which ligand-receptor pairs actually carry the ", pw, " pathway. One bar per pair, ",
+                       "length is that pair share of the pathway total inferred communication probability. A ",
+                       "pathway drawn as a single edge elsewhere on this page is usually a handful of pairs, and ",
+                       "often one - this is where that shows."))
   npng(paste0("signalingRole_network__", pw),
        netAnalysis_signalingRole_network(cc, signaling = pw, width = 12, height = 4,
-                                         font.size = 10))
+                                         font.size = 10),
+       legend = paste0("The four network roles for the ", pw, " pathway: for each population, how much it acts ",
+                       "as sender, receiver, mediator and influencer. Colour is the centrality score WITHIN THIS ",
+                       "PATHWAY, so it shows which population fills which role and NOT how strong this pathway is ",
+                       "against another. One unit, no comparison."))
 }
 
 # The single-object functions that were owed. Each is CellChat's own, each guarded, and each
@@ -1237,7 +1280,12 @@ if (!is.na(pw)) {
     netVisual_hierarchy2(cc@netP$prob[, , pw],
                          vertex.receiver = setdiff(seq_len(ngrp), vr),
                          title.name = paste(pw, "- the rest"))
-  }, w = 2800, h = 1500)
+  }, w = 2800, h = 1500,
+       legend = paste0("The ", pw, " pathway drawn twice as a two-sided hierarchy. On the left, signalling ",
+                       "into the ", length(vr), " population(s) chosen as receivers; on the right, signalling ",
+                       "into the remaining ", ngrp - length(vr), ". Edge width is the inferred communication ",
+                       "probability. THE SPLIT IS A READING AID chosen by this plugin and not a result - the same ",
+                       "network is on both sides."))
 
   # one named ligand-receptor pair inside that pathway, rather than the pathway aggregate
   lr <- tryCatch(extractEnrichedLR(cc, signaling = pw, geneLR.return = FALSE),
@@ -1245,12 +1293,20 @@ if (!is.na(pw)) {
   if (!is.null(lr) && nrow(lr) > 0) {
     cat("native individual LR pair:", as.character(lr[1, 1]), "\n")
     ndev(paste0("individual__", gsub("[^A-Za-z0-9]+", "_", as.character(lr[1, 1]))),
-         netVisual_individual(cc, signaling = pw, pairLR.use = lr[1, ], layout = "circle"))
+         netVisual_individual(cc, signaling = pw, pairLR.use = lr[1, ], layout = "circle"),
+         legend = paste0("A single ligand-receptor pair from the ", pw, " pathway, drawn on its own rather than ",
+                         "aggregated with the rest. Nodes are populations, edge width is that one pair inferred ",
+                         "communication probability, and the ring is a layout. This is the finest grain the method ",
+                         "infers - every other network panel here sums pairs like this one."))
   }
 
   # the expression of that pathway's own genes, CellChat's own violin wrappers
   npng(paste0("geneExpression__", pw), plotGeneExpression(cc, signaling = pw),
-       w = 2000, h = 2200)
+       w = 2000, h = 2200,
+       legend = paste0("MEASURED EXPRESSION, not inference - the one panel here that is. Violins of the genes ",
+                       "making up the ", pw, " pathway, across populations, straight from the object. Everything ",
+                       "else on this page is inferred FROM numbers like these; this is the input, and a pathway ",
+                       "whose genes are barely expressed should be read with that in mind."))
   # `StackedVlnPlot` is NOT called here, and that is the accounting rather than an omission:
   # it takes a Seurat object, and `plotGeneExpression` above is the CellChat entry point that
   # builds one and calls it - measured in CellChat's own source, `gg <- StackedVlnPlot(w10x, ...)`.
@@ -1271,11 +1327,24 @@ for (pat in c("outgoing", "incoming")) {
     ccp <- identifyCommunicationPatterns(cc, pattern = pat, k = 3, width = 5, height = 16)
     assign(paste0("ccp_", pat), ccp, envir = globalenv())
     NULL
-  }, w = 2000, h = 3000)
+  }, w = 2000, h = 3000,
+       legend = paste0("The ", pat, " communication patterns, from a non-negative factorisation. Two heatmaps: ",
+                       "populations against patterns, and patterns against pathways. Colour is LOADING, not ",
+                       "communication probability. THE NUMBER OF PATTERNS WAS FIXED AT 3 AND NOT SELECTED - a ",
+                       "different k gives a different decomposition, so read this as one grouping of the signal ",
+                       "rather than as the grouping."))
   ccp <- tryCatch(get(paste0("ccp_", pat), envir = globalenv()), error = function(e) NULL)
   if (!is.null(ccp)) {
-    npng(paste0("river_", pat), netAnalysis_river(ccp, pattern = pat), w = 2400, h = 1800)
-    npng(paste0("dot_", pat), netAnalysis_dot(ccp, pattern = pat), w = 1800, h = 1600)
+    npng(paste0("river_", pat), netAnalysis_river(ccp, pattern = pat), w = 2400, h = 1800,
+         legend = paste0("The ", pat, " patterns as flow: populations on one side, latent patterns in the middle, ",
+                         "pathways on the other, and ribbon width is the loading. It is the same decomposition the ",
+                         "pattern heatmaps show, drawn so a pathway can be followed to the populations that use it. ",
+                         "Loadings, not probabilities, and the three patterns were fixed rather than chosen."))
+    npng(paste0("dot_", pat), netAnalysis_dot(ccp, pattern = pat), w = 1800, h = 1600,
+         legend = paste0("The ", pat, " pattern loadings as dots rather than ribbons: populations against ",
+                         "patterns, with dot size and colour both the loading. The same numbers as the river panel ",
+                         "beside it, in a form a single population can be read off. Loadings, not communication ",
+                         "probabilities."))
   }
 }
 
@@ -1292,9 +1361,16 @@ emb_ok <- if (!draw_figs) FALSE else tryCatch({
   assign("ccE", ccE, envir = globalenv()); TRUE
 }, error = function(e) { cat("net embedding FAILED:", conditionMessage(e), "\n"); FALSE })
 if (emb_ok) {
-  npng("embedding_functional", netVisual_embedding(ccE, type = "functional", label.size = 3.5))
+  npng("embedding_functional", netVisual_embedding(ccE, type = "functional", label.size = 3.5),
+       legend = paste0("Every pathway placed in two dimensions by FUNCTIONAL similarity - pathways land near ",
+                       "each other when they act between the same populations, whatever genes they use. THE AXES ",
+                       "HAVE NO UNITS and neither does the distance: this is a layout of a similarity matrix, so ",
+                       "read which pathways cluster and never how far apart two of them are."))
   npng("embeddingZoomIn_functional",
-       netVisual_embeddingZoomIn(ccE, type = "functional", nCol = 2), w = 2400, h = 2000)
+       netVisual_embeddingZoomIn(ccE, type = "functional", nCol = 2), w = 2400, h = 2000,
+       legend = paste0("The functional-similarity embedding again, one panel per cluster so that crowded ",
+                       "labels can be read. The same coordinates as the whole-page version, cropped - no pathway ",
+                       "has moved. The axes still have no units."))
 }
 
 # pathway x (sender, receiver) probability, CellChat's own computeCommunProbPathway
@@ -4084,11 +4160,19 @@ ndev("diffInteraction_weight", {
 ndev("diff_heatmap_count", ComplexHeatmap::draw(
   netVisual_heatmap(m, measure = "count", color.use = .ccol,
                     title.name = .diffttl("Differential number of interactions"))),
-  w = 2400, h = 1800)
+  w = 2400, h = 1800,
+     legend = paste0("Which population pairs differ in the NUMBER of inferred interactions between the two ",
+                     "arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in ",
+                     "the second arm, blue is higher in the reference. A pale cell means the two arms agree ",
+                     "there, which is NOT the same as neither arm having interactions."))
 ndev("diff_heatmap_weight", ComplexHeatmap::draw(
   netVisual_heatmap(m, measure = "weight", color.use = .ccol,
                     title.name = .diffttl("Differential interaction strength"))),
-  w = 2400, h = 1800)
+  w = 2400, h = 1800,
+     legend = paste0("The same differential matrix on interaction STRENGTH rather than count. Red is higher ",
+                     "in the second arm, blue in the reference. Strength and count can move in opposite ",
+                     "directions for one pair - it can gain interactions while each of them weakens - so the ",
+                     "two panels are drawn together."))
 
 # 3. ranked information flow with BOTH arms on one axis, CellChat's own comparison mode
 # CELLCHAT'S OWN BETWEEN-ARM TEST, RUN. `do.stat = TRUE` compares the two arms' per-pair
@@ -4101,9 +4185,17 @@ ndev("diff_heatmap_weight", ComplexHeatmap::draw(
 # and the one that switches the test off was taken. Arms fitted separately do have different
 # compositions here, so the unpaired test is the applicable one.
 npng("rankNet_stacked", rankNet(m, mode = "comparison", stacked = TRUE,
-                                do.stat = TRUE, paired.test = FALSE), w = 1600, h = 2000)
+                                do.stat = TRUE, paired.test = FALSE), w = 1600, h = 2000,
+     legend = paste0("Every pathway ranked by its RELATIVE information flow, each bar split between the two ",
+                     "arms. Because the bars are normalised this shows how a pathway flow is DIVIDED between ",
+                     "arms and not how much flow it carries: a rare pathway and a dominant one can look ",
+                     "identical here. Read the unstacked panel beside it for the amounts."))
 npng("rankNet_unstacked", rankNet(m, mode = "comparison", stacked = FALSE,
-                                  do.stat = TRUE, paired.test = FALSE), w = 1600, h = 2000)
+                                  do.stat = TRUE, paired.test = FALSE), w = 1600, h = 2000,
+     legend = paste0("The same ranking with the arms side by side on an ABSOLUTE scale, so a pathway actual ",
+                     "flow is readable and the dominant pathways separate from the rare ones. Read this one for ",
+                     "magnitude and the stacked panel for balance. Significance is a permutation test, and a ",
+                     "pathway absent from an arm is absent rather than tested and found zero."))
 
 # AND THE NUMBERS BEHIND IT, so a written result can quote the tool's own significance rather
 # than describe a picture. One row per pathway per arm, with the p-value CellChat computed.
@@ -4139,14 +4231,22 @@ npng("signalingRole_scatter_pair", {
     ggplot2::scale_size_continuous(limits = c(0, smax)) +
     ggplot2::ggtitle(names(role)[i])
   patchwork::wrap_plots(plots = gg)
-}, w = 2600, h = 1400)
+}, w = 2600, h = 1400,
+     legend = paste0("One sender-against-receiver scatter per arm, drawn on SHARED AXES AND A SHARED POINT ",
+                     "SCALE so the two are comparable by eye - which is this plugin doing, not the tool, and is ",
+                     "the reason the panel exists. Each point is a population: outgoing strength horizontally, ",
+                     "incoming vertically, and point size is the number of inferred links. Nothing is tested."))
 
 # 5. how each population's signalling ROLE moves between the two arms, in one panel
 npng("diff_signalingRole", {
   gg <- tryCatch(netAnalysis_diff_signalingRole_scatter(m), error = function(e) NULL)
   if (is.null(gg)) stop("netAnalysis_diff_signalingRole_scatter returned nothing")
   gg
-})
+},
+     legend = paste0("Each population placed by how much its OUTGOING signalling changed between the arms ",
+                     "against how much its INCOMING changed. The origin is a population that did not shift. It ",
+                     "is a difference of two inferences, so a point far from the origin means the two fits ",
+                     "disagree there - not that anything was measured to change."))
 
 # 6. outgoing and incoming role heatmaps, one per arm, drawn together with a SHARED colour
 #    maximum over both - the same rule as the shared axis above and for the same reason.
@@ -4178,7 +4278,12 @@ for (pat in c("outgoing", "incoming")) {
                                         title = names(object.list)[i], width = 6, height = 14,
                                         ylim.top = c(0, yt), ylim.right = c(0, yr)))
     ComplexHeatmap::draw(hs[[1]] + hs[[2]], ht_gap = grid::unit(0.5, "cm"))
-  }, w = 2600, h = 2200)
+  }, w = 2600, h = 2200,
+       legend = paste0("Pathways down the rows, populations across the columns, for ", pat, " signalling - one ",
+                       "heatmap per arm, side by side ON ONE SHARED COLOUR SCALE AND SHARED MARGINAL AXES, which ",
+                       "this plugin imposes so that the two can be compared. Colour is centrality, not ",
+                       "communication probability. A pathway present in one arm and absent in the other is drawn ",
+                       "as zeros in the arm that lacks it."))
 }
 
 # 7. the ligand-receptor pairs themselves, both arms on one bubble plot. CellChat's own
@@ -4207,7 +4312,12 @@ npng("bubble_comparison",
      netVisual_bubble(m, comparison = c(1, 2), angle.x = 90, remove.isolate = TRUE,
                       font.size = 6, font.size.title = 9,
                       title.name = paste("every enriched pair -", name_a, "against", name_b)),
-     w = .bw, h = 5200)
+     w = .bw, h = 5200,
+     legend = paste0("Every enriched ligand-receptor pair, ", name_a, " against ", name_b, ". Rows are pairs, ",
+                     "columns are sender to receiver within each arm; colour is the communication probability ",
+                     "and DOT SIZE IS THE PERMUTATION P-VALUE, so size is confidence and not strength. Pairs ",
+                     "with nothing to show in either arm are dropped, so an absent row was not tested and found ",
+                     "empty."))
 
 # AND A FOCUSED VIEW. The overview answers "is anything different anywhere"; this answers "in
 # what". It is the same function on the pathways that carry the most flow, so it is CellChat's
@@ -4225,7 +4335,11 @@ if (length(.top)) {
                         remove.isolate = TRUE, font.size = 6, font.size.title = 9,
                         title.name = paste("the ten pathways carrying the most flow -",
                                            name_a, "against", name_b)),
-       w = .bw, h = 2600)
+       w = .bw, h = 2600,
+       legend = paste0("The same comparison narrowed to the ten pathways carrying the most flow, ", name_a,,
+                       " against ", name_b, ", because the full panel is unreadable at this many pairs. THE TEN ",
+                       "WERE CHOSEN BY FLOW, NOT BY HOW MUCH THEY DIFFER, so this is a legible subset and not a ",
+                       "result: a pair that changed sharply inside a quiet pathway is not here."))
 }
 
 # 8. per-population signalling changes - the one figure that names WHICH signals moved for a
@@ -4235,7 +4349,11 @@ cat("signalingChanges over", length(shared), "shared population(s)\n")
 for (g in shared) {
   safe <- gsub("[^A-Za-z0-9]+", "_", g)
   npng(paste0("signalingChanges__", safe),
-       netAnalysis_signalingChanges_scatter(m, idents.use = g))
+       netAnalysis_signalingChanges_scatter(m, idents.use = g),
+       legend = paste0("For ", g, " alone: how much its outgoing signalling changed between the arms against ",
+                       "how much its incoming changed, one point per pathway. Pathways far from the origin are ",
+                       "where this population role differs most between arms. It is a difference of two ",
+                       "inferences - a shift means the two fits disagree, not that a change was measured."))
 }
 
 # 8b. the differential as BARS - CellChat's own comparison bar plot, which reads per source or
@@ -4249,10 +4367,17 @@ for (g in shared) {
 # the bottom, with not a single population name readable off the axis. Seen by opening it.
 npng("barplot_count", netVisual_barplot(m, comparison = c(1, 2), measure = "count",
                                         sources.use = seq_along(group_new), x.lab.rot = TRUE),
-     w = 2200, h = 1700)
+     w = 2200, h = 1700,
+     legend = paste0("The total NUMBER of inferred interactions in each arm, one bar per arm, from one fit on ",
+                     "that arm pooled cells. It is a single number per arm with no spread behind it, so a ",
+                     "difference here is NOT a tested difference - it is the arithmetic the rest of the ",
+                     "comparison starts from."))
 npng("barplot_weight", netVisual_barplot(m, comparison = c(1, 2), measure = "weight",
                                          sources.use = seq_along(group_new), x.lab.rot = TRUE),
-     w = 2200, h = 1700)
+     w = 2200, h = 1700,
+     legend = paste0("The same totals on interaction STRENGTH rather than count. One fit per arm, one bar, no ",
+                     "spread and no test. Count and strength can point in opposite directions, which is why ",
+                     "both bars are drawn rather than one."))
 
 # 9. the pathway manifold across BOTH arms - CellChat's own joint embedding, which places every
 #    pathway from both objects in one space and ranks how far each moved.
@@ -4266,11 +4391,21 @@ sim_ok <- tryCatch({
 }, error = function(e) { cat("pairwise similarity FAILED:", conditionMessage(e), "\n"); FALSE })
 if (sim_ok) {
   npng("embeddingPairwise_functional",
-       netVisual_embeddingPairwise(m, type = "functional", label.size = 3.5))
-  npng("rankSimilarity_functional", rankSimilarity(m, type = "functional"), w = 1600, h = 2000)
+       netVisual_embeddingPairwise(m, type = "functional", label.size = 3.5),
+       legend = paste0("Both arms pathways embedded TOGETHER by functional similarity, so the same pathway from ",
+                       "each arm appears as two points and the distance between them is how far its role shifted. ",
+                       "The axes have no units and neither does any single distance; only the pairing is meant to ",
+                       "be read."))
+  npng("rankSimilarity_functional", rankSimilarity(m, type = "functional"), w = 1600, h = 2000,
+       legend = paste0("Pathways ranked by HOW FAR THEY MOVED in the joint functional embedding - the largest ",
+                       "values are the pathways whose participating populations differ most between the arms. It ",
+                       "ranks a change in ROLE, not a change in amount: a pathway can carry the same flow in both ",
+                       "arms and still rank highly here."))
   npng("embeddingPairwiseZoomIn_functional",
        netVisual_embeddingPairwiseZoomIn(m, type = "functional", nCol = 2),
-       w = 2600, h = 2200)
+       w = 2600, h = 2200,
+       legend = paste0("The joint embedding again, one panel per cluster so the paired points can be told ",
+                       "apart. The same coordinates, cropped - nothing has moved. The axes still have no units."))
 }
 
 # 10. the top shared pathways drawn as networks and as chords, ONE PER ARM WITH A SHARED EDGE
@@ -4288,7 +4423,12 @@ for (pw in head(paths, 6)) {
       netVisual_aggregate(object.list[[i]], signaling = pw, layout = "circle",
                           edge.weight.max = wmax,
                           signaling.name = paste(pw, names(object.list)[i]))
-  }, w = 2800, h = 1500)
+  }, w = 2800, h = 1500,
+       legend = paste0("The ", pw, " pathway drawn once per arm, side by side, ON A SHARED MAXIMUM EDGE WEIGHT ",
+                       "so the two rings are comparable - which this plugin imposes and the tool does not. Nodes ",
+                       "are populations, edge width is the inferred communication probability, and position on ",
+                       "the ring carries no meaning. A missing edge in one arm is an inference that arm did not ",
+                       "make."))
   # ONE CHORD PER FILE. circlize draws into a whole device and does not share one with
   # `par(mfrow)`; two in one device failed every time with "not enough space for cells at track
   # index 2". Thirteen long labels also need the gaps and label size set rather than left at
@@ -4298,7 +4438,11 @@ for (pw in head(paths, 6)) {
          netVisual_chord_cell(object.list[[i]], signaling = pw, lab.cex = 0.45,
                               small.gap = 1, big.gap = 8,
                               title.name = paste(pw, names(object.list)[i])),
-         w = 1800, h = 1800)
+         w = 1800, h = 1800,
+         legend = paste0("The ", pw, " pathway as a chord diagram, one per arm: each ribbon runs from a sending ",
+                         "population to a receiving one and ribbon width is the inferred communication probability. ",
+                         "This is population-level, where the gene chord is pair-level. The ordering around the ",
+                         "circle is a layout and carries no meaning."))
 }
 
 # THE TALLY, LAST. A plot that fails prints one line near the START of a long run, and a caller
