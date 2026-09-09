@@ -127,6 +127,23 @@ points:
           # nine panels never ruled on.
           each_item_declares:
             drawn_by: [tool, plugin]
+          # AND EVERY PLACE THE PLUGIN ACTUALLY PRODUCES A PANEL, which is not in this
+          # declaration at all. MEASURED ON A SEALED RUN: 711 panels, 69 with a written legend,
+          # 642 without - and the 642 come out of 35 call sites in one file, every one of which
+          # calls a wrapper that already HAS a legend parameter and passes nothing to it. The
+          # legend is not missing from the format; it is missing from the call sites, and until
+          # this key existed nothing in the suite reported that. The sites are found by reading
+          # the plugin's source - see sch/dev/extract/draw_sites.py - so a plugin needs no
+          # declaration of its own draw wrappers and none of them was edited to be checked.
+          each_draw_site_describes: true
+          # HOW THE DEBT IS PAID, because a stage that reports one and does not say is a dead end
+          # this suite has already met twice.
+          finished_by: >
+            `sch dev convert legends --root . --point kernel --name <plugin>` prints one row per
+            silent draw site - the panel name as written, the plotting call under it, and the
+            argument to add. Write the sentence AT THE CALL SITE, where the numbers that describe
+            the panel still exist, and re-run this status: the count falls as the sites are
+            answered
           why: >
             who drew each panel. `tool` is the wrapped tool's own plotting function, unmodified.
             `plugin` is this plugin drawing the tool's NUMBERS itself - a second scale, a derived
