@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.23.0",
+    "version": "0.25.0",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
@@ -453,12 +453,33 @@ PLUGIN = {
         "netVisual_hierarchy2": {
             # the other panel of it
             "at_most": 1,"use": "the right panel of figures/native_hierarchy__<pathway>.png"},
+        # A SIDE EFFECT IS OUTPUT AND HAS TO BE ACCOUNTED FOR. `netClustering(type =
+        # "functional")` runs NMF rank estimation and writes `estimationNumCluster__*.pdf` into
+        # the working directory - 24 files on this cohort, from a call this plugin makes for its
+        # CLUSTERING and not for a picture. It is nobody's panel: no sentence cites it, no page
+        # links it, and `capacity --promised` refused the run for it, correctly, because nothing
+        # could tell it from output somebody had asked for.
+        #
+        # DECLARED, NOT SUPPRESSED. The file is CellChat's to write and deleting another tool's
+        # output is not this plugin's business; saying what it is costs one entry and makes the
+        # accounting true. `at_most` is 2 because the estimation runs once per similarity type
+        # per object, and the axis is the unit it was computed in.
+        "netClustering": {
+            "at_most": 2,
+            "use": "figures/estimationNumCluster__<type>.pdf - NOT A PANEL. CellChat's NMF rank "
+                   "estimation writes it while this plugin is CLUSTERING pathways by functional "
+                   "similarity; it is a diagnostic of that fit, kept because it is evidence the "
+                   "clustering was fitted and not because a result is written from it"},
         "netVisual_chord_cell": {
-            # TWELVE FILES, NOT SIX PATHWAYS. `at_most` bounds the FILES a family writes per
-            # occurrence of its axis, and this one draws each of `head(paths, 6)` once PER ARM -
-            # so a contrast gets twelve. Declared as six, the plan under-counted it by half, and
-            # a ceiling that does not mean files cannot be multiplied by anything.
-            "at_most": 12,"use": "figures/nativecmp_chord_cell__<pathway>.png, both arms on one page"},
+            # EIGHT FILES PER CONTRAST - four shared pathways, each drawn once per arm. It was
+            # twelve, and twelve chord diagrams of an appendix family that no sentence cites is
+            # more than a reader needs beside the six pathways the aggregate circle already
+            # covers.
+            #
+            # AND THIS NUMBER IS THE TEST. Until the wrappers read it, the loop said
+            # `head(paths, 6)` and the declaration said twelve; changing either changed nothing
+            # about the other. Changing it to eight now must produce eight, and P16 asks.
+            "at_most": 8,"use": "figures/nativecmp_chord_cell__<pathway>.png, both arms on one page"},
         "netVisual_diffInteraction": {"use": "figures/nativecmp_diffInteraction_{count,weight}.png, per arm pair"},
         "netVisual_embedding": {"use": "figures/native_embedding_functional.png"},
         "netVisual_embeddingZoomIn": {"use": "figures/native_embeddingZoomIn_functional.png"},
@@ -543,6 +564,7 @@ PLUGIN = {
             "nativecmp_": "contrast",
             "nativecmp_interaction": "cohort",
             "nativecmp_compareInteractions": "cohort",
+            "estimationNumCluster": "unit",
             "F1_": "unit", "F2_": "unit", "F3_": "unit", "F4_": "unit", "F5_": "unit",
             "F6_": "unit", "F7_": "unit", "F8_": "unit", "F9_": "unit", "F10_": "unit",
         },
@@ -551,6 +573,7 @@ PLUGIN = {
             "nativecmp_": "appendix",
             # the ten per-unit diagnostic plates: they say whether the METHOD worked on this
             # unit, which is a question about the run and not a finding about the biology
+            "estimationNumCluster": "appendix",
             "F1_": "appendix", "F2_": "appendix", "F3_": "appendix", "F4_": "appendix",
             "F5_": "appendix", "F6_": "appendix", "F7_": "appendix", "F8_": "appendix",
             "F9_": "appendix", "F10_": "appendix",
@@ -904,6 +927,9 @@ if (length(args) >= 14 && nzchar(args[14]) && file.exists(args[14])) {
     .fctx$absence <- paste(.fc$v[.fc$k == "absence"], collapse = "")
     .cr <- .fc[startsWith(.fc$k, "colour:"), , drop = FALSE]
     if (nrow(.cr)) .fctx$colours <- stats::setNames(.cr$v, sub("^colour:", "", .cr$k))
+    .cl <- .fc[startsWith(.fc$k, "ceiling:"), , drop = FALSE]
+    if (nrow(.cl)) .ceil <- stats::setNames(suppressWarnings(as.integer(.cl$v)),
+                                            sub("^ceiling:", "", .cl$k))
   }
 }
 
@@ -1212,8 +1238,36 @@ dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 }
 on.exit(.write_captions(), add = TRUE)
 
+# THE CEILING, ENFORCED BEFORE THE PLOT IS COMPUTED. R is lazy - `expr` is a promise until it is
+# forced - so refusing here costs the call and nothing else. Longest prefix wins, as everywhere
+# else a plugin states a rule and an exception together, and a family no ceiling covers is
+# unbounded exactly as it was before this existed.
+#
+# WHY IT IS HERE AND NOT IN THE LOOPS. The two bounds this plugin honoured were `head(paths, 6)`
+# and `head(.ranked, 8)`, typed in by hand beside a declaration that said 12 and 8. The plan read
+# the declaration, the run obeyed the literals, and they agreed only while somebody kept them in
+# step. The number now exists once, in the declaration, and arrives here.
+.ndrawn <- new.env(parent = emptyenv())
+.at_ceiling <- function(id) {
+  cl <- if (exists(".ceil", inherits = TRUE)) .ceil else integer(0)
+  if (!length(cl)) return(FALSE)
+  k <- names(cl)[startsWith(id, names(cl))]
+  if (!length(k)) return(FALSE)
+  k <- k[which.max(nchar(k))]
+  cap <- cl[[k]]
+  if (is.na(cap)) return(FALSE)
+  n <- if (is.null(.ndrawn[[k]])) 0L else .ndrawn[[k]]
+  if (n >= cap) {
+    cat("ceiling: ", id, " not drawn - ", k, " declares at most ", cap, " here\n", sep = "")
+    return(TRUE)
+  }
+  .ndrawn[[k]] <- n + 1L
+  FALSE
+}
+
 npng <- function(name, expr, w = 1800, h = 1500, res = 200, legend = "", by = "tool") {
   if (!draw_figs && !(name %in% profile_plots)) return(invisible(NULL))
+  if (.at_ceiling(paste0("native_", name))) return(invisible(NULL))
   path <- file.path(figdir, paste0("native_", name, ".png"))
   .legend(basename(path), legend, by)
   ok <- tryCatch({
@@ -1231,6 +1285,7 @@ npng <- function(name, expr, w = 1800, h = 1500, res = 200, legend = "", by = "t
 # second wrapper evaluates for the side effect instead.
 ndev <- function(name, expr, w = 1800, h = 1500, res = 200, legend = "", by = "tool") {
   if (!draw_figs && !(name %in% profile_plots)) return(invisible(NULL))
+  if (.at_ceiling(paste0("native_", name))) return(invisible(NULL))
   path <- file.path(figdir, paste0("native_", name, ".png"))
   .legend(basename(path), legend, by)
   ok <- tryCatch({
@@ -3348,10 +3403,20 @@ def _write_figure_context(ctx):
     carries an R dependency graph and should not add one to print a subtitle.
     """
     ctx_block = getattr(ctx, "figure_context", None) or {}
-    if not ctx_block:
-        return ""
-    rows = [("stamp", ctx.figure_stamp()), ("absence", ctx.figure_absence())]
-    rows += [(f"colour:{k}", v) for k, v in sorted((ctx.figure_colours() or {}).items())]
+    rows = []
+    if ctx_block:
+        rows = [("stamp", ctx.figure_stamp()), ("absence", ctx.figure_absence())]
+        rows += [(f"colour:{k}", v) for k, v in sorted((ctx.figure_colours() or {}).items())]
+    # AND THE DECLARED CEILINGS, WHICH ARE NOT A SUBTITLE. `at_most` is resolved by the host from
+    # this plugin's own declaration and handed here so the R wrappers can REFUSE past it. Until
+    # they could, the ceiling was a number the plan read and the drawing code did not: the two
+    # bounds this script honoured were `head(paths, 6)` and `head(.ranked, 8)`, transcribed by
+    # hand, so changing the declaration changed the plan and not one figure on disk.
+    #
+    # NOT GATED ON `ctx_block`. The context block is a subtitle and a colour map, and a run
+    # without one still has ceilings; returning early there sent the R its old unbounded self.
+    rows += [(f"ceiling:{k}", int(v))
+             for k, v in sorted((getattr(ctx, "figure_ceiling", None) or {}).items())]
     rows = [(k, str(v).replace("\t", " ").replace("\n", " ")) for k, v in rows if str(v)]
     if not rows:
         return ""
@@ -4053,6 +4118,9 @@ if (length(args) >= 6 && nzchar(args[6]) && file.exists(args[6])) {
     .fctx$stamp <- paste(.fc$v[.fc$k == "stamp"], collapse = "")
     .cr <- .fc[startsWith(.fc$k, "colour:"), , drop = FALSE]
     if (nrow(.cr)) .fctx$colours <- stats::setNames(.cr$v, sub("^colour:", "", .cr$k))
+    .cl <- .fc[startsWith(.fc$k, "ceiling:"), , drop = FALSE]
+    if (nrow(.cl)) .ceil <- stats::setNames(suppressWarnings(as.integer(.cl$v)),
+                                            sub("^ceiling:", "", .cl$k))
   }
 }
 
@@ -4200,7 +4268,35 @@ cat("merged:", name_a, "and", name_b, "\n")
 }
 on.exit(.write_captions(), add = TRUE)
 
+# THE CEILING, ENFORCED BEFORE THE PLOT IS COMPUTED. R is lazy - `expr` is a promise until it is
+# forced - so refusing here costs the call and nothing else. Longest prefix wins, as everywhere
+# else a plugin states a rule and an exception together, and a family no ceiling covers is
+# unbounded exactly as it was before this existed.
+#
+# WHY IT IS HERE AND NOT IN THE LOOPS. The two bounds this plugin honoured were `head(paths, 6)`
+# and `head(.ranked, 8)`, typed in by hand beside a declaration that said 12 and 8. The plan read
+# the declaration, the run obeyed the literals, and they agreed only while somebody kept them in
+# step. The number now exists once, in the declaration, and arrives here.
+.ndrawn <- new.env(parent = emptyenv())
+.at_ceiling <- function(id) {
+  cl <- if (exists(".ceil", inherits = TRUE)) .ceil else integer(0)
+  if (!length(cl)) return(FALSE)
+  k <- names(cl)[startsWith(id, names(cl))]
+  if (!length(k)) return(FALSE)
+  k <- k[which.max(nchar(k))]
+  cap <- cl[[k]]
+  if (is.na(cap)) return(FALSE)
+  n <- if (is.null(.ndrawn[[k]])) 0L else .ndrawn[[k]]
+  if (n >= cap) {
+    cat("ceiling: ", id, " not drawn - ", k, " declares at most ", cap, " here\n", sep = "")
+    return(TRUE)
+  }
+  .ndrawn[[k]] <- n + 1L
+  FALSE
+}
+
 npng <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "tool") {
+  if (.at_ceiling(paste0("nativecmp_", nm))) return(invisible(NULL))
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
   .legend(basename(path), legend, by)
   ok <- tryCatch({
@@ -4215,6 +4311,7 @@ npng <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "too
 # object that must be `draw`n. `print` on those either errors or prints nothing, so a second
 # wrapper evaluates for its side effect instead of printing.
 ndev <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "tool") {
+  if (.at_ceiling(paste0("nativecmp_", nm))) return(invisible(NULL))
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
   .legend(basename(path), legend, by)
   ok <- tryCatch({
@@ -4479,11 +4576,14 @@ if (length(.top)) {
   })
 }, error = function(e) stats::setNames(rep(NA_real_, length(shared)), shared))
 .ranked <- if (all(is.na(.mv))) shared else names(sort(.mv, decreasing = TRUE))
-.drawn <- head(.ranked, 8)
-cat("signalingChanges over", length(.drawn), "of", length(shared), "shared population(s)",
-    if (all(is.na(.mv))) "(unranked: the movement could not be computed)" else
-      "(the eight whose total signalling moved most)", "\n")
-for (g in .drawn) {
+# THE ORDER IS THIS SCRIPT'S; THE NUMBER IS THE DECLARATION'S. Ranking is a judgement about
+# what the panel is for and belongs here. How many to keep is `at_most`, and it used to be
+# written here too - `head(.ranked, 8)` beside a declaration that said 8 - so the two agreed by
+# hand. The loop now offers them all in the right order and the wrapper stops at the ceiling.
+cat("signalingChanges: ", length(shared), " shared population(s), offered ",
+    if (all(is.na(.mv))) "unranked (the movement could not be computed)" else
+      "most-moved first", "; the declared ceiling decides how many are drawn\n", sep = "")
+for (g in .ranked) {
   safe <- gsub("[^A-Za-z0-9]+", "_", g)
   npng(paste0("signalingChanges__", safe),
        netAnalysis_signalingChanges_scatter(m, idents.use = g),
@@ -4550,7 +4650,11 @@ if (sim_ok) {
 #     uses them; the shared maximum is what makes two panels mean the same thing.
 paths <- intersect(a@netP$pathways, b@netP$pathways)
 cat("shared pathways:", length(paths), "\n")
-for (pw in head(paths, 6)) {
+# ALL OF THEM, IN THE ORDER THEY COME, AND THE WRAPPERS CUT. Two families are drawn in this one
+# loop - the aggregate circle and the chord - and they carry DIFFERENT ceilings, 6 and 12, which
+# a single `head(paths, 6)` here could not express: it bounded the pathways and both families
+# with one number that matched neither declaration.
+for (pw in paths) {
   safe <- gsub("[^A-Za-z0-9]+", "_", pw)
   wmax <- tryCatch(max(sapply(object.list, function(o)
     max(o@netP$prob[, , pw], na.rm = TRUE))), error = function(e) NA)
@@ -4613,6 +4717,21 @@ args <- commandArgs(trailingOnly = TRUE)
 stopifnot(length(args) >= 2)
 figdir <- args[1]
 n <- as.integer(args[2])
+# THE DECLARED CEILINGS, AS THE LAST ARGUMENT. This script's argument list has a length that is a
+# function of n - one path and one name per arm - so a fixed position could not be used for
+# anything added later, and the ceilings arrive at the end where the count does not matter. An
+# older host passes nothing here and every family is unbounded, exactly as before.
+.ceil <- integer(0)
+if (length(args) >= 3 && nzchar(args[length(args)]) && file.exists(args[length(args)])) {
+  .cf <- tryCatch(utils::read.delim(args[length(args)], header = FALSE, sep = "\t", quote = "",
+                                    comment.char = "", stringsAsFactors = FALSE,
+                                    col.names = c("k", "v")), error = function(e) NULL)
+  if (!is.null(.cf) && nrow(.cf)) {
+    .cl <- .cf[startsWith(.cf$k, "ceiling:"), , drop = FALSE]
+    if (nrow(.cl)) .ceil <- stats::setNames(suppressWarnings(as.integer(.cl$v)),
+                                            sub("^ceiling:", "", .cl$k))
+  }
+}
 # THE LENGTH IS A FUNCTION OF n HERE, so it cannot be counted from the call site and has to be
 # asserted from inside: 2 fixed, then n object paths and n names.
 stopifnot(!is.na(n), n >= 1, length(args) >= 2 + 2 * n)
@@ -4661,7 +4780,35 @@ m <- mergeCellChat(objs, add.names = nms)
 }
 on.exit(.write_captions(), add = TRUE)
 
+# THE CEILING, ENFORCED BEFORE THE PLOT IS COMPUTED. R is lazy - `expr` is a promise until it is
+# forced - so refusing here costs the call and nothing else. Longest prefix wins, as everywhere
+# else a plugin states a rule and an exception together, and a family no ceiling covers is
+# unbounded exactly as it was before this existed.
+#
+# WHY IT IS HERE AND NOT IN THE LOOPS. The two bounds this plugin honoured were `head(paths, 6)`
+# and `head(.ranked, 8)`, typed in by hand beside a declaration that said 12 and 8. The plan read
+# the declaration, the run obeyed the literals, and they agreed only while somebody kept them in
+# step. The number now exists once, in the declaration, and arrives here.
+.ndrawn <- new.env(parent = emptyenv())
+.at_ceiling <- function(id) {
+  cl <- if (exists(".ceil", inherits = TRUE)) .ceil else integer(0)
+  if (!length(cl)) return(FALSE)
+  k <- names(cl)[startsWith(id, names(cl))]
+  if (!length(k)) return(FALSE)
+  k <- k[which.max(nchar(k))]
+  cap <- cl[[k]]
+  if (is.na(cap)) return(FALSE)
+  n <- if (is.null(.ndrawn[[k]])) 0L else .ndrawn[[k]]
+  if (n >= cap) {
+    cat("ceiling: ", id, " not drawn - ", k, " declares at most ", cap, " here\n", sep = "")
+    return(TRUE)
+  }
+  .ndrawn[[k]] <- n + 1L
+  FALSE
+}
+
 npng <- function(nm, expr, w = 2000, h = 1300, res = 200, legend = "", by = "tool") {
+  if (.at_ceiling(paste0("nativecmp_", nm))) return(invisible(NULL))
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
   .legend(basename(path), legend, by)
   ok <- tryCatch({
@@ -4678,6 +4825,7 @@ npng <- function(nm, expr, w = 2000, h = 1300, res = 200, legend = "", by = "too
 # ndev" halted the whole framing loop after the first framing's scatter plots, so one framing of
 # two was drawn and neither heatmap was. The sibling script had both wrappers; this one had one.
 ndev <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "tool") {
+  if (.at_ceiling(paste0("nativecmp_", nm))) return(invisible(NULL))
   path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
   .legend(basename(path), legend, by)
   ok <- tryCatch({
@@ -5541,7 +5689,11 @@ def compare(ctx):
         cmd = ([_RS(ctx), script, str(ctx.figures()), str(len(names))]
                + [str(x) for x in rds] + list(names)
                + [str(points) if rows else "",
-                  str(inter) if ctx.interactions else ""])
+                  str(inter) if ctx.interactions else "",
+                  # LAST, BECAUSE THE LIST ABOVE IS AS LONG AS THE DESIGN IS WIDE. Two entries
+                  # per arm means no fixed index exists for anything appended, and the R reads
+                  # this one off the end.
+                  str(_write_figure_context(ctx))])
         pr = _sp.run(cmd, capture_output=True, text=True)
         for line in (pr.stdout + pr.stderr).splitlines():
             if line.strip():
