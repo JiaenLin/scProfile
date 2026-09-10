@@ -232,6 +232,13 @@ def _compare(plugin_path, spec_path):
         unit_values=spec.get("unit_values") or {},
         interactions=spec.get("interactions") or [],
         figure_context=spec.get("figure_context") or {},
+        # THE SAME TWO THE PER-UNIT CONTEXT GETS, resolved by the same reader the plan uses.
+        # `_compare_spec` carries the plugin's declaration in `spec`; without these the compare
+        # phase wrote no ceiling rows and a family declared at 8 drew 77 in one contrast.
+        figure_position=((spec.get("plugin_spec") or {}).get("report") or {})
+                        .get("figure_position") or {},
+        figure_ceiling={f: n for f, n, _a, _p, _o in
+                        _PLN.figure_families(spec.get("plugin_spec") or {})},
         log=print,
     )
     fn(ctx)

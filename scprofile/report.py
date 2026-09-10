@@ -999,6 +999,11 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             # a reader is most likely to carry a colour across. Found by opening 62 figure kinds
             # after two panels from one family had been taken as evidence for all of them.
             "figure_context": _fig_ctx(out_dir),
+            # THE PLUGIN'S OWN DECLARATION, so the compare phase can be governed by it the way
+            # the per-unit phase is. Without it `figure_ceiling` resolved to nothing here and a
+            # family declared `at_most: 8` drew 77 panels in one contrast, the guard never
+            # firing because it had no table to consult.
+            "plugin_spec": ((_k.spec or {}) if _k is not None else {}),
         }
         cdir = kdir / _RS.COMPARE_DIRNAME / str(label)
         _launches.append(_compare_launch(
@@ -1139,6 +1144,11 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
                                    "reference": _a, "against": _b})
         spec_json = {
             "pair": _COHORT_COMPARE,
+            # THE PLUGIN'S OWN DECLARATION, so the compare phase can be governed by it the way
+            # the per-unit phase is. Without it `figure_ceiling` resolved to nothing here and a
+            # family declared `at_most: 8` drew 77 panels in one contrast, the guard never
+            # firing because it had no table to consult.
+            "plugin_spec": ((_k.spec or {}) if _k is not None else {}),
             "interactions": _inter,
             "units": {u: str((base / udir[u]) if not Path(udir[u]).is_absolute()
                              else Path(udir[u])) for u in _cross},

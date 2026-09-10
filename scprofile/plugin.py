@@ -1175,11 +1175,26 @@ class CompareContext(FigureContextReader):
     """
 
     def __init__(self, *, pair, units, out, config=None, members=None, unit_values=None,
-                 interactions=None, figure_context=None, log=print):
+                 interactions=None, figure_context=None, figure_position=None,
+                 figure_ceiling=None, log=print):
         #: The host's figure context - the run's stable label->colour map and the stamp. Read it
         #: through the same accessors the per-unit Context exposes; a comparison needs it MORE, not
         #: less, because a differential names two arms and a direction that appear nowhere else.
         self.figure_context = dict(figure_context or {})
+        #: AND THE SAME TWO DECLARATIONS THE PER-UNIT CONTEXT CARRIES. A comparison draws more
+        #: per-item families than a unit does - one chord per pathway, one scatter per population
+        #: - so it needs the ceilings MORE, not less. Given to `Context` and not to this class,
+        #: the compare phase wrote no ceiling rows, the embedded R parsed an empty table, and a
+        #: family declared at 8 drew 77 in one contrast with the guard never firing.
+        #:
+        #: THIS IS THE SECOND TIME THIS PAIR HAS DIVERGED. `figure_stamp` was added to `Context`
+        #: alone and every arm-pair comparison died on the missing accessor; the mixin above was
+        #: extracted to fix it. A mixin carries METHODS, and these are instance attributes, so it
+        #: could not have caught this - which is what `tests/test_the_two_contexts_agree.py` is
+        #: for.
+        self.figure_position = dict(figure_position or {})
+        self.figure_ceiling = dict(figure_ceiling or {})
+        self._figure_count = {}
         #: A label for this comparison, e.g. `age__aged__young`. Used in filenames.
         self.pair = str(pair)
         #: {unit_name: Path} - the finished units, in the order the contrast names them.
