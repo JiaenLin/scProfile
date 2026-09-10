@@ -194,4 +194,32 @@ if FAILURES:
     for f in FAILURES:
         print("  -", f)
     sys.exit(1)
+
+print("\nEVERY context object reads the figure context the SAME WAY")
+# THE DEFECT. `Context` had figure_colours/figure_stamp/figure_absence and `CompareContext` had
+# none of them, while CompareContext's own constructor said of the same field: "Read it through
+# the same accessors the per-unit Context exposes; a comparison needs it MORE, not less." A plugin
+# that believed the comment died on the first line of its comparison -
+#   AttributeError: 'CompareContext' object has no attribute 'figure_stamp'
+# - exit 1 after 0.1s, on every arm pair of every run including the sealed reference, and the run
+# sealed exit 0 because the phase had no record to fail. Once it had one, the record read
+# `status: failed, error: None, figures: []` and 5 declared upstream plots were simply absent.
+from scprofile.plugin import Context as _Ctx, CompareContext as _CCtx   # noqa: E402
+_ACCESSORS = ("figure_colours", "figure_stamp", "figure_absence")
+for _n in _ACCESSORS:
+    ck(f"CompareContext reads `{_n}` too, not only Context",
+       hasattr(_CCtx, _n) and hasattr(_Ctx, _n),
+       f"Context {hasattr(_Ctx, _n)}, CompareContext {hasattr(_CCtx, _n)}")
+# AND THE SAME IMPLEMENTATION, not a second copy that can drift - which is how they came apart.
+for _n in _ACCESSORS:
+    ck(f"`{_n}` is one function, shared, not copied",
+       getattr(_Ctx, _n) is getattr(_CCtx, _n))
+with tempfile.TemporaryDirectory() as _td:
+    _cc = _CCtx(pair="a__b", units={}, out=_td,
+                figure_context={"stamp": "S", "note": "N", "colours": {POPS[0]: "#123456"}})
+    ck("a comparison reads the stamp the host gave it", _cc.figure_stamp() == "S")
+    ck("a comparison reads the absence note", _cc.figure_absence() == "N")
+    ck("a comparison reads the colour map, restricted and ordered",
+       _cc.figure_colours([POPS[0]]) == {POPS[0]: "#123456"})
+
 print("\nok - one colour map, one stamp, named absence, and none of it method-specific")

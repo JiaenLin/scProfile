@@ -172,7 +172,46 @@ class Guard:
         self.notes.append(str(text))
 
 
-class Context:
+class FigureContextReader:
+    """The three accessors that read the host's figure context, shared by every context object.
+
+    ONE DEFINITION BECAUSE TWO DIVERGED. `Context` had these and `CompareContext` did not, while
+    CompareContext's own constructor said, of the same field, "Read it through the same accessors
+    the per-unit Context exposes; a comparison needs it MORE, not less". The comment asserted an
+    API the class never had, and a plugin that believed it died on the first line of its
+    comparison: `AttributeError: 'CompareContext' object has no attribute 'figure_stamp'`, exit 1
+    after 0.1s, on every arm pair of every run, for as long as the plugin had been calling it -
+    the sealed reference included. Nothing saw it, because the phase left no record until one was
+    added; then the record said `status: failed` and the run still sealed exit 0.
+
+    A mixin rather than a copy: two copies of an accessor are two things to keep in step, and the
+    defect this repairs IS the two having fallen out of step.
+    """
+
+    def figure_colours(self, labels=()):
+        """{label: '#rrggbb'} for these labels, or {} if the host supplied no map.
+
+        RESTRICTED TO WHAT IS ASKED FOR, in the order asked for, because a plotting function that
+        takes a colour vector takes it positionally against ITS OWN level order - handing it the
+        whole run's map would colour the wrong populations, which is the defect this exists to
+        fix arriving through its fix.
+        """
+        cmap = (self.figure_context or {}).get("colours") or {}
+        if not cmap:
+            return {}
+        want = [str(x) for x in labels] if labels else sorted(cmap)
+        return {k: cmap[k] for k in want if k in cmap}
+
+    def figure_stamp(self):
+        """One line naming what a panel is OF - unit, size, contrast direction. "" if unknown."""
+        return str((self.figure_context or {}).get("stamp") or "")
+
+    def figure_absence(self):
+        """The sentence naming what is NOT in the panel set, or "" when nothing is missing."""
+        return str((self.figure_context or {}).get("note") or "")
+
+
+class Context(FigureContextReader):
     """Everything a plugin is given, already correct. Built by the host, never by a plugin.
 
     The plugin receives this and returns nothing: it calls `emit_*` for what it produced and sets
@@ -311,28 +350,6 @@ class Context:
         if not self.figures_for:
             return True
         return (self.unit_axis or "") in set(self.figures_for)
-
-    def figure_colours(self, labels=()):
-        """{label: '#rrggbb'} for these labels, or {} if the host supplied no map.
-
-        RESTRICTED TO WHAT IS ASKED FOR, in the order asked for, because a plotting function that
-        takes a colour vector takes it positionally against ITS OWN level order - handing it the
-        whole run's map would colour the wrong populations, which is the defect this exists to
-        fix arriving through its fix.
-        """
-        cmap = (self.figure_context or {}).get("colours") or {}
-        if not cmap:
-            return {}
-        want = [str(x) for x in labels] if labels else sorted(cmap)
-        return {k: cmap[k] for k in want if k in cmap}
-
-    def figure_stamp(self):
-        """One line naming what a panel is OF - unit, size, contrast direction. "" if unknown."""
-        return str((self.figure_context or {}).get("stamp") or "")
-
-    def figure_absence(self):
-        """The sentence naming what is NOT in the panel set, or "" when nothing is missing."""
-        return str((self.figure_context or {}).get("note") or "")
 
     def draws(self, fid):
         """Whether THIS figure should be drawn for this unit.
@@ -1067,7 +1084,7 @@ class Context:
         self._metrics[str(name)] = v
 
 
-class CompareContext:
+class CompareContext(FigureContextReader):
     """What a plugin's `compare(ctx)` is given: two of its own finished units, and where to write.
 
     THE PHASE THAT WAS MISSING. `run(ctx)` sees one unit, so every comparison the design supports

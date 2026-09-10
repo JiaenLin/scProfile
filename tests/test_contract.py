@@ -922,8 +922,22 @@ def test_every_ctx_attribute_a_plugin_uses_exists():
     # CompareContext - the phase that lets a plugin draw its wrapped tool's own DIFFERENTIAL
     # figures, which need two finished units rather than one. Checking only Context reported
     # every compare-phase attribute as undeclared.
-    ctx_classes = [n for n in tree.body
-                   if isinstance(n, _ast.ClassDef) and n.name in ("Context", "CompareContext")]
+    # THE BASES COUNT TOO. This collected methods only from classes literally NAMED Context or
+    # CompareContext, so the moment the two shared an accessor through a base class - which is how
+    # they were stopped from drifting apart, after CompareContext was found to be missing three of
+    # them for the whole life of the compare phase - every inherited method read as unknown and
+    # every plugin using one read as a defect. Follow the bases that are defined in this file.
+    _named = ("Context", "CompareContext")
+    _by_name = {n.name: n for n in tree.body if isinstance(n, _ast.ClassDef)}
+    _want, _seen = list(_named), set()
+    while _want:
+        _nm = _want.pop()
+        if _nm in _seen or _nm not in _by_name:
+            continue
+        _seen.add(_nm)
+        _want += [b.id for b in _by_name[_nm].bases if isinstance(b, _ast.Name)]
+    ctx_classes = [_by_name[n] for n in _named if n in _by_name] + \
+                  [_by_name[n] for n in sorted(_seen) if n not in _named]
     assert ctx_classes, "no Context class found in plugin.py"
     ctx_cls = ctx_classes[0]
     known = {n.name for c in ctx_classes for n in c.body if isinstance(n, (_ast.FunctionDef,))}
