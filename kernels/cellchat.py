@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.21.0",
+    "version": "0.22.0",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
@@ -337,7 +337,9 @@ PLUGIN = {
     "native_plots": {
         # USED - CellChat draws these itself, into the instance's figures/ directory.
         "netAnalysis_computeCentrality": {"use": "tables/cellchat_centrality.csv (numbers only; its plot is not drawn)"},
-        "rankNet": {"use": "tables/cellchat_rank_net.csv per unit (return.data), figures/nativecmp_rankNet_{stacked,unstacked}.png per arm pair - CellChat's comparison mode - and figures/nativecmp_interaction_flow<suffix>.png, which PRESENTS its per-pathway contributions as one point per pathway: the change within one stratum against the change within the other. CellChat ships no interaction plot; the numbers and the between-arm test on each simple effect are entirely rankNet's, and no test is claimed for the difference of two differences"},
+        "rankNet": {
+            # stacked and unstacked, times the two response-by axes
+            "at_most": 4,"use": "tables/cellchat_rank_net.csv per unit (return.data), figures/nativecmp_rankNet_{stacked,unstacked}.png per arm pair - CellChat's comparison mode - and figures/nativecmp_interaction_flow<suffix>.png, which PRESENTS its per-pathway contributions as one point per pathway: the change within one stratum against the change within the other. CellChat ships no interaction plot; the numbers and the between-arm test on each simple effect are entirely rankNet's, and no test is claimed for the difference of two differences"},
         # THE PROFILE HAS TO ANSWER ALL THREE LEVELS, NOT ONE. It shipped the signalling-role
         # panels alone, which say where a programme acts and whether a population is a net
         # sender - and nothing about WHICH cell types communicate or WHICH ligand-receptor pairs
@@ -347,7 +349,9 @@ PLUGIN = {
         # unit and gated off the profile page, so the fix is a declaration and not a figure.
         "netVisual_circle": {"use": "figures/native_circle_count.png and native_circle_weight.png",
                              "profile": True},
-        "netVisual_heatmap": {"profile": True,
+        "netVisual_heatmap": {
+            # count and weight; the measure varies, not the data
+            "at_most": 2,"profile": True,
                               "use": "figures/native_heatmap_{count,weight}.png per unit, figures/nativecmp_diff_heatmap_{count,weight}.png per arm pair, and figures/nativecmp_interaction_<suffix>.png - the same encoding on a DERIVED matrix, the difference of two of the differences this function draws, for which CellChat provides no plot and no test"},
         # `profile: True` MARKS THE PANELS THAT DESCRIBE ONE UNIT ON ITS OWN, for the profile
         # page. These are the tool's own plots, not the host's reimplementations of them: where
@@ -357,7 +361,9 @@ PLUGIN = {
         # becomes the appendix it replaces.
         "netAnalysis_signalingRole_scatter": {"use": "figures/native_signalingRole_scatter.png per unit, and figures/nativecmp_signalingRole_scatter_pair.png - both arms on one shared range",
                                               "profile": True},
-        "netAnalysis_signalingRole_heatmap": {"use": "figures/native_signalingRole_heatmap_{out,in}.png per unit, and figures/nativecmp_signalingRole_heatmap_<pattern>.png - both arms, shared maximum",
+        "netAnalysis_signalingRole_heatmap": {
+            # outgoing and incoming; there is no third pattern
+            "at_most": 2,"use": "figures/native_signalingRole_heatmap_{out,in}.png per unit, and figures/nativecmp_signalingRole_heatmap_<pattern>.png - both arms, shared maximum",
                                               "profile": True},
         # NOT A WRAPPED FUNCTION. CellChat draws no interaction at ligand-receptor level, so
         # these two are this plugin's own: a magnitude ranking and, beside it, the two component
@@ -365,6 +371,8 @@ PLUGIN = {
         # direction OVERTURNS between strata, because a reversal is a property of the components
         # and not of the gap between them.
         "interaction_lr": {
+            # one per response-by axis, times the plain and scatter renderings
+            "at_most": 4,
             # `drawn_by: plugin` IS THE FIELD SAYING SO, rather than a comment above it. The
             # accounting check reads `native_plots` and cannot read English, so it reported this
             # entry as a function CellChat does not export - correctly, and as though it were a
@@ -389,10 +397,19 @@ PLUGIN = {
                       "evidence": "returns a character vector of n colours from ggplot2's "
                                   "default hue scale; it draws nothing. Matched only because "
                                   "the discovery pattern includes `gg`"},
-        "netVisual_aggregate": {"use": "figures/native_aggregate_circle__<pathway>.png per unit, and figures/nativecmp_aggregate_circle__<pathway>.png - both arms, shared edge maximum"},
-        "netVisual_chord_gene": {"use": "figures/native_chord_gene__<pathway>.png"},
-        "netAnalysis_contribution": {"use": "figures/native_contribution__<pathway>.png"},
-        "netAnalysis_signalingRole_network": {"use": "figures/native_signalingRole_network__<pathway>.png"},
+        "netVisual_aggregate": {
+            # the top pathway per unit, and per contrast the same `head(paths, 6)` loop as the
+            # chord above - 36 files being 6 pathways x 6 contrasts. Already bounded in code.
+            "at_most": 6,"use": "figures/native_aggregate_circle__<pathway>.png per unit, and figures/nativecmp_aggregate_circle__<pathway>.png - both arms, shared edge maximum"},
+        "netVisual_chord_gene": {
+            # the top pathway of the unit
+            "at_most": 1,"use": "figures/native_chord_gene__<pathway>.png"},
+        "netAnalysis_contribution": {
+            # the top pathway of the unit; a second adds no comparison
+            "at_most": 1,"use": "figures/native_contribution__<pathway>.png"},
+        "netAnalysis_signalingRole_network": {
+            # the top pathway of the unit
+            "at_most": 1,"use": "figures/native_signalingRole_network__<pathway>.png"},
 
         # GENUINELY IMPOSSIBLE ON THIS DATA, with the evidence the vocabulary demands.
         "netVisual_spatial": {
@@ -408,7 +425,9 @@ PLUGIN = {
         # that were never reached are reached. `owed` is not a valid reason and `validate`
         # reports every remaining one: writing a false reason to make a gate green is worse
         # than a red gate.
-        "netVisual": {"use": "figures/native_hierarchy__<pathway>.png, layout='hierarchy'"},
+        "netVisual": {
+            # the top pathway of the unit, drawn as a hierarchy
+            "at_most": 1,"use": "figures/native_hierarchy__<pathway>.png, layout='hierarchy'"},
         "netVisual_barplot": {"use": "figures/nativecmp_barplot_{count,weight}.png, per arm pair"},
         # ABSENT FROM THIS ACCOUNTING UNTIL NOW, neither used nor skipped: the roster is built
         # from the functions somebody listed, and an exhaustive-looking table with a hole in it
@@ -421,12 +440,24 @@ PLUGIN = {
         # The placeholder form covers the per-1,000-cell panels too. Written as a prefix rather
         # than a brace list because a panel whose origin cannot be named does not reach a page,
         # and a new second scale must not silently become an unplaceable file.
-        "compareInteractions": {"use": "figures/nativecmp_compareInteractions_<measure>.png - total interactions and total strength, one bar per arm, over every arm the design crosses; and the same numbers per 1,000 cells",
+        "compareInteractions": {
+            # count, count per 1k, weight, weight per 1k - the measure varies, not the data
+            "at_most": 4,"use": "figures/nativecmp_compareInteractions_<measure>.png - total interactions and total strength, one bar per arm, over every arm the design crosses; and the same numbers per 1,000 cells",
                                 "population_axis": False},
-        "netVisual_individual": {"use": "figures/native_individual__<ligand_receptor>.png"},
-        "netVisual_hierarchy1": {"use": "the left panel of figures/native_hierarchy__<pathway>.png; it takes a net matrix and netVisual(layout='hierarchy') is the documented way in"},
-        "netVisual_hierarchy2": {"use": "the right panel of figures/native_hierarchy__<pathway>.png"},
-        "netVisual_chord_cell": {"use": "figures/nativecmp_chord_cell__<pathway>.png, both arms on one page"},
+        "netVisual_individual": {
+            # the strongest ligand-receptor pair of the top pathway
+            "at_most": 1,"use": "figures/native_individual__<ligand_receptor>.png"},
+        "netVisual_hierarchy1": {
+            # one panel of the hierarchy figure above
+            "at_most": 1,"use": "the left panel of figures/native_hierarchy__<pathway>.png; it takes a net matrix and netVisual(layout='hierarchy') is the documented way in"},
+        "netVisual_hierarchy2": {
+            # the other panel of it
+            "at_most": 1,"use": "the right panel of figures/native_hierarchy__<pathway>.png"},
+        "netVisual_chord_cell": {
+            # the pathways carrying the most flow. ALREADY CAPPED IN THE CODE at `head(paths, 6)`;
+            # the 72 files on this cohort are 6 pathways x 2 arms x 6 contrasts, which is the
+            # design and not an unbounded loop. Declared so the two cannot drift apart.
+            "at_most": 6,"use": "figures/nativecmp_chord_cell__<pathway>.png, both arms on one page"},
         "netVisual_diffInteraction": {"use": "figures/nativecmp_diffInteraction_{count,weight}.png, per arm pair"},
         "netVisual_embedding": {"use": "figures/native_embedding_functional.png"},
         "netVisual_embeddingZoomIn": {"use": "figures/native_embeddingZoomIn_functional.png"},
@@ -446,8 +477,14 @@ PLUGIN = {
             "unplaced": "the panel this plugin draws under that name comes from "
                         "netAnalysis_signalingRole_scatter on the merged object, and is placed "
                         "through `direction`"},
-        "netAnalysis_signalingChanges_scatter": {"use": "figures/nativecmp_signalingChanges__<population>.png"},
-        "plotGeneExpression": {"use": "figures/native_geneExpression__<pathway>.png"},
+        "netAnalysis_signalingChanges_scatter": {
+            # THE ONE LOOP THAT WAS GENUINELY UNBOUNDED. It drew one panel per population the two
+            # arms share - 62 on this cohort, and 240 on one with forty populations. Capped in
+            # the code below at the eight that MOVED MOST, which is what the panel is for.
+            "at_most": 8,"use": "figures/nativecmp_signalingChanges__<population>.png"},
+        "plotGeneExpression": {
+            # the top pathway of the unit
+            "at_most": 1,"use": "figures/native_geneExpression__<pathway>.png"},
         "StackedVlnPlot": {"skip": "duplicate_of", "same_as": "plotGeneExpression"},
     },
 
@@ -473,7 +510,48 @@ PLUGIN = {
         # as it ships its panels; mapping a name to a template is the place where adding a
         # second method quietly stops working.
         "writing_template": "cell-cell-communication",
+        # WHERE A RESULT PLACES EACH FAMILY, AND WHAT IT IS NOT WRITTEN FROM AT ALL. Answered
+        # against `sch dev convert placement`, which listed 48 declared families of which 5 were
+        # placed. The rule is about WHAT A PANEL IS, not about what one cohort happened to cite:
+        #
+        #   overview    the totals per arm, which orient a reader before any comparison
+        #   contrast    the arm-pair comparisons, and the reference unit's own profile - the
+        #               panels a Results paragraph about "what changed" is written from
+        #   conclusion  the interaction: the difference of two differences, which is the thing
+        #               a 2x2 design exists to reach
+        #   appendix    drawn, kept, placed on the pages, reviewable - and no result is written
+        #               from it. Per-unit description for eighteen units, per-pathway and
+        #               per-population detail, and the ten diagnostic plates. Not numbered, so
+        #               no sentence can cite one, the writing step does not wait on them, and
+        #               they are not written a second time as a vector copy.
+        #
+        # THE BROAD RULE FIRST AND THE EXCEPTIONS AFTER IT, because the longest prefix wins.
+        # `native_` does not match `nativecmp_` - the seventh character is `c`, not `_` - so the
+        # two defaults below are independent and neither reaches the other's families.
         "figure_position": {
+            "native_": "appendix",
+            "nativecmp_": "appendix",
+            # the ten per-unit diagnostic plates: they say whether the METHOD worked on this
+            # unit, which is a question about the run and not a finding about the biology
+            "F1_": "appendix", "F2_": "appendix", "F3_": "appendix", "F4_": "appendix",
+            "F5_": "appendix", "F6_": "appendix", "F7_": "appendix", "F8_": "appendix",
+            "F9_": "appendix", "F10_": "appendix",
+            # the reference unit's own profile - the only per-unit panels a result is read
+            # against, and numbered for the reference unit alone by `profile_figures`
+            "native_circle_": "contrast",
+            "native_heatmap_": "contrast",
+            "native_bubble": "contrast",
+            "native_signalingRole_scatter": "contrast",
+            "native_signalingRole_heatmap": "contrast",
+            # the arm-pair comparisons
+            "nativecmp_bubble_": "contrast",
+            "nativecmp_diffInteraction": "contrast",
+            "nativecmp_diff_heatmap": "contrast",
+            "nativecmp_diff_signalingRole": "contrast",
+            "nativecmp_rankNet": "contrast",
+            "nativecmp_signalingRole_heatmap": "contrast",
+            "nativecmp_signalingRole_scatter_pair": "contrast",
+            # and the two that were already here
             "nativecmp_compareInteractions": "overview",
             "nativecmp_interaction": "conclusion",
         },
@@ -4367,8 +4445,27 @@ if (length(.top)) {
 # 8. per-population signalling changes - the one figure that names WHICH signals moved for a
 #    given population. Drawn for every population the two arms SHARE: a population absent from
 #    one arm has no change to plot, and is named above rather than passed silently.
-cat("signalingChanges over", length(shared), "shared population(s)\n")
-for (g in shared) {
+# CAPPED, AND RANKED BEFORE IT IS CUT. `at_most: 8` in the declaration is a promise about how
+# many panels this family may produce; the loop is what keeps it. Taking the first eight in
+# whatever order `intersect` returned would cap the COUNT and throw away the point, so the shared
+# populations are ordered by how much their total signalling moved between the arms - the
+# quantity the panel exists to show - and the top eight are drawn.
+#
+# IF THE RANKING CANNOT BE COMPUTED THE CAP STILL HOLDS. Falling back to the full list would turn
+# a failed sort into an unbounded loop, which is the state this replaces.
+.mv <- tryCatch({
+  .w <- lapply(object.list, function(o) o@net$weight)
+  sapply(shared, function(g) {
+    v <- sapply(.w, function(x) if (g %in% rownames(x)) sum(x[g, ]) + sum(x[, g]) else NA_real_)
+    if (any(is.na(v))) NA_real_ else abs(max(v) - min(v))
+  })
+}, error = function(e) stats::setNames(rep(NA_real_, length(shared)), shared))
+.ranked <- if (all(is.na(.mv))) shared else names(sort(.mv, decreasing = TRUE))
+.drawn <- head(.ranked, 8)
+cat("signalingChanges over", length(.drawn), "of", length(shared), "shared population(s)",
+    if (all(is.na(.mv))) "(unranked: the movement could not be computed)" else
+      "(the eight whose total signalling moved most)", "\n")
+for (g in .drawn) {
   safe <- gsub("[^A-Za-z0-9]+", "_", g)
   npng(paste0("signalingChanges__", safe),
        netAnalysis_signalingChanges_scatter(m, idents.use = g),

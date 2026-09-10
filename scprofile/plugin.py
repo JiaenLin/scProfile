@@ -211,6 +211,25 @@ class FigureContextReader:
         return str((self.figure_context or {}).get("note") or "")
 
 
+def _wants_vector(placed, name):
+    """Does this panel get a vector copy? Everything but a kind the plugin placed `appendix`.
+
+    THE SAME DECLARATION THAT DECIDES THE NUMBERING. A plugin that has said a kind is drawn and
+    no result is written from it has already said the thing this needs to know, and asking it
+    again in a second key is how two declarations of one fact start disagreeing. Longest prefix
+    wins, exactly as in the composer, so a family can be withheld with one member kept.
+
+    UNDECLARED MEANS YES. A plugin that declares no positions at all keeps every vector copy it
+    had before this existed - a reduction nobody asked for is a regression.
+    """
+    decl = {str(k): str(v) for k, v in (placed or {}).items()}
+    base = str(name).rsplit("/", 1)[-1]
+    for k in sorted(decl, key=len, reverse=True):
+        if base.startswith(k):
+            return decl[k] != "appendix"
+    return True
+
+
 class Context(FigureContextReader):
     """Everything a plugin is given, already correct. Built by the host, never by a plugin.
 
@@ -219,7 +238,7 @@ class Context(FigureContextReader):
     """
 
     def __init__(self, adata, *, keys, out, cores=1, memory_gb=None, unit=None, unit_axis=None,
-                 figures_for=None, profile_figures=None,
+                 figures_for=None, profile_figures=None, figure_position=None,
                  unit_members=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
                  sentinels=(), provenance=None, constraint="", cache_dir=None,
@@ -263,6 +282,11 @@ class Context(FigureContextReader):
         #: group needs its few panels for every group, and switching the full set off for an axis
         #: must not switch off the three that page is made of.
         self.profile_figures = frozenset(str(x) for x in (profile_figures or ()))
+        #: {figure-id prefix -> where a result places it}, from the plugin's own declaration. The
+        #: host reads it to decide the paper's numbering; this is the same map, reaching the
+        #: drawing side so a kind placed `appendix` does not also get a vector copy written for
+        #: a page that will never cite it. ONE DECLARATION, read in two places, never two.
+        self.figure_position = dict(figure_position or {})
         #: WHAT A FIGURE MUST BE ABLE TO SAY ABOUT ITSELF, computed by the host: the stable
         #: label->colour map, the line naming this unit or contrast with its n, and the named
         #: absences. Read it through `figure_stamp()` and `figure_colours()` rather than by key,
@@ -897,7 +921,15 @@ class Context(FigureContextReader):
                 self.log(f"      {_code}: {_detail}")
         want_in = float(fig.get_size_inches()[0])
         fig.savefig(png, dpi=dpi, bbox_inches="tight")
-        fig.savefig(pdf, bbox_inches="tight")
+        # THE VECTOR COPY IS FOR THE FIGURES A RESULT IS WRITTEN FROM. It is offered on the page
+        # as a "vector (PDF)" download, so it is not redundant - it is just not needed for every
+        # panel. MEASURED: one cohort wrote 360 files for 180 diagnostic plates, ten per unit
+        # across eighteen units, in two formats, and the section cites none of them. Which kinds
+        # those are is not the host's to know; the plugin says so by placing them `appendix`,
+        # the same declaration that keeps them out of the paper's numbering.
+        vector = _wants_vector(self.figure_position, name)
+        if vector:
+            fig.savefig(pdf, bbox_inches="tight")
         # WHAT WAS WRITTEN, NOT WHAT WAS ASKED FOR. `fit_column` snaps the figure to its
         # declared width and `bbox_inches="tight"` on the two lines above is then free to grow
         # it again - so the only honest measurement is read back from the file. A test proves
@@ -919,7 +951,8 @@ class Context(FigureContextReader):
         # declaration and the panel. Without it the reporter can count figures and nothing else:
         # it cannot say which declared panel is missing, and a missing panel is the one thing a
         # reader cannot see for themselves.
-        self._figures.append({"id": str(name), "path": png, "vector": pdf, "source": src,
+        self._figures.append({"id": str(name), "path": png,
+                              "vector": pdf if vector else None, "source": src,
                               "caption": caption,
                               # CARRIED, so the run reports it and the eye scan can be pointed
                               # at the panels a machine already has doubts about.

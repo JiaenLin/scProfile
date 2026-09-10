@@ -381,6 +381,7 @@ def main(argv):
                   profile_figures=[str(f.get("id")) for f in
                                    ((spec.get("report") or {}).get("figures") or [])
                                    if f.get("profile") and f.get("id")],
+                  figure_position=(spec.get("report") or {}).get("figure_position") or {},
                   organism=inp.get("organism"), assay=inp.get("assay"),
                   references=inp.get("references"),
                   # BY ROLE, NOT BY NAME. `Context` accepted these from the beginning and nothing

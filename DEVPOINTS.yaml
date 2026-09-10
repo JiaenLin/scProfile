@@ -210,6 +210,42 @@ points:
             The LEGEND ITSELF is not declared here: it is written where the figure is drawn, out
             of numbers no build stage has - the n, the cap that was applied, the populations that
             were dropped - and is read back from captions.tsv when the plugin runs
+        - name: placement
+          phase: build
+          fills: [report.figure_position]
+          # WHICH DECLARATIONS NAME A FIGURE FAMILY, and how to read an id out of each. Nothing
+          # in `sch/` knows that this format keeps upstream plots in `native_plots` with their
+          # filenames written into a prose `use:`, or that a plugin's own plates carry an `id`.
+          # Both are facts about this repository's format and both are declared here, like
+          # `version_field` and `environment.holds` above.
+          places_every:
+            - field: native_plots
+              named_by: use
+              # A PLACEHOLDER MEANS ONE PANEL PER DATA ITEM. `nativecmp_chord_cell__<pathway>`
+              # draws once per pathway and `nativecmp_signalingChanges__<population>` once per
+              # shared population - 72 and 62 panels on this cohort, and 240 on one with forty
+              # populations. The count is not knowable until a cohort arrives, which is exactly
+              # why the ceiling belongs in the declaration.
+              per_item: "<"
+              bound: at_most
+            - field: report.figures
+              named_by: id
+          positions: [overview, contrast, conclusion, appendix]
+          finished_by: >
+            `sch dev convert placement --root . --point kernel --name <plugin>` prints one row
+            per family that has no position and one per per-item family with no ceiling. Add a
+            `report.figure_position` prefix rule for the first and an `at_most:` for the second,
+            then cap the loop that draws it - the declaration and the code have to agree, and
+            only the second one actually stops drawing
+          why: >
+            WHICH FIGURES A RESULT IS WRITTEN FROM, AND HOW MANY OF EACH THERE ARE. Measured on a
+            sealed run: 1187 figures for one plugin, of 81 kinds, of which the composed section
+            cites 31 kinds and 90 files. The other fifty kinds are drawn per unit, per pathway or
+            per population, and the writing step was waiting on all of them. `appendix` is how a
+            plugin says a kind is drawn and no result is written from it: it stays on the pages
+            and stays reviewable, but it is not numbered, no sentence can cite it, it does not
+            gate the writing, and it is not written a second time as a vector copy - 180 of those
+            on this cohort, for plates the section never mentions
         - name: measure
           phase: test
           fills: [memory_gb_base, memory_gb_per_100k]
