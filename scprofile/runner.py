@@ -974,6 +974,24 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
                     f"refusing to remove {p} for a --force rebuild: it is not a directory named "
                     f"{' or '.join(sorted(expected))!r}. Remove it yourself if that is what you "
                     f"meant.")
+            # AND THE MEANS TO REBUILD ARE CHECKED BEFORE ANYTHING IS REMOVED. This used to
+            # rmtree first and look for a package manager afterwards, so a job that had not
+            # loaded its conda module turned a WORKING environment into no environment at all
+            # and then printed a helpful message about what it would have needed. Measured: one
+            # from-source R environment, destroyed by a repair job that could not repair.
+            #
+            # The check is the same one the build makes below, asked early and asked only when
+            # the lock actually needs it: a lock with no conda packages builds as a venv and must
+            # not be refused for the absence of a manager it will not use.
+            _m = machine(log=None)
+            _mgr = (shutil.which("micromamba") or shutil.which("mamba")
+                    or shutil.which("conda"))
+            if spec["conda"] and not _mgr and not _m["pythons"]:
+                raise RuntimeError(
+                    f"refusing to remove {p} for a --force rebuild: this lock needs conda "
+                    f"packages and no micromamba, mamba or conda is on PATH, so the rebuild "
+                    f"would fail and leave nothing behind. On a cluster this is usually a "
+                    f"missing `module load anaconda3` in the job. The environment is untouched.")
             log(f"  --force: removing {p} first, so the rebuild cannot inherit packages the "
                 f"current lock does not name")
             shutil.rmtree(p)
