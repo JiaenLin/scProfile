@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.20.1",
+    "version": "0.21.0",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
@@ -258,8 +258,16 @@ PLUGIN = {
         # pulls it in transitively. Alone, `netVisual_embedding` and `netVisual_embeddingZoomIn`
         # drew nothing on any of 18 units and the run still sealed. `sch dev convert borrowed`
         # names it; `capacity --promised` is what noticed the panels were gone.
+        # LOADED AT 25 SITES AND DECLARED BY NOBODY UNTIL NOW. `sch dev convert borrowed` reports
+        # it as this plugin's own import; what it could not report is which VERSION, because that
+        # was decided by the neighbours. Six of the eight plugins that shared this environment
+        # pin numpy below 2, so cellchat ran on 1.26.4 for its whole life; unplugged it resolved
+        # to 2.5.3 and crossed a major version with nothing declaring that this was allowed. The
+        # range is what there is evidence for: the sealed reference produced its 90 numeric
+        # tables on 1.26.4 and runs 709905/709939 reproduced all 90 byte-identical on 2.5.3.
         "packages": {"anndata": ">=0.12,<0.13", "pandas": ">=2.0,<3", "scipy": ">=1.10",
-                     "matplotlib": ">=3.7,<4", "umap-learn": ">=0.5,<0.6"},
+                     "matplotlib": ">=3.7,<4", "umap-learn": ">=0.5,<0.6",
+                     "numpy": ">=1.24,<3"},
         "language": "r",
         "r": ["NMF==0.28",
               "immunogenomics/presto@7eb75c4c0a0cf8fc49c705f0975bb3650c51e114",
