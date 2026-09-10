@@ -245,6 +245,27 @@ KINDS = (
          rules=(), per_contrast=False,
          plugin_because="the reference funnel is not in an edge list and no declaration carries it; "
                          "only the plugin knows what its database offered"),
+    # DRAWN SINCE BEFORE THIS CATALOGUE EXISTED AND NEVER ENTERED IN IT. `report.py` calls
+    # `design_panel.draw` and files the result as `<plugin>_across_design.png`, one per run. The
+    # registry is what tells a plugin's stray output from the host's own panels, so a host panel
+    # missing from it is charged to the plugin: `capacity --promised` refused an otherwise clean
+    # run over this one file. Registering it is the fix; adding it to IMPLEMENTED alone broke the
+    # contract that every implemented id is a registered kind, which is the check that made the
+    # omission legible in the first place.
+    Kind("across_design", "Every unit's metrics laid over the design",
+         "how each unit sits in the design - which cells of the crossing are populated, and how "
+         "the per-unit numbers vary within and between them",
+         "that any difference between cells is a tested effect: it is a layout of measurements, "
+         "with no model and no interval",
+         rules=("R6_never_gated_on_sample",),
+         per_contrast=False, levels=(GROUP, SAMPLE), cohort_only=True,
+         # SERVES NO QUESTION, DELIBERATELY. `serves` is what a result SECTION is built from, and
+         # this panel answers none of the design's questions - it is a layout showing how the
+         # units sit in the crossing, read before the questions rather than as one of them.
+         # Declaring `serves=("cohort",)` made `result_spec` demand it of every run and report a
+         # gap where none existed. It is registered so the accounting can tell a host panel from
+         # a plugin's stray output, which is the only thing that was missing.
+         serves=()),
 )
 
 BY_ID = {k.id: k for k in KINDS}
@@ -309,6 +330,13 @@ IMPLEMENTED = {
     "unit_presence": "network_panels.unit_presence — P1_population_presence, on the cohort page",
     "unit_totals": "network_panels.unit_totals — P2_unit_totals, on the cohort page",
     "interaction": "compare_panel.draw_interaction — C5_interaction, one per crossed pair",
+    # DRAWN BY THE HOST AND ABSENT FROM THIS LIST UNTIL A CHECK ASKED. `report.py` calls
+    # `design_panel.draw` and files the result as `<plugin>_across_design.png`, and because no
+    # entry here named it, `capacity --promised` reported it as output no declaration accounts
+    # for - one file, refusing an otherwise clean run. The registry is what tells a plugin's
+    # litter from the host's own panels, so a host panel missing from it is charged to the
+    # plugin.
+    "across_design": "design_panel.draw — across_design, one per run over the whole design",
 }
 
 #: WHICH KINDS ANSWER WHICH KIND OF QUESTION. `design_panel.comparisons()` enumerates what a

@@ -273,3 +273,64 @@ the numbers.** Declaring it wrongly does not fail; it produces a comparison that
 
 An unrecognised key here is an **ERROR**, not a warning: a misspelt column name removes panels
 in silence, and a plugin that has lost three looks exactly like one that declared less.
+
+## `report.figure_position`, `report.figure_axis` and `at_most` — the figure plan
+
+Three declarations decide **which** figures a run draws, **how many** of each, and which of them
+a result is written from. Together with the design table they determine the figure count before
+any compute is scheduled: `scprofile plan` prints it, and `capacity --promised` holds the finished
+run against it.
+
+```python
+"report": {
+    "figure_position": {"native_": "appendix", "nativecmp_diffInteraction": "contrast"},
+    "figure_axis":     {"native_": "unit", "nativecmp_": "contrast"},
+},
+"native_plots": {
+    "netVisual_chord_cell": {"at_most": 8,
+                             "use": "figures/nativecmp_chord_cell__<pathway>.png"},
+    "netVisual_aggregate":  {"at_most": {"native_aggregate_circle": 1,
+                                         "nativecmp_aggregate_circle": 6},
+                             "use": "figures/native_aggregate_circle__<pathway>.png per unit, "
+                                    "and figures/nativecmp_aggregate_circle__<pathway>.png"},
+}
+```
+
+**`figure_position`** maps a figure-id prefix to where a result places the family: `overview`,
+`contrast`, `conclusion`, or `appendix`. Longest prefix wins, so a broad rule and its exception
+sit beside each other. `appendix` means the family is drawn and no result is written from it: the
+panels are produced, placed on the pages and reviewable, but they are not numbered, no sentence
+can cite them, the writing step does not wait on them, and no vector copy is written for them.
+
+**`figure_axis`** maps a prefix to what the family multiplies over: `unit`, `contrast` or
+`cohort`. Without it a ceiling is a number with no units and no count can be computed.
+
+**`at_most`** is the ceiling **in files, per occurrence of the axis** — not the number of items a
+loop iterates. A family drawing six pathways once per arm writes twelve files per contrast. It may
+be a single number, or a mapping from family to number when one entry names several: an upstream
+function that draws one panel per unit and six per contrast needs two.
+
+### The ceiling governs, it does not describe
+
+The host resolves these declarations and hands them to the drawing side, which refuses past the
+ceiling before computing the panel. Where the wrapped tool draws into its own graphics device the
+host cannot intervene, and `capacity --promised` reports a family that exceeded its ceiling as a
+failure of the run.
+
+A ceiling written twice — once in the declaration and once as a literal in the drawing code — is
+two numbers kept in step by hand. The declaration is the only place the number belongs.
+
+### Accounting runs in both directions
+
+`capacity --promised` asks two questions of every run and refuses on either:
+
+- **declared and never drawn** — a plot named in `native_plots` that produced no file anywhere in
+  the run. The reader was promised a panel and did not get one.
+- **drawn and declared by nothing** — output the run produced that no declaration accounts for.
+  A wrapped tool that writes a diagnostic into the working directory is doing something ordinary;
+  the point is that nothing else in the run can tell it from output someone asked for. Declare it,
+  with `at_most` and a position, and the accounting is complete.
+
+Host-drawn panels are not a plugin's output and are recognised from `panels.IMPLEMENTED`. A host
+panel missing from that registry is charged to the plugin.
+

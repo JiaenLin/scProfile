@@ -165,6 +165,20 @@ Three corollaries that come up every time:
   other variant is supplementary. Prefer covering distinct questions over covering one question
   thoroughly.
 
+**This choice is declared, not inferred.** `report.figure_position` places every figure family
+the plugin declares, and `appendix` is how it says a family is drawn and no result is written
+from it. The consequences are mechanical: an appendix family is not numbered, so no sentence can
+cite it; the writing step does not wait for it to be reviewed; and it is written once rather than
+twice, because the vector copy follows the paper. The declaration is the only place the choice is
+recorded, and `sch dev convert placement` refuses to report the stage finished while any family
+is unplaced.
+
+**How many of each is declared too.** A family drawn once per pathway or per population has no
+size until a cohort arrives — one contrast can draw eight panels or two hundred and forty from
+the same loop, depending on the data. `at_most` is the ceiling in files per occurrence of the
+axis, it reaches the drawing code, and the drawing stops there. A count that lives in the loop
+instead is a second copy of a number, and the two agree only while someone keeps them in step.
+
 ---
 
 ## What this standard does not do
