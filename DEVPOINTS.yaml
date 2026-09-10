@@ -231,6 +231,13 @@ points:
             - field: report.figures
               named_by: id
           positions: [overview, contrast, conclusion, appendix]
+          # WHAT A CEILING IS COUNTED IN. `at_most: 6` is a number with no units until the
+          # declaration says whether the family is drawn once per unit, once per arm-pair
+          # comparison, or once for the whole cohort - and until it does, no figure count can be
+          # computed before a job is submitted. Read as a prefix map like `figure_position`, so a
+          # plugin whose families are named by phase states it in two rules.
+          axis_field: report.figure_axis
+          axes: [unit, contrast, cohort]
           finished_by: >
             `sch dev convert placement --root . --point kernel --name <plugin>` prints one row
             per family that has no position and one per per-item family with no ceiling. Add a

@@ -2334,6 +2334,57 @@ def _plan(a):
                 + f"({x['cores']}c)" for x in wave))
     else:
         print("\nnothing is runnable on this object as it stands.")
+
+    # ---- HOW MANY FIGURES THIS WILL DRAW, BEFORE A QUEUE SLOT IS SPENT -------------------------
+    # THE NUMBER IS THE POINT. `planner.result_spec` has been able to say what a result should
+    # CONTAIN, from the design table and the declaration and with no run, since it was written -
+    # and its only caller builds a page out of a finished run, so it was always read after the
+    # compute it was meant to inform. It also consults one field, `report.unit_network`, which is
+    # the host's own panels: 84 files of 1187 on a real cohort.
+    #
+    # This is the other 1103. A specification a reader can argue with is worth having and is not
+    # the same as a number that can look wrong: 1187 figures for one plugin is obvious on a screen
+    # and invisible in a list of families. It is the design's own arithmetic - a declared ceiling
+    # times the number of times its axis occurs - so a plan that disagrees with a run is a defect
+    # in one of them, and measurable.
+    try:
+        from . import compare_panel as _CP
+        _pairs = _CP.arm_pairs(dtab, factors=dfactors) if dtab is not None else []
+    except Exception:                                                     # noqa: BLE001
+        # A DESIGN THIS CANNOT READ IS NOT A RUN WITH NO COMPARISONS. Reporting zero contrasts
+        # would silently drop every per-contrast family from the count and print a total that is
+        # only the per-unit half - which reads as a smaller run, not as a plan that could not be
+        # made.
+        _pairs = None
+    # AND THE COUNT IS SKIPPED, NOT GUESSED. Reporting zero contrasts would drop every
+    # per-contrast family and print the per-unit half as if it were the whole run. The exit code
+    # is NOT touched here: whether a plan can be counted says nothing about whether it can run.
+    _countable = _pairs is not None
+    _rows, _tot, _vec = [], 0, 0
+    for _n in (sorted(runnable or []) if _countable else []):
+        _sp = (ks[_n].spec or {}) if _n in ks else {}
+        _fp = PL.figure_plan(_sp, units=len(units or []), contrasts=len(_pairs), cohort=1)
+        if not _fp["rows"]:
+            continue
+        _rows.append((_n, _fp))
+        _tot += _fp["files"]
+        _vec += _fp["vector"]
+    if not _countable:
+        print("\nfigures this will draw — CANNOT SAY: the arm pairs could not be resolved from "
+              "this design, so\n  every per-contrast family would have counted as zero.")
+    if _rows:
+        print(f"\nfigures this will draw — {_tot + _vec} "
+              f"({_tot} panel(s), {_vec} vector copy(ies)), from the design and the declarations")
+        for _n, _fp in _rows:
+            _big = [r for r in _fp["rows"] if r["files"]][:3]
+            print(f"  {_n:<12} {_fp['files'] + _fp['vector']:>5}  "
+                  + ", ".join(f"{r['family']} {r['at_most']}x{r['axis']}={r['files']}"
+                              for r in _big)
+                  + (f", and {len([r for r in _fp['rows'] if r['files']]) - len(_big)} more "
+                     f"family(ies)" if len([r for r in _fp["rows"] if r["files"]]) > 3 else ""))
+        print("  A CEILING IS A DECLARATION, NOT A MEASUREMENT: `sch dev convert placement` is "
+              "what makes a plugin\n  state one per family. A family with no ceiling counts as "
+              "one and the total is then a floor.")
     print("\nnothing was run.")
     return 0 if runnable and ok_all else REFUSE
 

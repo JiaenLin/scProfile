@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.22.0",
+    "version": "0.23.0",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
@@ -339,7 +339,7 @@ PLUGIN = {
         "netAnalysis_computeCentrality": {"use": "tables/cellchat_centrality.csv (numbers only; its plot is not drawn)"},
         "rankNet": {
             # stacked and unstacked, times the two response-by axes
-            "at_most": 4,"use": "tables/cellchat_rank_net.csv per unit (return.data), figures/nativecmp_rankNet_{stacked,unstacked}.png per arm pair - CellChat's comparison mode - and figures/nativecmp_interaction_flow<suffix>.png, which PRESENTS its per-pathway contributions as one point per pathway: the change within one stratum against the change within the other. CellChat ships no interaction plot; the numbers and the between-arm test on each simple effect are entirely rankNet's, and no test is claimed for the difference of two differences"},
+            "at_most": {"nativecmp_rankNet": 2, "nativecmp_interaction_flow": 4},"use": "tables/cellchat_rank_net.csv per unit (return.data), figures/nativecmp_rankNet_{stacked,unstacked}.png per arm pair - CellChat's comparison mode - and figures/nativecmp_interaction_flow<suffix>.png, which PRESENTS its per-pathway contributions as one point per pathway: the change within one stratum against the change within the other. CellChat ships no interaction plot; the numbers and the between-arm test on each simple effect are entirely rankNet's, and no test is claimed for the difference of two differences"},
         # THE PROFILE HAS TO ANSWER ALL THREE LEVELS, NOT ONE. It shipped the signalling-role
         # panels alone, which say where a programme acts and whether a population is a net
         # sender - and nothing about WHICH cell types communicate or WHICH ligand-receptor pairs
@@ -351,7 +351,7 @@ PLUGIN = {
                              "profile": True},
         "netVisual_heatmap": {
             # count and weight; the measure varies, not the data
-            "at_most": 2,"profile": True,
+            "at_most": {"native_heatmap": 2, "nativecmp_diff_heatmap": 2, "nativecmp_interaction": 3},"profile": True,
                               "use": "figures/native_heatmap_{count,weight}.png per unit, figures/nativecmp_diff_heatmap_{count,weight}.png per arm pair, and figures/nativecmp_interaction_<suffix>.png - the same encoding on a DERIVED matrix, the difference of two of the differences this function draws, for which CellChat provides no plot and no test"},
         # `profile: True` MARKS THE PANELS THAT DESCRIBE ONE UNIT ON ITS OWN, for the profile
         # page. These are the tool's own plots, not the host's reimplementations of them: where
@@ -363,7 +363,7 @@ PLUGIN = {
                                               "profile": True},
         "netAnalysis_signalingRole_heatmap": {
             # outgoing and incoming; there is no third pattern
-            "at_most": 2,"use": "figures/native_signalingRole_heatmap_{out,in}.png per unit, and figures/nativecmp_signalingRole_heatmap_<pattern>.png - both arms, shared maximum",
+            "at_most": {"native_signalingRole_heatmap": 2, "nativecmp_signalingRole_heatmap": 2},"use": "figures/native_signalingRole_heatmap_{out,in}.png per unit, and figures/nativecmp_signalingRole_heatmap_<pattern>.png - both arms, shared maximum",
                                               "profile": True},
         # NOT A WRAPPED FUNCTION. CellChat draws no interaction at ligand-receptor level, so
         # these two are this plugin's own: a magnitude ranking and, beside it, the two component
@@ -372,7 +372,7 @@ PLUGIN = {
         # and not of the gap between them.
         "interaction_lr": {
             # one per response-by axis, times the plain and scatter renderings
-            "at_most": 4,
+            "at_most": {"nativecmp_interaction_lr": 2, "nativecmp_interaction_lr_scatter": 2},
             # `drawn_by: plugin` IS THE FIELD SAYING SO, rather than a comment above it. The
             # accounting check reads `native_plots` and cannot read English, so it reported this
             # entry as a function CellChat does not export - correctly, and as though it were a
@@ -400,7 +400,7 @@ PLUGIN = {
         "netVisual_aggregate": {
             # the top pathway per unit, and per contrast the same `head(paths, 6)` loop as the
             # chord above - 36 files being 6 pathways x 6 contrasts. Already bounded in code.
-            "at_most": 6,"use": "figures/native_aggregate_circle__<pathway>.png per unit, and figures/nativecmp_aggregate_circle__<pathway>.png - both arms, shared edge maximum"},
+            "at_most": {"native_aggregate_circle": 1, "nativecmp_aggregate_circle": 6},"use": "figures/native_aggregate_circle__<pathway>.png per unit, and figures/nativecmp_aggregate_circle__<pathway>.png - both arms, shared edge maximum"},
         "netVisual_chord_gene": {
             # the top pathway of the unit
             "at_most": 1,"use": "figures/native_chord_gene__<pathway>.png"},
@@ -454,10 +454,11 @@ PLUGIN = {
             # the other panel of it
             "at_most": 1,"use": "the right panel of figures/native_hierarchy__<pathway>.png"},
         "netVisual_chord_cell": {
-            # the pathways carrying the most flow. ALREADY CAPPED IN THE CODE at `head(paths, 6)`;
-            # the 72 files on this cohort are 6 pathways x 2 arms x 6 contrasts, which is the
-            # design and not an unbounded loop. Declared so the two cannot drift apart.
-            "at_most": 6,"use": "figures/nativecmp_chord_cell__<pathway>.png, both arms on one page"},
+            # TWELVE FILES, NOT SIX PATHWAYS. `at_most` bounds the FILES a family writes per
+            # occurrence of its axis, and this one draws each of `head(paths, 6)` once PER ARM -
+            # so a contrast gets twelve. Declared as six, the plan under-counted it by half, and
+            # a ceiling that does not mean files cannot be multiplied by anything.
+            "at_most": 12,"use": "figures/nativecmp_chord_cell__<pathway>.png, both arms on one page"},
         "netVisual_diffInteraction": {"use": "figures/nativecmp_diffInteraction_{count,weight}.png, per arm pair"},
         "netVisual_embedding": {"use": "figures/native_embedding_functional.png"},
         "netVisual_embeddingZoomIn": {"use": "figures/native_embeddingZoomIn_functional.png"},
@@ -528,6 +529,23 @@ PLUGIN = {
         # THE BROAD RULE FIRST AND THE EXCEPTIONS AFTER IT, because the longest prefix wins.
         # `native_` does not match `nativecmp_` - the seventh character is `c`, not `_` - so the
         # two defaults below are independent and neither reaches the other's families.
+        # WHAT EACH FAMILY MULTIPLIES OVER. A ceiling is a number with no units until this says
+        # whether the family is drawn once per unit, once per arm-pair comparison, or once for
+        # the whole cohort - and without it no figure count can be computed before a job is
+        # submitted. Longest prefix wins, as with the positions below, so the two broad rules
+        # cover forty-six families and the exceptions name themselves.
+        #
+        # `nativecmp_interaction*` and `nativecmp_compareInteractions` are drawn ONCE over the
+        # crossed arms, not per pair: they are the design-wide panels, and counting them per
+        # contrast overstates them sixfold.
+        "figure_axis": {
+            "native_": "unit",
+            "nativecmp_": "contrast",
+            "nativecmp_interaction": "cohort",
+            "nativecmp_compareInteractions": "cohort",
+            "F1_": "unit", "F2_": "unit", "F3_": "unit", "F4_": "unit", "F5_": "unit",
+            "F6_": "unit", "F7_": "unit", "F8_": "unit", "F9_": "unit", "F10_": "unit",
+        },
         "figure_position": {
             "native_": "appendix",
             "nativecmp_": "appendix",

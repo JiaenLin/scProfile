@@ -816,3 +816,93 @@ def gap_text(sections):
             L.append(f"     MISSING  {p['kind']}: {p['establishes']}")
     L += ["", f"{tot_h} of {tot_h + tot_m} specified panels delivered."]
     return "\n".join(L)
+
+
+#: How many figures a run will draw, from the design and the declaration ALONE.
+#:
+#: WHY THIS IS HERE AND NOT IN A REPORT. `result_spec` above says what a result should CONTAIN and
+#: needs no run - and its only caller builds a page out of a finished one, so the specification
+#: was always read after the compute it was meant to inform. It also reads one field,
+#: `report.unit_network`, which is the host's own panels: on a real cohort that is 84 files of
+#: 1187. The other 1103 come from the plugin's own inventory, and nothing looked at it before a
+#: job was submitted.
+#:
+#: MEASURED: one plugin drew 1187 figures. Nobody could have known that without running it.
+def figure_families(plugin_spec):
+    """[(family, ceiling, axis, position)] - the plugin's whole plot inventory, from declarations.
+
+    THREE FIELDS, ALL THE PLUGIN'S. `native_plots` and `report.figures` say WHAT it draws;
+    `report.figure_axis` says what each family multiplies over; `report.figure_position` says
+    where a result places it, and `appendix` means a result is not written from it at all.
+    `at_most` is the ceiling IN FILES per occurrence of the axis - not in items iterated, because
+    a family drawing six pathways once per arm writes twelve files per contrast. It may be stated
+    per family, because one upstream entry can name several: `netVisual_aggregate` draws one
+    circle per unit and six per contrast.
+    """
+    import re as _re
+
+    spec = plugin_spec or {}
+    report = spec.get("report") or {}
+
+    def _prefix_map(field):
+        m = {str(k): str(v) for k, v in (report.get(field) or {}).items()}
+        return m, sorted(m, key=len, reverse=True)
+
+    axes, akeys = _prefix_map("figure_axis")
+    place, pkeys = _prefix_map("figure_position")
+
+    def _match(stem, m, keys, default):
+        for k in keys:
+            if stem.startswith(k):
+                return m[k]
+        return default
+
+    fams = {}
+    for fn, rec in sorted((spec.get("native_plots") or {}).items()):
+        rec = rec if isinstance(rec, dict) else {}
+        if rec.get("skip"):
+            continue
+        cap = rec.get("at_most")
+        for raw in _re.findall(r"figures/([A-Za-z0-9_{},<>-]+?)\.(?:png|pdf|svg)",
+                               str(rec.get("use") or "")):
+            stem = _re.split(r"__|\{|<", raw)[0].rstrip("_")
+            n = cap.get(stem, cap.get(raw)) if isinstance(cap, dict) else cap
+            fams.setdefault(stem, int(n) if n else 1)
+    own = set()
+    for e in (report.get("figures") or []):
+        fid = str((e or {}).get("id") or "")
+        if fid:
+            fams.setdefault(fid, 1)
+            own.add(fid)
+    # WHICH FAMILIES CAN HAVE A VECTOR COPY AT ALL. Only the ones the plugin draws through the
+    # host's own figure writer; an upstream plot arrives as a PNG from the wrapped tool's device
+    # and there is no vector to write. Counting one for every family overstated this cohort by
+    # 171 files that were never going to exist.
+    return [(stem, n, _match(stem, axes, akeys, "unit"),
+             _match(stem, place, pkeys, "contrast"), stem in own)
+            for stem, n in sorted(fams.items())]
+
+
+def figure_plan(plugin_spec, *, units=1, contrasts=0, cohort=1, vector_for_paper=True):
+    """{rows, files, vector, total} - what a run of this shape will draw, before it is scheduled.
+
+    A COUNT IS THE POINT. A specification a reader can argue with is worth having and is not the
+    same as a number that can look wrong: 1187 figures for one plugin is obvious on a screen and
+    invisible in a list of families. The arithmetic is the declaration's own - a ceiling times
+    the number of times its axis occurs - so a plan that disagrees with a run is a defect in one
+    of them and can be measured rather than felt.
+    """
+    per = {"unit": max(0, int(units)), "contrast": max(0, int(contrasts)),
+           "cohort": max(0, int(cohort))}
+    rows, files, vec = [], 0, 0
+    for stem, n, axis, position, own in figure_families(plugin_spec):
+        times = per.get(axis, 0)
+        k = n * times
+        # THE VECTOR COPY FOLLOWS THE PAPER, the same rule the drawing side applies.
+        v = k if (vector_for_paper and own and position != "appendix") else 0
+        rows.append({"family": stem, "at_most": n, "axis": axis, "position": position,
+                     "files": k, "vector": v})
+        files += k
+        vec += v
+    return {"rows": sorted(rows, key=lambda r: -r["files"]), "files": files, "vector": vec,
+            "total": files + vec}
