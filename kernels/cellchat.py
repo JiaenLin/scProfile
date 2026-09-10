@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.19.0",
+    "version": "0.20.0",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
@@ -252,8 +252,14 @@ PLUGIN = {
 
     "requires": {
         "python": ">=3.10,<3.13",
+        # `umap-learn` IS REACHED FROM R THROUGH RETICULATE, and this plugin's own R names it:
+        # `netEmbedding(..., umap.method = "umap-learn")`, at three sites. It was never declared
+        # and worked anyway for as long as this plugin shared an environment with a stack that
+        # pulls it in transitively. Alone, `netVisual_embedding` and `netVisual_embeddingZoomIn`
+        # drew nothing on any of 18 units and the run still sealed. `sch dev convert borrowed`
+        # names it; `capacity --promised` is what noticed the panels were gone.
         "packages": {"anndata": ">=0.12,<0.13", "pandas": ">=2.0,<3", "scipy": ">=1.10",
-                     "matplotlib": ">=3.7,<4"},
+                     "matplotlib": ">=3.7,<4", "umap-learn": ">=0.5,<0.6"},
         "language": "r",
         "r": ["NMF==0.28",
               "immunogenomics/presto@7eb75c4c0a0cf8fc49c705f0975bb3650c51e114",
@@ -285,6 +291,14 @@ PLUGIN = {
             "r-future": "", "r-future.apply": "", "r-pbapply": "", "r-irlba": "",
             "r-ggalluvial": "", "r-svglite": "", "r-ggrepel": "", "r-circlize": "",
             "r-cowplot": "", "r-rspectra": "", "r-reticulate": "", "r-sna": "", "r-fnn": "",
+            # SUGGESTED BY CellChat, THEREFORE NOT INSTALLED, THEREFORE MISSING. `remotes` runs
+            # with `dependencies = FALSE`, which skips Suggests - so nothing built Seurat and
+            # `R CMD INSTALL` never refused, because CellChat builds fine without it. Only
+            # `plotGeneExpression` needs it, at draw time. In the shared directory it was present
+            # anyway, built from source on 2026-08-30 by something that was not this declaration;
+            # alone, that panel failed on all 18 units with "there is no package called Seurat"
+            # and the run sealed exit 0. A Suggests this plugin actually calls is a dependency.
+            "r-seurat": "",
             "r-shape": "", "r-patchwork": "", "r-plyr": "", "r-ggpubr": "", "r-ggnetwork": "",
             "r-plotly": "", "r-shiny": "", "r-bslib": "", "r-collapse": "", "r-rcppeigen": "",
             "bioconductor-complexheatmap": "", "bioconductor-biocgenerics": "",
