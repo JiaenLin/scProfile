@@ -36,6 +36,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scprofile import declare, manifest                                   # noqa: E402
 from scprofile.plugin import CompareContext, Context, Guard                # noqa: E402
+# ABSOLUTE, LIKE EVERY IMPORT IN THIS FILE. `_entry.py` is executed as a SCRIPT in the
+# plugin's own environment, so it has no parent package and `from . import planner` raises
+# "attempted relative import with no known parent package" - which the driver then reads as
+# a broken environment and answers by force-rebuilding it from source.
+from scprofile import planner as _PLN                                      # noqa: E402
 
 
 def _has(ctx, cap, inp):
@@ -374,8 +379,6 @@ def main(argv):
                               headline="parameter refused",
                               absent=[{"what": "everything", "why": str(e)}])
         return 0
-
-    from . import planner as _PLN
 
     ctx = Context(A, keys=keys, out=out, cores=cores, memory_gb=memory_gb, unit=unit,
                   unit_members=members,
