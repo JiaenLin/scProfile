@@ -1,0 +1,89 @@
+#!/bin/bash
+#PBS -N scprofile_loop
+#PBS -q short
+#PBS -l select=1:ncpus=4:mem=16gb
+#PBS -l walltime=01:00:00
+#PBS -j oe
+#
+# =============================================================================================
+# THE TEST LOOP, AS A JOB - because a check nothing can run is a check nobody runs
+# =============================================================================================
+#
+# DEVELOPMENT.md: "THE LOOP IS HOW THIS TOOL IS TESTED, and it is not optional." The site rule is
+# that every tool invocation goes through the scheduler and never a login node. Between those two
+# there was NO WAY TO RUN THE LOOP AT ALL, and the consequence is exactly what it sounds like: a
+# round can finish with its suites green, its rules held and its predictions graded, and never
+# once ask the question the loop exists to ask - does the chain work on the runs somebody actually
+# made, in the state they are actually in.
+#
+# This is the missing half. It runs the stations, prints the first blocked one and the one thing
+# to do next, and seals the answer beside the runs it read.
+#
+# WHAT IT CANNOT DO, AND MUST NOT PRETEND TO. Station 7 is the EYE and station 8 is the
+# MANUSCRIPT. Nothing here looks at a figure and nothing here writes prose; the loop refuses to
+# advance without them and this job reports that refusal rather than routing around it. A job that
+# reported the mechanical stations green and stopped would be the failure DEVELOPMENT.md names:
+# "a chain reported working on the strength of the stations that happened to be easy."
+#
+# rule-one: no-removal. Reads the runs; writes only inside $RUNDIR.
+# Authored on the workstation and pushed (rule H1). No `git` runs below.
+#
+#   qsub -v RUNDIR=...,TOOL=...,RUNS=...[,ROUND=N] setup/loop.pbs
+
+set -euo pipefail
+
+RUNDIR="${RUNDIR:?pass -v RUNDIR=<where this job writes>}"
+TOOL="${TOOL:?pass -v TOOL=<the scProfile checkout>}"
+RUNS="${RUNS:?pass -v RUNS=<the directory holding this project run directories>}"
+ROUND="${ROUND:-0}"
+
+mkdir -p "$RUNDIR"
+exec >> "$RUNDIR/loop.log" 2>&1
+
+seal() {
+  s=$?
+  {
+    echo "exit=$s"
+    echo "jobid=${PBS_JOBID:-interactive}"
+    echo "purpose=does the chain work on the runs somebody actually made"
+    echo "runs=$RUNS"
+    hostname
+    date -u +%Y-%m-%dT%H:%M:%SZ
+    echo "loop=${LOOP:-unknown}   (non-zero: a station is BLOCKED, which is a RESULT of the"
+    echo "                          loop and not a failure of this job - the distinction is why"
+    echo "                          the job's own exit and the loop's are kept apart)"
+    echo
+    [ -s "$RUNDIR/stations.txt" ] && cat "$RUNDIR/stations.txt"
+  } > "$RUNDIR/$([ "$s" -eq 0 ] && echo SEALED.txt || echo FAILED.txt)"
+}
+trap seal EXIT
+
+echo "=== the test loop - $(date -u)"
+echo "=== node $(hostname) - PBS ${PBS_JOBID:-interactive}"
+
+set +eu
+source /etc/profile 2>/dev/null || true
+module load anaconda3/3.0.0 2>/dev/null || true
+set -eu
+
+PY="${PY:-python3}"
+for f in "$TOOL/tests/loop_stations.py" "$RUNS"; do
+  [ -e "$f" ] || { echo "MISSING: $f"; exit 2; }
+done
+
+cd "$TOOL"
+echo "=== scProfile: $(cat HEAD.txt 2>/dev/null || echo unknown)"
+echo "=== run directories: $(find "$RUNS" -maxdepth 2 -name report.json | wc -l)"
+
+# THE EXIT CODE IS THE ANSWER AND IS KEPT, not displayed. `loop_stations.py` exits non-zero on a
+# BLOCKED station, which is a RESULT and not a job failure: a blocked round is the loop working.
+set +e
+PYTHONPATH="$TOOL" "$PY" tests/loop_stations.py --runs "$RUNS" --round "$ROUND" \
+    > "$RUNDIR/stations.txt" 2>&1
+LOOP=$?
+export LOOP
+set -e
+cat "$RUNDIR/stations.txt"
+echo
+echo "=== loop_stations exit: $LOOP  (non-zero means a station is BLOCKED, which is a result)"
+exit 0
