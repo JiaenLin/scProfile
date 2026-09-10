@@ -356,6 +356,18 @@ def figure_index(run, plugin, spec=None, design=None):
     order = _order(f, design, _controls(run))
     place = _positions(spec)
     idx, n = {}, 0
+
+    # NUMBERING IN ONE PLACE. The cohort branch below normalises an unrecognised position to
+    # "conclusion" so an undeclared design-wide panel still reaches the page - which would take
+    # a panel declared `appendix` and number it anyway. The refusal has to sit where the number
+    # is handed out, not at each of the three call sites that hand one out.
+    def take(path):
+        nonlocal n
+        if place(path) == APPENDIX:
+            return
+        n += 1
+        idx[path] = n
+
     # TWO PASSES, AND THE COHORT PANELS COME SECOND. A panel drawn over every arm at once is
     # filed under no contrast, so it answers all of them - and in a single pass it was therefore
     # collected by whichever contrast happened to be read FIRST, which handed the design-wide
@@ -376,8 +388,7 @@ def figure_index(run, plugin, spec=None, design=None):
             for _key, needs in SENTENCE_EVIDENCE:
                 for path in _figs_for(by, routes, label, needs, host, scope="cohort"):
                     if path not in idx and place(path) == "overview":
-                        n += 1
-                        idx[path] = n
+                        take(path)
     # THE REFERENCE PROFILE IS NUMBERED BETWEEN THE OVERVIEW AND THE CONTRASTS, because that is
     # where it is read. Its panels are filed under no contrast and under no design-wide need, so
     # they entered no pass at all and the paper could not cite them - the control group had 144
@@ -385,8 +396,7 @@ def figure_index(run, plugin, spec=None, design=None):
     for path in profile_figures(run, plugin, spec,
                                 reference_unit(design, _controls(run), _unit_dirs(run, plugin))):
         if path not in idx and (Path(run) / path).is_file():
-            n += 1
-            idx[path] = n
+            take(path)
     for pos in ("contrast", "conclusion"):
         scope = "contrast" if pos == "contrast" else "cohort"
         for label in order:
@@ -406,17 +416,27 @@ def figure_index(run, plugin, spec=None, design=None):
                             at = "conclusion"
                         if at != pos:
                             continue
-                    n += 1
-                    idx[path] = n
+                    take(path)
     return idx
 
 
 #: A panel with no declared position is body - the middle of the document, with the contrasts.
 DEFAULT_POSITION = "contrast"
 
+#: A KIND THE PLUGIN DRAWS AND NO RESULT IS WRITTEN FROM. Not "unimportant" and not hidden: the
+#: panel is still produced, still placed on the pages, still reviewable. It is not NUMBERED, so
+#: no sentence can cite it and the writing step does not wait on it.
+#:
+#: WHY THIS HAD TO BE SAYABLE. This cohort draws 1187 figures of 81 kinds - one circle plot per
+#: unit, one chord per pathway per contrast, 72 of that kind alone. Every one was gating the
+#: result section, so writing 24 claims required opening 1019 images, and 50 of the 81 kinds are
+#: never cited by any sentence the composer writes. The host cannot know which those are: it has
+#: no idea what a chord diagram per pathway is for. The plugin does, and now says so.
+APPENDIX = "appendix"
+
 
 def _positions(spec):
-    """A function {figure path -> "overview" | "contrast" | "conclusion"} from the declaration.
+    """A function {figure path -> "overview" | "contrast" | "conclusion" | "appendix"}.
 
     KEYED ON THE FIGURE ID'S PREFIX, NOT ON THE FUNCTION THAT DREW IT, because one upstream
     function can draw panels belonging in different places - a difference between two arms is

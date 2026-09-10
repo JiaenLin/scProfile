@@ -280,6 +280,7 @@ def tasks(run, plugin, spec=None, how=None):
     that discovers it finished some time ago.
     """
     from . import brief as B
+    from . import compose as C
     from . import review as R
 
     run = Path(run)
@@ -288,9 +289,28 @@ def tasks(run, plugin, spec=None, how=None):
 
     brief = run / "kernels" / plugin / B.NAME
     try:
-        out = R.outstanding(run, plugin) or []
+        drawn_out = R.outstanding(run, plugin) or []
     except Exception:                                                     # noqa: BLE001
-        out = []
+        drawn_out = []
+    # THE WRITING STEP BLOCKS ON THE FIGURES THE PAPER IS WRITTEN FROM, NOT ON EVERY PANEL DRAWN.
+    # `review.shards` has said so in its own docstring since it was written - "the brief's list
+    # holds the ones the PAPER is written from, which is a smaller set and the one the writing
+    # step actually blocks on" - and this function then gated on the whole outstanding set. On
+    # this cohort that is 1019 figures against 90: writing 24 claims required opening every
+    # chord diagram of every pathway of every contrast, 50 of the 81 kinds of which no sentence
+    # the composer writes ever cites. A gate nobody can pass is a gate that gets stepped around.
+    #
+    # THE FULL SET IS STILL REPORTED, in the step's own title, because "90 outstanding" on a run
+    # holding 1187 figures would read as a run whose figures had almost all been looked at.
+    paper = set()
+    try:
+        paper = set(C.figure_index(run, plugin, spec, pay.get("design") or {}))
+    except Exception:                                                     # noqa: BLE001
+        paper = set()
+    # AN EMPTY INDEX IS NOT AN EMPTY GATE. Before the composer has run there is no numbering, and
+    # intersecting with nothing would report every figure as looked at and unblock the writing of
+    # a section against a paper that does not exist yet.
+    out = [(r, st) for r, st in drawn_out if str(r) in paper] if paper else drawn_out
     exists, authored = _authored(run, plugin)
     claims = list((run / "kernels" / plugin).glob("PAPER_CLAIMS*.jsonl"))
     tmpl = B.template_of(spec)
@@ -326,7 +346,11 @@ def tasks(run, plugin, spec=None, how=None):
           "state": DONE if brief.is_file() else (PENDING if started else BLOCKED),
           "why": "the evidence this result is written from, with every number's file named",
           "do": f"scprofile write --out {run} --plugin {plugin}"},
-         {"id": "look", "title": f"Open the figures ({len(out)} outstanding)",
+         {"id": "look",
+          "title": (f"Open the figures ({len(out)} outstanding"
+                    + (f" of {len(drawn_out)} drawn, the rest placed `appendix` by the plugin "
+                       f"and cited by no sentence" if len(drawn_out) > len(out) else "")
+                    + ")"),
           "state": DONE if (started and not out) else (PENDING if started else BLOCKED),
           "why": "every figure defect found in this project was found by opening the image "
                  "while the suite was green; a table shows none of them",
