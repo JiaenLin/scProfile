@@ -222,6 +222,48 @@ points:
       # one dataset. A build that is complete says the plugin is finished as code and was written
       # with no data in front of it. Whether it is right is the test stage's question.
       stages:
+        # THE ENVIRONMENT, AND IT IS A BUILD STAGE. The question is answerable from declarations
+        # with NO RUN: resolve this kernel alone, resolve it with the family, subtract. A lent
+        # package is exposure and not a defect - a seven-member environment lends its members a
+        # hundred names each and almost none is touched - so what this owes on is a name the
+        # kernel's own source LOADS and its own `requires` never asks for.
+        #
+        # THIS WAS A COMMAND WITH NO STAGE, AND THE GAP COST AN END-TO-END RUN. cellchat spent
+        # its whole life in a seven-member environment and depended on Seurat and umap-learn
+        # while declaring neither. Its selftest passed - neither is imported at module scope -
+        # and `build: 7 of 7 complete` was printed over it. Unplugged, two drawing paths died
+        # forty minutes into a cohort run, 54 panels of 711.
+        - name: environment
+          phase: build
+          fills: [requires]
+          every_requirement_declared: true
+          finished_by: >
+            `sch dev convert borrowed --root . --point kernel` names every package the kernel
+            LOADS that its own `requires` does not ask for, with the file and line that loads it.
+            Add each to `requires` - the interval there is evidence for, not the version that
+            happens to be installed - and re-run this status
+          why: >
+            what this kernel needs, declared by this kernel. `Group.name` hashes the UNION of a
+            group's members' requirements, so a kernel that borrows from its neighbours resolves
+            to a DIFFERENT environment the day it is alone - and that day is the deployment, not
+            the development
+        # THE REUSE KEY, AND WHETHER IT KEPT UP WITH THE CODE. Also a command with no stage until
+        # a commit rewrote a kernel's drawing protocol and left `version` standing still; the
+        # audit found it afterwards, which as a stage it would have found before. STALE is the
+        # only debt: CANNOT SAY - uncommitted, computed, no history - is a fact about the
+        # checkout and not about the kernel.
+        - name: freshness
+          phase: build
+          fills: [version]
+          version_is_current: true
+          finished_by: >
+            `sch dev convert freshness --root . --point kernel` names the commits that touched
+            this kernel since `version` last moved. Raise it, in the same commit as the change
+            that made it stale
+          why: >
+            see `version_means` above: a run started with --reuse-from matches an earlier unit
+            carrying the same key and hardlinks its products in. Change what a kernel draws,
+            leave this alone, and every reusing run serves the old panels and prints REUSED
         - name: contract
           phase: build
           fills: [inject, produces]

@@ -76,7 +76,17 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.25.0",
+    # 0.26.0: the drawing protocol moved out of this file into the GENERATED companion beside it,
+    # `cellchat.draw.R`. `sch dev convert freshness` caught this key standing still while the
+    # file changed - which is the one failure reuse can have: a later run started with
+    # --reuse-from matches an earlier unit carrying the same key, hardlinks its products, and
+    # serves the pre-change panels while printing REUSED.
+    "version": "0.26.0",
+    # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
+    # rises when the same inputs would give different output. PBS 710085 reproduced all 90
+    # numeric tables byte-identical, and a direct compare against the run before the change put
+    # 386 of 404 tables byte-identical - the 18 that differ are `cellchat_net_embedding.csv`,
+    # which differs between any two runs because the UMAP is not seeded.
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
