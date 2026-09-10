@@ -863,11 +863,25 @@ def figure_families(plugin_spec):
         if rec.get("skip"):
             continue
         cap = rec.get("at_most")
-        for raw in _re.findall(r"figures/([A-Za-z0-9_{},<>-]+?)\.(?:png|pdf|svg)",
+        # THE DIRECTORY IS WRITTEN ONCE AND THE FILES FOLLOW IT. A `use:` reads
+        # "figures/native_circle_count.png and native_circle_weight.png" - English, not a list -
+        # and a pattern requiring `figures/` on every name found the first and missed the second,
+        # so an entire family of 18 files was absent from the plan and from every count built on
+        # it. The extension is what makes a token a figure; a table is excluded by naming .csv.
+        for raw in _re.findall(r"(?:figures/)?([A-Za-z0-9_{},<>-]+?)\.(?:png|pdf|svg)",
                                str(rec.get("use") or "")):
             stem = _re.split(r"__|\{|<", raw)[0].rstrip("_")
             n = cap.get(stem, cap.get(raw)) if isinstance(cap, dict) else cap
-            fams.setdefault(stem, int(n) if n else 1)
+            # A BRACE FAMILY NAMES AS MANY FILES AS IT HAS MEMBERS, and the declaration was
+            # already saying so. `native_dot_{outgoing,incoming}.png` is two files;
+            # `nativecmp_barplot_{count,weight}.png` is two. Collapsing the brace into the stem
+            # and counting one undercounted five families by eighteen and six files each - 84 in
+            # all - and the fix is in this reader, not in any plugin: nothing had to be declared
+            # that had not been declared already.
+            members = 1
+            for grp in _re.findall(r"\{([^}]*)\}", raw):
+                members *= max(1, len([x for x in grp.split(",") if x.strip()]))
+            fams.setdefault(stem, int(n) if n else members)
     own = set()
     for e in (report.get("figures") or []):
         fid = str((e or {}).get("id") or "")

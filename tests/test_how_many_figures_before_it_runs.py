@@ -27,11 +27,17 @@ def check(ok, msg):
 
 # Invented families: a planner that passed by recognising a real panel name would fail here.
 SPEC = {"native_plots": {
-            "fnPerUnit": {"use": "figures/perunit_thing.png", "at_most": 2},
+            # THE DIRECTORY IS WRITTEN ONCE AND THE FILES FOLLOW IT, in English. Requiring
+            # `figures/` on every name dropped a whole family of 18 files from a real plan.
+            "fnPerUnit": {"use": "figures/perunit_thing.png and perunit_other.png",
+                          "at_most": {"perunit_thing": 2, "perunit_other": 1}},
             "fnPerPair": {"use": "figures/percontrast__<item>.png", "at_most": 12},
             "fnBoth": {"use": "figures/perunit_two__<x>.png and figures/percontrast_two__<y>.png",
                        "at_most": {"perunit_two": 1, "percontrast_two": 6}},
             "fnCohort": {"use": "figures/wholedesign_x.png", "at_most": 3},
+            # A BRACE FAMILY NAMES AS MANY FILES AS IT HAS MEMBERS, and needs no ceiling to say
+            # so. Counting one undercounted five real families by 84 files.
+            "fnBrace": {"use": "figures/perunit_brace_{a,b,c}.png"},
             "fnSkipped": {"skip": "not_applicable", "use": "figures/never.png"},
             "fnTable": {"use": "tables/numbers.csv"}},
         "report": {
@@ -48,6 +54,8 @@ p = PL.figure_plan(SPEC, units=10, contrasts=6, cohort=1)
 by = {r["family"]: r for r in p["rows"]}
 
 check(by["perunit_thing"]["files"] == 20, "a per-unit ceiling did not multiply by the units")
+check(by.get("perunit_other", {}).get("files") == 10,
+      "a file named after an `and`, with the directory written once, was missed entirely")
 check(by["percontrast"]["files"] == 72, "a per-contrast ceiling did not multiply by the pairs")
 check(by["wholedesign_x"]["files"] == 3, "a cohort family was multiplied by something")
 
@@ -72,12 +80,15 @@ check(by["OWN2"]["files"] == 10, "an appendix family stopped being drawn; it is 
 
 # THE TOTAL IS THE SUM, and it is what a person actually reads.
 check(p["total"] == p["files"] + p["vector"], "the total does not add up")
-check(p["files"] == 20 + 72 + 3 + 10 + 36 + 10 + 10, f"the total is wrong: {p['files']}")
+check(p["files"] == 20 + 10 + 72 + 3 + 10 + 36 + 10 + 10 + 30,
+      f"the total is wrong: {p['files']}")
 
 # A FAMILY WITH NO CEILING COUNTS AS ONE, so the number is a floor and never silently zero.
 nocap = PL.figure_plan({"native_plots": {"f": {"use": "figures/x_y.png"}},
                         "report": {"figure_axis": {"x_": "unit"}}}, units=7, contrasts=0)
 check(nocap["files"] == 7, f"an unbounded family did not count as one per axis: {nocap['files']}")
+check(by["perunit_brace"]["files"] == 30,
+      f"a three-member brace family was not counted as three files: {by.get('perunit_brace')}")
 
 if FAILURES:
     print("FAIL")
