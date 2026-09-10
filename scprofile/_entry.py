@@ -375,6 +375,8 @@ def main(argv):
                               absent=[{"what": "everything", "why": str(e)}])
         return 0
 
+    from . import planner as _PLN
+
     ctx = Context(A, keys=keys, out=out, cores=cores, memory_gb=memory_gb, unit=unit,
                   unit_members=members,
                   unit_axis=inp.get("unit_axis"), figures_for=inp.get("figures_for"),
@@ -382,6 +384,9 @@ def main(argv):
                                    ((spec.get("report") or {}).get("figures") or [])
                                    if f.get("profile") and f.get("id")],
                   figure_position=(spec.get("report") or {}).get("figure_position") or {},
+                  # THE DECLARED CEILINGS, resolved to {family: n} by the same reader the plan
+                  # uses - so what stops the drawing and what predicts it cannot disagree.
+                  figure_ceiling={f: n for f, n, _a, _p, _o in _PLN.figure_families(spec)},
                   organism=inp.get("organism"), assay=inp.get("assay"),
                   references=inp.get("references"),
                   # BY ROLE, NOT BY NAME. `Context` accepted these from the beginning and nothing

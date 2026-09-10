@@ -3422,7 +3422,7 @@ def _promised(run):
     It also found five plots that had been declared and never drawn since long before that, in the
     sealed reference as well - which is the shape of the thing: nobody could see it.
     """
-    from . import kernels as _K, native as _N
+    from . import kernels as _K, native as _N, planner as _PL
     ks = _K.discover()
     kdir = run / "kernels"
     if not kdir.is_dir():
@@ -3501,7 +3501,25 @@ def _promised(run):
         print("  A wrapped tool writing into the working directory is a thing wrapped tools do. "
               "The\n  point is that nothing else in this run could tell these from output "
               "somebody asked for.")
-    return 2 if (bad or lit) else 0
+    # AND THE THIRD QUESTION, WHICH MAKES THE OTHER TWO WORTH ASKING: did anything draw more than
+    # it said it would? `at_most` is read by the plan and by nothing else - the drawing code does
+    # not consult it - so a declaration describes the execution rather than governing it, and a
+    # plan can drift silently from the run it predicts. Held against the run, every run.
+    over = 0
+    for name, ndec, nfile, gaps, decl, files, own in rows:
+        k = ks.get(name)
+        rows_over = _PL.over_ceiling((k.spec or {}) if k is not None else {},
+                                     [str(f) for f in (kdir / name).rglob("*")])
+        if not rows_over:
+            continue
+        over += len(rows_over)
+        print(f"  {name}: {len(rows_over)} family(ies) DREW MORE THAN THEY DECLARE:")
+        for fam, where, drew, cap in rows_over[:8]:
+            print(f"    {fam}  {drew} in {where or '.'}, declared at most {cap}")
+        print("  A ceiling the code does not read is a number two people keep in step by hand. "
+              "The\n  declaration is not the thing that stops the drawing; the loop is. Fix the "
+              "loop.")
+    return 2 if (bad or lit or over) else 0
 
 
 def _capacity(a):

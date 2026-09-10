@@ -211,6 +211,21 @@ class FigureContextReader:
         return str((self.figure_context or {}).get("note") or "")
 
 
+def _ceiling_for(ceilings, name):
+    """(family, ceiling) for this figure id, or None when nothing bounds it.
+
+    Longest prefix wins, as everywhere else a plugin states a rule and an exception together.
+    """
+    base = str(name).rsplit("/", 1)[-1]
+    for k in sorted(ceilings or {}, key=len, reverse=True):
+        if base.startswith(k):
+            try:
+                return k, int(ceilings[k])
+            except (TypeError, ValueError):
+                return None
+    return None
+
+
 def _wants_vector(placed, name):
     """Does this panel get a vector copy? Everything but a kind the plugin placed `appendix`.
 
@@ -239,6 +254,7 @@ class Context(FigureContextReader):
 
     def __init__(self, adata, *, keys, out, cores=1, memory_gb=None, unit=None, unit_axis=None,
                  figures_for=None, profile_figures=None, figure_position=None,
+                 figure_ceiling=None,
                  unit_members=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
                  sentinels=(), provenance=None, constraint="", cache_dir=None,
@@ -287,6 +303,11 @@ class Context(FigureContextReader):
         #: drawing side so a kind placed `appendix` does not also get a vector copy written for
         #: a page that will never cite it. ONE DECLARATION, read in two places, never two.
         self.figure_position = dict(figure_position or {})
+        #: {family -> the most files it may write here}, from the plugin's own `at_most`. ONE
+        #: CONTEXT IS ONE OCCURRENCE OF AN AXIS - one unit, or one arm pair - so a count kept
+        #: here is a count per occurrence, which is what the ceiling means.
+        self.figure_ceiling = dict(figure_ceiling or {})
+        self._figure_count = {}
         #: WHAT A FIGURE MUST BE ABLE TO SAY ABOUT ITSELF, computed by the host: the stable
         #: label->colour map, the line naming this unit or contrast with its n, and the named
         #: absences. Read it through `figure_stamp()` and `figure_colours()` rather than by key,
@@ -840,6 +861,27 @@ class Context(FigureContextReader):
                 except Exception:                                         # noqa: BLE001
                     pass
             return None
+        # THE CEILING IS ENFORCED WHERE THE FIGURE IS WRITTEN, not only where the plan is read.
+        # `at_most` was consulted by the planner and by nothing else, so a plugin could declare
+        # six and draw twelve and only a later comparison of two numbers would notice. Here the
+        # host can refuse, and it does; where the wrapped tool writes into its own device the
+        # host cannot, and `capacity --promised` catches that after the fact instead.
+        _fam = _ceiling_for(self.figure_ceiling, name)
+        if _fam is not None:
+            _key, _cap = _fam
+            _n = self._figure_count.get(_key, 0)
+            if _n >= _cap:
+                self.log(f"  {name}: NOT DRAWN - `{_key}` declares at most {_cap} here and this "
+                         f"is number {_n + 1}. The declaration is the ceiling; raise it if the "
+                         f"panel is wanted.")
+                if close:
+                    try:
+                        import matplotlib.pyplot as _plt
+                        _plt.close(fig)
+                    except Exception:                                     # noqa: BLE001
+                        pass
+                return None
+            self._figure_count[_key] = _n + 1
         png = self.out / "figures" / f"{name}.png"
         pdf = self.out / "figures" / f"{name}.pdf"
         self.drawn.add(str(name))

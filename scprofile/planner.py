@@ -920,3 +920,46 @@ def figure_plan(plugin_spec, *, units=1, contrasts=0, cohort=1, vector_for_paper
         vec += v
     return {"rows": sorted(rows, key=lambda r: -r["files"]), "files": files, "vector": vec,
             "total": files + vec}
+
+
+def over_ceiling(plugin_spec, paths):
+    """[(family, where, drew, ceiling)] - families that drew more than they declared.
+
+    WHY A DECLARATION HAS TO BE CHECKED AGAINST A RUN. `at_most` is read by the plan and by
+    nothing else: the drawing code does not consult it. The two ceilings a real plugin honoured
+    were literals transcribed into its R by hand, which means the declaration DESCRIBED the
+    execution instead of governing it, and the plan was true only for as long as somebody kept
+    two numbers in step. A plan that can drift silently from the run it predicts is worth nothing
+    - so the run is held against it, every time, and a family that exceeds its ceiling is a
+    failure of the run and not a note.
+
+    WHAT THIS CANNOT DO is stop the drawing. A panel written by an upstream tool into its own
+    graphics device is on disk before the host sees it; refusing it afterwards would be deleting
+    a file somebody's code just wrote. It is caught and reported, and the fix is the loop.
+
+    PER OCCURRENCE OF THE AXIS, not per run: a ceiling of 8 on a per-contrast family means eight
+    in each contrast, and summing six contrasts to 48 and comparing that against 8 would report
+    every bounded family in every design as over-drawn.
+    """
+    import collections
+    import os
+    import re as _re
+
+    caps = {f: (n, axis) for f, n, axis, _pos, _own in figure_families(plugin_spec)}
+    fams = sorted(caps, key=len, reverse=True)
+    seen = collections.defaultdict(collections.Counter)
+    for p in paths or ():
+        base = os.path.basename(str(p))
+        if not base.lower().endswith((".png", ".pdf", ".svg")):
+            continue
+        stem = _re.split(r"__", base.rsplit(".", 1)[0])[0]
+        hit = next((f for f in fams if stem.startswith(f)), None)
+        if hit:
+            seen[hit][os.path.dirname(str(p))] += 1
+    out = []
+    for fam, where in seen.items():
+        n, _axis = caps[fam]
+        for d, drew in sorted(where.items()):
+            if drew > n:
+                out.append((fam, d, drew, n))
+    return sorted(out, key=lambda r: -(r[2] - r[3]))
