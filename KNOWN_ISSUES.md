@@ -16,3 +16,37 @@ and the reuse layer cannot tell a redrawn panel from a changed one.
 Found by the interface-change reproduction (the project's stage-4 RUNLOG, 2026-09-06). The fix
 is a seed handed to `netEmbedding`'s UMAP, declared as config so it appears in the run's own
 parameters; until then the layout is compared and reported, never judged, by any reproduction.
+
+## `cores` and `cost` are required and checked by nothing — OPEN, measured 2026-09-10
+
+`sch dev convert status` prints, on every kernel, which of the point's seventeen required keys a
+conversion stage fills. Eleven do. Of the six that do not, four are checked elsewhere —
+`scprofile validate` refuses a kernel whose `api` the host does not implement, walks `provides`
+against the capability graph, and reads `state_version` and `wraps` — and `wraps` is in any case
+the conversion's INPUT and cannot be its output.
+
+**`cores` and `cost` are checked by nothing, anywhere.** The ladder's declaration tier asserts they
+are PRESENT; no mechanism asks whether they are true. A kernel can declare `cores: 4` and
+`cost: medium` and be scheduled on that forever. `memory_gb_base` and `memory_gb_per_100k` are not
+in that position: `capacity --memory` fits both terms from a real run and the `measure` stage
+gates on them, which is the shape this would take — a `--cores` mode reading each instance's
+recorded core share and wall time out of `report.json`, and a test-phase stage over it.
+
+Found by auditing the maker's coverage rather than its completeness: `build: 7 of 7 complete` was
+being printed over eight required keys no stage mentioned.
+
+## The test loop is blocked at station 6b — OPEN, measured 2026-09-10
+
+`setup/loop.pbs`, PBS 710090: **43 `text_overlap` across five panels** — F1_database_coverage 18,
+F2_population_power 14, F10_pathway_similarity 9, F9_patterns 1, F6_signaling_roles 1. Stations 7
+(eye, 0 of 149), 8 (paper) and 9 (required outputs) are blocked behind it.
+
+PRE-EXISTING AND MEASURED AS SUCH: runs 710076, 710080 and 710085 carry the identical 43 audits and
+180 audit keys, so the round that moved cellchat's drawing protocol into a generated companion
+neither caused these nor cleared them. They are mechanical defects `emit_figure` records on every
+panel of every run and they need no eye to fix.
+
+Found on the first run of the loop under this project's own rules. Until 2026-09-10 there was no
+way to run it: DEVELOPMENT.md says the loop is not optional, the site rule is that every tool
+invocation goes through the scheduler, and no job existed that did both.
+
