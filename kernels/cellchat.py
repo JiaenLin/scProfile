@@ -76,7 +76,7 @@ _MATRIX_FORMAT = "mtx-genes-x-cells-v1"
 
 PLUGIN = {
     "api": 1,
-    "version": "0.20.0",
+    "version": "0.20.1",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
@@ -4350,7 +4350,7 @@ if (length(.top)) {
                         title.name = paste("the ten pathways carrying the most flow -",
                                            name_a, "against", name_b)),
        w = .bw, h = 2600,
-       legend = paste0("The same comparison narrowed to the ten pathways carrying the most flow, ", name_a,,
+       legend = paste0("The same comparison narrowed to the ten pathways carrying the most flow, ", name_a,
                        " against ", name_b, ", because the full panel is unreadable at this many pairs. THE TEN ",
                        "WERE CHOSEN BY FLOW, NOT BY HOW MUCH THEY DIFFER, so this is a legible subset and not a ",
                        "result: a pair that changed sharply inside a quiet pathway is not here."))
