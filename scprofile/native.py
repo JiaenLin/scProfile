@@ -177,6 +177,52 @@ def accounting_debt(specs):
     return owing, undeclared
 
 
+def undrawn(declared, filenames):
+    """Declared upstream plots that produced NO FILE anywhere in a run - [(function, use)].
+
+    THE DECLARATION IS A PROMISE AND NOTHING WAS CHECKING IT. `native_plots` says, for every
+    upstream function this plugin uses, the file that function writes. `function_for` above reads
+    that mapping FORWARDS - given a file, which function drew it - and the backwards question was
+    asked by nothing: a function the plugin declares it uses, whose file never appeared, is a
+    panel the reader was promised and did not get.
+
+    MEASURED, AND IT IS WHY THIS EXISTS. A plugin that had only ever run inside a SHARED
+    environment silently depended on two packages it never declared - one of them reached only
+    from inside an upstream function, so no import in this repository names it and no difference
+    of declarations can predict it. Unplugged, three of its declared plots drew nothing across
+    every unit of a full run, and the run still sealed: 657 panels where the reference had 711,
+    and nothing in the tool said which promise had been broken.
+
+    ACROSS THE WHOLE RUN, NOT PER UNIT, and that is the difference between a check and a nuisance.
+    Plenty of declared panels are legitimately absent from one unit - a comparison panel in a
+    single-sample unit, a pathway panel where the pathway is not present. A promise is broken only
+    when the file appears NOWHERE, which is a fact about the run and not about one of its parts.
+
+    A SKIPPED ENTRY PROMISES NOTHING. `not_applicable`, `superseded_by_design` and `duplicate_of`
+    are rulings that this plugin does not draw the thing; asking them for a file would report the
+    accounting as a defect. Only an entry carrying `use:` is a promise.
+    """
+    stems = {str(f).rsplit("/", 1)[-1] for f in (filenames or ())}
+    stems |= {s[:-4] for s in list(stems) if s.endswith(".png")}
+    out = []
+    for fn, rec in sorted((declared or {}).items()):
+        use = str((rec or {}).get("use") or "")
+        if not use or (rec or {}).get("skip"):
+            continue
+        # AN ENTRY THAT PROMISES NO PANEL IS NOT A PANEL THAT WENT MISSING. A `use:` may name a
+        # table rather than a figure - cellchat's `netAnalysis_computeCentrality` says
+        # "tables/cellchat_centrality.csv (numbers only; its plot is not drawn)" - and asking a
+        # figure question of it reports the declaration's own honesty as a defect. That was the
+        # single false row this check produced on its first real run, and one false row in twelve
+        # is the rate at which a check stops being read.
+        if ".png" not in use:
+            continue
+        if not any(function_for(  # the SAME matcher, so the two can never disagree
+                {fn: rec}, name) == fn for name in stems):
+            out.append((fn, use))
+    return out
+
+
 def function_for(declared, filename):
     """Which declared upstream function drew this file, or "" - read from the declaration.
 

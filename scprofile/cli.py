@@ -3349,6 +3349,68 @@ def _measured(run):
     return 0
 
 
+def _promised(run):
+    """Upstream plots a plugin DECLARES it draws and produced no file for, anywhere in the run.
+
+    THE DECLARATION IS A PROMISE AND NOTHING READ IT BACK. `native_plots` names, per upstream
+    function, the file that function writes. The host has always read that mapping forwards - it
+    is how a caption can say which function drew a panel - and never backwards, so a declared
+    plot that drew nothing was invisible to every gate: the suites pass because the code is
+    well-formed, and `capacity` compares a run against another run, which agrees with it when
+    both are missing the same thing.
+
+    HOW IT WAS FOUND, and why per-run rather than per-unit. A plugin that had only ever run in a
+    SHARED environment turned out to depend on two packages it never declared. One is reached only
+    from INSIDE an upstream function, so nothing in this repository imports it and no comparison of
+    declarations can predict it - `sch dev convert borrowed` says so in as many words. Unplugged,
+    three of its declared plots drew nothing on any unit of a full run and the run sealed clean.
+    Per-unit this is unusable: a comparison panel is legitimately absent from a single-sample unit
+    and a pathway panel from a unit lacking the pathway. A promise is broken when the file appears
+    NOWHERE.
+
+    It also found five plots that had been declared and never drawn since long before that, in the
+    sealed reference as well - which is the shape of the thing: nobody could see it.
+    """
+    from . import kernels as _K, native as _N
+    ks = _K.discover()
+    kdir = run / "kernels"
+    if not kdir.is_dir():
+        print(f"no kernels/ under {run}: nothing to read back")
+        return 3
+    rows, looked = [], 0
+    for d in sorted(p for p in kdir.iterdir() if p.is_dir()):
+        k = ks.get(d.name)
+        if k is None:
+            print(f"  {d.name}: ran here but is not installed now, so its declaration "
+                  f"cannot be read back")
+            continue
+        declared = (k.spec or {}).get("native_plots") or {}
+        if not declared:
+            continue
+        looked += 1
+        names = [f.name for f in d.rglob("*.png")]
+        gaps = _N.undrawn(declared, names)
+        rows.append((d.name, len(declared), len(names), gaps))
+    if not looked:
+        print("no plugin in this run declares any upstream plot, so none was promised")
+        return 0
+    bad = 0
+    for name, ndec, nfile, gaps in rows:
+        print(f"{name}: {ndec} declared upstream plot(s), {nfile} panel file(s) on disk")
+        if not gaps:
+            print("  every declared plot produced at least one file")
+            continue
+        bad += len(gaps)
+        print(f"  {len(gaps)} DECLARED AND NEVER DRAWN - promised in `native_plots`, "
+              f"no file anywhere in this run:")
+        for f, use in gaps:
+            print(f"    {f}")
+            print(f"        declared to write: {use}")
+        print("  Each is a panel a reader was promised. The plugin's own log usually says why - a "
+              "package\n  the plugin does not declare is the case this check was written for.")
+    return 2 if bad else 0
+
+
 def _capacity(a):
     """What a run delivered, held against another run.
 
@@ -3361,6 +3423,8 @@ def _capacity(a):
     from . import capacity as _C
 
     run = Path(a.out).resolve()
+    if getattr(a, "promised", False):
+        return _promised(run)
     if getattr(a, "memory", False):
         return _measured(run)
     now = _C.measure(run)
@@ -3748,6 +3812,9 @@ def main(argv=None):
     cp_.add_argument("--memory", action="store_true",
                      help="instead: print the memory model this run fitted, ready to paste into "
                           "the plugin's declaration")
+    cp_.add_argument("--promised", action="store_true",
+                     help="instead: which upstream plots this run's plugins DECLARE they draw and "
+                          "produced no file for, anywhere in the run")
     cp_.add_argument("--strict", action="store_true",
                      help="exit non-zero if this run delivered less than the other")
     cp_.set_defaults(fn=_capacity)

@@ -84,6 +84,62 @@ points:
       # spatial information, and `superseded_by_design` cannot be written at all without the
       # id of the panel that supersedes.
       ruling_context: [report.figures, cannot_show]
+      # WHICH FIELD IS A CLAIM ABOUT THE CODE. `must_declare` above says `version` has to EXIST;
+      # nothing said it has to be TRUE, and no stage fills it because no stage can - it is not
+      # extracted from CellChat or scvelo and it is not a judgement about the method, it is a
+      # fact about this file's own history. `sch dev convert freshness` reads it from here and
+      # asks git; it reports and never writes, like every other registration check in the suite.
+      #
+      # THE OTHER TWO VERSION-SHAPED FIELDS ARE NOT THIS ONE AND MUST NOT BE NAMED HERE. `api` is
+      # the HOST contract a kernel was written against - it moves when scprofile/declare.py moves
+      # and no kernel edit can make it stale. `state_version` versions the NUMBERS, by its own
+      # definition in declare.py: it rises when the same inputs would give different output, so
+      # thirty-five added legends correctly do not move it. Only `version` says "this is the
+      # code", and only `version` is checked.
+      version_field: version
+      version_means: >
+        the REUSE KEY. scprofile/cli.py hands it to landscape.wanted(); a run started with
+        --reuse-from matches an earlier unit carrying the same key and licence.adopt() hardlinks
+        that unit's products in rather than recomputing them. Change what a kernel draws, leave
+        this alone, and every reusing run serves the old panels and prints REUSED - a stale
+        result reported as a clean success, which is the one failure mode reuse can have
+      # HOW THIS REPOSITORY TURNS REQUIREMENTS INTO ENVIRONMENTS, so the maker can ask what a
+      # SHARED one lends its members. Nothing in `sch/` knows the resolver, the grouping call, or
+      # the names of the fields a requirement is made of; they are all here, like `version_field`
+      # above, and they are read by `sch dev convert borrowed`.
+      #
+      # WHY THE MAKER NEEDS THIS AT ALL, MEASURED. cellchat spent its whole life in a seven-member
+      # environment. Unplugged, it resolves to a one-member one - correctly - and two of its
+      # drawing paths died there: `there is no package called 'Seurat'` and `Cannot find UMAP`.
+      # Its selftest still passed, because neither is imported at module scope. The question is
+      # answerable from these declarations with no run: resolve alone, resolve with the family,
+      # subtract.
+      environment:
+        catalogue: kernels.discover
+        plugin_named: name
+        groups: resolve.group_by_compatibility
+        environment_named: name
+        shared_by: members
+        # A DECLARED ENTRY IS NOT THE NAME A PLUGIN WRITES, and the two texts a plugin is made of
+        # spell a package differently. `written_in: host` is this file's own Python; `embedded` is
+        # a script of another language inside it. Scoping matters and was measured: searched in
+        # the host text, `r-matrix`, `r-shape`, `r-base` and `r-cluster` matched the English words
+        # `matrix`, `shape`, `base` and `cluster` in seven plugins' comments.
+        holds:
+          - field: packages
+            what: python packages
+            spelled:
+              - {as: "^(.+)$", written_in: host}
+          - field: conda
+            what: conda packages
+            spelled:
+              - {as: "^(.+)$", written_in: host}
+              - {as: "^r-(.+)$", written_in: embedded}
+              - {as: "^bioconductor-(.+)$", written_in: embedded}
+          - field: r
+            what: R packages
+            spelled:
+              - {as: "^(?:.*/)?([^/@=]+)", written_in: embedded}
       # TWO PHASES, AND THE SPLIT IS NOT COSMETIC. A `build` stage reads SOURCE - this plugin's own
       # code, or the wrapped tool's signatures and namespace - and touches no data, so it cannot be
       # shaped around one cohort. A `test` stage needs something to run on, and that is where a
@@ -164,6 +220,24 @@ points:
             both terms, from a real run. A rate alone attributes the fixed cost to the cells and
             the job is sized to be killed on small objects. Every run already fits this and stores
             it in report.json; `capacity --memory` is what reads it back out
+        - name: promised
+          phase: test
+          fills: [native_plots]
+          # A COMMAND, like `measure`, because only a run can answer it. `{run}` is filled from
+          # `--run`.
+          command: ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--promised"]
+          why: >
+            every upstream plot this plugin DECLARES it draws produced a file. The declaration is
+            a promise and nothing read it back: the host reads `native_plots` FORWARDS, to say
+            which function drew a panel, and never backwards, so a declared plot that drew nothing
+            was invisible to every gate - the suites pass because the code is well formed, and
+            `capacity --against` compares two runs that are missing the same thing and agrees.
+            Measured: the sealed reference carries 8 declared plots that have never been drawn,
+            and a plugin unplugged from the environment it had always shared lost 3 more to two
+            packages it never declared, one of them reached only from inside an upstream function
+            where no import in this repository names it. Asked ACROSS THE RUN and not per unit,
+            because a comparison panel is legitimately absent from a single-sample unit
+
         - name: judgement
           phase: build
           kind: judgement
