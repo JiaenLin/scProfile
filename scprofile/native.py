@@ -223,6 +223,46 @@ def undrawn(declared, filenames):
     return out
 
 
+def undeclared(declared, filenames, ids=()):
+    """Files a run produced that NO declaration accounts for - [(filename, count)].
+
+    THE OTHER DIRECTION FROM `undrawn`, AND THE ONE NOTHING WAS ASKING. `undrawn` catches a
+    promise the run did not keep; this catches output the run made and nobody promised. Both read
+    the same declaration with the same matcher, and until this existed a plugin could litter a run
+    with files it had never mentioned and every gate in the tool would report the run as clean.
+
+    MEASURED. One cohort of 1187 figures carried 24 `estimationNumCluster*.pdf` written by the
+    NMF rank estimation inside an upstream function - not by any call this plugin makes, not named
+    by any entry in `native_plots`, linked from no page, and cited by no sentence. They are the
+    wrapped tool writing into the working directory, which is a thing wrapped tools do. The point
+    is not that they are large; it is that nothing in the run could tell them from output somebody
+    had asked for.
+
+    `ids` is the plugin's OWN figure ids - what it draws itself rather than through the tool -
+    passed in by the caller, because which declaration fields carry them is a fact about the
+    format and not about this matcher. A file is accounted for when the upstream matcher names a
+    function for it OR its name begins with one of those ids.
+
+    THE COUNT IS RETURNED WITH THE NAME because litter arrives per unit: reporting 24 rows of the
+    same file is a list nobody reads, and reporting one row hides that it happened 24 times.
+    """
+    import collections
+    known = tuple(sorted((str(i) for i in (ids or ()) if str(i)), key=len, reverse=True))
+    seen = collections.Counter()
+    for f in (filenames or ()):
+        name = str(f).rsplit("/", 1)[-1]
+        if not name:
+            continue
+        if function_for(declared or {}, name):
+            continue
+        stem = name.rsplit(".", 1)[0]
+        if any(stem.startswith(k) for k in known):
+            continue
+        # THE UNIT OR CONTRAST IS STRIPPED so the same litter from eighteen units is one row.
+        seen[stem.split("__", 1)[0]] += 1
+    return sorted(seen.items())
+
+
 def function_for(declared, filename):
     """Which declared upstream function drew this file, or "" - read from the declaration.
 

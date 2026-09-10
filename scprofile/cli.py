@@ -3388,14 +3388,28 @@ def _promised(run):
         if not declared:
             continue
         looked += 1
+        # EVERY FILE, NOT EVERY PNG. The backwards question is about output nobody asked for,
+        # and a wrapped tool that writes a stray PDF writes a PDF - restricting the sweep to the
+        # extension the promises are written in would have missed all twenty-four of them.
         names = [f.name for f in d.rglob("*.png")]
+        allf = [f.name for f in d.rglob("*") if f.is_file()
+                and f.suffix.lower() in (".png", ".pdf", ".svg", ".jpg", ".jpeg", ".tif", ".tiff")]
+        own = set()
+        for _fld in ("figures", "unit_network", "unit_metrics", "comparison_stats",
+                     "provides_evidence"):
+            _v = (((k.spec or {}).get("report") or {}) or {}).get(_fld)
+            if isinstance(_v, list):
+                for _e in _v:
+                    own.add(str(_e.get("id") if isinstance(_e, dict) else _e))
+            elif isinstance(_v, dict):
+                own |= {str(x) for x in _v}
         gaps = _N.undrawn(declared, names)
-        rows.append((d.name, len(declared), len(names), gaps))
+        rows.append((d.name, len(declared), len(names), gaps, declared, allf, own))
     if not looked:
         print("no plugin in this run declares any upstream plot, so none was promised")
         return 0
     bad = 0
-    for name, ndec, nfile, gaps in rows:
+    for name, ndec, nfile, gaps, _decl, _allf, _own in rows:
         print(f"{name}: {ndec} declared upstream plot(s), {nfile} panel file(s) on disk")
         if not gaps:
             print("  every declared plot produced at least one file")
@@ -3408,7 +3422,35 @@ def _promised(run):
             print(f"        declared to write: {use}")
         print("  Each is a panel a reader was promised. The plugin's own log usually says why - a "
               "package\n  the plugin does not declare is the case this check was written for.")
-    return 2 if bad else 0
+
+    # AND THE OTHER DIRECTION, in the same command, because they are one question asked both
+    # ways: what was promised and not drawn, and what was drawn and never promised. Reported
+    # together or the second one never gets run.
+    import re as _re
+    from . import panels as _P
+    host_ids = set()
+    for _line in (getattr(_P, "IMPLEMENTED", {}) or {}).values():
+        m = _re.search(r"\u2014\s*([A-Za-z0-9_]+)", str(_line))
+        if m:
+            host_ids.add(m.group(1))
+    lit = 0
+    for name, ndec, nfile, gaps, decl, files, own in rows:
+        # THE HOST'S OWN PANELS ARE NOT THE PLUGIN'S LITTER. They are filed as `<plugin>_<fid>`
+        # beside the plugin's, and a first version of this reported eighty-four of them as
+        # unaccounted for - the check was right and was not told what the host draws.
+        acc = set(own) | {f"{name}_{h}" for h in host_ids}
+        extra = _N.undeclared(decl, files, ids=acc)
+        if not extra:
+            continue
+        lit += sum(c for _f, c in extra)
+        print(f"  {name}: {sum(c for _f, c in extra)} file(s) ACCOUNTED FOR BY NOTHING - "
+              f"produced by the run, named by no declaration and by no host panel:")
+        for fam, c in sorted(extra, key=lambda r: -r[1]):
+            print(f"    {fam}  x{c}")
+        print("  A wrapped tool writing into the working directory is a thing wrapped tools do. "
+              "The\n  point is that nothing else in this run could tell these from output "
+              "somebody asked for.")
+    return 2 if (bad or lit) else 0
 
 
 def _capacity(a):
