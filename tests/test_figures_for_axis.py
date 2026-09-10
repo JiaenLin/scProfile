@@ -15,6 +15,7 @@ numbers loses its data and the run reports a smaller result rather than a faster
 is a silent change of finding, not a change of speed.
 """
 import re
+import re as _re
 import sys
 from pathlib import Path
 
@@ -76,16 +77,35 @@ check("draw_figs <- " in ck, "the embedded R never parses the flag")
 # SCOPED TO THE GUARD ITSELF, not to a return statement. Counting `return(invisible(NULL))`
 # across the whole file caught every other helper that returns early - a check that breaks when
 # an unrelated helper is added is measuring the wrong thing, for the fourth time in this file.
-_guards = ck.count("if (!draw_figs && !(name %in% profile_plots))")
-check(_guards == 2,
-      f"expected the drawing guard in exactly the two per-unit plot wrappers, found {_guards}")
-check(ck.count("!draw_figs") >= 2,
-      "a plot wrapper does not consult the drawing flag at all")
-check(ck.count("profile_plots") >= 3,
-      "the R guard has no profile exception, so the profile page loses the units whose full "
-      "figure set the run switched off - a page with holes in exactly what it describes")
-run_block = ck[ck.index("_R_RUN"):]
-run_block = run_block[:run_block.index("_R_COMPARE")] if "_R_COMPARE" in run_block else run_block
+# MATCHED ON THE PROPERTY IN THE SCRIPT THAT RUNS - for the fourth time in this file's history,
+# and this time because the wrapper MOVED. It lives in a generated companion prepended to every
+# embedded script, so the per-unit script no longer spells the guard inside `npng` at all: it
+# declares WHAT IS VISIBLE, once, and the generated wrapper asks before it opens a device. Both
+# halves are still required and neither is a literal any more.
+_run = dict(subject.r_as_run("cellchat", "that its figures declare the axis they are drawn for"))
+_per_unit = _run.get("_R_RUN", "")
+_vis = _re.search(r"visible\s*=\s*function\s*\([^)]*\)\s*(.+)", _per_unit)
+check(_vis is not None,
+      "the per-unit script declares no visibility rule, so the drawing flag reaches no panel")
+if _vis:
+    _rule = _vis.group(1)
+    check("draw_figs" in _rule,
+          "the per-unit visibility rule does not consult the drawing flag at all")
+    check("profile_plots" in _rule,
+          "the visibility rule has no profile exception, so the profile page loses the units "
+          "whose full figure set the run switched off - a page with holes in exactly what it "
+          "describes")
+# AND THE WRAPPER ASKS BEFORE IT DRAWS. A rule nothing consults is a comment, which is the
+# defect one directory over that this whole mechanism exists to stop.
+_asks = _re.search(r"\$visible\(", _per_unit)
+check(_asks is not None,
+      "no draw wrapper consults the declared visibility rule, so the flag governs nothing")
+if _asks:
+    _dev = _per_unit.index("grDevices::png(")
+    check(_asks.start() < _dev,
+          "the wrapper consults the visibility rule after it opens the device, so the work the "
+          "flag exists to skip has already been done")
+run_block = _per_unit
 for line in run_block.splitlines():
     if "draw_figs" in line and "write.csv" in line:
         FAILURES.append(f"the drawing flag gates a table write, which changes the RESULT and "

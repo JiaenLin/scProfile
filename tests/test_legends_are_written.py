@@ -105,8 +105,17 @@ finally:
 # 4. the plugin writes them, for every panel it draws itself
 ck = subject.source("cellchat", "that its panels carry written legends")
 check(ck.count(".write_captions()") >= 1, "the plugin never writes its legends")
-check(ck.count(".legend(basename(path)") >= 6,
-      f"only {ck.count('.legend(basename(path)')} of the plot wrappers record a legend")
+# READ FROM THE SCRIPT THAT RUNS, not from the Python constant. The wrappers live in a GENERATED
+# companion that is prepended to every embedded script, so counting definitions in `cellchat.py`
+# counts zero - and counting six of them, as this did, was counting three copies of one wrapper
+# pair and calling the duplication evidence.
+_as_run = subject.r_as_run("cellchat", "that its panels carry written legends")
+for _tag, _script in _as_run:
+    if "npng" not in _script and "ndev" not in _script:
+        continue
+    check(".legend(" in _script,
+          f"{_tag} draws and its wrapper records no legend, so every panel it writes falls back "
+          f"to its filename")
 
 # CALL SITES, NOT DEFINITIONS. The first version of this counted `.legend(basename(path)` - which
 # is six WRAPPER DEFINITIONS - and passed while not one plot in two of the three scripts actually
@@ -114,10 +123,9 @@ check(ck.count(".legend(basename(path)") >= 6,
 # filenames as its legends the whole time, which is verbatim the defect this file exists for.
 import re as _re                                                          # noqa: E402
 
-for _tag in ("_R_RUN", "_R_COMPARE", "_R_COHORT"):
-    _i = ck.index(_tag + " = ")
-    _j = ck.index('"""', ck.index('"""', _i) + 3)
-    _body = ck[_i:_j]
+for _tag, _body in _as_run:
+    if _tag not in ("_R_RUN", "_R_COMPARE", "_R_COHORT"):
+        continue
     _sites = len(_re.findall(r"legend = paste0", _body))
     check(_sites >= 2,
           f"{_tag} has {_sites} plot call(s) that pass a legend - its panels fall back to the "

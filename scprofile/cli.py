@@ -1588,8 +1588,12 @@ def _scaffold(a):
               f"comes before the implementation so a plugin can be judged against a real dataset "
               f"with `scprofile plan` before anyone writes it.", file=sys.stderr)
         return REFUSE
+    # `--dir` ON THE NON-NEW PATH TOO, so a generated companion can be written somewhere other
+    # than beside the plugin. That is what lets a check REGENERATE it into a scratch directory
+    # and compare - which is the difference between a file that is generated and one that merely
+    # looks like the generator's output.
     for n in names:
-        SC.scaffold(ks[n], force=a.force)
+        SC.scaffold(ks[n], force=a.force, out_dir=getattr(a, "dir", None))
     return 0
 
 
@@ -3909,7 +3913,10 @@ def main(argv=None):
     sc_.add_argument("--new", action="store_true",
                      help="write a NEW one-file plugin from the template, instead of a declared "
                           "plugin's build skeleton")
-    sc_.add_argument("--dir", type=Path, default=Path("kernels"),
+    # DEFAULT NONE, NOT `kernels`. `--new` falls back to `kernels` itself; on the other path a
+    # non-None default would redirect every scaffold there, including a point that lives
+    # somewhere else - and would make "write it beside the plugin" unexpressible.
+    sc_.add_argument("--dir", type=Path, default=None,
                      help="where --new writes the file")
     sc_.set_defaults(fn=_scaffold)
 

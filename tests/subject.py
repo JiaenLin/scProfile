@@ -23,6 +23,7 @@ WHAT IS SHARED IS THE DETECTOR, not the subject. `r_scripts()` is one implementa
 R a plugin embeds", used by the lint suites that legitimately run over every plugin.
 """
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -79,6 +80,49 @@ def source(name, about):
               f"checked here. Not a defect: this suite is about that plugin's own "
               f"implementation, and it runs again wherever the plugin does")
         sys.exit(0)
+
+
+def companions(name):
+    """[(filename, text)] for the GENERATED R a plugin keeps beside itself.
+
+    NAMED FOR ITS PLUGIN. Nine one-file kernels share one `kernels/` directory, so a companion
+    is `kernels/<name>.draw.R` and never a bare `draw.R` that would answer for all nine.
+    """
+    out = []
+    for f in sorted((ROOT / "kernels").glob(f"{name}.*.R")):
+        try:
+            out.append((f.name, f.read_text(encoding="utf-8")))
+        except OSError:
+            continue
+    return out
+
+
+def r_as_run(name, about):
+    """[(attribute, script)] for every embedded R script, WITH the generated protocol prepended.
+
+    THE TEXT THAT RUNS, WHICH IS NOT THE TEXT IN THE PYTHON FILE. A plugin that draws through R
+    is handed a generated companion - the ceilings, the colour map, the caption file and both
+    draw wrappers - prepended to each of its embedded scripts, so ONE definition serves all of
+    them. Three suites here grepped the Python constant alone and went red the day that
+    consolidation happened: each was asserting a property of the running script and reading half
+    of it. Reading half of a script is how a check comes to be measuring the spelling.
+    """
+    pre = "".join(t for _f, t in companions(name))
+    # WHICH SCRIPTS ACTUALLY GET IT, read from the plugin rather than assumed. Not every embedded
+    # script draws: a probe that reads a database and writes a table is handed no wrapper, and
+    # prepending one here would let a suite check a script assembled in a way that never happens.
+    py = source(name, about)
+    out = []
+    for who, attr, rsrc in r_scripts():
+        if who != name:
+            continue
+        prepended = bool(re.search(r"\+\s*" + re.escape(attr) + r"\b", py)
+                         or re.search(re.escape(attr) + r"\s*\+", py))
+        out.append((attr, (pre if prepended else "") + rsrc))
+    if not out:
+        print(f"skipped - `{name}` holds no embedded R here, so {about} is not checked")
+        sys.exit(0)
+    return out
 
 
 def _modules():

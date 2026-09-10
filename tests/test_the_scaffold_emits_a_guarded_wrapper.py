@@ -40,24 +40,46 @@ if m:
     # THE SAME SHAPE THE MAKER LOOKS FOR: a conditional naming the token that leaves.
     guards = [l.strip() for l in body.splitlines()
               if l.strip().startswith("if") and token in l.strip() and returns in l.strip()]
-    check(len(guards) >= 2,
-          f"the generated wrapper has {len(guards)} guard(s) naming {token!r} and returning; "
-          f"both `npng` and `ndev` draw, so both must refuse")
+    check(len(guards) >= 1,
+          f"the generated wrapper has {len(guards)} guard(s) naming {token!r} and returning, so "
+          f"nothing in it refuses past a declared ceiling")
 
-    # AND THE GUARD IS THE FIRST THING IN THE BODY, before the device is opened. A refusal after
-    # the panel is computed saves nothing and, on a device already open, leaves a file behind.
-    for fn in ("npng", "ndev"):
+    def body_of(fn):
         mm = re.search(rf"^{fn} <- function\([^)]*\)\s*\{{\n(.*?)\n\}}", body, re.S | re.M)
-        check(mm is not None, f"the generated wrapper defines no {fn}")
-        if mm:
-            first = next((l.strip() for l in mm.group(1).splitlines() if l.strip()), "")
-            check(first.startswith("if") and token in first,
-                  f"{fn}'s first statement is {first[:60]!r}, not the ceiling guard")
+        return mm.group(1) if mm else None
+
+    # EVERY PUBLIC WRAPPER REFUSES BEFORE IT DRAWS - directly, or through the one it hands the
+    # expression to. THE FIRST VERSION DEMANDED THE GUARD BE EACH WRAPPER'S FIRST STATEMENT,
+    # which is a demand that the guard be WRITTEN TWICE: `npng` and `ndev` differ in one line,
+    # and the moment they were factored onto a single guarded body this check failed the
+    # correct arrangement and would have passed the duplicated one. A check that rewards
+    # copying mechanism, inside the file that exists to stop mechanism being copied.
+    for fn in ("npng", "ndev"):
+        b = body_of(fn)
+        check(b is not None, f"the generated wrapper defines no {fn}")
+        if not b:
+            continue
+        first = next((l.strip() for l in b.splitlines() if l.strip()), "")
+        if first.startswith("if") and token in first:
+            continue
+        hop = re.match(r"([.\w]+)\s*\(", first)
+        inner = body_of(hop.group(1)) if hop else None
+        check(inner is not None,
+              f"{fn}'s first statement is {first[:60]!r} - neither the ceiling guard nor a call "
+              f"to another wrapper defined here")
+        if inner:
+            lines = [l.strip() for l in inner.splitlines() if l.strip()]
+            gi = next((i for i, l in enumerate(lines)
+                       if l.startswith("if") and token in l and returns in l), -1)
+            di = next((i for i, l in enumerate(lines) if "grDevices::png(" in l), len(lines))
+            check(gi >= 0, f"{fn} delegates to `{hop.group(1)}`, which never names {token!r}")
+            check(gi < di, f"{fn} delegates to `{hop.group(1)}`, which opens the device before "
+                           f"it consults the ceiling - the panel is computed either way")
 
     # THE LEGEND SLOT SURVIVES. The maker finds it by one language-neutral rule - the parameter
     # whose default is the empty string - so a generated wrapper that dropped it would produce a
     # plugin whose every draw site reports as having nowhere to put a legend.
-    check(len(re.findall(r'legend = ""', body)) >= 2,
+    check(len(re.findall(r'legend = ""', body)) >= 3,
           "the generated wrapper has no parameter defaulting to the empty string, so the maker "
           "can find no legend slot in it")
 

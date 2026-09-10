@@ -822,6 +822,33 @@ _MEAN_TYPES = {"triMean": 0.25, "truncatedMean": None, "thresholdedMean": None}
 #: rotated column label fifteen of them took half the height of the figure.*
 _DOT_PAIRS = 15
 
+# THE DRAWING PROTOCOL IS GENERATED, NOT WRITTEN HERE. `kernels/cellchat.draw.R` is produced by
+# `scprofile scaffold cellchat` and prepended to every embedded R script this plugin runs, so ONE
+# definition serves all of them - the colour map, the provenance stamp, the declared ceilings, the
+# caption file, and both draw wrappers.
+#
+# WHY IT IS NOT THREE BLOCKS OF R IN THIS FILE ANY MORE. It was, and the copies drifted. One of
+# them recorded the cost in its own comment: a script "was written with only `npng` and then
+# called `ndev` for the interaction heatmaps - could not find function ndev halted the whole
+# framing loop after the first framing's scatter plots, so one framing of two was drawn and
+# neither heatmap was. The sibling script had both wrappers; this one had one." Three near-copies
+# of a ceiling reader and six of a wrapper, in three variants, is a defect waiting for whichever
+# variant is edited next. `sch dev rules --root .` is what now says so.
+#
+# READ WHEN IT IS NEEDED, NOT AT IMPORT. This module is imported to be validated and to be
+# planned, on machines where nothing draws; a missing companion must fail the DRAW, with the
+# command that makes it, and not every reading of the declaration.
+def _draw_r():
+    """The generated drawing protocol, from the companion the maker writes beside this file."""
+    from pathlib import Path as _P
+    f = _P(__file__).resolve()
+    f = f.with_name(f.stem + ".draw.R")
+    if not f.is_file():
+        raise SystemExit(f"cellchat: {f.name} is missing beside this plugin. It is GENERATED - "
+                         f"run `scprofile scaffold cellchat` to write it.")
+    return f.read_text(encoding="utf-8")
+
+
 #: STEP ONE, AND IT IS CHEAP. Reads the database and writes it out interaction by interaction,
 #: with every complex expanded into its subunits, so the coverage of this object can be measured
 #: BEFORE the scoring is paid for. It touches no expression data.
@@ -907,70 +934,14 @@ draw_figs <- !(length(args) >= 12 && identical(toupper(args[12]), "FALSE"))
 profile_plots <- if (length(args) >= 13 && nzchar(args[13]))
   strsplit(args[13], ";", fixed = TRUE)[[1]] else character(0)
 
-# args[14]. THE HOST'S FIGURE CONTEXT: the run's stable label->colour map, the line naming this
-# unit with its n, and what is not in the panel set. Read if the file is there and IGNORED if it
-# is not, so this script still runs unchanged against a host that predates it.
-#
-# WHY THE COLOUR MAP MATTERS HERE. CellChat picks its own palette per object, from the order the
-# levels happen to arrive in, so one population is one colour in a per-unit panel and another
-# colour in a comparison panel of the same run. Passing `color.use` makes a label one colour
-# everywhere. The map is the host's - it is the only party that sees every unit - and `color.use`
-# is this plugin's knowledge of CellChat's argument name. Neither could do it alone.
-.fctx <- list(stamp = "", absence = "", colours = character(0))
-if (length(args) >= 14 && nzchar(args[14]) && file.exists(args[14])) {
-  .fc <- tryCatch(utils::read.delim(args[14], header = FALSE, sep = "\t",
-                                    quote = "", comment.char = "",
-                                    stringsAsFactors = FALSE, col.names = c("k", "v")),
-                  error = function(e) NULL)
-  if (!is.null(.fc) && nrow(.fc)) {
-    .fctx$stamp <- paste(.fc$v[.fc$k == "stamp"], collapse = "")
-    .fctx$absence <- paste(.fc$v[.fc$k == "absence"], collapse = "")
-    .cr <- .fc[startsWith(.fc$k, "colour:"), , drop = FALSE]
-    if (nrow(.cr)) .fctx$colours <- stats::setNames(.cr$v, sub("^colour:", "", .cr$k))
-    .cl <- .fc[startsWith(.fc$k, "ceiling:"), , drop = FALSE]
-    if (nrow(.cl)) .ceil <- stats::setNames(suppressWarnings(as.integer(.cl$v)),
-                                            sub("^ceiling:", "", .cl$k))
-  }
-}
+# THE DRAWING PROTOCOL, CONFIGURED ONCE. Everything it sets up - the colour map, the
+# provenance stamp, the declared ceilings, the caption file and both draw wrappers -
+# is defined in the GENERATED companion prepended above this script.
+.figures(prefix = "native_", what = "native plot", w = 1800, h = 1500,
+         context = if (length(args) >= 14) args[14] else "",
+         visible = function(id) draw_figs || (id %in% profile_plots))
 
-# THE VECTOR CellChat WANTS: IN ITS LEVEL ORDER, AND NAMED.
-#
-# Ordered, because a plotting function takes `color.use` positionally against the object's factor
-# levels and any other order colours the wrong populations. NAMED, because netVisual_circle
-# refuses an unnamed one outright - "The input `color.use` should be a named vector!" - while
-# netVisual_heatmap and netAnalysis_signalingRole_scatter accept it either way. The two upstream
-# functions disagree about the contract, so the vector satisfies the stricter of them; `unname()`
-# here cost 36 circle plots across 18 units in one run, and the per-unit tallies reported the
-# failure while the run-level count said nothing until the capacity guard compared the totals.
-#
-# Returns NULL when the host gave no map or when any level is unmapped, because a partial vector
-# is worse than none: CellChat would recycle it silently.
-.cols_for <- function(levs) {
-  if (!length(.fctx$colours)) return(NULL)
-  levs <- as.character(levs)
-  if (!all(levs %in% names(.fctx$colours))) return(NULL)
-  .out <- .fctx$colours[levs]
-  names(.out) <- levs
-  .out
-}
 
-# A PHASE CLOCK, DEFINED AT THE TOP BECAUSE R DOES NOT HOIST. Twice the cost of a round has
-# been diagnosed by assumption and been wrong: the inference was assumed dominant and was not,
-# then the matrix write was, and it takes one to five seconds. Guessing where a run spends its
-# time is what makes every round of development expensive, so the run measures itself.
-# t0 IS ZERO, NOT "NOW". `proc.time()` elapsed is measured from the moment R STARTED, so anchoring
-# the clock at zero makes the first mark cover everything before it - interpreter start-up and
-# loading CellChat and its dependencies, which happen above this line and were therefore charged
-# to nothing. Anchoring it at "now" instead made the first phase report 0 while the cost it was
-# supposed to name sat outside the clock entirely: an accounting line that says zero is worse than
-# no line, because it reads as a measurement.
-.clock <- new.env(); .clock$t0 <- 0; .clock$marks <- list()
-mark <- function(what) {
-  now <- proc.time()[["elapsed"]]
-  .clock$marks[[what]] <- now - .clock$t0
-  .clock$t0 <- now
-  invisible(NULL)
-}
 
 
 # WHAT HAPPENED BEFORE THE FIRST MARK IS STILL COST. The clock started at the top of the script
@@ -1213,91 +1184,8 @@ if (!identical(normalizePath(store, mustWork = FALSE),
 # reader can tell at a glance which encoding they are looking at.
 figdir <- file.path(dirname(dirname(out)), "figures")
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
-.plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
-.caps <- new.env(); .caps$rows <- list()
-.legend <- function(fname, text, by) {
-  if (!nzchar(text)) return(invisible(NULL))
-  .caps$rows[[length(.caps$rows) + 1L]] <-
-    # ONE LINE, ALWAYS. The file is tab-separated and written with quote = FALSE, so a caption
-    # carrying a tab or a newline does not corrupt one row - it shifts every column after it, or
-    # splits the row in two, and the reader then drops what it cannot parse WITHOUT SAYING SO.
-    # Collapsing whitespace here matches what the reader does anyway and makes the written file
-    # unable to express the broken shape.
-    list(file = fname, caption = gsub("[[:space:]]+", " ", trimws(text)), drawn_by = by)
-  invisible(NULL)
-}
-.write_captions <- function() {
-  # CALLED ON EXIT AS WELL AS AT THE END. An abort in a later section left `captions.tsv`
-  # unwritten, so panels drawn BEFORE the failure silently lost their legends and fell back to
-  # their filenames - a degradation that renders as a normal page.
-  if (!length(.caps$rows)) return(invisible(NULL))
-  d <- do.call(rbind, lapply(.caps$rows, function(r) as.data.frame(r, stringsAsFactors = FALSE)))
-  utils::write.table(d, file.path(figdir, "captions.tsv"),
-                     sep = "\t", row.names = FALSE, quote = FALSE)
-  cat("wrote", nrow(d), "figure legend(s)\n")
-}
-on.exit(.write_captions(), add = TRUE)
 
-# THE CEILING, ENFORCED BEFORE THE PLOT IS COMPUTED. R is lazy - `expr` is a promise until it is
-# forced - so refusing here costs the call and nothing else. Longest prefix wins, as everywhere
-# else a plugin states a rule and an exception together, and a family no ceiling covers is
-# unbounded exactly as it was before this existed.
-#
-# WHY IT IS HERE AND NOT IN THE LOOPS. The two bounds this plugin honoured were `head(paths, 6)`
-# and `head(.ranked, 8)`, typed in by hand beside a declaration that said 12 and 8. The plan read
-# the declaration, the run obeyed the literals, and they agreed only while somebody kept them in
-# step. The number now exists once, in the declaration, and arrives here.
-.ndrawn <- new.env(parent = emptyenv())
-.at_ceiling <- function(id) {
-  cl <- if (exists(".ceil", inherits = TRUE)) .ceil else integer(0)
-  if (!length(cl)) return(FALSE)
-  k <- names(cl)[startsWith(id, names(cl))]
-  if (!length(k)) return(FALSE)
-  k <- k[which.max(nchar(k))]
-  cap <- cl[[k]]
-  if (is.na(cap)) return(FALSE)
-  n <- if (is.null(.ndrawn[[k]])) 0L else .ndrawn[[k]]
-  if (n >= cap) {
-    cat("ceiling: ", id, " not drawn - ", k, " declares at most ", cap, " here\n", sep = "")
-    return(TRUE)
-  }
-  .ndrawn[[k]] <- n + 1L
-  FALSE
-}
 
-npng <- function(name, expr, w = 1800, h = 1500, res = 200, legend = "", by = "tool") {
-  if (!draw_figs && !(name %in% profile_plots)) return(invisible(NULL))
-  if (.at_ceiling(paste0("native_", name))) return(invisible(NULL))
-  path <- file.path(figdir, paste0("native_", name, ".png"))
-  .legend(basename(path), legend, by)
-  ok <- tryCatch({
-    grDevices::png(path, width = w, height = h, res = res)
-    on.exit(grDevices::dev.off(), add = TRUE)
-    print(expr)
-    TRUE
-  }, error = function(e) { cat("native plot", name, "FAILED:", conditionMessage(e), "\n"); FALSE })
-  if (ok && file.exists(path)) { .plots$ok <- .plots$ok + 1L
-                                 cat("native plot", name, "written\n") }
-  else { .plots$bad <- c(.plots$bad, name); if (file.exists(path)) unlink(path) }
-}
-# Some CellChat functions DRAW rather than return - a base-graphics network, a ComplexHeatmap
-# object, a function whose value is NULL. `print` on those prints nothing or errors, so this
-# second wrapper evaluates for the side effect instead.
-ndev <- function(name, expr, w = 1800, h = 1500, res = 200, legend = "", by = "tool") {
-  if (!draw_figs && !(name %in% profile_plots)) return(invisible(NULL))
-  if (.at_ceiling(paste0("native_", name))) return(invisible(NULL))
-  path <- file.path(figdir, paste0("native_", name, ".png"))
-  .legend(basename(path), legend, by)
-  ok <- tryCatch({
-    grDevices::png(path, width = w, height = h, res = res)
-    on.exit(grDevices::dev.off(), add = TRUE)
-    force(expr)
-    TRUE
-  }, error = function(e) { cat("native plot", name, "FAILED:", conditionMessage(e), "\n"); FALSE })
-  if (ok && file.exists(path)) { .plots$ok <- .plots$ok + 1L
-                                 cat("native plot", name, "written\n") }
-  else { .plots$bad <- c(.plots$bad, name); if (file.exists(path)) unlink(path) }
-}
 
 mark("downstream quantities")
 groups <- levels(cc@idents)
@@ -3602,7 +3490,7 @@ def run(ctx):
                 ctx.log(f"  matrix store: not cached ({_e})")
 
     script = ctx.out / "cellchat.R"
-    script.write_text(_R_RUN, encoding="utf-8")
+    script.write_text(_draw_r() + _R_RUN, encoding="utf-8")
     edges_f = ctx.out / "tables" / "ccc_edges.csv"
     # A DIRECTORY THAT OUTLIVES THE RUN, for the fitted object. Without it every new run began
     # with an empty instance directory and paid for the whole inference again to redraw a plot.
@@ -4103,57 +3991,13 @@ args <- commandArgs(trailingOnly = TRUE)
 stopifnot(length(args) >= 5)
 rds_a <- args[1]; rds_b <- args[2]; name_a <- args[3]; name_b <- args[4]; figdir <- args[5]
 
-# args[6]. THE HOST'S FIGURE CONTEXT - the run's stable label->colour map and the line naming this
-# contrast. Read if present, ignored if not, so this script still runs against a host that
-# predates it. Without it CellChat picks a palette per object from whatever order the levels
-# arrive in, and a population drawn orange in a per-unit panel came out red in the comparison of
-# the same run.
-.fctx <- list(stamp = "", absence = "", colours = character(0))
-if (length(args) >= 6 && nzchar(args[6]) && file.exists(args[6])) {
-  .fc <- tryCatch(utils::read.delim(args[6], header = FALSE, sep = "\t", quote = "",
-                                    comment.char = "", stringsAsFactors = FALSE,
-                                    col.names = c("k", "v")),
-                  error = function(e) NULL)
-  if (!is.null(.fc) && nrow(.fc)) {
-    .fctx$stamp <- paste(.fc$v[.fc$k == "stamp"], collapse = "")
-    .cr <- .fc[startsWith(.fc$k, "colour:"), , drop = FALSE]
-    if (nrow(.cr)) .fctx$colours <- stats::setNames(.cr$v, sub("^colour:", "", .cr$k))
-    .cl <- .fc[startsWith(.fc$k, "ceiling:"), , drop = FALSE]
-    if (nrow(.cl)) .ceil <- stats::setNames(suppressWarnings(as.integer(.cl$v)),
-                                            sub("^ceiling:", "", .cl$k))
-  }
-}
+# THE DRAWING PROTOCOL, CONFIGURED ONCE. Everything it sets up - the colour map, the
+# provenance stamp, the declared ceilings, the caption file and both draw wrappers -
+# is defined in the GENERATED companion prepended above this script.
+.figures(prefix = "nativecmp_", what = "native compare", w = 2000, h = 1600,
+         context = if (length(args) >= 6) args[6] else "")
 
-# ORDERED AND NAMED, or NULL. Ordered because `color.use` is positional against the object's own
-# levels; NAMED because netVisual_circle refuses an unnamed vector outright while the heatmap and
-# the scatter accept either - the two upstream functions disagree and this satisfies the stricter.
-# NULL unless every level is covered, since a short vector is recycled silently.
-.cols_for <- function(levs) {
-  if (!length(.fctx$colours)) return(NULL)
-  levs <- as.character(levs)
-  if (!all(levs %in% names(.fctx$colours))) return(NULL)
-  .out <- .fctx$colours[levs]
-  names(.out) <- levs
-  .out
-}
 
-# A PHASE CLOCK, DEFINED AT THE TOP BECAUSE R DOES NOT HOIST. Twice the cost of a round has
-# been diagnosed by assumption and been wrong: the inference was assumed dominant and was not,
-# then the matrix write was, and it takes one to five seconds. Guessing where a run spends its
-# time is what makes every round of development expensive, so the run measures itself.
-# t0 IS ZERO, NOT "NOW". `proc.time()` elapsed is measured from the moment R STARTED, so anchoring
-# the clock at zero makes the first mark cover everything before it - interpreter start-up and
-# loading CellChat and its dependencies, which happen above this line and were therefore charged
-# to nothing. Anchoring it at "now" instead made the first phase report 0 while the cost it was
-# supposed to name sat outside the clock entirely: an accounting line that says zero is worse than
-# no line, because it reads as a measurement.
-.clock <- new.env(); .clock$t0 <- 0; .clock$marks <- list()
-mark <- function(what) {
-  now <- proc.time()[["elapsed"]]
-  .clock$marks[[what]] <- now - .clock$t0
-  .clock$t0 <- now
-  invisible(NULL)
-}
 
 dir.create(figdir, showWarnings = FALSE, recursive = TRUE)
 
@@ -4243,85 +4087,8 @@ m <- mergeCellChat(object.list, add.names = c(name_a, name_b))
 mark("align and merge")
 cat("merged:", name_a, "and", name_b, "\n")
 
-.plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
-.caps <- new.env(); .caps$rows <- list()
-.legend <- function(fname, text, by) {
-  if (!nzchar(text)) return(invisible(NULL))
-  .caps$rows[[length(.caps$rows) + 1L]] <-
-    # ONE LINE, ALWAYS. The file is tab-separated and written with quote = FALSE, so a caption
-    # carrying a tab or a newline does not corrupt one row - it shifts every column after it, or
-    # splits the row in two, and the reader then drops what it cannot parse WITHOUT SAYING SO.
-    # Collapsing whitespace here matches what the reader does anyway and makes the written file
-    # unable to express the broken shape.
-    list(file = fname, caption = gsub("[[:space:]]+", " ", trimws(text)), drawn_by = by)
-  invisible(NULL)
-}
-.write_captions <- function() {
-  # CALLED ON EXIT AS WELL AS AT THE END. An abort in a later section left `captions.tsv`
-  # unwritten, so panels drawn BEFORE the failure silently lost their legends and fell back to
-  # their filenames - a degradation that renders as a normal page.
-  if (!length(.caps$rows)) return(invisible(NULL))
-  d <- do.call(rbind, lapply(.caps$rows, function(r) as.data.frame(r, stringsAsFactors = FALSE)))
-  utils::write.table(d, file.path(figdir, "captions.tsv"),
-                     sep = "\t", row.names = FALSE, quote = FALSE)
-  cat("wrote", nrow(d), "figure legend(s)\n")
-}
-on.exit(.write_captions(), add = TRUE)
 
-# THE CEILING, ENFORCED BEFORE THE PLOT IS COMPUTED. R is lazy - `expr` is a promise until it is
-# forced - so refusing here costs the call and nothing else. Longest prefix wins, as everywhere
-# else a plugin states a rule and an exception together, and a family no ceiling covers is
-# unbounded exactly as it was before this existed.
-#
-# WHY IT IS HERE AND NOT IN THE LOOPS. The two bounds this plugin honoured were `head(paths, 6)`
-# and `head(.ranked, 8)`, typed in by hand beside a declaration that said 12 and 8. The plan read
-# the declaration, the run obeyed the literals, and they agreed only while somebody kept them in
-# step. The number now exists once, in the declaration, and arrives here.
-.ndrawn <- new.env(parent = emptyenv())
-.at_ceiling <- function(id) {
-  cl <- if (exists(".ceil", inherits = TRUE)) .ceil else integer(0)
-  if (!length(cl)) return(FALSE)
-  k <- names(cl)[startsWith(id, names(cl))]
-  if (!length(k)) return(FALSE)
-  k <- k[which.max(nchar(k))]
-  cap <- cl[[k]]
-  if (is.na(cap)) return(FALSE)
-  n <- if (is.null(.ndrawn[[k]])) 0L else .ndrawn[[k]]
-  if (n >= cap) {
-    cat("ceiling: ", id, " not drawn - ", k, " declares at most ", cap, " here\n", sep = "")
-    return(TRUE)
-  }
-  .ndrawn[[k]] <- n + 1L
-  FALSE
-}
 
-npng <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "tool") {
-  if (.at_ceiling(paste0("nativecmp_", nm))) return(invisible(NULL))
-  path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
-  .legend(basename(path), legend, by)
-  ok <- tryCatch({
-    grDevices::png(path, width = w, height = h, res = res)
-    on.exit(grDevices::dev.off(), add = TRUE)
-    print(expr); TRUE
-  }, error = function(e) { cat("native compare", nm, "FAILED:", conditionMessage(e), "\n"); FALSE })
-  if (ok) { .plots$ok <- .plots$ok + 1L; cat("native compare", nm, "written\n") }
-  else { .plots$bad <- c(.plots$bad, nm); if (file.exists(path)) unlink(path) }
-}
-# Some CellChat functions DRAW rather than return - a base-graphics circle, a ComplexHeatmap
-# object that must be `draw`n. `print` on those either errors or prints nothing, so a second
-# wrapper evaluates for its side effect instead of printing.
-ndev <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "tool") {
-  if (.at_ceiling(paste0("nativecmp_", nm))) return(invisible(NULL))
-  path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
-  .legend(basename(path), legend, by)
-  ok <- tryCatch({
-    grDevices::png(path, width = w, height = h, res = res)
-    on.exit(grDevices::dev.off(), add = TRUE)
-    force(expr); TRUE
-  }, error = function(e) { cat("native compare", nm, "FAILED:", conditionMessage(e), "\n"); FALSE })
-  if (ok) { .plots$ok <- .plots$ok + 1L; cat("native compare", nm, "written\n") }
-  else { .plots$bad <- c(.plots$bad, nm); if (file.exists(path)) unlink(path) }
-}
 
 # 0. TOTAL INTERACTIONS AND TOTAL STRENGTH PER ARM - CellChat's own summary bar, and the first
 #    thing a reader of a comparison asks. Drawn on the UNMASKED object: a total is a total, and
@@ -4717,21 +4484,9 @@ args <- commandArgs(trailingOnly = TRUE)
 stopifnot(length(args) >= 2)
 figdir <- args[1]
 n <- as.integer(args[2])
-# THE DECLARED CEILINGS, AS THE LAST ARGUMENT. This script's argument list has a length that is a
-# function of n - one path and one name per arm - so a fixed position could not be used for
-# anything added later, and the ceilings arrive at the end where the count does not matter. An
-# older host passes nothing here and every family is unbounded, exactly as before.
-.ceil <- integer(0)
-if (length(args) >= 3 && nzchar(args[length(args)]) && file.exists(args[length(args)])) {
-  .cf <- tryCatch(utils::read.delim(args[length(args)], header = FALSE, sep = "\t", quote = "",
-                                    comment.char = "", stringsAsFactors = FALSE,
-                                    col.names = c("k", "v")), error = function(e) NULL)
-  if (!is.null(.cf) && nrow(.cf)) {
-    .cl <- .cf[startsWith(.cf$k, "ceiling:"), , drop = FALSE]
-    if (nrow(.cl)) .ceil <- stats::setNames(suppressWarnings(as.integer(.cl$v)),
-                                            sub("^ceiling:", "", .cl$k))
-  }
-}
+# THE DRAWING PROTOCOL, CONFIGURED ONCE - see the generated companion prepended above.
+.figures(prefix = "nativecmp_", what = "native compare", w = 2000, h = 1300,
+         context = if (length(args) >= 3) args[length(args)] else "")
 # THE LENGTH IS A FUNCTION OF n HERE, so it cannot be counted from the call site and has to be
 # asserted from inside: 2 fixed, then n object paths and n names.
 stopifnot(!is.na(n), n >= 1, length(args) >= 2 + 2 * n)
@@ -4755,87 +4510,8 @@ cat("populations per arm:",
 
 m <- mergeCellChat(objs, add.names = nms)
 
-.plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
-.caps <- new.env(); .caps$rows <- list()
-.legend <- function(fname, text, by) {
-  if (!nzchar(text)) return(invisible(NULL))
-  .caps$rows[[length(.caps$rows) + 1L]] <-
-    # ONE LINE, ALWAYS. The file is tab-separated and written with quote = FALSE, so a caption
-    # carrying a tab or a newline does not corrupt one row - it shifts every column after it, or
-    # splits the row in two, and the reader then drops what it cannot parse WITHOUT SAYING SO.
-    # Collapsing whitespace here matches what the reader does anyway and makes the written file
-    # unable to express the broken shape.
-    list(file = fname, caption = gsub("[[:space:]]+", " ", trimws(text)), drawn_by = by)
-  invisible(NULL)
-}
-.write_captions <- function() {
-  # CALLED ON EXIT AS WELL AS AT THE END. An abort in a later section left `captions.tsv`
-  # unwritten, so panels drawn BEFORE the failure silently lost their legends and fell back to
-  # their filenames - a degradation that renders as a normal page.
-  if (!length(.caps$rows)) return(invisible(NULL))
-  d <- do.call(rbind, lapply(.caps$rows, function(r) as.data.frame(r, stringsAsFactors = FALSE)))
-  utils::write.table(d, file.path(figdir, "captions.tsv"),
-                     sep = "\t", row.names = FALSE, quote = FALSE)
-  cat("wrote", nrow(d), "figure legend(s)\n")
-}
-on.exit(.write_captions(), add = TRUE)
 
-# THE CEILING, ENFORCED BEFORE THE PLOT IS COMPUTED. R is lazy - `expr` is a promise until it is
-# forced - so refusing here costs the call and nothing else. Longest prefix wins, as everywhere
-# else a plugin states a rule and an exception together, and a family no ceiling covers is
-# unbounded exactly as it was before this existed.
-#
-# WHY IT IS HERE AND NOT IN THE LOOPS. The two bounds this plugin honoured were `head(paths, 6)`
-# and `head(.ranked, 8)`, typed in by hand beside a declaration that said 12 and 8. The plan read
-# the declaration, the run obeyed the literals, and they agreed only while somebody kept them in
-# step. The number now exists once, in the declaration, and arrives here.
-.ndrawn <- new.env(parent = emptyenv())
-.at_ceiling <- function(id) {
-  cl <- if (exists(".ceil", inherits = TRUE)) .ceil else integer(0)
-  if (!length(cl)) return(FALSE)
-  k <- names(cl)[startsWith(id, names(cl))]
-  if (!length(k)) return(FALSE)
-  k <- k[which.max(nchar(k))]
-  cap <- cl[[k]]
-  if (is.na(cap)) return(FALSE)
-  n <- if (is.null(.ndrawn[[k]])) 0L else .ndrawn[[k]]
-  if (n >= cap) {
-    cat("ceiling: ", id, " not drawn - ", k, " declares at most ", cap, " here\n", sep = "")
-    return(TRUE)
-  }
-  .ndrawn[[k]] <- n + 1L
-  FALSE
-}
 
-npng <- function(nm, expr, w = 2000, h = 1300, res = 200, legend = "", by = "tool") {
-  if (.at_ceiling(paste0("nativecmp_", nm))) return(invisible(NULL))
-  path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
-  .legend(basename(path), legend, by)
-  ok <- tryCatch({
-    grDevices::png(path, width = w, height = h, res = res)
-    on.exit(grDevices::dev.off(), add = TRUE)
-    print(expr); TRUE
-  }, error = function(e) { cat("native compare", nm, "FAILED:", conditionMessage(e), "\n"); FALSE })
-  if (ok) { .plots$ok <- .plots$ok + 1L; cat("native compare", nm, "written\n") }
-  else { .plots$bad <- c(.plots$bad, nm); if (file.exists(path)) unlink(path) }
-}
-# AND THE SIDE-EFFECT WRAPPER. `ComplexHeatmap::draw` and the base-graphics network functions
-# DRAW rather than return, so `print` on them prints nothing or errors. This script was written
-# with only `npng` and then called `ndev` for the interaction heatmaps - "could not find function
-# ndev" halted the whole framing loop after the first framing's scatter plots, so one framing of
-# two was drawn and neither heatmap was. The sibling script had both wrappers; this one had one.
-ndev <- function(nm, expr, w = 2000, h = 1600, res = 200, legend = "", by = "tool") {
-  if (.at_ceiling(paste0("nativecmp_", nm))) return(invisible(NULL))
-  path <- file.path(figdir, paste0("nativecmp_", nm, ".png"))
-  .legend(basename(path), legend, by)
-  ok <- tryCatch({
-    grDevices::png(path, width = w, height = h, res = res)
-    on.exit(grDevices::dev.off(), add = TRUE)
-    force(expr); TRUE
-  }, error = function(e) { cat("native compare", nm, "FAILED:", conditionMessage(e), "\n"); FALSE })
-  if (ok) { .plots$ok <- .plots$ok + 1L; cat("native compare", nm, "written\n") }
-  else { .plots$bad <- c(.plots$bad, nm); if (file.exists(path)) unlink(path) }
-}
 
 # CellChat's own total-interactions bar, in the mode that takes every object at once. `group`
 # is the position of each arm in the merged object, which is what its own vignette passes.
@@ -5618,7 +5294,7 @@ def compare(ctx):
             ctx.log(f"no saved CellChat object for {missing}")
             return
         with _tf.NamedTemporaryFile("w", suffix=".R", delete=False) as fh:
-            fh.write(_R_COHORT)
+            fh.write(_draw_r() + _R_COHORT)
             script = fh.name
         # THE POINTS, FROM THE HOST'S OWN NUMBERS. `ctx.unit_values` holds the same totals the
         # host draws in its across-unit panel, computed from this plugin's declared edge table -
@@ -5712,7 +5388,7 @@ def compare(ctx):
         ctx.log(f"no saved CellChat object for {ctx.pair}: {missing}")
         return
     with tempfile.NamedTemporaryFile("w", suffix=".R", delete=False) as fh:
-        fh.write(_R_COMPARE)
+        fh.write(_draw_r() + _R_COMPARE)
         script = fh.name
     # args[6] is the HOST's figure context. The per-unit script has read it since the map existed;
     # the compare scripts did not, so one population was orange in a per-unit panel and red in the
