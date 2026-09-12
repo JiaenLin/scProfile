@@ -254,6 +254,17 @@ pv = merge.provenance(fp, {}, {}, merged={})
 ck("uns carries the failed units", pv["kernels"]["liana"]["failed_units"] == ["s3", "s4"])
 ck("uns does not say ok", pv["kernels"]["liana"]["status"] == "partial")
 
+# A PLUGIN SKIPPED BEFORE ANY INSTANCE HAS NO UNIT. `unmet` skips a plugin whose required
+# capability the object lacks - {"kernel": name, "why": [...]} and nothing else - and the run
+# then built its failed map with `x["unit"]` over every skip: KeyError, after every other plugin
+# had run, on the first plugin the host ever ran on the fixture (ADR-0016 step 7a, PBS 710974).
+_sk = [{"kernel": "enrichment", "why": ["needs lognorm; the object has none"]},
+       {"kernel": "liana", "unit": "s3", "why": ["timed out"]},
+       {"kernel": "liana", "unit": None, "why": ["merge refused"]}]
+_fu = merge.failed_units(_sk)
+ck("a plugin-level skip without a unit does not raise", _fu.get("enrichment") == [])
+ck("a unit-level skip names its unit, and a merge refusal names none", _fu.get("liana") == ["s3"])
+
 # the schedule table shows each instance's OWN time
 sched = {"schedule": [[{"plugin": "liana", "unit": "s1", "cores": 1, "seconds": 100.0},
                        {"plugin": "liana", "unit": "s2", "cores": 1, "seconds": 100.0},

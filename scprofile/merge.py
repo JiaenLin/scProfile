@@ -448,6 +448,27 @@ def link_objects(out_dir, payload, dest, *, log=print):
 _NUMBERS = re.compile(r"\d[\d,\.]*")
 
 
+def failed_units(skipped):
+    """{kernel: [unit, ...]} from the run's skip records - the units that failed, per plugin.
+
+    A SKIP HAS NO UNIT WHEN THE WHOLE PLUGIN WAS SKIPPED: `unmet` refuses a plugin whose required
+    capability the object lacks before any instance exists, and a merge refusal names none
+    either. Read with `x["unit"]` over every skip, the run raised KeyError after every other
+    plugin had finished - on the first plugin the host ever ran on the fixture. A skip without a
+    unit is the plugin's, and names no unit.
+    """
+    out = {}
+    for x in (skipped or []):
+        k = str((x or {}).get("kernel") or "")
+        if not k:
+            continue
+        out.setdefault(k, [])
+        u = (x or {}).get("unit")
+        if u is not None:
+            out[k].append(u)
+    return out
+
+
 def fold_payloads(payloads, failed=None):
     """One entry per PLUGIN from a list with one entry per INSTANCE. Keyed by name, keeps units.
 

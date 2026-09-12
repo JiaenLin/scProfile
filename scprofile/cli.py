@@ -1066,9 +1066,7 @@ def _run(a):
 
     FB.report(diagnoses)
     describe = inputs.describe(A, keys, organism, assay, csrc)
-    folded = merge.fold_payloads(
-        payloads, failed={s["kernel"]: [x["unit"] for x in skipped if x["kernel"] == s["kernel"]]
-                          for s in skipped})
+    folded = merge.fold_payloads(payloads, failed=merge.failed_units(skipped))
     A.uns["scprofile"] = merge.provenance(
         folded, describe, {n: ks[n].cannot_show for n in ran}, merged=merged_slots)
     # NOTHING MERGED, NOTHING TO WRITE. When every plugin refused, failed or was skipped, `A` is
