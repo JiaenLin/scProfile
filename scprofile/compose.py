@@ -21,7 +21,7 @@ softened.
 WHAT THIS IS NOT. IT IS NOT THE RESULT, AND IT IS NOT WAITING FOR A PERSON. It states what was
 measured, in the design's own order, with the tool's own statistics - the part that must be
 reproducible. THE AUTHOR IS THE AGENT RUNNING THIS TOOL: it reads the brief, opens the figures,
-decides what matters, writes what the measurements MEAN, and passes it back with `--section`,
+decides what matters, writes what the measurements MEAN, and carries it in with `paper --write`,
 and that authored version wins. What the run guarantees is that a section exists between sealing
 and writing, that its numbers are traceable, and that it cannot silently disagree with the panel
 beside it.
@@ -1091,8 +1091,8 @@ def section(run, plugin, spec=None, design=None, run_key=""):
           "measured skeleton of a result. **The reading of it — what the changes mean, and what "
           "they suggest — belongs in an authored version**, written against "
           "`.claude/skills/result-section`, which may state findings and hypotheses in the "
-          "field's own language; pass it back with `--section` and it replaces this and is never "
-          "overwritten.", ""]
+          "field's own language; carry it in with `scprofile paper --write` and it replaces this "
+          "and is never overwritten.", ""]
     return "\n".join(L)
 
 

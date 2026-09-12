@@ -279,176 +279,44 @@ def _plugin_spec_of(pay, plugin=""):
 
 
 def brief(out, plugin=""):
-    """Everything needed to WRITE the section, read out of the run. Returns text.
+    """The writing brief, as `scprofile write` writes it - `kernels/<plugin>/WRITING_BRIEF.md`,
+    written first if the run has none. Returns its text; for no plugin, every plugin's.
 
-    IT OPENS WITH THE DESIGN'S OWN QUESTIONS, NOT WITH THE PANELS. A writer handed a directory of
-    figures writes about the figures; a writer handed the questions the design supports writes
-    about the experiment and then goes looking for the figure that answers each. The order of
-    those two decides whether a section is a survey of the tooling or a result - and the first
-    section written from this brief was a survey, because the brief led with panels.
-
-    The specification comes from `planner.result_spec` and needs no run at all; what the run adds
-    is which of the specified panels actually exist.
-
-    THE STEP THAT MAKES THIS AN AGENTIC PROCESS RATHER THAN A FILING CONVENTION. An agent asked
-    to "write the result" has to go and find the figures, guess which are the main ones, and
-    open the object for the design - three chances to write about something the run does not
-    contain. The brief hands over exactly what the run holds: the panels on the page a reader
-    meets first, each with the caption the panel itself carries, the design, and the constraint
-    the upstream object placed on the whole run.
-
-    THE CAPTION REST IS INCLUDED AND IT IS THE POINT. That is where a panel states what it does
-    NOT establish - the confound audit, the shared-scale warning, the elements taken off the
-    magnitude scale - and it is precisely the material a first draft omits and a reviewer then
-    finds.
+    ONE BRIEF (harness ADR-0017). This composed a second brief of its own - the panels with
+    their captions, the tool's comparison panels by contrast - beside the one the reporter
+    writes at the end of every run, and the two named different figure sets and different next
+    commands; an agent following one was told by the other that nothing was done. The
+    reporter's is the brief: the design's questions, the contrasts in reading order with their
+    references, every figure with the number the paper gives it and whether it has been looked
+    at, the run's own caveats, and the skill and template to write against. What the second
+    carried and the first does not - each panel's caption - is on the page the figure numbers
+    point at.
     """
     import json as _json
+    from . import brief as _B
 
     root = Path(out)
     try:
         pay = _json.loads((root / "report.json").read_text(encoding="utf-8"))
     except Exception:                                                     # noqa: BLE001
-        return ("No report.json in this run, so there is nothing to write from. "
-                "Run `scprofile report --out <RUNDIR>` first.")
-
-    L = [f"# Writing brief — {root.name}", ""]
-    d = pay.get("describe") or {}
-    L += [f"Object: {d.get('n_obs', '?'):,} observations x {d.get('n_vars', '?'):,} features."
-          if isinstance(d.get("n_obs"), int) else "Object: size not recorded.",
-          f"Assay: {d.get('assay') or '(not declared)'}   Organism: "
-          f"{d.get('organism') or '(not declared)'}", ""]
-
-    des = pay.get("design") or {}
-    ax = pay.get("unit_axis") or {}
-    if des:
-        facs = sorted({f for r in des.values() for f in (r or {})})
-        L += [f"Design: {len(des)} sample(s) over {', '.join(facs)}."]
-        arms = sorted(u for u, k in ax.items() if k == "group")
-        if arms:
-            mem = pay.get("unit_members") or {}
-            L += ["Arms (the unit of inference): "
-                  + "; ".join(f"{a} n={len(mem.get(a) or [])}" for a in arms)]
-        L += [""]
-
-        # THE DESIGN'S OWN QUESTIONS, BEFORE ANY PANEL IS MENTIONED. `planner.result_spec` needs
-        # only the design table and the plugin's declaration, so this section of the brief is
-        # identical whether or not anything has run - and a writer meets the experiment before
-        # meeting the output. The first section written from this brief was a survey of the
-        # tooling because the brief led with panels.
-        try:
-            from .planner import (result_spec as _rs, spec_text as _st,
-                                  delivered as _dl, gap_text as _gt)
-            _spec = _rs(des, _plugin_spec_of(pay, plugin))
-            L += [_st(_spec), ""]
-            # AND WHAT THIS RUN ACTUALLY HAS, against that specification. A missing panel is a
-            # gap to report in the section, not a section to quietly leave out.
-            _figs = [f.get("file") or f.get("id") or ""
-                     for k in (pay.get("kernels") or {}).values()
-                     for f in (k.get("figures") or [])]
-            L += [_gt(_dl(_spec, _figs)), ""]
-            # THE SAME LABELS THE PANEL USES, so a section and a panel section are one thing
-            # seen twice. The panel is built from `design_panel.comparisons` and the written
-            # section was built from whatever headings its author chose, so the two agreed on
-            # nothing but the run they came from and a reader had to re-derive the mapping.
-            from .compare_panel import control_basis as _cb
-            from .design_panel import comparisons as _cm
-
-            _ctrl = _cb(des, controls=pay.get("controls"))
-            if _ctrl:
-                L += ["THE REFERENCE OF EACH CONTRAST - everything is measured against these:"]
-                L += [f"  {f}: against {lv!r}   ({why})" for f, (lv, why) in sorted(_ctrl.items())]
-                L += [""]
-            L += ["USE THESE HEADINGS, VERBATIM, IN THIS ORDER. They are the panel's section "
-                  "names, so a reader moving between the two documents lands in the same place:"]
-            for _c in _cm(des):
-                L += [f"  {_c.get('kind', '').upper():12s} {_c.get('label', '')}"
-                      f"   -- {_c.get('question', '')}"]
-            L += ["", "A question with no panel is a gap to report, not a section to skip.", ""]
-        except Exception as _e:                                           # noqa: BLE001
-            L += [f"(the design's questions could not be enumerated: {_e})", ""]
-
-    con = pay.get("constraint_on_use")
-    if con:
-        L += ["CONSTRAINT CARRIED BY THE UPSTREAM OBJECT - it binds anything written here:",
-              "  " + " ".join(str(con).split())[:600], ""]
-
-    lab = pay.get("label_by_unit") or {}
-    tot = pay.get("label_total") or {}
-    if lab and tot:
-        thin = [l for l in tot if any(l not in (lab.get(u) or {}) for u in lab)]
-        L += [f"Populations: {len(tot)} in the object; {len(thin)} are absent from at least one "
-              f"unit and cannot carry a between-unit comparison"
-              + (f" ({', '.join(sorted(thin)[:8])}{'...' if len(thin) > 8 else ''})"
-                 if thin else ""), ""]
-
-    for k in sorted(pay.get("kernels") or {}):
-        pl = (pay["kernels"] or {}).get(k) or {}
-        figs = pl.get("figures") or []
-        cohort = [f for f in figs if not f.get("unit")]
-        L += [f"## {k}", ""]
-        if pl.get("cannot_show"):
-            L += ["What this method cannot show, from its own declaration:"]
-            L += [f"  - {' '.join(str(c).split())}" for c in pl["cannot_show"]]
-            L += [""]
-        # THE PANELS ON THE PAGE, WHICHEVER LAYER DREW THEM. The plugin's payload holds only
-        # what the plugin emitted; the design panel, the census, the between-arm comparisons and
-        # the interaction are drawn by the HOST at render time. Reading only the payload
-        # reported "no cohort-level panel" for a page carrying nine of them - the nine a reader
-        # meets first, and the ones every claim in the section is read off.
-        try:
-            _pj = _json.loads((root / "report" / "panels.json")
-                              .read_text(encoding="utf-8")).get(k, {})
-            placed = _pj.get("cohort") or []
-            native = _pj.get("native") or []
-        except Exception:                                                 # noqa: BLE001
-            placed, native = [], []
-        cohort = list(placed) + list(cohort)
-        L += [f"Panels on the page a reader meets first ({len(cohort)}):" if cohort
-              else "No cohort-level panel on this page; every panel is per unit. Say so, and "
-                   "read the claims off the per-arm page instead.", ""]
-        for f in cohort:
-            cap = f.get("caption")
-            lead, rest = (cap if isinstance(cap, (list, tuple)) and len(cap) == 2
-                          else (cap or "", ""))
-            L += [f"  {f.get('path')}",
-                  f"     SHOWS : {' '.join(str(lead).split())}"]
-            if rest:
-                L += [f"     LIMITS: {' '.join(str(rest).split())}"]
-            L += [""]
-
-        # THE WRAPPED TOOL'S OWN COMPARISON PANELS, GROUPED BY CONTRAST. These are what a
-        # subsection about a contrast is written off: the method's own function, its own
-        # statistic, its own encoding. They live on the arms page rather than the first page,
-        # and a brief that read only the first page listed none of them - so the section written
-        # from it described the host's panels and never mentioned the tool's answer.
-        if native:
-            byc = {}
-            for f_ in native:
-                byc.setdefault(str(f_.get("label") or ""), []).append(f_)
-            L += [f"### The tool's own comparison panels ({len(native)} over {len(byc)} "
-                  f"contrast(s)) — CITE THESE FOR ANY CLAIM ABOUT A CONTRAST", ""]
-            for lab in sorted(byc):
-                L += [f"  CONTRAST {lab}"]
-                for f_ in byc[lab]:
-                    cap = f_.get("caption")
-                    lead, rest = (cap if isinstance(cap, (list, tuple)) and len(cap) == 2
-                                  else (cap or "", ""))
-                    L += [f"    {f_.get('path')}",
-                          f"       SHOWS : {' '.join(str(lead).split())}"]
-                    if rest:
-                        L += [f"       LIMITS: {' '.join(str(rest).split())}"]
-                L += [""]
+        return (f"No report.json in {root}, so there is nothing to write from. Run "
+                f"`scprofile report --out {root}` first.")
+    plugins = [plugin] if plugin else sorted(pay.get("kernels") or {})
+    texts = []
+    for p in plugins:
+        f = root / "kernels" / p / _B.NAME
+        if not f.is_file():
+            try:
+                _B.write_brief(root, p)
+            except Exception as e:                                        # noqa: BLE001
+                texts.append(f"No brief for {p}: it could not be written ({e}).")
+                continue
+        if f.is_file():
+            texts.append(f.read_text(encoding="utf-8"))
         else:
-            L += ["The tool drew no comparison panel of its own in this run. Say so, and say "
-                  "which contrasts were left to the host's encodings.", ""]
-    L += ["---", "Write the Results section you would submit. Then record each claim against the",
-          "figures you read it off, put it to a reviewer, and record what happened:", "",
-          "  scprofile paper --out <RUNDIR> --claim '...' --cites <fig>,<fig>",
-          "  scprofile paper --out <RUNDIR> --round <id> --verdict standing|narrowed|withdrawn"
-          " --why '...'",
-          "  scprofile paper --out <RUNDIR> --write section.md",
-          "  scprofile paper --out <RUNDIR> --render", ""]
-    return "\n".join(L)
+            texts.append(f"No brief for {p}: the run holds no findings to write from. Run "
+                         f"`scprofile report --out {root}` first.")
+    return "\n\n".join(texts) if texts else f"No plugin ran in {root}; nothing to write from."
 
 
 def next_step(out, plugin=""):
@@ -629,7 +497,7 @@ def render(out, *, run_key="", title="Result section", plugin=""):
             'and no figure below was looked at before it was cited. '
             '<b>The agent running this tool is the author of this section</b> \u2014 open the '
             'figures, write the result against <code>.claude/skills/result-section</code>, and '
-            'carry it in with <code>run --section</code>; <code>scprofile agenda</code> lists '
+            'carry it in with <code>scprofile paper --write</code>; <code>scprofile agenda</code> lists '
             'what remains. Nothing here is waiting for anyone else.</div>')
     if body:
         out_html.append(_md(body))

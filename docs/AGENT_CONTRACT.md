@@ -56,7 +56,7 @@ compute leaves a run with figures nobody opened and a section nobody wrote, whic
 the agenda exists to get a run out of, not a state to report back from.
 
 Finish it: submit, watch, collect, open every figure the brief lists (fan it out), write the
-result, carry it back in with `--section`, record the claims. Then say what the result is.
+result, carry it back in with `paper --write`, record the claims. Then say what the result is.
 
 Human review happens outside this tool, on the finished artifacts.
 
@@ -126,7 +126,8 @@ the tool. The tool was fine. The shortcut was not.*
     scprofile write   --out <run> [--plugin <p>]     # the brief: evidence, figures, template
     scprofile review  --out <run> --figure <f> --note "..."   # ONE PER FIGURE, before writing
     ...write...                                       # against .claude/skills/result-section
-    scprofile run     --section <file>                # carry it back into the run
+    scprofile paper   --out <run> --plugin <p> --write <file>   # carry it back into the run
+    scprofile paper   --out <run> --plugin <p> --render         # and render it beside its figures
 
 ### Under a scheduler, the figures are not where you are
 

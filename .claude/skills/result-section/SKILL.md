@@ -341,7 +341,8 @@ parameter. Choosing silently would have hidden that entirely.*
 - [ ] The figures in the section are the figures in the panel
 - [ ] The reference arm of every contrast is stated
 - [ ] The tool's own statistic reported wherever a finding is stated
-- [ ] Carried into the run with `--section`, not left beside it
+- [ ] Carried into the run with `paper --write` and rendered with `paper --render`, not left
+      beside it
 
 **A section that lives outside the run is a draft**, however good it reads. It has no run key,
 its citations resolve to nothing, and it disappears with the session that produced it.

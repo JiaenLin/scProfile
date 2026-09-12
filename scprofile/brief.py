@@ -18,7 +18,8 @@ THE ORDER OF THE PHASE, which the brief states to whoever reads it:
     1. read the brief;
     2. OPEN THE FIGURES it names, and record what was seen (`scprofile review`);
     3. write, against the skill and the plugin's declared template;
-    4. carry it back in with `run --section`, where the claims are checked.
+    4. carry it back in with `paper --write`, render it with `paper --render`, and defend the
+       claims with `paper --claim` and `--round`.
 
 Step 2 is not advice. A figure is where a defect lives that no table shows - an encoding that
 contradicts its legend, a panel whose ranking hides the thing it was drawn for - and every one
@@ -108,8 +109,10 @@ def write_brief(run, plugin, spec=None, design=None):
          + (f" and the template it names for this method, `{SKILL}/templates/{tmpl}.md`."
             if tmpl else ", which names no template for this plugin - say so rather than "
                           "borrowing another method's."),
-         f"4. Carry it back into the run: `scprofile run --section <file>`. A section outside the "
-         f"run has no run key and its citations resolve to nothing.", "",
+         f"4. Carry it back into the run: `scprofile paper --out {run} --plugin {plugin} "
+         f"--write <file>`, then `--render`. A section outside the run has no run key and its "
+         f"citations resolve to nothing; a sealed run is written to through its writing "
+         f"replay, never in place.", "",
          f"**You are writing about {subject}.** The reference level of every factor is "
          + (", ".join(f"`{k} = {v}`" for k, v in sorted(ctl.items())) if ctl
             else "not declared, so direction cannot be assumed") + ".", ""]
@@ -190,6 +193,30 @@ def write_brief(run, plugin, spec=None, design=None):
                  f"| {d['n_significant']} of {d['n_tested']} |")
     L += ["", "*Read against both scales. Where a total and a per-observation figure disagree "
               "in size, say which one the claim is made on - the skill states the rule.*", ""]
+
+    # THE SAME LABELS THE PANEL USES, so a section and the panel are one thing seen twice. The
+    # panel is built from `design_panel.comparisons`; a section written under whatever headings
+    # its author chose agreed with it on nothing but the run, and a reader moving between the
+    # two had to re-derive the mapping. Carried here from the second brief this replaced
+    # (harness ADR-0017): it was the one thing that brief had which this one did not.
+    try:
+        from .compare_panel import control_basis as _cb
+        from .design_panel import comparisons as _cm
+        _ctrl = _cb(design, controls=pay.get("controls"))
+        if _ctrl:
+            L += ["THE REFERENCE OF EACH CONTRAST - everything is measured against these:"]
+            L += [f"  {_fac}: against {_lv!r}   ({_why})"
+                  for _fac, (_lv, _why) in sorted(_ctrl.items())]
+            L += [""]
+        L += ["## USE THESE HEADINGS, VERBATIM, IN THIS ORDER", "",
+              "They are the panel's section names, so a reader moving between the two documents "
+              "lands in the same place:", ""]
+        for _c in _cm(design):
+            L += [f"  {str(_c.get('kind', '')).upper():12s} {_c.get('label', '')}"
+                  f"   -- {_c.get('question', '')}"]
+        L += ["", "A question with no panel is a gap to report, not a section to skip.", ""]
+    except Exception as _e:                                               # noqa: BLE001
+        L += [f"(the design's questions could not be enumerated: {_e})", ""]
 
     _con = str(pay.get("constraint_on_use") or "").strip()
     _binds = pay.get("constraint_binds") or {}

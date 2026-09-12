@@ -39,7 +39,22 @@ figs.mkdir(parents=True)
 A, B = "kernels/k/figures/a.png", "kernels/k/figures/b.png"
 GOOD = "The share of one pathway rises in one arm and falls in the other, by about nine points"
 
-print("an empty ledger says so, rather than passing")
+print("one brief: `paper --brief` prints the brief the reporter writes, never a second one")
+# HARNESS ADR-0017. `paper.brief` composed a brief of its own beside `scprofile write`'s
+# WRITING_BRIEF.md, and the two named different figure sets and different next commands; an
+# agent following one was told by the other that nothing was done. The reporter's is the brief.
+with tempfile.TemporaryDirectory() as _td:
+    _run = Path(_td) / "run"
+    (_run / "kernels" / "p").mkdir(parents=True)
+    (_run / "report.json").write_text('{"kernels": {"p": {}}}', encoding="utf-8")
+    (_run / "kernels" / "p" / "WRITING_BRIEF.md").write_text("# Writing brief - p\nthe one brief\n",
+                                                            encoding="utf-8")
+    ck("the brief on disk is what is printed", PA.brief(_run, "p").strip()
+       == "# Writing brief - p\nthe one brief", PA.brief(_run, "p")[:80])
+    ck("a run with nothing to write from says so and names `report`",
+       "report" in PA.brief(Path(_td) / "nowhere", "p"), PA.brief(Path(_td) / "nowhere", "p")[:80])
+
+print("\nan empty ledger says so, rather than passing")
 ck("no claims reads as NOT RUN, not as clean", "NO CLAIMS RECORDED" in PA.summarise(root))
 ck("and nothing is outstanding only because nothing exists", PA.outstanding(root) == [])
 

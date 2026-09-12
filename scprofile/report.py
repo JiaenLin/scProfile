@@ -2290,8 +2290,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
         # and enters a run through `--section`; saying so turns a silence into a fact.
         _links.append(f"<b>No written result section in this run.</b> The figures and the panel "
                       f"are produced by the run; a section is written by the AGENT running this "
-                      f"tool and carried in "
-                      f"with <code>run --section &lt;file&gt;</code>, or added afterwards with "
+                      f"tool and carried in with "
                       f"<code>scprofile paper --out &lt;run&gt; --plugin {_e(name)} "
                       f"--write &lt;file&gt;</code>. Where a section exists for this analysis it "
                       f"is in the run whose figures it cites, because its citations are paths "

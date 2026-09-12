@@ -397,12 +397,13 @@ def tasks(run, plugin, spec=None, how=None):
           "do": "write it, then carry it in with the next task. If any figure is still to be "
                 "added or removed, do THAT first: the paper numbers figures in order, so changing "
                 "the set renumbers the citations of a section already written"},
-         {"id": "carry", "title": "Carry the written result into a run",
+         {"id": "carry", "title": "Carry the written result into the run",
           "state": DONE if authored else BLOCKED,
           "why": "a section outside a run has no run key and its citations resolve to nothing; "
-                 "one run produces all of its output, so it enters on a run and is not patched "
-                 "into this one",
-          "do": "scprofile run ... --section <file>"},
+                 "it enters the run it was written from - the writing replay of a sealed run - "
+                 "and is rendered beside the figures it cites (harness ADR-0017)",
+          "do": f"scprofile paper --out {run} --plugin {plugin} --write <file>   then   "
+                f"scprofile paper --out {run} --plugin {plugin} --render"},
          {"id": "defend", "title": "Record the claims and what review did to them",
           "state": DONE if claims else (PENDING if authored else BLOCKED),
           "why": "a claim is bound to the figures it cites, so a redraw makes it stale and the "

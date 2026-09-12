@@ -28,10 +28,11 @@ had was found by opening an image while the suite was green.
 The first seven stations ask whether the machinery worked. **Station 8 asks whether the output is
 worth having**, and it is the only station that can fail on a run where everything ran perfectly.
 
-It works like this. `paper --brief` prints what the run holds ready to write from: the design, the
-arms, the populations that cannot carry a comparison, the upstream constraint that binds any
-claim, and every panel a reader meets first with the caption it carries. You write a result
-section from that — and each sentence you would put in a paper is registered as a **claim** with
+It works like this. `paper --brief` prints the writing brief the reporter writes into the run
+(`kernels/<plugin>/WRITING_BRIEF.md`): the design's questions, the contrasts in reading order
+with their references, every figure with the number the paper gives it, the run's own caveats,
+and the skill and template to write against. You write a result section from that — and each
+sentence you would put in a paper is registered as a **claim** with
 `--claim`, citing the figures it was read off with `--cites`. A claim citing nothing is refused.
 Then the claim is put to review with `--round`, and the verdict is one of three: `standing`,
 `narrowed`, or `withdrawn`.

@@ -16,10 +16,13 @@ sys.path.insert(0, str(ROOT))
 
 FAILURES = []
 src = (ROOT / "scprofile" / "paper.py").read_text()
+# THE ONE BRIEF IS THE REPORTER'S (harness ADR-0017): `brief.write_brief` writes it and
+# `paper --brief` prints it. The checks below read the writer.
+bsrc = (ROOT / "scprofile" / "brief.py").read_text()
 
-i = src.index("def brief(")
-j = src.find("\ndef ", i + 1)
-blk = src[i:j if j > 0 else len(src)]
+i = bsrc.index("def write_brief(")
+j = bsrc.find("\ndef ", i + 1)
+blk = bsrc[i:j if j > 0 else len(bsrc)]
 assert len(blk) > 500, "brief block extraction failed; the checks below would prove nothing"
 
 if "comparisons as _cm" not in blk and "_cmps(" not in blk:
