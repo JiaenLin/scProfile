@@ -1512,7 +1512,8 @@ def _validate(a):
         # prints the accounting and counts anything unaccounted as an error, because an
         # unexplained gap between what a tool draws and what a wrapper uses is exactly the
         # difference between wrapping a method and re-inventing a worse one.
-        _np = (k.spec or {}).get("native_plots") or {}
+        from . import native as _NATd
+        _np = _NATd.declared_from(k.spec or {})
         if not _np:
             from . import native as _NAT0
             if _NAT0.requires_accounting(k.spec):
@@ -3450,7 +3451,7 @@ def _promised(run):
             print(f"  {d.name}: ran here but is not installed now, so its declaration "
                   f"cannot be read back")
             continue
-        declared = (k.spec or {}).get("native_plots") or {}
+        declared = _N.declared_from(k.spec or {})
         if not declared:
             continue
         looked += 1

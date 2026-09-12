@@ -70,6 +70,68 @@ class Unaccounted(Exception):
     """An upstream plot is neither used nor validly skipped."""
 
 
+def _check_skip(d):
+    """Why one skip entry is not a valid ruling, or "" when it is. ONE definition: `account`
+    and `check_skips` both read it, so the accounting and the validator cannot disagree."""
+    reason = str((d or {}).get("skip") or "")
+    if reason in REJECTED:
+        return f"REJECTED REASON {reason!r}: {REJECTED[reason]}"
+    if reason not in VALID:
+        return f"unknown reason {reason!r}. Valid: " + ", ".join(sorted(VALID))
+    _what, needs, _help = VALID[reason]
+    missing = [k for k in needs if not str((d or {}).get(k) or "").strip()]
+    if missing:
+        return f"{reason} requires {', '.join(missing)} - {VALID[reason][2]}"
+    return ""
+
+
+def check_skips(skips):
+    """[(fn, why)] for every entry of a `report.skips` mapping that is not a valid ruling."""
+    out = []
+    for fn, d in sorted((skips or {}).items()):
+        if not isinstance(d, dict):
+            out.append((fn, "a skip is a mapping {skip: reason, ...evidence}"))
+            continue
+        why = _check_skip(d)
+        if why:
+            out.append((fn, why))
+    return out
+
+
+def declared_from(spec):
+    """{fn: {"use": ..., "ids": [...]} | {"skip": ...}} - the upstream accounting, from the plan.
+
+    THE PLAN IS `report.figures` (harness ADR-0016). An entry with `drawn_by: tool` and an `fn`
+    is that function USED, and the id is where its output lands; `report.skips` is every export
+    the plan does not call, with a reason. A plugin whose entries carry no `fn` - the ones
+    written before the plan carried the call - is read from `native_plots` exactly as before, so
+    nothing here asks anything of them.
+
+    `use` stays a string because every reader of it prints it or asks whether it names a
+    figure; `ids` is the structured half `function_for` matches on, and it is what stops a
+    filename being parsed out of English for a plugin that has said it plainly.
+    """
+    report = (spec or {}).get("report") or {}
+    figs = report.get("figures") if isinstance(report, dict) else None
+    entries = [e for e in (figs or []) if isinstance(e, dict) and str(e.get("fn") or "").strip()]
+    if not entries:
+        return dict((spec or {}).get("native_plots") or {})
+    out = {}
+    for e in entries:
+        if str(e.get("drawn_by") or "tool") != "tool":
+            continue                       # the plugin's own drawing of the tool's numbers
+        fn = str(e["fn"]).strip()
+        rec = out.setdefault(fn, {"use": "", "ids": []})
+        fid = str(e.get("id") or "").strip()
+        if fid and fid not in rec["ids"]:
+            rec["ids"].append(fid)
+    for fn, rec in out.items():
+        rec["use"] = ", ".join(f"figures/{i}.png" for i in rec["ids"])
+    for fn, d in sorted(((report.get("skips") if isinstance(report, dict) else None) or {}).items()):
+        out[str(fn)] = dict(d) if isinstance(d, dict) else {"skip": str(d)}
+    return out
+
+
 def account(inventory, declared):
     """Check every upstream plot is used or validly skipped. Returns (used, skipped, problems).
 
@@ -89,17 +151,9 @@ def account(inventory, declared):
         if d.get("use"):
             used[fn] = d["use"]
             continue
-        reason = str(d.get("skip") or "")
-        if reason in REJECTED:
-            problems.append((fn, f"REJECTED REASON {reason!r}: {REJECTED[reason]}"))
-            continue
-        if reason not in VALID:
-            problems.append((fn, f"unknown reason {reason!r}. Valid: " + ", ".join(sorted(VALID))))
-            continue
-        _what, needs, _help = VALID[reason]
-        missing = [k for k in needs if not str(d.get(k) or "").strip()]
-        if missing:
-            problems.append((fn, f"{reason} requires {', '.join(missing)} - {VALID[reason][2]}"))
+        why = _check_skip(d)
+        if why:
+            problems.append((fn, why))
             continue
         skipped[fn] = d
     for fn in sorted(set(declared or {}) - set(inventory)):
@@ -283,6 +337,17 @@ def function_for(declared, filename):
     stem = stem[:-4] if stem.endswith(".png") else stem
     best, best_len = "", -1
     for fn, rec in (declared or {}).items():
+        # THE STRUCTURED HALF FIRST. An entry that came from the plan carries its ids; a file is
+        # that entry's when its name is the id or the id followed by the per-item separator.
+        # Longest id wins, the same rule as below, and the prose route is never consulted for
+        # an entry that has ids.
+        ids = (rec or {}).get("ids")
+        if ids:
+            for fid in ids:
+                fid = str(fid)
+                if (stem == fid or stem.startswith(fid + "__")) and len(fid) > best_len:
+                    best, best_len = fn, len(fid)
+            continue
         use = str((rec or {}).get("use") or "")
         if not use:
             continue

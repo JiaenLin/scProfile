@@ -302,49 +302,36 @@ points:
           why: >
             what the wrapped tool already draws. cellchat used 1 of 30 until somebody looked; after
             the accounting it uses 32 of 35
-        - name: legends
+        # THE FIGURE PLAN (harness ADR-0016). One list carries the call: which function, over
+        # which axis, with which arguments, over which items, under which ceiling, placed where,
+        # described how, and who draws it. The scaffold GENERATES the draw sites from it, so a
+        # figure is adjusted here and never in method code; `sch dev convert plan` prints every
+        # entry and what it lacks. This stage replaced `legends` and `placement` - the two
+        # questions they asked are two of the keys below, on one list.
+        #
+        # THE LEGACY KEYS STAY UNTIL THE LAST HELD-OUT PLUGIN IS ON THE PLAN. `places_every`,
+        # `axis_field`, `positions` and `axes` are what a plugin written before the plan carried
+        # the call is read by - the prose `use:` and the two prefix maps - and `--migrate` is
+        # what turns that into entries. Removing them now would make the eight unreadable, which
+        # rule 2 forbids and the reader's fallback exists for.
+        - name: plan
           phase: build
           fills: [report.figures]
-          # EVERY ENTRY, NOT THE FIELD. The list exists from the first figure declared, so a
-          # stage that only asked whether `report.figures` is there reported done with eight of
-          # nine panels never ruled on.
+          # WHAT THE MAKER CALLS A THING -> WHAT THIS FORMAT CALLS IT, like `version_field`
+          # above. Nothing in `sch/` knows that a call's arguments live under `args`.
+          entry_keys:
+            upstream: fn
+            items: items
+            bound: at_most
+            call: args
+            expression: expr
+            skips: report.skips
           each_item_declares:
             drawn_by: [tool, plugin]
-          # AND EVERY PLACE THE PLUGIN ACTUALLY PRODUCES A PANEL, which is not in this
-          # declaration at all. MEASURED ON A SEALED RUN: 711 panels, 69 with a written legend,
-          # 642 without - and the 642 come out of 35 call sites in one file, every one of which
-          # calls a wrapper that already HAS a legend parameter and passes nothing to it. The
-          # legend is not missing from the format; it is missing from the call sites, and until
-          # this key existed nothing in the suite reported that. The sites are found by reading
-          # the plugin's source - see sch/dev/extract/draw_sites.py - so a plugin needs no
-          # declaration of its own draw wrappers and none of them was edited to be checked.
-          each_draw_site_describes: true
-          # HOW THE DEBT IS PAID, because a stage that reports one and does not say is a dead end
-          # this suite has already met twice.
-          finished_by: >
-            `sch dev convert legends --root . --point kernel --name <plugin>` prints one row per
-            silent draw site - the panel name as written, the plotting call under it, and the
-            argument to add. Write the sentence AT THE CALL SITE, where the numbers that describe
-            the panel still exist, and re-run this status: the count falls as the sites are
-            answered
-          why: >
-            who drew each panel. `tool` is the wrapped tool's own plotting function, unmodified.
-            `plugin` is this plugin drawing the tool's NUMBERS itself - a second scale, a derived
-            matrix, an annotation layer - which is a different claim about provenance and is
-            exactly what the upstream-plot accounting exists to protect. With this absent the
-            reporter asserted `tool` for every undescribed panel, so a plugin-drawn figure was
-            reported as the tool's own encoding and the accounting was undone at the last step.
-            The LEGEND ITSELF is not declared here: it is written where the figure is drawn, out
-            of numbers no build stage has - the n, the cap that was applied, the populations that
-            were dropped - and is read back from captions.tsv when the plugin runs
-        - name: placement
-          phase: build
-          fills: [report.figure_position]
-          # WHICH DECLARATIONS NAME A FIGURE FAMILY, and how to read an id out of each. Nothing
-          # in `sch/` knows that this format keeps upstream plots in `native_plots` with their
-          # filenames written into a prose `use:`, or that a plugin's own plates carry an `id`.
-          # Both are facts about this repository's format and both are declared here, like
-          # `version_field` and `environment.holds` above.
+            axis: [unit, contrast, cohort]
+            position: [overview, contrast, conclusion, appendix]
+            legend: []
+          outstanding_if: wraps.plots_unreviewed
           places_every:
             - field: native_plots
               named_by: use
@@ -357,13 +344,13 @@ points:
               bound: at_most
             - field: report.figures
               named_by: id
+          axis_field: report.figure_axis
           positions: [overview, contrast, conclusion, appendix]
           # WHAT A CEILING IS COUNTED IN. `at_most: 6` is a number with no units until the
           # declaration says whether the family is drawn once per unit, once per arm-pair
           # comparison, or once for the whole cohort - and until it does, no figure count can be
           # computed before a job is submitted. Read as a prefix map like `figure_position`, so a
           # plugin whose families are named by phase states it in two rules.
-          axis_field: report.figure_axis
           axes: [unit, contrast, cohort]
           # A CEILING THE DRAWING CODE DOES NOT READ IS A COMMENT. Measured: a plugin declaring
           # 49 ceilings, every guard stripped out of its embedded R, and the whole build phase
@@ -375,37 +362,27 @@ points:
           # `token` is what this format calls the thing where the drawing code reads it -
           # `figure_context.tsv` carries `ceiling:<family>` rows. `returns` is what leaving a
           # wrapper looks like in the language it is written in. Neither is known to `sch/`.
+          # LEGACY, like the four above it: what a hand-written draw wrapper must read - the
+          # ceiling-guard instrument reads this and retires with the extractor in step 5.
           enforced_by:
             token: ceiling
             returns: return
-          # AND THAT THE CODE HONOURING IT IS THE MAKER'S OUTPUT, not a hand-written file that
-          # satisfies the check. DEMANDED, CHECKED and GENERATED are three different claims, and
-          # for a while this repository had the first two and reported the third: the command
-          # below CRASHED for every kernel here - it wrote the six-file layout `scprofile/plugin.py`
-          # replaced, and a one-file kernel's path is a file, so it tried `kernels/<name>.py/run.py`
-          # - which means the wrapper it was said to generate had never once been generated.
-          #
-          # `{out}` is a scratch directory the suite makes; `{python}` is the HOST's interpreter,
-          # because this generator is this repository's own tool whatever language the plugin
-          # draws in. The comparison is byte for byte.
           generated_by:
             command: ["{python}", "-m", "scprofile.cli", "scaffold", "{name}",
                       "--dir", "{out}", "--force"]
           finished_by: >
-            `sch dev convert placement --root . --point kernel --name <plugin>` prints one row
-            per family that has no position and one per per-item family with no ceiling. Add a
-            `report.figure_position` prefix rule for the first and an `at_most:` for the second,
-            then cap the loop that draws it - the declaration and the code have to agree, and
-            only the second one actually stops drawing
+            `sch dev convert plan --root . --point kernel --name <plugin>` prints every entry
+            with what it lacks and, given `--python`, the upstream function's parameters beside
+            each `fn`. A plugin still on `native_plots` and the prefix maps: `--migrate` prints
+            the paste-ready plan built from them and from its draw sites. Then
+            `scprofile scaffold <plugin> --force` regenerates the companion from the plan
           why: >
-            WHICH FIGURES A RESULT IS WRITTEN FROM, AND HOW MANY OF EACH THERE ARE. Measured on a
-            sealed run: 1187 figures for one plugin, of 81 kinds, of which the composed section
-            cites 31 kinds and 90 files. The other fifty kinds are drawn per unit, per pathway or
-            per population, and the writing step was waiting on all of them. `appendix` is how a
-            plugin says a kind is drawn and no result is written from it: it stays on the pages
-            and stays reviewable, but it is not numbered, no sentence can cite it, it does not
-            gate the writing, and it is not written a second time as a vector copy - 180 of those
-            on this cohort, for plates the section never mentions
+            WHICH FIGURES A RESULT IS WRITTEN FROM, HOW MANY OF EACH, DRAWN BY WHAT WITH WHICH
+            ARGUMENTS, AND DESCRIBED HOW. Measured before this existed: 47 hand-written R draw
+            sites carried the call, so changing a heatmap's measure meant editing method code,
+            and a `skip` in the accounting did not stop the site drawing. The plan is where a
+            figure is adjusted; the companion is generated from it; `promised` and the loop's
+            stations read the run back against it
         - name: measure
           phase: test
           fills: [memory_gb_base, memory_gb_per_100k]

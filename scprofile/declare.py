@@ -112,6 +112,14 @@ class DeclarationError(Exception):
 #: `_who_produces` in kernels.py was written to record.
 SHOWS = ("diagnostic", "result", "comparison")
 
+#: THE FIGURE PLAN'S VOCABULARY (harness ADR-0016). An entry of `report.figures` may say who draws
+#: it, over which axis, where a result places it and what kind of panel it is - and every one of
+#: those words is one of these or the entry is refused. The reader is `planner.figure_families`;
+#: the generator is `scaffold.render_plan`; both read these same tuples.
+from .captions import DRAWN_BY          # ONE definition: the legend writer already owns it
+AXES = ("unit", "contrast", "cohort")
+POSITIONS = ("overview", "contrast", "conclusion", "appendix")
+
 #: The order the reporter lays them out in. Not alphabetical, not emission order: a reader must
 #: meet the checks on the method before the number it produced.
 SHOWS_ORDER = {k: i for i, k in enumerate(SHOWS)}
@@ -182,7 +190,7 @@ def report_figures(spec) -> list:
 #: reads through the accessor now, so the next sibling cannot be one edit behind.
 REPORT_KEYS = ("figures", "reads_with", "unit_metrics", "unit_network",
                "provides_evidence", "comparison_stats", "subject", "figure_position",
-               "figure_axis", "writing_template")
+               "figure_axis", "writing_template", "skips")
 
 #: THE COLUMNS A `unit_network` NAMES. `table`, `source`, `target` and `weight` are required and
 #: are the network itself; `group` and `member` are optional and each earns further panels -
@@ -226,6 +234,85 @@ def report_get(spec, key, default=None):
         raise KeyError(f"`report.{key}` is read but not declared in declare.REPORT_KEYS — "
                        f"add it there, or the checker will warn that the reporter ignores it")
     return (spec or {}).get(key, default)
+
+
+def _check_plan_entry(f, at, out) -> None:
+    """The plan fields of one `report.figures` entry (ADR-0016): present ones must be well formed.
+
+    NOTHING HERE IS REQUIRED OF AN ENTRY THAT DECLARES NONE OF THEM - a plugin written before the
+    plan carried the call is read as it always was. What is refused is a value outside the
+    vocabulary, a per-item family with no ceiling, an upstream entry with no function, and a call
+    with nothing to call: each of those would reach the generator and the planner as a silent
+    default, and a default nobody chose is the defect the plan exists to remove.
+    """
+    by = f.get("drawn_by")
+    if by is not None and str(by) not in DRAWN_BY:
+        out.append(("ERROR", f"{at} declares drawn_by={by!r}; it must be one of "
+                             f"{', '.join(DRAWN_BY)}"))
+    axis = f.get("axis")
+    if axis is not None and str(axis) not in AXES:
+        out.append(("ERROR", f"{at} declares axis={axis!r}; it must be one of {', '.join(AXES)} "
+                             f"- what the family multiplies over, and which script draws it"))
+    pos = f.get("position")
+    if pos is not None and str(pos) not in POSITIONS:
+        out.append(("ERROR", f"{at} declares position={pos!r}; it must be one of "
+                             f"{', '.join(POSITIONS)}"))
+    kind = f.get("kind")
+    if kind is not None:
+        from . import panels as _P
+        if str(kind) != "other" and str(kind) not in _P.BY_ID:
+            out.append(("ERROR", f"{at} declares kind={kind!r}, which is not a registered panel "
+                                 f"kind ({', '.join(sorted(_P.BY_ID))}) nor \"other\". A kind is "
+                                 f"what binds the figure rules to a panel."))
+    for key in ("fn", "args", "items", "legend", "expr", "when", "file"):
+        v = f.get(key)
+        if v is not None and not isinstance(v, str):
+            out.append(("ERROR", f"{at} declares `{key}` as {type(v).__name__}; it must be a "
+                                 f"string"))
+    if str(f.get("file") or "").strip() and f.get("at_most") is None:
+        out.append(("ERROR", f"{at} names its file by an expression (`file`) and declares no "
+                             f"`at_most`. A computed file stem is one panel per something, and "
+                             f"a family drawn per something has a ceiling or draws without "
+                             f"bound."))
+    if f.get("generated") is not None and not isinstance(f.get("generated"), bool):
+        out.append(("ERROR", f"{at} declares `generated` as {type(f.get('generated')).__name__}; "
+                             f"it is True, or False for a file the tool writes as a side effect "
+                             f"of a call the method makes"))
+    if f.get("items") is not None and f.get("at_most") is None:
+        out.append(("ERROR", f"{at} draws one panel per item of `{f.get('items')}` and declares "
+                             f"no `at_most`. A per-item family with no ceiling draws without "
+                             f"bound: 240 panels on a cohort of forty populations."))
+    if f.get("at_most") is not None:
+        try:
+            if int(f["at_most"]) < 1:
+                raise ValueError
+        except (TypeError, ValueError):
+            out.append(("ERROR", f"{at} declares at_most={f.get('at_most')!r}; it must be a "
+                                 f"positive integer, the files per occurrence of the axis"))
+    if str(by or "") == "tool" and not str(f.get("fn") or "").strip() \
+            and not str(f.get("expr") or "").strip():
+        out.append(("ERROR", f"{at} is drawn by the tool and names no `fn` (nor an `expr`). An "
+                             f"upstream panel is a call to the tool's own function; without the "
+                             f"name the accounting cannot say which export it uses."))
+    if str(f.get("args") or "").strip() and not str(f.get("fn") or "").strip():
+        out.append(("ERROR", f"{at} declares `args` and no `fn` to pass them to"))
+    if str(f.get("expr") or "").strip() and str(f.get("args") or "").strip():
+        out.append(("ERROR", f"{at} declares both `expr` and `args`; an entry is a call "
+                             f"(`fn` + `args`) or a verbatim expression, not both"))
+
+
+def _check_skips(skips, out) -> None:
+    """`report.skips`: every upstream export the plan does not call, with a reason from the
+    closed vocabulary in `native.py`. The same check `native_plots` skip entries get."""
+    if skips is None:
+        return
+    if not isinstance(skips, dict):
+        out.append(("ERROR", "`report.skips` must be a mapping of upstream function -> "
+                             "{skip: reason, ...evidence}"))
+        return
+    from . import native as _NAT
+    for fn, why in _NAT.check_skips(skips):
+        out.append(("ERROR", f"report.skips[{fn}]: {why}"))
 
 
 def _check_report(spec, out) -> None:
@@ -274,26 +361,35 @@ def _check_report(spec, out) -> None:
                                      f"both be reported present or absent."))
             else:
                 seen.add(fid)
-            if not str(f.get("question") or "").strip():
-                out.append(("ERROR", f"{at} states no `question`. It is printed above the panel "
-                                     f"so a reader knows what it is for before deciding whether "
-                                     f"it answers them."))
-            shows = f.get("shows")
-            if shows not in SHOWS:
-                out.append(("ERROR", f"{at} declares shows={shows!r}; it must be one of "
-                                     f"{', '.join(SHOWS)}. The reporter orders a page by this and "
-                                     f"by nothing else - a reader must meet the checks on the "
-                                     f"method before the number it produced."))
-            if not str(f.get("source") or "").strip():
-                out.append(("ERROR", f"{at} names no `source` table. A figure whose numbers "
-                                     f"cannot be opened is a figure a reader has to believe, and "
-                                     f"several journals now require the source data beside the "
-                                     f"panel."))
+            # AN UPSTREAM PANEL IS THE TOOL'S ENCODING OF THE TOOL'S NUMBERS. It carries no
+            # `source` table of its own, no `shows` the reporter orders by, and its question is
+            # its legend; those three are the plugin-drawn panel's obligations. `drawn_by: tool`
+            # is what says which this is (ADR-0016).
+            if str(f.get("drawn_by") or "") == "tool":
+                pass
+            else:
+                if not str(f.get("question") or "").strip():
+                    out.append(("ERROR", f"{at} states no `question`. It is printed above the "
+                                         f"panel so a reader knows what it is for before deciding "
+                                         f"whether it answers them."))
+                shows = f.get("shows")
+                if shows not in SHOWS:
+                    out.append(("ERROR", f"{at} declares shows={shows!r}; it must be one of "
+                                         f"{', '.join(SHOWS)}. The reporter orders a page by this "
+                                         f"and by nothing else - a reader must meet the checks on "
+                                         f"the method before the number it produced."))
+                if not str(f.get("source") or "").strip():
+                    out.append(("ERROR", f"{at} names no `source` table. A figure whose numbers "
+                                         f"cannot be opened is a figure a reader has to believe, "
+                                         f"and several journals now require the source data "
+                                         f"beside the panel."))
             if not f.get("required", True) and not str(f.get("when_absent") or "").strip():
                 out.append(("WARN", f"{at} is optional and says nothing for the case where it is "
                                     f"absent. The reporter will print that it was not produced "
                                     f"and no reason, which reads as an oversight rather than as "
                                     f"a property of the data."))
+            _check_plan_entry(f, at, out)
+    _check_skips(block.get("skips"), out)
 
     # A PAGE HAS A BUDGET AND A PLUGIN IS NOT THE ONLY THING SPENDING IT. The reporter adds its
     # own panels to any page whose plugin writes a per-cell column - the per-arm views, capped at
@@ -655,9 +751,12 @@ def check(spec, name="<plugin>"):
     # of the one thing the plugin format exists to keep out of it - and a NEW wrapper owed nothing
     # until somebody noticed and appended its name. Now the admission is the plugin's own, written
     # by whoever takes the debt on, and a wrapper cannot validate while silent about it.
-    if w.get("tool") and not spec.get("native_plots") and not str(w.get("plots_unreviewed") or "").strip():
+    from . import native as _NATd
+    if w.get("tool") and not _NATd.declared_from(spec) \
+            and not str(w.get("plots_unreviewed") or "").strip():
         out.append(("ERROR", f"wraps {w['tool']} and neither accounts for its figures nor admits "
-                             f"that nobody has looked at them. Declare `native_plots`, or say so "
+                             f"that nobody has looked at them. Declare them - `report.figures` "
+                             f"entries with `fn` and `drawn_by: tool`, plus `report.skips` - or say so "
                              f"in `wraps.plots_unreviewed` - cellchat went from 1 of 30 upstream "
                              f"plots used to 14 when somebody went through them, and four of the "
                              f"fourteen answer a design comparison directly."))

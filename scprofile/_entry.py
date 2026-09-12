@@ -235,8 +235,8 @@ def _compare(plugin_path, spec_path):
         # THE SAME TWO THE PER-UNIT CONTEXT GETS, resolved by the same reader the plan uses.
         # `_compare_spec` carries the plugin's declaration in `spec`; without these the compare
         # phase wrote no ceiling rows and a family declared at 8 drew 77 in one contrast.
-        figure_position=((spec.get("plugin_spec") or {}).get("report") or {})
-                        .get("figure_position") or {},
+        # THE ONE MAP, with every plan entry's own position folded in (ADR-0016).
+        figure_position=_PLN.position_map(spec.get("plugin_spec") or {}),
         figure_ceiling={f: n for f, n, _a, _p, _o in
                         _PLN.figure_families(spec.get("plugin_spec") or {})},
         log=print,
@@ -393,7 +393,8 @@ def main(argv):
                   profile_figures=[str(f.get("id")) for f in
                                    ((spec.get("report") or {}).get("figures") or [])
                                    if f.get("profile") and f.get("id")],
-                  figure_position=(spec.get("report") or {}).get("figure_position") or {},
+                  # THE ONE MAP, with every plan entry's own position folded in (ADR-0016).
+                  figure_position=_PLN.position_map(spec),
                   # THE DECLARED CEILINGS, resolved to {family: n} by the same reader the plan
                   # uses - so what stops the drawing and what predicts it cannot disagree.
                   figure_ceiling={f: n for f, n, _a, _p, _o in _PLN.figure_families(spec)},

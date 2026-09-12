@@ -1992,7 +1992,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # BLOCK; `native_plots` is a TOP-LEVEL key, and reading it off `spec` gave `{}` to everything
     # that inverts it - so no compare caption could name the function that drew it and
     # `population_axis` could never fire. Two consumers now read one binding.
-    _decl_native = (p.get("spec") or {}).get("native_plots") or {}
+    from . import native as _NATd
+    _decl_native = _NATd.declared_from(p.get("spec") or {})
     # ONCE ON THE PAGE, AT THE TOP. `ctx.contradiction` records into `caveats` as well, so that
     # a refutation survives into any document built from the payload by something that has
     # never heard of the newer field. On the page that is the same sentence twice, once in a

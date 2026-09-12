@@ -212,7 +212,8 @@ def _native_index(run, plugin, spec):
     check separately and get it right.
     """
     routes = ((spec or {}).get("report") or {}).get("provides_evidence") or {}
-    declared = (spec or {}).get("native_plots") or {}
+    from . import native as _NATd
+    declared = _NATd.declared_from(spec)
     native = []
     try:
         placed = json.loads((Path(run) / "report" / "panels.json")
@@ -444,8 +445,10 @@ def _positions(spec):
     draws both. Longest prefix wins so a plugin can put a general rule and an exception beside
     each other. The host knows nothing about any particular panel; it applies what is declared.
     """
-    decl = {str(k): str(v) for k, v in
-            (((spec or {}).get("report") or {}).get("figure_position") or {}).items()}
+    # THE ONE MAP (ADR-0016): the prefix map with every plan entry's own position as an exact
+    # key, read by the same function the entry point and the planner read.
+    from . import planner as _PLN
+    decl = _PLN.position_map(spec)
     keys = sorted(decl, key=len, reverse=True)
 
     def where(path):
@@ -592,8 +595,13 @@ def profile_figures(run, plugin, spec, unit):
     """
     from . import native as _NAT
 
-    declared = (spec or {}).get("native_plots") or {}
+    declared = _NAT.declared_from(spec)
     keep = {fn for fn, d in declared.items() if isinstance(d, dict) and d.get("profile")}
+    # A PLAN ENTRY SAYS `profile` ON ITSELF, not on the function - fold those in by function.
+    for e in (((spec or {}).get("report") or {}).get("figures") or []):
+        if isinstance(e, dict) and e.get("profile") and e.get("fn") \
+                and str(e.get("drawn_by") or "tool") == "tool":
+            keep.add(str(e["fn"]))
     if not (keep and unit):
         return []
     d = Path(run) / "kernels" / plugin / str(unit) / "figures"

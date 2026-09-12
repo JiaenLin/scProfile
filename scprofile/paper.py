@@ -908,7 +908,8 @@ def panel(out, *, run_key="", plugin=""):
 
     spec = _plugin_spec_of(pay, plugin)
     routes = ((spec.get("report") or {}).get("provides_evidence") or {})
-    declared = (spec.get("native_plots") or {})
+    from . import native as _NATd
+    declared = _NATd.declared_from(spec)
     try:
         placed = _json.loads((root / "report" / "panels.json").read_text(encoding="utf-8"))
         native = (placed.get(plugin) or {}).get("native") or []

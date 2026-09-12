@@ -828,6 +828,37 @@ def gap_text(sections):
 #: job was submitted.
 #:
 #: MEASURED: one plugin drew 1187 figures. Nobody could have known that without running it.
+def position_map(plugin_spec):
+    """{prefix or id: position} - the declared prefix map, with every plan entry's own `position`
+    as an exact key (harness ADR-0016).
+
+    ONE MAP FOR EVERY CONSUMER. The composer, the entry point and the vector-copy rule each read
+    `report.figure_position` on their own; an entry's own word now sits in the same map as an
+    exact key, and longest-prefix-wins - the rule they all already apply - makes it beat any
+    broader prefix. Nothing downstream changes shape, and a plugin whose entries carry no
+    position keeps its prefix map untouched.
+    """
+    report = (plugin_spec or {}).get("report") or {}
+    from . import declare as _D
+    m = {str(k): str(v) for k, v in (_D.report_get(report, "figure_position") or {}).items()}
+    for e in (_D.report_get(report, "figures") or []):
+        if isinstance(e, dict) and e.get("id") and e.get("position"):
+            m[str(e["id"])] = str(e["position"])
+    return m
+
+
+def axis_map(plugin_spec):
+    """{prefix or id: axis} - `report.figure_axis` with every plan entry's own `axis` as an
+    exact key. The sibling of `position_map`, for the same reason."""
+    report = (plugin_spec or {}).get("report") or {}
+    from . import declare as _D
+    m = {str(k): str(v) for k, v in (_D.report_get(report, "figure_axis") or {}).items()}
+    for e in (_D.report_get(report, "figures") or []):
+        if isinstance(e, dict) and e.get("id") and e.get("axis"):
+            m[str(e["id"])] = str(e["axis"])
+    return m
+
+
 def figure_families(plugin_spec):
     """[(family, ceiling, axis, position)] - the plugin's whole plot inventory, from declarations.
 
@@ -846,16 +877,14 @@ def figure_families(plugin_spec):
     spec = plugin_spec or {}
     report = spec.get("report") or {}
 
-    def _prefix_map(field):
-        # THROUGH THE ONE DOOR. Read as `report.get(field)`, `figure_axis` was consumed here and
-        # unknown to the checker's key list, and the guard that scans every consumer for
-        # `report_get` calls could not see this one - so `validate` warned that the reporter
-        # ignores a key this function had just read.
-        m = {str(k): str(v) for k, v in (_D.report_get(report, field) or {}).items()}
-        return m, sorted(m, key=len, reverse=True)
-
-    axes, akeys = _prefix_map("figure_axis")
-    place, pkeys = _prefix_map("figure_position")
+    # THE ENTRY'S OWN WORD, THEN THE PREFIX MAP. `axis_map`/`position_map` fold each plan entry's
+    # own value into the declared prefix map as an exact key; longest prefix wins, so an entry
+    # that says where it goes beats a broader rule, and a plugin that says nothing per entry is
+    # read exactly as before.
+    axes = axis_map(spec)
+    akeys = sorted(axes, key=len, reverse=True)
+    place = position_map(spec)
+    pkeys = sorted(place, key=len, reverse=True)
 
     def _match(stem, m, keys, default):
         for k in keys:
@@ -864,7 +893,23 @@ def figure_families(plugin_spec):
         return default
 
     fams = {}
-    for fn, rec in sorted((spec.get("native_plots") or {}).items()):
+    # THE PLAN FIRST (ADR-0016). An entry that carries `fn`, `axis` or `at_most` is a family that
+    # has said what it is; a plugin with any such entry is read from its plan alone, and
+    # `native_plots` prose is not consulted for it - the same rule `native.declared_from` keeps,
+    # so the count and the accounting cannot read two different plans.
+    figs_all = [e for e in (_D.report_get(report, "figures") or []) if isinstance(e, dict)]
+    planned = [e for e in figs_all
+               if any(e.get(k) is not None for k in ("fn", "axis", "at_most", "expr"))]
+    for e in planned:
+        fid = str(e.get("id") or "").strip()
+        if not fid:
+            continue
+        try:
+            n = max(1, int(e.get("at_most") or 1))
+        except (TypeError, ValueError):
+            n = 1
+        fams.setdefault(fid, n)
+    for fn, rec in sorted((spec.get("native_plots") or {}).items() if not planned else []):
         rec = rec if isinstance(rec, dict) else {}
         if rec.get("skip"):
             continue
@@ -889,10 +934,14 @@ def figure_families(plugin_spec):
                 members *= max(1, len([x for x in grp.split(",") if x.strip()]))
             fams.setdefault(stem, int(n) if n else members)
     own = set()
-    for e in (report.get("figures") or []):
-        fid = str((e or {}).get("id") or "")
-        if fid:
-            fams.setdefault(fid, 1)
+    for e in figs_all:
+        fid = str(e.get("id") or "")
+        if not fid:
+            continue
+        fams.setdefault(fid, 1)
+        # OWN MEANS THE HOST'S EMIT PATH WROTE IT - a vector copy exists only there. A plan entry
+        # drawn by the tool is an upstream PNG from another interpreter's device.
+        if str(e.get("drawn_by") or "plugin") != "tool":
             own.add(fid)
     # WHICH FAMILIES CAN HAVE A VECTOR COPY AT ALL. Only the ones the plugin draws through the
     # host's own figure writer; an upstream plot arrives as a PNG from the wrapped tool's device
