@@ -68,11 +68,14 @@ with tempfile.TemporaryDirectory() as td:
     _look = {t["id"]: t for t in AG.tasks(run, "p", how=AG.PBS)}["look"]
     _look_l = {t["id"]: t for t in AG.tasks(run, "p", how=AG.LOCAL)}["look"]
     _how = " ".join(_look.get("how") or [])
-    check("FIGURES.txt" in _how,
+    check("FIGURES.txt" in _how and "--no-p" in _how and "written layer" in _how,
           "the pbs look step does not name the transfer list, so the agent has to parse the "
           "brief's markdown to find the images: %r" % (_how[:120],))
-    check("--files-from" in _how or "-T " in _how,
-          "the pbs look step names no way to move the set in one operation: %r" % (_how[:120],))
+    # ONE TRANSFER OF THE RUN'S LIGHT HALF, WRITABLE (harness ADR-0017): the replay the agent
+    # works against, not a bag of images to look at and a sealed run to record into.
+    check("rsync -rlt" in _how and "--exclude 'objects/'" in _how and run.name in _how,
+          "the pbs look step names no way to bring the run's light half across in one "
+          "operation, writable, under its own run key: %r" % (_how[:160],))
     check(not any("rsync" in h for h in (_look_l.get("how") or [])),
           "local mode is told to transfer files that are already in front of it")
 

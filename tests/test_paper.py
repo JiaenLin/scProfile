@@ -78,12 +78,21 @@ ck("a verdict with no reasoning is refused",
    refuses(PA.review, root, cid, PA.STANDING, "ok"))
 ck("a round against an unrecorded claim is refused",
    refuses(PA.review, root, "0" * 12, PA.STANDING, "checked against its own denominator"))
+# A ROUND NEEDS A REVIEWER WHO IS NOT THE AUTHOR (harness ADR-0017). PAPER_TEST.md's own list
+# of what the test did not cover began with "the REVIEWER is unspecified - a project with no
+# reviewer has no test". For agents that is the whole test: a claim survives a second agent
+# given the figures and told to refute it, or it does not.
+ck("a round with no reviewer is refused",
+   refuses(PA.review, root, cid, PA.STANDING, "checked against its own denominator and it held"))
+ck("a round by the claim's own author is refused",
+   refuses(PA.review, root, cid, PA.STANDING, "checked against its own denominator and it held",
+           reviewer="t"))
 PA.review(root, cid, PA.STANDING, "checked against its own denominator and it held", reviewer="r")
 ck("a defended claim leaves the outstanding set", not PA.outstanding(root))
 ck("and its state is the verdict", PA.status(root)[0][1] == PA.STANDING)
 
 print("\nthe later verdict wins, because a claim can die on the second round")
-PA.review(root, cid, PA.WITHDRAWN, "the ranking was not stable on a second scale")
+PA.review(root, cid, PA.WITHDRAWN, "the ranking was not stable on a second scale", reviewer="r")
 ck("the newest verdict is the claim's state", PA.status(root)[0][1] == PA.WITHDRAWN)
 ck("and the round count is kept", PA.status(root)[0][2] == 2)
 
@@ -102,7 +111,7 @@ f2 = root2 / "figures"
 f2.mkdir(parents=True)
 (f2 / "x.png").write_text("X")
 r2 = PA.claim(root2, GOOD, ["figures/x.png"])
-PA.review(root2, r2["id"], PA.STANDING, "put to a reviewer and it held up")
+PA.review(root2, r2["id"], PA.STANDING, "put to a reviewer and it held up", reviewer="r")
 ck("all-standing is flagged rather than reported as success",
    "EVERY CLAIM SURVIVED UNCHANGED" in PA.summarise(root2))
 

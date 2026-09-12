@@ -188,9 +188,23 @@ def review(out, cid, verdict, why, *, reviewer="", replaces="", plugin=""):
         raise Refused(f"a verdict of {len(text.split())} word(s) does not say what was examined. "
                       f"Say what the reviewer put to it and what happened, in at least "
                       f"{MIN_WHY_WORDS} words.")
-    known = {r["id"] for r in read_ledger(out, plugin) if r.get("kind") == "claim"}
-    if cid not in known:
+    claims = {r["id"]: r for r in read_ledger(out, plugin) if r.get("kind") == "claim"}
+    if cid not in claims:
         raise Refused(f"no claim {cid!r} in this run. Record the claim before reviewing it.")
+    # A ROUND NEEDS A REVIEWER WHO IS NOT THE AUTHOR (harness ADR-0017). "The REVIEWER is
+    # unspecified - a project with no reviewer has no test" headed this test's own list of what
+    # it did not cover. For agents it is the whole test: a claim survives a second agent that
+    # was given the figures and told to refute it, or it does not. A composed claim's author is
+    # `composed`, so any named agent may review it; an agent's own claims need another agent.
+    who = str(reviewer or "").strip()
+    author = str(claims[cid].get("author") or "").strip()
+    if not who:
+        raise Refused("a round names its reviewer (--reviewer <who>), and the reviewer is not the "
+                      "claim's author. A verdict nobody gave is not a review.")
+    if author and who == author:
+        raise Refused(f"the reviewer {who!r} is the claim's author. A claim is defended against "
+                      f"a second reader - another agent, given the figures and told to refute "
+                      f"it - or it is not defended.")
     return _append(out, {"kind": "review", "id": cid, "verdict": verdict, "why": text,
                          "reviewer": str(reviewer or ""), "replaces": str(replaces or ""),
                          "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, plugin)

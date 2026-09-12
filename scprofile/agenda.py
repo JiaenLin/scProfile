@@ -365,16 +365,24 @@ def tasks(run, plugin, spec=None, how=None):
           # The host does not know the agent's hostname or where it keeps files, and must not
           # guess - it names the list, the run root and the direction, and leaves the two
           # endpoints to the agent, which is the only party that knows them.
+          # THE COPY IS THE RUN'S WRITING REPLAY (harness ADR-0017). A sealed run is read-only
+          # by design, and the ledger, the claims and the section are written; on the run itself
+          # every writing command dies on the first file. So the agent brings the run's LIGHT
+          # HALF across - everything but the fitted objects - writable, under the same run key,
+          # works against that copy, and sends the written layer back as a writing run.
           "how": ([f"the figures are on the cluster filesystem; whatever you open images with "
-                   f"usually is not. Bring the whole set across in ONE transfer using the list "
-                   f"this run writes - {run}/kernels/{plugin}/{B.FIGURE_LIST}, one "
-                   f"run-relative path per line, in the order the paper numbers them:",
-                   f"    rsync -a --files-from=<the list> <host>:{run}/ <a local directory>/",
-                   f"    # no rsync: tar -C {run} -T {run}/kernels/{plugin}/"
-                   f"{B.FIGURE_LIST} -czf figures.tgz   (then fetch and unpack that)",
-                   "open every one from the local copy - then record each look AGAINST THE RUN "
-                   "DIRECTORY, not the copy, because the ledger lives with the run and is bound "
-                   "to the image the run holds."] if how == PBS else []) + _fanout(run, plugin,
+                   f"usually is not, and a sealed run cannot be written to. Bring the run's "
+                   f"light half across in ONE transfer, writable, into a local directory named "
+                   f"for the run key (the paper's list, {B.FIGURE_LIST}, comes with it):",
+                   f"    rsync -rlt --no-p --chmod=Du+rwx,Fu+rw --exclude 'objects/' "
+                   f"--exclude '*.h5ad' --exclude '*.rds' --exclude '*.h5' --exclude 'cache/' "
+                   f"--exclude '_cache/' <host>:{run}/ <local>/{run.name}/",
+                   f"then every command on this list runs against <local>/{run.name} in place "
+                   f"of {run}: open every figure from it and record each look there. When the "
+                   f"list is finished, send the written layer back - kernels/{plugin}/"
+                   f"FIGURE_REVIEW.jsonl, PAPER*.md and PAPER_CLAIMS*.jsonl, and "
+                   f"report/*_paper.html and *_panel.html - as the writing run the harness's "
+                   f"job seals (jobs/writing_seal.pbs)."] if how == PBS else []) + _fanout(run, plugin,
                                                                                    len(out)),
           "do": f'scprofile review --out {run} --plugin {plugin} --figure <path> --note "..."'},
          {"id": "write", "title": "Write the result",

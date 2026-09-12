@@ -4094,7 +4094,9 @@ def main(argv=None):
                          "the tooling rather than as a result. Omit only for a deliberate "
                          "cohort-level synthesis")
     pa.add_argument("--author", default="", help="who wrote the claim")
-    pa.add_argument("--reviewer", default="", help="who reviewed it")
+    pa.add_argument("--reviewer", default="",
+                    help="who reviewed it - required for --round, and not the claim's author: a "
+                         "second agent given the figures and told to refute the claim")
     pa.add_argument("--brief", action="store_true",
                     help="what this run holds, ready to write from: the panels a reader meets "
                          "first with the caption each carries, the design, the arms, the "

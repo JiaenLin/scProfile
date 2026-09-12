@@ -388,6 +388,14 @@ points:
           # A COMMAND, LIKE `tests` AND `fixture` ALREADY ARE. The harness must not know what a
           # run directory of this tool looks like. `{run}` is filled from `--run`.
           command: ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--memory"]
+          finished_by: >
+            a run whose instances each ran in their own process records a peak per instance, and
+            `capacity --memory` fits the two terms from those and prints them to paste. A run
+            whose instances shared one job records no per-instance peak and this stage OWES on it
+            for good - that is a property of the job's shape, not of the plugin. Answer it from a
+            run made with one instance per process, or leave both terms undeclared: the allocator
+            then applies its conservative default and says so, which is the tool's rule for an
+            absent declaration and not a defect of this plugin (harness ADR-0017)
           why: >
             both terms, from a real run. A rate alone attributes the fixed cost to the cells and
             the job is sized to be killed on small objects. Every run already fits this and stores
@@ -438,11 +446,13 @@ points:
           fills: []
           command: ["{python}", "tests/loop_stations.py", "--run", "{run}", "--station", "7"]
           finished_by: >
-            `scprofile review --out RUNDIR --plugin <plugin> --shards N` prints the outstanding
-            figures in disjoint groups; open each, and record what you saw with
-            `scprofile review --out RUNDIR --plugin <plugin> --figure <path> --note "..."`. The
-            scan set is every kind once plus the largest and smallest instance of each; a look is
-            bound to the image's digest, so scan the whole set on one build before fixing anything
+            `scprofile review --out RUNDIR --plugin <plugin> --shards N` prints the scan set -
+            every figure the paper numbers plus one instance of every other kind drawn - split
+            into disjoint groups, one per agent; open each figure, and record what you saw with
+            `scprofile review --out RUNDIR --plugin <plugin> --figure <path> --note "..."`. A
+            sealed run is read through its writing replay (the run's light half, copied writable
+            under the same run key); record against the replay. A look is bound to the image's
+            digest, so scan the whole set on one build before fixing anything
           why: >
             THE GOAL OF THE LOOP. Every figure defect this tool has had was found by opening the
             image while the suite was green. Nothing mechanises it; this stage counts it
@@ -451,11 +461,14 @@ points:
           fills: []
           command: ["{python}", "tests/loop_stations.py", "--run", "{run}", "--station", "8"]
           finished_by: >
-            `scprofile paper --out RUNDIR --plugin <plugin> --brief` prints what the run holds
-            ready to write from; register each sentence you would put in a paper with `--claim`
-            and the figures it was read off with `--cites`, then put it to review with `--round`
-            and record standing, narrowed or withdrawn. A claim is bound to the digest of every
-            figure it cites, so a redraw makes it stale and it is defended again
+            `scprofile paper --out RUNDIR --plugin <plugin> --brief` prints the writing brief;
+            the run already holds the tool's composed claims (author `composed`) and section.
+            Write the result against the brief and the skill it names, carry it in with
+            `--write <file>`, register each sentence you would put in a paper with `--claim` and
+            the figures it was read off with `--cites`; then a SECOND agent, given the figures,
+            puts every claim to `--round --reviewer <who>` and records standing, narrowed or
+            withdrawn; then `--render`. A claim is bound to the digest of every figure it
+            cites, so a redraw makes it stale and it is defended again
           why: >
             whether a result can be WRITTEN from these figures and survive review. Missing
             figures surface here and nowhere else - a gap appears when somebody tries to write
@@ -465,9 +478,11 @@ points:
           fills: []
           command: ["{python}", "tests/loop_stations.py", "--run", "{run}", "--station", "9"]
           finished_by: >
-            the station names every required output the run does not carry - the review ledger,
-            the manuscript and its rendered page, per plugin. Produce them; a run without them is
-            not finished whatever else it wrote
+            the station names every required output the run does not carry - per plugin, the
+            review ledger and the section under `kernels/<plugin>/` and the rendered page under
+            `report/`. Produce them on the writing replay, then send the written layer back as
+            the writing run the harness's job seals; a run without them is not finished whatever
+            else it wrote
           why: >
             every deliverable a finished run must carry is present. Last and gating: everything
             before it can be green while the run holds no manuscript at all
