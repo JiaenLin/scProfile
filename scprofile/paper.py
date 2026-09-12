@@ -319,17 +319,27 @@ def brief(out, plugin=""):
     texts = []
     for p in plugins:
         f = root / "kernels" / p / _B.NAME
-        if not f.is_file():
-            try:
-                _B.write_brief(root, p)
-            except Exception as e:                                        # noqa: BLE001
-                texts.append(f"No brief for {p}: it could not be written ({e}).")
-                continue
-        if f.is_file():
+        # REFRESHED EVERY TIME IT IS PRINTED. The brief marks which figures are not yet looked
+        # at; written once at report time and printed as it lay, it told a writer that 62 of the
+        # 90 numbered figures had never been opened on a run where every one of them had (blind
+        # 0004). It is derived from the run, so printing it means writing it.
+        fresh, why = None, ""
+        try:
+            fresh = _B.write_brief(root, p)
+        except Exception as e:                                            # noqa: BLE001
+            why = str(e)
+        if fresh is None and f.is_file():
+            texts.append(f.read_text(encoding="utf-8")
+                         + f"\n\n> This brief could not be refreshed from the run"
+                         + (f" ({why})" if why else "") + "; the look marks above are as of "
+                         f"when it was written. `scprofile review --out {root} --plugin {p}` "
+                         f"is current.")
+        elif f.is_file():
             texts.append(f.read_text(encoding="utf-8"))
         else:
-            texts.append(f"No brief for {p}: the run holds no findings to write from. Run "
-                         f"`scprofile report --out {root}` first.")
+            texts.append(f"No brief for {p}: the run holds no findings to write from"
+                         + (f" ({why})" if why else "") + f". Run `scprofile report --out "
+                         f"{root}` first.")
     return "\n\n".join(texts) if texts else f"No plugin ran in {root}; nothing to write from."
 
 

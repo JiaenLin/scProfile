@@ -43,14 +43,35 @@ print("one brief: `paper --brief` prints the brief the reporter writes, never a 
 # HARNESS ADR-0017. `paper.brief` composed a brief of its own beside `scprofile write`'s
 # WRITING_BRIEF.md, and the two named different figure sets and different next commands; an
 # agent following one was told by the other that nothing was done. The reporter's is the brief.
+# AND IT IS REFRESHED EVERY TIME IT IS PRINTED. The brief marks which figures are not yet
+# looked at; written once at report time and printed as it lay, it told a writer that 62 of
+# the 90 numbered figures had never been opened on a run where every one of them had (blind
+# 0004, the writer's first defect). The brief is derived from the run, so printing it means
+# writing it; only a run that cannot be written from prints what is on disk, and says so.
+from scprofile import brief as _BR
 with tempfile.TemporaryDirectory() as _td:
     _run = Path(_td) / "run"
     (_run / "kernels" / "p").mkdir(parents=True)
     (_run / "report.json").write_text('{"kernels": {"p": {}}}', encoding="utf-8")
-    (_run / "kernels" / "p" / "WRITING_BRIEF.md").write_text("# Writing brief - p\nthe one brief\n",
+    (_run / "kernels" / "p" / "WRITING_BRIEF.md").write_text("# Writing brief - p\nstale\n",
                                                             encoding="utf-8")
-    ck("the brief on disk is what is printed", PA.brief(_run, "p").strip()
-       == "# Writing brief - p\nthe one brief", PA.brief(_run, "p")[:80])
+    _calls = []
+    def _fresh(run, plugin, spec=None, design=None):
+        _calls.append(plugin)
+        f = Path(run) / "kernels" / plugin / "WRITING_BRIEF.md"
+        f.write_text("# Writing brief - p\nfresh\n", encoding="utf-8")
+        return f
+    _orig = _BR.write_brief
+    _BR.write_brief = _fresh
+    try:
+        ck("the brief is rewritten before it is printed", PA.brief(_run, "p").strip()
+           == "# Writing brief - p\nfresh" and _calls == ["p"], PA.brief(_run, "p")[:80])
+        _BR.write_brief = lambda run, plugin, spec=None, design=None: None
+        ck("a run the brief cannot be written from prints what is on disk, and says so",
+           "fresh" in PA.brief(_run, "p") and "could not be refreshed" in PA.brief(_run, "p"),
+           PA.brief(_run, "p")[:120])
+    finally:
+        _BR.write_brief = _orig
     ck("a run with nothing to write from says so and names `report`",
        "report" in PA.brief(Path(_td) / "nowhere", "p"), PA.brief(Path(_td) / "nowhere", "p")[:80])
 
