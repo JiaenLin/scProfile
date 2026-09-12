@@ -372,5 +372,38 @@ _d5 = [x for x in FB.figure_drift(_kern, _pay2) if x.layer == FB.DECLARATION]
 ck("a unit-axis panel the unit did not draw is still charged to it",
    len(_d5) == 1 and "native_ring" in _d5[0].why, "; ".join(x.why[:90] for x in _d5))
 
+# AND BY THE PLAN'S OWN FILE RULE, IN BOTH DIRECTIONS. A per-item family's records are its files -
+# `native_river_outgoing`, `native_chord_gene__LAMININ` - and its entry is the family's id; matched
+# by the id alone, eleven families were charged as never emitted on every unit and 432 of their
+# files reported as undeclared, on a run that had drawn every one of them (PBS 710982, R15). A
+# file the tool writes as a side effect (`generated: False`) carries no caption and no record;
+# `capacity --promised` holds the run to it from disk, and the feedback charges nobody for it.
+print("\na per-item family is drawn by its files, and its files are declared by their family")
+_kern2 = _ty4.SimpleNamespace(name="k", spec={
+    "per_unit": "sample",
+    "report": {"figures": [
+        {"id": "native_river", "drawn_by": "tool", "fn": "river", "axis": "unit",
+         "position": "contrast", "items": 'c("outgoing", "incoming")',
+         "file": 'paste0("river_", pat)', "at_most": 2, "args": "cc", "legend": "L",
+         "kind": "other"},
+        {"id": "native_chord_gene", "drawn_by": "tool", "fn": "chord", "axis": "unit",
+         "position": "contrast", "items": "paths", "at_most": 3,
+         "file": 'paste0("chord_gene__", p)', "args": "cc", "legend": "L", "kind": "chord"},
+        {"id": "rank_estimate", "drawn_by": "tool", "fn": "estimate", "axis": "unit",
+         "position": "appendix", "generated": False, "args": "cc", "legend": "L",
+         "kind": "other"},
+        {"id": "native_lonely", "drawn_by": "tool", "fn": "lonely", "axis": "unit",
+         "position": "contrast", "items": "paths", "at_most": 1,
+         "file": 'paste0("lonely__", p)', "args": "cc", "legend": "L", "kind": "other"}]}})
+_pay3 = {"status": "ok", "figures": [
+    {"id": "native_river_outgoing", "path": "kernels/k/U/figures/native_river_outgoing.png",
+     "caption": "c", "drawn_by": "tool", "measured": False},
+    {"id": "native_chord_gene__LAMININ",
+     "path": "kernels/k/U/figures/native_chord_gene__LAMININ.png",
+     "caption": "c", "drawn_by": "tool", "measured": False}]}
+_d6 = [x for x in FB.figure_drift(_kern2, _pay3) if x.layer == FB.DECLARATION]
+ck("the drawn families and the side-effect file are not charged, the family that drew nothing is",
+   len(_d6) == 1 and "native_lonely" in _d6[0].why, "; ".join(x.why[:80] for x in _d6))
+
 print("\n" + ("the loop holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

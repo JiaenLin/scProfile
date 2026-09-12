@@ -220,13 +220,30 @@ def figure_drift(kernel, payload):
     # only have emitted what is drawn over a unit, and holding it to the rest diagnosed every
     # contrast and cohort panel as "did not emit" on every unit of every run. An entry that
     # names no axis is read as the unit's, which is what it meant before the plan existed.
+    declared_all = list(declared)
     if (kernel.spec or {}).get("per_unit"):
         declared = [d for d in declared if str(d.get("axis") or "unit") == "unit"]
 
-    drew = {str(f.get("id") or "") for f in (payload.get("figures") or []) if isinstance(f, dict)}
+    # BY THE PLAN'S OWN FILE RULE, IN BOTH DIRECTIONS (harness ADR-0016 step 4f). A per-item
+    # family's records are its files - the family's id and then the item's name - and its
+    # entry is the family's id alone; matched by the id alone, eleven families were charged
+    # as never emitted on every unit and 432 of their files reported as undeclared, on a run
+    # that had drawn every one of them (PBS 710982). `native.names_file` is the one rule for
+    # which files an entry claims; it is what `promised` and the paper's index read too.
+    from pathlib import Path as _Path
+    from .native import names_file, per_item_entry
+    recs = [f for f in (payload.get("figures") or []) if isinstance(f, dict)]
+    drew = {str(f.get("id") or "") for f in recs}
+    stems = {_Path(str(f.get("path") or "")).stem or str(f.get("id") or "") for f in recs}
     for d in declared:
         fid = str(d.get("id") or "")
         if fid in drew or not d.get("required", True):
+            continue
+        # A FILE THE TOOL WRITES AS A SIDE EFFECT carries no caption and no record; the run is
+        # held to it from disk, by `capacity --promised`, and nobody is charged for it here.
+        if d.get("generated") is False:
+            continue
+        if any(names_file(fid, s, per_item_entry(d)) for s in stems):
             continue
         out.append(Diagnosis(
             DECLARATION,
@@ -234,9 +251,12 @@ def figure_drift(kernel, payload):
             f"page states it as NOT PRODUCED, which tells a reader the run is incomplete; if the "
             f"panel is not always drawable, mark it optional and say when.",
             action=f"emit {fid!r}, or set required=False with a `when_absent` reason"))
-    for fid in sorted(drew - {str(d.get("id") or "") for d in declared}):
+    declared_ids = {str(d.get("id") or "") for d in declared_all}
+    for fid in sorted(drew - declared_ids):
         if not fid:
             continue
+        if any(names_file(str(d.get("id") or ""), fid, per_item_entry(d)) for d in declared_all):
+            continue                    # a per-item family's file, declared by its family
         out.append(Diagnosis(
             DECLARATION,
             f"emitted figure {fid!r}, which its `report` block does not declare. The page shows "
