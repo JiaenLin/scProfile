@@ -1,0 +1,6 @@
+#!/bin/sh
+# THE COMMIT GATE. Installed once per clone by `git config core.hooksPath setup/githooks`, and
+# then run by git before every commit here, whatever session, editor or terminal made it. The
+# rules are not in this file: they are the commit half of `.claude/hooks/dev_guideline.py`, so
+# they exist once. `scprofile check` reports whether this is installed.
+exec python3 "$(git rev-parse --show-toplevel)/.claude/hooks/dev_guideline.py" --pre-commit

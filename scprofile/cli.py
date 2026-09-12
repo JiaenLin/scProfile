@@ -2612,6 +2612,17 @@ def _check(a):
         row(f"every shipped plugin validates ({len(_ks)} found)", not _bad,
             "; ".join(f"{n}: {len(v)} error(s) — {v[0]}" for n, v in _bad.items()))
 
+    # --- the commit gate of THIS CLONE --------------------------------------------------------
+    # A PROPERTY OF THE CHECKOUT, NOT OF THE CODE, and the one row here that a fresh clone is
+    # red on by construction. The guideline's commit rules run as a git pre-commit hook under a
+    # committed hooks path; `core.hooksPath` is per-clone and cannot be committed, so until the
+    # install command has been run once, nothing here fires on `git commit`. Measured: a session
+    # rooted in another repository committed figure code past every rule, because the only
+    # trigger was keyed to the session and not to this repository.
+    from . import gate as _G
+    _ok, _why = _G.installed(root.parent)
+    row("the commit gate is installed in this clone", _ok, _why)
+
     # --- what a run directory actually produced, if one was named -----------------------------
     if a.out:
         from . import resume as _RS, review as _RV, runcard as _RC2

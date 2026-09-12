@@ -1,22 +1,45 @@
 #!/usr/bin/env python3
-"""PreToolUse hook that ENFORCES DEVELOPMENT.md. It denies; it does not remind.
+"""The development guideline, ENFORCED. It denies; it does not remind.
 
 A guideline that prints is advice, and advice is what gets skipped under time pressure. Every
 rule below is one that was written down here and then broken by the person who wrote it, so the
-enforcement is mechanical: exit 2 blocks the call and the reason goes back to the caller.
+enforcement is mechanical: a refused call goes back to the caller with the reason.
 
-WHAT IS ENFORCED, and why each is mechanically checkable:
+TWO AXES, TWO TRIGGERS, ONE FILE. The rules are about two different things and are fired by two
+different mechanisms, and keeping them in one file is what stops the two drifting apart:
 
-  1. NO TOOL CODE IN A SCRATCHPAD. Writing a .py outside the repo that imports scprofile is
-     building the thing somewhere a run can never reach it. Put it in the package.
-  2. NO COMMIT WHILE THE SUITES ARE RED. "Commit only when green" was stated and then broken by
-     a command that chained `git commit` after a loop that merely printed PASS/FAIL.
-  3. NO COMMIT WHILE `scprofile check` IS RED.
-  4. NO COMMIT OF FIGURE CODE WITHOUT `check --deep` PASSING. Behaviour, not source greps.
+  THE SESSION.  Rules 1, 1b and 1c are about where an agent puts things while it works - a .py in
+                a scratchpad, scProfile material outside the repository, ad-hoc scProfile code in
+                a heredoc. They fire as a Claude Code `PreToolUse` hook (JSON on stdin), because
+                the session is where those things happen.
+
+  THE COMMIT.   Rules 2, 3 and 4 are about what may land in THIS REPOSITORY - no commit while a
+                suite is red, none while `scprofile check` is red, no figure code without
+                `check --deep`. They fire as a git `pre-commit` hook (`--pre-commit`, no stdin),
+                installed by `git config core.hooksPath setup/githooks`, because a commit is a
+                property of the repository and not of the session that made it.
+
+WHY THE SPLIT, MEASURED. All five rules were a `PreToolUse` hook, which Claude Code loads from
+the directory a session was STARTED in. A session rooted in the plugin maker's repository edits
+this one through the maker - which is the round's own rule - and its commits met no gate:
+figure code was committed with `check --deep` run afterwards, and two of the commands rule 1c
+denies were run. The rules were right and the trigger was keyed to the wrong axis. The commit
+rules now fire on `git commit` here whatever ran it; the session rules keep firing where the
+session is.
+
+The session hook still has one thing to say about commits: it refuses one while the git gate is
+NOT INSTALLED in this clone, and prints the command that installs it. `core.hooksPath` is
+per-clone configuration and cannot be committed, so a fresh clone is gated by nothing until
+somebody runs that command once - and the moment that matters is the first commit.
+
+THE ESCAPE, RECORDED HERE BECAUSE NOTHING RECORDS IT. `git commit --no-verify` skips the gate and
+leaves no trace, where a session hook's refusal was at least visible in the transcript. This
+project holds that a gate whose escapes are all recorded is a gate that stays on, and this one
+falls short of that standard; it is written down where the gate is, which is less.
 
 What is NOT enforced, and cannot be: whether anybody LOOKED at a figure. No hook can see eyes on
-a picture. `scprofile review` records it and the count is printed here on every figure-code
-commit, so the number is in front of whoever is committing.
+a picture. `scprofile review` records it and the reminder is printed on every figure-code commit,
+so the number is in front of whoever is committing.
 """
 import json
 import subprocess
@@ -24,13 +47,16 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
 FIGURE_CODE = ("figure.py", "design_panel.py", "compare_panel.py", "network_panels.py",
                "panels.py", "report.py")
 
 
-def deny(msg):
+def deny(msg, code=2):
+    """Refuse, and say why. 2 is what a PreToolUse hook returns to block; git takes any non-zero."""
     print(f"BLOCKED by DEVELOPMENT.md\n\n{msg}\n", file=sys.stderr)
-    return 2
+    return code
 
 
 def run(cmd, **kw):
@@ -55,11 +81,12 @@ def _texty(path):
     return str(path).lower().endswith(TEXTY)
 
 
-def main():
-    try:
-        ev = json.load(sys.stdin)
-    except Exception:
-        return 0
+# -----------------------------------------------------------------------------------------------
+# THE SESSION AXIS
+# -----------------------------------------------------------------------------------------------
+
+def session(ev):
+    """Rules 1, 1b, 1c - and the one thing the session says about a commit."""
     tool = ev.get("tool_name")
     ti = ev.get("tool_input") or {}
 
@@ -115,25 +142,47 @@ def main():
             "  - to check something once:                scprofile <command> --out <RUNDIR>\n"
             "  - if neither fits, it is a script worth committing: put it in tests/ and run it "
             "from there.")
-    cmd = str(ti.get("command") or "")
-    if "git commit" not in cmd or str(ROOT) not in cmd and "scProfile" not in cmd:
-        # a commit elsewhere is not ours to police
-        if "git commit" not in cmd:
-            return 0
+    if "git commit" not in cmd:
+        return 0
+    # A COMMIT IS GATED BY GIT, NOT HERE - so what this checks is that git WILL gate it. The
+    # rules themselves run in `pre_commit()` below, once, whichever session or terminal commits.
+    from scprofile import gate as _G
+    ok, why = _G.installed(ROOT)
+    if not ok:
+        return deny(
+            f"the commit gate is not installed in this clone: {why}\n"
+            f"The guideline's commit rules run as a git pre-commit hook here, so that a commit "
+            f"from ANY session meets them. Install it once:\n"
+            f"    {_G.install_command()}\n"
+            f"then commit again.")
+    return 0
 
-    # 2. every suite must pass
-    failed = [t.name for t in sorted((ROOT / "tests").glob("test_*.py"))
-              if run([sys.executable, str(t)]).returncode != 0]
-    if failed:
-        return deny("Suites are RED: " + ", ".join(failed) +
-                    "\nEvery check must be able to fail, and these are failing. Fix them first.")
+
+# -----------------------------------------------------------------------------------------------
+# THE COMMIT AXIS
+# -----------------------------------------------------------------------------------------------
+
+def pre_commit():
+    """Rules 2, 3, 4 - against what is STAGED. Non-zero refuses the commit."""
+    # 2. every suite must pass - BY THE ONE RUNNER, not a loop that looks like it. DEVELOPMENT.md
+    #    says "the gate is `python tests/run_all.py`, and nothing else", and this step was a
+    #    second loop over the same files that did not set PYTHONPATH the way the runner does. The
+    #    first time the gate was made to run for real it refused on seven suites the runner
+    #    passes - the suites were fine and the copy of the runner was not. Two mechanisms for
+    #    one question is the defect the guideline names, found in the file that enforces it.
+    r = run([sys.executable, str(ROOT / "tests" / "run_all.py"), "--jobs", "4"])
+    if r.returncode != 0:
+        tail = "\n".join(((r.stdout or "") + (r.stderr or "")).strip().splitlines()[-12:])
+        return deny("Suites are RED (`python tests/run_all.py`):\n" + tail +
+                    "\nEvery check must be able to fail, and these are failing. Fix them first.",
+                    code=1)
 
     # 3. the tool's own check must be green
     c = run([sys.executable, "-m", "scprofile.cli", "check"],
             env={**__import__("os").environ, "PYTHONPATH": str(ROOT)})
     if c.returncode != 0:
         red = [l for l in (c.stdout or "").splitlines() if l.strip().startswith("RED")]
-        return deny("`scprofile check` is RED:\n" + "\n".join(red[:6]))
+        return deny("`scprofile check` is RED:\n" + "\n".join(red[:6]), code=1)
 
     # 4. figure code demands the behavioural checks
     touched = run(["git", "diff", "--cached", "--name-only"]).stdout
@@ -142,10 +191,22 @@ def main():
                 env={**__import__("os").environ, "PYTHONPATH": str(ROOT)})
         if d.returncode != 0:
             red = [l for l in (d.stdout or "").splitlines() if l.strip().startswith("RED")]
-            return deny("Figure code changed and `check --deep` is RED:\n" + "\n".join(red[:6]))
+            return deny("Figure code changed and `check --deep` is RED:\n" + "\n".join(red[:6]),
+                        code=1)
         print("DEVELOPMENT.md: figure code changed. A green suite is not a look — open the "
               "figures this changes and record them with `scprofile review`.", file=sys.stderr)
     return 0
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if "--pre-commit" in argv:
+        return pre_commit()
+    try:
+        ev = json.load(sys.stdin)
+    except Exception:
+        return 0
+    return session(ev)
 
 
 if __name__ == "__main__":
