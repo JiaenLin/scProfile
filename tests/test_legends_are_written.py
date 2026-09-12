@@ -123,22 +123,40 @@ for _tag, _script in _as_run:
 # filenames as its legends the whole time, which is verbatim the defect this file exists for.
 import re as _re                                                          # noqa: E402
 
+# ON THE PLAN (harness ADR-0016) A SITE IS `.draw("<id>")` AND ITS LEGEND IS THE ENTRY'S. The
+# plan is read through the one reader, the entry is looked up by the id the site names, and a
+# legend is required of every entry a site reaches - the same requirement the hand-written
+# `legend = paste0(...)` used to meet at the call. A site naming no entry is a panel that
+# stops existing at draw time.
+from scprofile import declare as _DC                                      # noqa: E402
+from scprofile.kernels import discover as _disc                           # noqa: E402
+
+_spec = (_disc().get("cellchat").spec if _disc().get("cellchat") else {}) or {}
+_entries = {str(e.get("id")): e for e in _DC.report_figures(_spec) if e.get("id")}
 for _tag, _body in _as_run:
     if _tag not in ("_R_RUN", "_R_COMPARE", "_R_COHORT"):
         continue
-    _sites = len(_re.findall(r"legend = paste0", _body))
-    check(_sites >= 2,
-          f"{_tag} has {_sites} plot call(s) that pass a legend - its panels fall back to the "
+    _hand = len(_re.findall(r"legend = paste0", _body))
+    _ids = _re.findall(r'\.draw\(\s*"([^"]+)"', _body)
+    check(_hand + len(_ids) >= 2,
+          f"{_tag} has {_hand + len(_ids)} plot call(s) - its panels fall back to the "
           f"filename, which is not a legend")
+    for _id in _ids:
+        _e = _entries.get(_id)
+        check(_e is not None, f"{_tag} draws {_id!r}, which is no entry of the plan")
+        check(bool(_e and str(_e.get("legend") or "").strip()),
+              f"{_tag} draws {_id!r} and its entry carries no legend, so the panel falls back "
+              f"to its filename")
 
-# EVERY PANEL THE PLUGIN DRAWS ITSELF MUST SAY SO. `by = \"plugin\"` is the claim that this is
-# the tool's NUMBERS and not its encoding; a panel we drew that omits it is reported as the
-# tool's own work.
-# Four panel families are drawn by the plugin from the tool's numbers today: the per-observation
-# bars, the interaction scatter on each scale, and the interaction matrix. The raw bars are
-# correctly NOT among them - they are the tool's own function, unmodified - which is the
-# distinction this count exists to keep.
-own = len(re.findall(r'by = "plugin"', ck))
+# EVERY PANEL THE PLUGIN DRAWS ITSELF MUST SAY SO. `drawn_by: plugin` on an entry the companion
+# draws is the claim that this is the tool's NUMBERS and not its encoding; a panel we drew that
+# omits it is reported as the tool's own work. Six such families today: the per-thousand bars,
+# the interaction scatter on each scale, the interaction matrix, and the ligand-receptor
+# interaction pair. The raw bars are correctly NOT among them - they are the tool's own function,
+# unmodified - which is the distinction this count exists to keep.
+own = sum(1 for e in _entries.values()
+          if str(e.get("drawn_by") or "") == "plugin" and _DC.drawn_by_companion(e))
+own += len(re.findall(r'by = "plugin"', ck))                        # a hand-written site's claim
 check(own >= 4, f"only {own} plugin-drawn panel family(ies) declare themselves as such; a panel "
                 f"we drew that omits it is reported to a reader as the tool's own work")
 

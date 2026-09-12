@@ -205,6 +205,16 @@ def guard(plugin_path, payload, log=print):
     return 0
 
 
+def _companion_text(plugin_path):
+    """The generated R companion beside a one-file plugin, as text; "" when there is none."""
+    from scprofile import scaffold as _SC          # run as a script: no parent package
+    try:
+        f = _SC.companion(plugin_path, "draw.R")
+        return f.read_text(encoding="utf-8") if f.is_file() else ""
+    except OSError:
+        return ""
+
+
 def _compare(plugin_path, spec_path):
     """Run a plugin's `compare(ctx)` over one pair of units.
 
@@ -232,6 +242,7 @@ def _compare(plugin_path, spec_path):
         unit_values=spec.get("unit_values") or {},
         interactions=spec.get("interactions") or [],
         figure_context=spec.get("figure_context") or {},
+        r_companion=_companion_text(plugin_path),
         # THE SAME TWO THE PER-UNIT CONTEXT GETS, resolved by the same reader the plan uses.
         # `_compare_spec` carries the plugin's declaration in `spec`; without these the compare
         # phase wrote no ceiling rows and a family declared at 8 drew 77 in one contrast.
@@ -388,7 +399,7 @@ def main(argv):
         return 0
 
     ctx = Context(A, keys=keys, out=out, cores=cores, memory_gb=memory_gb, unit=unit,
-                  unit_members=members,
+                  unit_members=members, r_companion=_companion_text(plugin_path),
                   unit_axis=inp.get("unit_axis"), figures_for=inp.get("figures_for"),
                   profile_figures=[str(f.get("id")) for f in
                                    ((spec.get("report") or {}).get("figures") or [])

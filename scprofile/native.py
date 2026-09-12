@@ -153,14 +153,23 @@ def names_file(fid, stem, per_item=False) -> bool:
     return stem == fid or stem.startswith(fid + "__") or (per_item and stem.startswith(fid + "_"))
 
 
-def account(inventory, declared):
+def account(inventory, declared, every=None):
     """Check every upstream plot is used or validly skipped. Returns (used, skipped, problems).
 
     `inventory`  the plotting functions the wrapped tool exports, measured from its environment.
     `declared`   {function: {"use": <where>} | {"skip": <reason>, ...evidence}}
+    `every`      every function the tool exports, when the measurement could read them; None
+                 when it could not.
 
     A function missing from `declared` is a problem, not a silent pass: the accounting must be
     exhaustive or it is a sample of the ones somebody remembered.
+
+    DISCOVERY IS NOT MEMBERSHIP. The inventory is what a RULE recognised as drawing - a name
+    pattern, a body that reaches a device - and a rule misses things: four functions one plugin
+    declared and called were exported and unmatched, and were reported beside the one that was
+    genuinely gone as "the upstream does not export this". With `every`, a declared function
+    the rule missed is what it is - used, and exported - and only one absent from the namespace
+    is stale. Without `every`, the sentence says both possibilities, because it cannot tell.
     """
     used, skipped, problems = {}, {}, []
     for fn in sorted(inventory):
@@ -178,8 +187,22 @@ def account(inventory, declared):
             continue
         skipped[fn] = d
     for fn in sorted(set(declared or {}) - set(inventory)):
-        problems.append((fn, "declared but NOT IN THE INVENTORY: the upstream does not export "
-                             "this, so the entry is stale or misspelt"))
+        d = (declared or {}).get(fn) or {}
+        if every is not None and fn in set(every):
+            # exported and merely unrecognised by the rule: what the plugin says about it stands
+            if d.get("use"):
+                used[fn] = d["use"]
+            elif not _check_skip(d):
+                skipped[fn] = d
+            else:
+                problems.append((fn, _check_skip(d)))
+            continue
+        problems.append((fn, "declared but NOT IN THE INVENTORY: "
+                             + ("the upstream does not export this, so the entry is stale or "
+                                "misspelt" if every is not None else
+                                "either the upstream does not export it, or the inventory's "
+                                "rule did not recognise it as drawing - measure with the "
+                                "package's own exports to tell which")))
     return used, skipped, problems
 
 

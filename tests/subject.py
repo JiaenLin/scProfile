@@ -116,8 +116,12 @@ def r_as_run(name, about):
     for who, attr, rsrc in r_scripts():
         if who != name:
             continue
+        # PREPENDED BY THE PLUGIN (`_draw_r() + _R_RUN`) OR BY THE HOST (`ctx.rscript(_R_RUN,
+        # ...)`, harness ADR-0016 step 4): either way the script that runs begins with the
+        # companion, and a suite reading the constant alone reads half of it.
         prepended = bool(re.search(r"\+\s*" + re.escape(attr) + r"\b", py)
-                         or re.search(re.escape(attr) + r"\s*\+", py))
+                         or re.search(re.escape(attr) + r"\s*\+", py)
+                         or re.search(r"\.rscript\(\s*" + re.escape(attr) + r"\b", py))
         out.append((attr, (pre if prepended else "") + rsrc))
     if not out:
         print(f"skipped - `{name}` holds no embedded R here, so {about} is not checked")

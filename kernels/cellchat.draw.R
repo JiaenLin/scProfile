@@ -23,7 +23,10 @@
 #
 # WHAT IS DELIBERATELY NOT HERE: anything about the method. This file knows about ceilings,
 # captions, colours, devices and a phase clock - the things the HOST and the plugin agree on. It
-# names no plotting function and no biology.
+# names no plotting function and no biology - except in THE PLAN at the end of it, which is
+# generated from the plugin's own `report.figures`: one entry per figure family, and `.draw(id)`
+# where a hand-written draw site used to stand. A figure is adjusted in the plan and regenerated;
+# it is never edited here.
 
 .figcfg <- new.env(parent = emptyenv())
 .figcfg$prefix <- ""
@@ -227,4 +230,665 @@ npng <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
 ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
                  legend = "", by = "tool") {
   .draw_one(id, expr, TRUE, w, h, res, legend, by)
+}
+
+# ================================================================================================
+# THE PLAN. GENERATED from `report.figures`; one entry per figure family this companion
+# draws. Adjust the entry in the plugin's declaration and regenerate.
+# ================================================================================================
+.plan <- list()
+.plan[["nativecmp_rankNet_stacked"]] <- list(
+  id = "nativecmp_rankNet_stacked",
+  axis = "contrast",
+  by = "tool",
+  fn = "rankNet",
+  device = "png",
+  w = quote(1600),
+  h = quote(2000),
+  expr = quote(rankNet(m, mode = "comparison", stacked = TRUE, do.stat = TRUE, paired.test = FALSE)),
+  legend = "Every pathway ranked by its RELATIVE information flow, each bar split between the two arms. Because the bars are normalised this shows how a pathway flow is DIVIDED between arms and not how much flow it carries: a rare pathway and a dominant one can look identical here. Read the unstacked panel beside it for the amounts.")
+.plan[["nativecmp_rankNet_unstacked"]] <- list(
+  id = "nativecmp_rankNet_unstacked",
+  axis = "contrast",
+  by = "tool",
+  fn = "rankNet",
+  device = "png",
+  w = quote(1600),
+  h = quote(2000),
+  expr = quote(rankNet(m, mode = "comparison", stacked = FALSE, do.stat = TRUE, paired.test = FALSE)),
+  legend = "The same ranking with the arms side by side on an ABSOLUTE scale, so a pathway actual flow is readable and the dominant pathways separate from the rare ones. Read this one for magnitude and the stacked panel for balance. Significance is a permutation test, and a pathway absent from an arm is absent rather than tested and found zero.")
+.plan[["nativecmp_interaction_flow"]] <- list(
+  id = "nativecmp_interaction_flow",
+  axis = "cohort",
+  by = "plugin",
+  fn = "",
+  device = "png",
+  file = quote(paste0("interaction_flow__", safe)),
+  expr = quote({ ggplot2::ggplot(both, ggplot2::aes(x = d2, y = d1)) + ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") + ggplot2::geom_hline(yintercept = 0, colour = "grey85") + ggplot2::geom_vline(xintercept = 0, colour = "grey85") + ggplot2::geom_point(ggplot2::aes(colour = interaction), size = 2.4) + ggrepel::geom_text_repel(data = top, ggplot2::aes(label = name), size = 3, max.overlaps = 20, min.segment.length = 0) + ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b", midpoint = 0) + ggplot2::coord_equal(xlim = c(-lim, lim), ylim = c(-lim, lim)) + ggplot2::labs(x = paste0(eff_lbl, " within ", st[2], " (the control)"), y = paste0(eff_lbl, " within ", st[1]), colour = paste0("larger in\n", st[1], " (+) /\n", st[2], " (-)"), title = paste0("Does the ", fac, " response depend on ", as.character(rows$stratum_factor[1]), "?"), subtitle = paste0("One point per pathway. Each axis is the ", eff_lbl, " within one stratum. The dashed line is NO ", "interaction - the same response in both. ABOVE it the ", "response is larger in ", st[1], "; below it, larger in ", st[2], ", which is the control.")) + ggplot2::theme_classic() }),
+  legend = "Does the {fac} response depend on {as.character(rows$stratum_factor[1])}? One point per signalling pathway. The vertical axis is the {eff_lbl} within {st[1]}; the horizontal axis is the same response within {st[2]}, which is the control. The dashed line is NO interaction - an identical response in both strata - so a point's distance from it IS the interaction, and points ABOVE it respond more in {st[1]}. Every value is rankNet's own per-pathway contribution; the method provides no test for a difference of two differences and none is claimed.")
+.plan[["nativecmp_interaction_flow_log"]] <- list(
+  id = "nativecmp_interaction_flow_log",
+  axis = "cohort",
+  by = "plugin",
+  fn = "",
+  device = "png",
+  w = quote(2000),
+  h = quote(1900),
+  when = quote(nrow(pos) >= 3),
+  file = quote(paste0("interaction_flow_log__", safe)),
+  expr = quote({ ggplot2::ggplot(pos, ggplot2::aes(x = l2, y = l1)) + ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") + ggplot2::geom_point(ggplot2::aes(colour = li), size = 2.4) + ggrepel::geom_text_repel(data = ptop, ggplot2::aes(label = name), size = 3, max.overlaps = 20, min.segment.length = 0) + ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b", midpoint = 0) + ggplot2::coord_equal(xlim = c(-lim2, lim2), ylim = c(-lim2, lim2)) + ggplot2::labs(x = paste0("log2 fold ", eff_lbl, " within ", st[2], " (the control)"), y = paste0("log2 fold ", eff_lbl, " within ", st[1]), colour = paste0("larger in\n", st[1], " (+) /\n", st[2], " (-)"), title = paste0("Does the ", fac, " response depend on ", as.character(rows$stratum_factor[1]), "? - multiplicative scale"), subtitle = paste0(nrow(pos), " of ", nrow(both), " pathways; the rest ", "are absent from an arm and have no fold change")) + ggplot2::theme_classic() }),
+  legend = "The same question on the MULTIPLICATIVE scale: log2 fold {eff_lbl} within {st[1]} against the same within {st[2]}, the control. Here no interaction means the same FOLD change in both strata rather than the same absolute change, which is a different question and can rank pathways differently. Drawn only on the {nrow(pos)} of {nrow(both)} pathways present in all four arms; the rest are absent from one and have no fold change, which is why this panel never appears without the additive one beside it.")
+.plan[["native_circle_count"]] <- list(
+  id = "native_circle_count",
+  axis = "unit",
+  by = "tool",
+  fn = "netVisual_circle",
+  device = "png",
+  expr = quote({
+ netVisual_circle(cc@net$count, vertex.weight = as.numeric(table(cc@idents)),
+ weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
+ title.name = "interactions")
+ .stampf()
+ }),
+  legend = "Every population is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is HOW MANY ligand-receptor interactions were inferred from the sender to the receiver, and edge colour is the sender. The ring is a layout and nothing more - a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.")
+.plan[["native_circle_weight"]] <- list(
+  id = "native_circle_weight",
+  axis = "unit",
+  by = "tool",
+  fn = "netVisual_circle",
+  device = "png",
+  expr = quote({
+ netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),
+ weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
+ title.name = "interaction strength")
+ .stampf()
+ }),
+  legend = "The same network drawn on STRENGTH rather than count: edge width is the summed communication probability from sender to receiver, not the number of pairs behind it. Count and strength disagree freely - a population can send many weak interactions or one strong one - which is why both are drawn. Node size is the number of cells, and the ring is a layout that carries no meaning.")
+.plan[["native_heatmap_count"]] <- list(
+  id = "native_heatmap_count",
+  axis = "unit",
+  by = "tool",
+  fn = "netVisual_heatmap",
+  device = "png",
+  expr = quote(netVisual_heatmap(cc, measure = "count", color.heatmap = "Blues", color.use = .gcol, title.name = .ttl("interactions"))),
+  legend = "Senders down the rows, receivers across the columns, colour is the NUMBER of inferred interactions for that ordered pair. The bars above and beside are the column and row totals. Read it directionally: the cell at row i, column j is i signalling to j, and is not the cell opposite it.")
+.plan[["native_heatmap_weight"]] <- list(
+  id = "native_heatmap_weight",
+  axis = "unit",
+  by = "tool",
+  fn = "netVisual_heatmap",
+  device = "png",
+  expr = quote(netVisual_heatmap(cc, measure = "weight", color.heatmap = "Blues", color.use = .gcol, title.name = .ttl("interaction strength"))),
+  legend = "The same matrix on interaction STRENGTH - colour is the summed communication probability for that ordered pair rather than the number of pairs behind it. A pair can be dark here and pale in the count panel, or the reverse. Senders down the rows, receivers across the columns, and the direction is not symmetric.")
+.plan[["nativecmp_diff_heatmap_count"]] <- list(
+  id = "nativecmp_diff_heatmap_count",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_heatmap",
+  device = "ndev",
+  w = quote(2400),
+  h = quote(1800),
+  expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, title.name = .diffttl("Differential number of interactions")))),
+  legend = "Which population pairs differ in the NUMBER of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is NOT the same as neither arm having interactions.")
+.plan[["nativecmp_diff_heatmap_weight"]] <- list(
+  id = "nativecmp_diff_heatmap_weight",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_heatmap",
+  device = "ndev",
+  w = quote(2400),
+  h = quote(1800),
+  expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, title.name = .diffttl("Differential interaction strength")))),
+  legend = "The same differential matrix on interaction STRENGTH rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair - it can gain interactions while each of them weakens - so the two panels are drawn together.")
+.plan[["nativecmp_interaction"]] <- list(
+  id = "nativecmp_interaction",
+  axis = "cohort",
+  by = "plugin",
+  fn = "",
+  device = "ndev",
+  file = quote(paste0("interaction_", ms, "__", safe)),
+  expr = quote({
+ mx <- max(abs(M), na.rm = TRUE)
+ ttl <- paste0("Does the ", fac, " response depend on ",
+ as.character(rows$stratum_factor[1]), "?   (", ms_lbl, ")")
+ sub <- paste0("(", as.character(rows$against[1]), " - ",
+ as.character(rows$reference[1]), ") within ", st[1],
+ "   minus   (", as.character(rows$against[2]), " - ",
+ as.character(rows$reference[2]), ") within ", st[2], " (control)",
+ "\nRED: ", fac, " response larger in ", st[1],
+ "     BLUE: larger in ", st[2])
+ ComplexHeatmap::draw(ComplexHeatmap::Heatmap(
+ M, name = paste0("interaction\n(", ms_short, ")\n+ = larger in\n", st[1]),
+ col = circlize::colorRamp2(c(-mx, 0, mx), c("#2166ac", "white", "#b2182b")),
+ border = TRUE,
+ rect_gp = grid::gpar(col = "grey88", lwd = 0.4),
+ cluster_rows = FALSE, cluster_columns = FALSE,
+ row_title = "Sources (Sender)", column_title_side = "top",
+ row_title_gp = grid::gpar(fontsize = 10),
+ row_names_side = "left",
+ row_names_gp = grid::gpar(fontsize = 8),
+ column_names_gp = grid::gpar(fontsize = 8),
+ column_title = paste0(ttl, "\n", sub),
+ column_title_gp = grid::gpar(fontsize = 9)),
+ column_title = "Targets (Receiver)", column_title_side = "bottom",
+ column_title_gp = grid::gpar(fontsize = 10))
+ }),
+  legend = "Does the {fac} response depend on {as.character(rows$stratum_factor[1])}? Per ordered population pair, for {ms_lbl}: the {eff_lbl} within {st[1]} minus the same response within {st[2]}, which is the control. RED means the {fac} response is LARGER in {st[1]}; BLUE means larger in {st[2]}; WHITE means the same response in both, which is NO interaction and not an absence of signalling. Rows are senders, columns are receivers. Drawn on the {nrow(M)} populations present in every arm, which is fewer than the two-arm panels carry. Values are the merged object's own matrices; no test applies to a difference of two differences.{ms_unit}{ms_note}")
+.plan[["native_signalingRole_scatter"]] <- list(
+  id = "native_signalingRole_scatter",
+  axis = "unit",
+  by = "tool",
+  fn = "netAnalysis_signalingRole_scatter",
+  device = "png",
+  expr = quote(netAnalysis_signalingRole_scatter(cc, color.use = .gcol)),
+  legend = "Each population placed by how much inferred signalling it SENDS (horizontal) against how much it RECEIVES (vertical), for this unit alone. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested.")
+.plan[["nativecmp_signalingRole_scatter_pair"]] <- list(
+  id = "nativecmp_signalingRole_scatter_pair",
+  axis = "contrast",
+  by = "tool",
+  fn = "netAnalysis_signalingRole_scatter",
+  device = "png",
+  expr = quote({
+ gg <- Filter(Negate(is.null), role)
+ if (!length(gg)) stop("neither object returned a role scatter")
+ lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)
+ smax <- max(unlist(lapply(gg, function(g) g$data$Count)), na.rm = TRUE)
+ for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +
+ ggplot2::scale_size_continuous(limits = c(0, smax)) +
+ ggplot2::ggtitle(names(role)[i])
+ patchwork::wrap_plots(plots = gg)
+ }),
+  legend = "One sender-against-receiver scatter per arm, drawn on SHARED AXES AND A SHARED POINT SCALE so the two are comparable by eye - which is this plugin doing, not the tool, and is the reason the panel exists. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested.")
+.plan[["native_signalingRole_heatmap_out"]] <- list(
+  id = "native_signalingRole_heatmap_out",
+  axis = "unit",
+  by = "tool",
+  fn = "netAnalysis_signalingRole_heatmap",
+  device = "png",
+  expr = quote(netAnalysis_signalingRole_heatmap(cc, pattern = "outgoing", width = 10, height = 12)),
+  legend = "Which signalling programmes this unit SENDS, and from which populations. Rows are programmes, columns are populations. Colour is relative strength RESCALED WITHIN EACH ROW, so it shows where a programme acts and NOT how strong one programme is against another. The bars above and beside are the column and row totals. One unit, no comparison.")
+.plan[["native_signalingRole_heatmap_in"]] <- list(
+  id = "native_signalingRole_heatmap_in",
+  axis = "unit",
+  by = "tool",
+  fn = "netAnalysis_signalingRole_heatmap",
+  device = "png",
+  expr = quote(netAnalysis_signalingRole_heatmap(cc, pattern = "incoming", width = 10, height = 12)),
+  legend = "Which signalling programmes this unit RECEIVES, and at which populations. Rows are programmes, columns are populations. Colour is relative strength RESCALED WITHIN EACH ROW, so it shows where a programme is received and NOT how strong one programme is against another. One unit, no comparison.")
+.plan[["nativecmp_signalingRole_heatmap"]] <- list(
+  id = "nativecmp_signalingRole_heatmap",
+  axis = "contrast",
+  by = "tool",
+  fn = "netAnalysis_signalingRole_heatmap",
+  device = "ndev",
+  items = quote(c("outgoing", "incoming")),
+  file = quote(paste0("signalingRole_heatmap_", pat)),
+  expr = quote({
+ allp <- union(object.list[[1]]@netP$pathways, object.list[[2]]@netP$pathways)
+ .cen <- function(o, how) {
+ cs <- o@netP$centr
+ m <- sapply(names(cs), function(k) {
+ v <- if (pat == "outgoing") cs[[k]]$outdeg else cs[[k]]$indeg
+ if (is.null(v) || !length(v)) rep(0, nlevels(o@idents)) else as.numeric(v)
+ })
+ if (!length(m)) return(0)
+ m <- matrix(unlist(m), ncol = length(cs))
+ if (how == "top") max(colSums(m), na.rm = TRUE) else max(rowSums(m), na.rm = TRUE)
+ }
+ yt <- max(sapply(object.list, .cen, how = "top"), na.rm = TRUE)
+ yr <- max(sapply(object.list, .cen, how = "right"), na.rm = TRUE)
+ hs <- lapply(seq_along(object.list), function(i)
+ netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = pat, signaling = allp,
+ title = names(object.list)[i], width = 6, height = 14,
+ ylim.top = c(0, yt), ylim.right = c(0, yr)))
+ ComplexHeatmap::draw(hs[[1]] + hs[[2]], ht_gap = grid::unit(0.5, "cm"))
+ }),
+  legend = "Pathways down the rows, populations across the columns, for {pat} signalling - one heatmap per arm, side by side ON ONE SHARED COLOUR SCALE AND SHARED MARGINAL AXES, which this plugin imposes so that the two can be compared. Colour is centrality, not communication probability. A pathway present in one arm and absent in the other is drawn as zeros in the arm that lacks it.")
+.plan[["nativecmp_interaction_lr"]] <- list(
+  id = "nativecmp_interaction_lr",
+  axis = "cohort",
+  by = "plugin",
+  fn = "interaction_lr",
+  device = "png",
+  file = quote(paste0("interaction_lr__", safe)),
+  expr = quote({
+ dd <- lr$d
+ dd$label <- factor(dd$label, levels = rev(dd$label))
+ ggplot2::ggplot(dd, ggplot2::aes(x = label, y = ix, fill = ix > 0)) +
+ ggplot2::geom_col(show.legend = FALSE) +
+ ggplot2::geom_hline(yintercept = 0, linewidth = 0.3) +
+ ggplot2::coord_flip() +
+ ggplot2::scale_fill_manual(values = c(`TRUE` = "#b2182b", `FALSE` = "#2166ac")) +
+ ggplot2::labs(x = NULL,
+ y = paste0(eff_lbl, " within ", st[1], " minus the same within ", st[2],
+ "\n(percentage points of each arm's total communication ",
+ "probability)"),
+ title = paste0("Which ligand-receptor pairs respond to ", fac,
+ " differently between ", st[1], " and ", st[2], "?"),
+ subtitle = paste0("RED: the ", fac, " response is larger in ", st[1],
+ "    BLUE: larger in ", st[2],
+ "\n", nrow(dd), " of ", lr$n_all,
+ " pairs present in all four arms, of ", lr$n_any,
+ " seen in any")) +
+ ggplot2::theme_classic() +
+ ggplot2::theme(axis.text.y = ggplot2::element_text(size = 7))
+ }),
+  legend = "Which ligand-receptor pairs respond to {fac} differently between {st[1]} and {st[2]}? Each bar is one pair: the {eff_lbl} within {st[1]} minus the same response within {st[2]}, which is the control. RED means the response is LARGER in {st[1]}; BLUE means larger in {st[2]}. In brackets after each pair is the sender and receiver carrying most of it, so the pair is read in a cell type rather than on its own. Values are PERCENTAGE POINTS: each arm's pairs are expressed as a share of that arm's own total before any difference is taken, because a communication probability is normalised within its own object. Drawn on the {nrow(lr$d)} largest of {lr$n_all} pairs present in ALL FOUR arms, out of {lr$n_any} seen in any of them - a pair absent from one arm has no difference of differences and is not shown. No test applies to a difference of two differences and none is claimed.")
+.plan[["nativecmp_interaction_lr_scatter"]] <- list(
+  id = "nativecmp_interaction_lr_scatter",
+  axis = "cohort",
+  by = "plugin",
+  fn = "interaction_lr",
+  device = "png",
+  file = quote(paste0("interaction_lr_scatter__", safe)),
+  expr = quote({
+ dd <- lr$d
+ .r <- range(c(dd$resp1, dd$resp2), na.rm = TRUE)
+ .pad <- max(diff(.r) * 0.10, 1e-9)
+ .lim <- c(.r[1] - .pad, .r[2] + .pad)
+ .lab <- dd[dd$flip, , drop = FALSE]
+ .lab <- .lab[order(-abs(.lab$ix)), , drop = FALSE]
+ .lab <- utils::head(.lab, 10)
+ .repel <- requireNamespace("ggrepel", quietly = TRUE)
+ .lab_layer <- if (.repel)
+ ggrepel::geom_text_repel(data = .lab, ggplot2::aes(label = pair), size = 2.6,
+ min.segment.length = 0, segment.size = 0.25,
+ segment.colour = "grey55", box.padding = 0.45,
+ max.overlaps = Inf, seed = 1L)
+ else
+ ggplot2::geom_text(data = .lab, ggplot2::aes(label = pair), size = 2.6, hjust = -0.1)
+ ggplot2::ggplot(dd, ggplot2::aes(x = resp2, y = resp1)) +
+ ggplot2::annotate("rect", xmin = -Inf, xmax = 0, ymin = 0, ymax = Inf,
+ fill = "#b2182b", alpha = 0.06) +
+ ggplot2::annotate("rect", xmin = 0, xmax = Inf, ymin = -Inf, ymax = 0,
+ fill = "#2166ac", alpha = 0.06) +
+ ggplot2::geom_hline(yintercept = 0, linewidth = 0.3, colour = "grey40") +
+ ggplot2::geom_vline(xintercept = 0, linewidth = 0.3, colour = "grey40") +
+ ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed",
+ linewidth = 0.4, colour = "grey30") +
+ ggplot2::geom_point(ggplot2::aes(colour = flip), size = 2.4, alpha = 0.9) +
+ .lab_layer +
+ ggplot2::scale_colour_manual(values = c(`TRUE` = "#b2182b", `FALSE` = "grey45"),
+ labels = c(`TRUE` = "direction overturns",
+ `FALSE` = "same direction in both"),
+ name = NULL) +
+ ggplot2::coord_equal(xlim = .lim, ylim = .lim) +
+ ggplot2::labs(
+ x = paste0(eff_lbl, " within ", st[2], " (the control)"),
+ y = paste0(eff_lbl, " within ", st[1]),
+ title = paste0("Does any ligand-receptor pair respond to ", fac,
+ " in OPPOSITE directions between ", st[1], " and ", st[2], "?"),
+ subtitle = paste0("Axes: percentage points of each arm's own total.\n",
+ "Dashed line = no interaction. Shaded quadrants = direction ",
+ "overturns (", lr$n_flip, " of ", lr$n_all, " pairs; ",
+ nrow(.lab), " named).")) +
+ ggplot2::theme_classic() +
+ ggplot2::theme(legend.position = "top")
+ }),
+  legend = "Each point is one ligand-receptor pair, placed by its {eff_lbl} within {st[1]} (vertical) against the same response within {st[2]}, which is the control (horizontal). Both axes are PERCENTAGE POINTS of each arm's total communication probability, so a value is a pair's share of its own arm before any difference is taken. The dashed diagonal is NO interaction - an identical response in both strata - so a point's distance from it IS the interaction. THE SHADED QUADRANTS ARE THE OVERTURNS: a pair there responds to {fac} in one direction within {st[1]} and in the OPPOSITE direction within {st[2]}, which the bar panel beside this one cannot show, because a difference of +1 against -1 and one of +8 against +5 are both simply a gap. {lr$n_flip} of {lr$n_all} pairs present in all four arms overturn. Overturning pairs are labelled, the largest reversals first, and the count of both is on the plate; the rest are not, to keep the panel readable. No test applies to a difference of two differences and none is claimed.")
+.plan[["native_bubble"]] <- list(
+  id = "native_bubble",
+  axis = "unit",
+  by = "tool",
+  fn = "netVisual_bubble",
+  device = "png",
+  w = quote(2600),
+  h = quote(2000),
+  expr = quote(netVisual_bubble(cc, sources.use = seq_len(ngrp), targets.use = seq_len(ngrp), remove.isolate = TRUE)),
+  legend = "Every inferred ligand-receptor pair worth drawing, across all {ngrp} populations. Rows are pairs, columns are sender to receiver; colour is the communication probability and DOT SIZE IS THE PERMUTATION P-VALUE, so a large dot is a confident one and not a strong one. Pairs with nothing to show are dropped, so an absent row was not tested and found empty.")
+.plan[["nativecmp_bubble_comparison"]] <- list(
+  id = "nativecmp_bubble_comparison",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_bubble",
+  device = "png",
+  w = quote(.bw),
+  h = quote(5200),
+  expr = quote(netVisual_bubble(m, comparison = c(1, 2), angle.x = 90, remove.isolate = TRUE, font.size = 6, font.size.title = 9, title.name = paste("every enriched pair -", name_a, "against", name_b))),
+  legend = "Every enriched ligand-receptor pair, {name_a} against {name_b}. Rows are pairs, columns are sender to receiver within each arm; colour is the communication probability and DOT SIZE IS THE PERMUTATION P-VALUE, so size is confidence and not strength. Pairs with nothing to show in either arm are dropped, so an absent row was not tested and found empty.")
+.plan[["nativecmp_bubble_focused"]] <- list(
+  id = "nativecmp_bubble_focused",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_bubble",
+  device = "png",
+  w = quote(.bw),
+  h = quote(2600),
+  expr = quote(netVisual_bubble(m, comparison = c(1, 2), signaling = .top, angle.x = 90, remove.isolate = TRUE, font.size = 6, font.size.title = 9, title.name = paste("the ten pathways carrying the most flow -", name_a, "against", name_b))),
+  legend = "The same comparison narrowed to the ten pathways carrying the most flow, {name_a} against {name_b}, because the full panel is unreadable at this many pairs. THE TEN WERE CHOSEN BY FLOW, NOT BY HOW MUCH THEY DIFFER, so this is a legible subset and not a result: a pair that changed sharply inside a quiet pathway is not here.")
+.plan[["native_patterns"]] <- list(
+  id = "native_patterns",
+  axis = "unit",
+  by = "tool",
+  fn = "identifyCommunicationPatterns",
+  device = "ndev",
+  items = quote(c("outgoing", "incoming")),
+  file = quote(paste0("patterns_", pat)),
+  expr = quote({
+ ccp <- identifyCommunicationPatterns(cc, pattern = pat, k = 3, width = 5, height = 16)
+ assign(paste0("ccp_", pat), ccp, envir = globalenv())
+ NULL
+ }),
+  legend = "The {pat} communication patterns, from a non-negative factorisation. Two heatmaps: populations against patterns, and patterns against pathways. Colour is LOADING, not communication probability. THE NUMBER OF PATTERNS WAS FIXED AT 3 AND NOT SELECTED - a different k gives a different decomposition, so read this as one grouping of the signal rather than as the grouping.")
+.plan[["nativecmp_rankSimilarity_functional"]] <- list(
+  id = "nativecmp_rankSimilarity_functional",
+  axis = "contrast",
+  by = "tool",
+  fn = "rankSimilarity",
+  device = "png",
+  w = quote(1600),
+  h = quote(2000),
+  expr = quote(rankSimilarity(m, type = "functional")),
+  legend = "Pathways ranked by HOW FAR THEY MOVED in the joint functional embedding - the largest values are the pathways whose participating populations differ most between the arms. It ranks a change in ROLE, not a change in amount: a pathway can carry the same flow in both arms and still rank highly here.")
+.plan[["native_database_category"]] <- list(
+  id = "native_database_category",
+  axis = "unit",
+  by = "tool",
+  fn = "showDatabaseCategory",
+  device = "png",
+  expr = quote(showDatabaseCategory(cc@DB)),
+  legend = "What is in the DATABASE, not what is in this object. The composition of the reference by interaction category - secreted signalling, extracellular-matrix receptor, and cell-cell contact. It describes the prior every inference on this page was drawn from, and it would look the same on any dataset.")
+.plan[["native_aggregate_circle"]] <- list(
+  id = "native_aggregate_circle",
+  axis = "unit",
+  by = "tool",
+  fn = "netVisual_aggregate",
+  device = "png",
+  file = quote(paste0("aggregate_circle__", pw)),
+  expr = quote(netVisual_aggregate(cc, signaling = pw, layout = "circle")),
+  legend = "The inferred network for the {pw} pathway alone, aggregated over every ligand-receptor pair in it. Nodes are populations, edge width is the summed communication probability from sender to receiver, and the ring is a layout that carries no meaning. One pathway, one unit, no comparison.")
+.plan[["nativecmp_aggregate_circle"]] <- list(
+  id = "nativecmp_aggregate_circle",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_aggregate",
+  device = "ndev",
+  w = quote(2800),
+  h = quote(1500),
+  file = quote(paste0("aggregate_circle__", safe)),
+  expr = quote({
+ graphics::par(mfrow = c(1, 2), xpd = TRUE)
+ for (i in seq_along(object.list))
+ netVisual_aggregate(object.list[[i]], signaling = pw, layout = "circle",
+ edge.weight.max = wmax,
+ signaling.name = paste(pw, names(object.list)[i]))
+ }),
+  legend = "The {pw} pathway drawn once per arm, side by side, ON A SHARED MAXIMUM EDGE WEIGHT so the two rings are comparable - which this plugin imposes and the tool does not. Nodes are populations, edge width is the inferred communication probability, and position on the ring carries no meaning. A missing edge in one arm is an inference that arm did not make.")
+.plan[["native_chord_gene"]] <- list(
+  id = "native_chord_gene",
+  axis = "unit",
+  by = "tool",
+  fn = "netVisual_chord_gene",
+  device = "png",
+  file = quote(paste0("chord_gene__", pw)),
+  expr = quote(netVisual_chord_gene(cc, signaling = pw, lab.cex = 0.6, legend.pos.y = 30)),
+  legend = "The {pw} pathway opened up to the GENES behind it: each ribbon runs from a ligand on the sending side to its receptor on the receiving side, and ribbon width is that pair inferred communication probability. The ordering around the circle is a layout. This is the gene-level view of the numbers the aggregate circle sums.")
+.plan[["native_contribution"]] <- list(
+  id = "native_contribution",
+  axis = "unit",
+  by = "tool",
+  fn = "netAnalysis_contribution",
+  device = "png",
+  file = quote(paste0("contribution__", pw)),
+  expr = quote(netAnalysis_contribution(cc, signaling = pw)),
+  legend = "Which ligand-receptor pairs actually carry the {pw} pathway. One bar per pair, length is that pair share of the pathway total inferred communication probability. A pathway drawn as a single edge elsewhere on this page is usually a handful of pairs, and often one - this is where that shows.")
+.plan[["native_signalingRole_network"]] <- list(
+  id = "native_signalingRole_network",
+  axis = "unit",
+  by = "tool",
+  fn = "netAnalysis_signalingRole_network",
+  device = "png",
+  file = quote(paste0("signalingRole_network__", pw)),
+  expr = quote(netAnalysis_signalingRole_network(cc, signaling = pw, width = 12, height = 4, font.size = 10)),
+  legend = "The four network roles for the {pw} pathway: for each population, how much it acts as sender, receiver, mediator and influencer. Colour is the centrality score WITHIN THIS PATHWAY, so it shows which population fills which role and NOT how strong this pathway is against another. One unit, no comparison.")
+.plan[["native_hierarchy"]] <- list(
+  id = "native_hierarchy",
+  axis = "unit",
+  by = "tool",
+  fn = "netVisual_hierarchy1",
+  device = "ndev",
+  w = quote(2800),
+  h = quote(1500),
+  file = quote(paste0("hierarchy__", pw)),
+  expr = quote({
+ graphics::par(mfrow = c(1, 2), xpd = TRUE)
+ netVisual_hierarchy1(cc@netP$prob[, , pw], vertex.receiver = vr,
+ title.name = paste(pw, "- receivers on the left"))
+ netVisual_hierarchy2(cc@netP$prob[, , pw],
+ vertex.receiver = setdiff(seq_len(ngrp), vr),
+ title.name = paste(pw, "- the rest"))
+ }),
+  legend = "The {pw} pathway drawn twice as a two-sided hierarchy. On the left, signalling into the {length(vr)} population(s) chosen as receivers; on the right, signalling into the remaining {ngrp - length(vr)}. Edge width is the inferred communication probability. THE SPLIT IS A READING AID chosen by this plugin and not a result - the same network is on both sides.")
+.plan[["nativecmp_barplot_count"]] <- list(
+  id = "nativecmp_barplot_count",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_barplot",
+  device = "png",
+  w = quote(2200),
+  h = quote(1700),
+  expr = quote(netVisual_barplot(m, comparison = c(1, 2), measure = "count", sources.use = seq_along(group_new), x.lab.rot = TRUE)),
+  legend = "The total NUMBER of inferred interactions in each arm, one bar per arm, from one fit on that arm pooled cells. It is a single number per arm with no spread behind it, so a difference here is NOT a tested difference - it is the arithmetic the rest of the comparison starts from.")
+.plan[["nativecmp_barplot_weight"]] <- list(
+  id = "nativecmp_barplot_weight",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_barplot",
+  device = "png",
+  w = quote(2200),
+  h = quote(1700),
+  expr = quote(netVisual_barplot(m, comparison = c(1, 2), measure = "weight", sources.use = seq_along(group_new), x.lab.rot = TRUE)),
+  legend = "The same totals on interaction STRENGTH rather than count. One fit per arm, one bar, no spread and no test. Count and strength can point in opposite directions, which is why both bars are drawn rather than one.")
+.plan[["nativecmp_compareInteractions"]] <- list(
+  id = "nativecmp_compareInteractions",
+  axis = "cohort",
+  by = "tool",
+  fn = "compareInteractions",
+  device = "png",
+  w = quote(max(1500, 340 * length(objs))),
+  h = quote(1300),
+  items = quote(c("count", "weight")),
+  file = quote(paste0("compareInteractions_", ms)),
+  expr = quote(g),
+  legend = "Total {if (ms == \"count\") \"number of inferred interactions\" else \"interaction strength\"} in each arm the design crosses, one bar per arm, from one fit on that arm's pooled cells. Open points are the individual samples inside each arm, each its OWN separate fit: the bar is not their sum or their mean, and on this cohort an arm's fit finds fewer interactions than its samples do separately. Nothing here is tested; these are totals with no interval.")
+.plan[["nativecmp_compareInteractions_per1k"]] <- list(
+  id = "nativecmp_compareInteractions_per1k",
+  axis = "cohort",
+  by = "plugin",
+  fn = "",
+  device = "png",
+  w = quote(max(1500, 340 * length(objs))),
+  h = quote(1300),
+  items = quote(c("count", "weight")),
+  file = quote(paste0("compareInteractions_", ms, "_per1k")),
+  expr = quote(gg),
+  legend = "The same totals divided by the cells each fit used, per 1,000 cells. A SECOND SCALE, NOT A CORRECTION: the quantity does not rise linearly with cell number, so dividing puts the arithmetic on the page rather than removing the dependence. {if (.decomposed) paste0( \"Each open point is one animal's share OF THIS ARM'S OWN FIT, \", \"credited by that animal's share of the arm's cells in the two \", \"populations of each pair - half for sending, half for receiving. \", \"That split is exact, so the bar is the cell-weighted mean of its \", \"own points and a point may fall on either side of it. It is a \", \"DERIVED attribution, not something CellChat reports: the method \", \"fits the arm's pooled cells and says nothing about which animal \", \"carried which edge. Each animal's INDEPENDENT fit is the raw panel \", \"beside this one.\") else paste0( \"Each point is one sample's OWN fit divided by ITS OWN cells. A \", \"pooled arm and a single sample are not comparable on this scale - \", \"a smaller fit finds proportionally more - so read the points \", \"against each other, not against the bar.\")}")
+.plan[["native_individual"]] <- list(
+  id = "native_individual",
+  axis = "unit",
+  by = "tool",
+  fn = "netVisual_individual",
+  device = "ndev",
+  file = quote(paste0("individual__", gsub("[^A-Za-z0-9]+", "_", as.character(lr[1, 1])))),
+  expr = quote(netVisual_individual(cc, signaling = pw, pairLR.use = lr[1, ], layout = "circle")),
+  legend = "A single ligand-receptor pair from the {pw} pathway, drawn on its own rather than aggregated with the rest. Nodes are populations, edge width is that one pair inferred communication probability, and the ring is a layout. This is the finest grain the method infers - every other network panel here sums pairs like this one.")
+.plan[["nativecmp_chord_cell"]] <- list(
+  id = "nativecmp_chord_cell",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_chord_cell",
+  device = "ndev",
+  w = quote(1800),
+  h = quote(1800),
+  file = quote(paste0("chord_cell__", safe, "__", gsub("[^A-Za-z0-9]+", "_", names(object.list)[i]))),
+  expr = quote(netVisual_chord_cell(object.list[[i]], signaling = pw, lab.cex = 0.45, small.gap = 1, big.gap = 8, title.name = paste(pw, names(object.list)[i]))),
+  legend = "The {pw} pathway as a chord diagram, one per arm: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning.")
+.plan[["nativecmp_diffInteraction_count"]] <- list(
+  id = "nativecmp_diffInteraction_count",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_diffInteraction",
+  device = "ndev",
+  expr = quote({ netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count", color.use = .ccol); .diffkey() }),
+  legend = "Which population pairs differ in the NUMBER of inferred interactions. Each node is a population; an edge is drawn where the two arms differ, its width in proportion to the size of that difference. Red is higher in {name_b}; blue is higher in {name_a}, the reference. An absent edge means the two arms agree, not that the pair does not signal.")
+.plan[["nativecmp_diffInteraction_weight"]] <- list(
+  id = "nativecmp_diffInteraction_weight",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_diffInteraction",
+  device = "ndev",
+  expr = quote({ netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight", color.use = .ccol); .diffkey() }),
+  legend = "The same comparison on interaction STRENGTH rather than count. Red is higher in {name_b}; blue is higher in {name_a}, the reference. Strength and count can disagree: a pair can gain interactions while each is weaker, and the two panels are drawn side by side for that reason.")
+.plan[["native_embedding_functional"]] <- list(
+  id = "native_embedding_functional",
+  axis = "unit",
+  by = "tool",
+  fn = "netVisual_embedding",
+  device = "png",
+  expr = quote(netVisual_embedding(ccE, type = "functional", label.size = 3.5)),
+  legend = "Every pathway placed in two dimensions by FUNCTIONAL similarity - pathways land near each other when they act between the same populations, whatever genes they use. THE AXES HAVE NO UNITS and neither does the distance: this is a layout of a similarity matrix, so read which pathways cluster and never how far apart two of them are.")
+.plan[["native_embeddingZoomIn_functional"]] <- list(
+  id = "native_embeddingZoomIn_functional",
+  axis = "unit",
+  by = "tool",
+  fn = "netVisual_embeddingZoomIn",
+  device = "png",
+  w = quote(2400),
+  h = quote(2000),
+  expr = quote(netVisual_embeddingZoomIn(ccE, type = "functional", nCol = 2)),
+  legend = "The functional-similarity embedding again, one panel per cluster so that crowded labels can be read. The same coordinates as the whole-page version, cropped - no pathway has moved. The axes still have no units.")
+.plan[["nativecmp_embeddingPairwise_functional"]] <- list(
+  id = "nativecmp_embeddingPairwise_functional",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_embeddingPairwise",
+  device = "png",
+  expr = quote(netVisual_embeddingPairwise(m, type = "functional", label.size = 3.5)),
+  legend = "Both arms pathways embedded TOGETHER by functional similarity, so the same pathway from each arm appears as two points and the distance between them is how far its role shifted. The axes have no units and neither does any single distance; only the pairing is meant to be read.")
+.plan[["nativecmp_embeddingPairwiseZoomIn_functional"]] <- list(
+  id = "nativecmp_embeddingPairwiseZoomIn_functional",
+  axis = "contrast",
+  by = "tool",
+  fn = "netVisual_embeddingPairwiseZoomIn",
+  device = "png",
+  w = quote(2600),
+  h = quote(2200),
+  expr = quote(netVisual_embeddingPairwiseZoomIn(m, type = "functional", nCol = 2)),
+  legend = "The joint embedding again, one panel per cluster so the paired points can be told apart. The same coordinates, cropped - nothing has moved. The axes still have no units.")
+.plan[["native_dot"]] <- list(
+  id = "native_dot",
+  axis = "unit",
+  by = "tool",
+  fn = "netAnalysis_dot",
+  device = "png",
+  w = quote(1800),
+  h = quote(1600),
+  items = quote(c("outgoing", "incoming")),
+  file = quote(paste0("dot_", pat)),
+  expr = quote(netAnalysis_dot(ccp, pattern = pat)),
+  legend = "The {pat} pattern loadings as dots rather than ribbons: populations against patterns, with dot size and colour both the loading. The same numbers as the river panel beside it, in a form a single population can be read off. Loadings, not communication probabilities.")
+.plan[["native_river"]] <- list(
+  id = "native_river",
+  axis = "unit",
+  by = "tool",
+  fn = "netAnalysis_river",
+  device = "png",
+  w = quote(2400),
+  h = quote(1800),
+  items = quote(c("outgoing", "incoming")),
+  file = quote(paste0("river_", pat)),
+  expr = quote(netAnalysis_river(ccp, pattern = pat)),
+  legend = "The {pat} patterns as flow: populations on one side, latent patterns in the middle, pathways on the other, and ribbon width is the loading. It is the same decomposition the pattern heatmaps show, drawn so a pathway can be followed to the populations that use it. Loadings, not probabilities, and the three patterns were fixed rather than chosen.")
+.plan[["nativecmp_diff_signalingRole"]] <- list(
+  id = "nativecmp_diff_signalingRole",
+  axis = "contrast",
+  by = "tool",
+  fn = "netAnalysis_diff_signalingRole_scatter",
+  device = "png",
+  expr = quote({
+ gg <- tryCatch(netAnalysis_diff_signalingRole_scatter(m), error = function(e) NULL)
+ if (is.null(gg)) stop("netAnalysis_diff_signalingRole_scatter returned nothing")
+ gg
+ }),
+  legend = "Each population placed by how much its OUTGOING signalling changed between the arms against how much its INCOMING changed. The origin is a population that did not shift. It is a difference of two inferences, so a point far from the origin means the two fits disagree there - not that anything was measured to change.")
+.plan[["nativecmp_signalingChanges"]] <- list(
+  id = "nativecmp_signalingChanges",
+  axis = "contrast",
+  by = "tool",
+  fn = "netAnalysis_signalingChanges_scatter",
+  device = "png",
+  file = quote(paste0("signalingChanges__", safe)),
+  expr = quote(netAnalysis_signalingChanges_scatter(m, idents.use = g)),
+  legend = "For {g} alone: how much its outgoing signalling changed between the arms against how much its incoming changed, one point per pathway. Pathways far from the origin are where this population role differs most between arms. It is a difference of two inferences - a shift means the two fits disagree, not that a change was measured.")
+.plan[["native_geneExpression"]] <- list(
+  id = "native_geneExpression",
+  axis = "unit",
+  by = "tool",
+  fn = "plotGeneExpression",
+  device = "png",
+  w = quote(2000),
+  h = quote(2200),
+  file = quote(paste0("geneExpression__", pw)),
+  expr = quote(plotGeneExpression(cc, signaling = pw)),
+  legend = "MEASURED EXPRESSION, not inference - the one panel here that is. Violins of the genes making up the {pw} pathway, across populations, straight from the object. Everything else on this page is inferred FROM numbers like these; this is the input, and a pathway whose genes are barely expressed should be read with that in mind.")
+
+# THE INTERPRETER. `.draw(id)` draws one entry of the plan where a hand-written site stood;
+# `.draw_all(axis)` draws every entry of an axis, `.item` bound over an entry's items. Every
+# expression the entry carries is evaluated in the frame `.draw` is called from - the method's
+# own locals are what the site saw, and they are what the plan's entry sees.
+.items <- function(x) {
+  x <- as.character(x)
+  x[!is.na(x) & nzchar(x)]
+}
+
+# A LEGEND IS A TEMPLATE WHOSE {...} ARE R EXPRESSIONS, evaluated where the draw is called. A
+# placeholder that fails to evaluate is reported and rendered as "?", never as a silent blank:
+# the panel is still drawn, and the log says which sentence lost which fact.
+.fill <- function(template, env) {
+  if (is.null(template) || !nzchar(template)) return("")
+  m <- gregexpr("\\{[^{}]+\\}", template)
+  holes <- regmatches(template, m)[[1]]
+  if (!length(holes)) return(template)
+  vals <- vapply(holes, function(h) {
+    ex <- substr(h, 2L, nchar(h) - 1L)
+    tryCatch(paste(as.character(eval(parse(text = ex), env)), collapse = ", "),
+             error = function(e) {
+               cat("legend placeholder failed: {", ex, "} - ", conditionMessage(e), "\n", sep = "")
+               "?"
+             })
+  }, character(1))
+  regmatches(template, m) <- list(vals)
+  template
+}
+
+.draw <- function(id, item = NULL, env = parent.frame()) {
+  e <- .plan[[id]]
+  if (is.null(e)) stop("no entry in the plan is called ", id)
+  if (!is.null(item)) assign(".item", item, envir = env)
+  if (!is.null(e$when) && !isTRUE(eval(e$when, env))) return(invisible(NULL))
+  # THE FILE STEM: the entry's own expression, or the id without this script's prefix - the
+  # prefix is put back by the device path, as it was for every hand-written site.
+  stem <- if (!is.null(e$file)) as.character(eval(e$file, env))
+          else if (nzchar(.figcfg$prefix) && startsWith(id, .figcfg$prefix))
+            substring(id, nchar(.figcfg$prefix) + 1L) else id
+  w <- if (is.null(e$w)) .figcfg$w else eval(e$w, env)
+  h <- if (is.null(e$h)) .figcfg$h else eval(e$h, env)
+  res <- if (is.null(e$res)) .figcfg$res else eval(e$res, env)
+  # THE CALL IS A PROMISE: `.draw_one` forces it inside the device, exactly as it forced the
+  # expression a hand-written site passed it.
+  .draw_one(stem, eval(e$expr, env), identical(e$device, "ndev"), w, h, res,
+            legend = .fill(e$legend, env), by = e$by)
+}
+
+.draw_all <- function(axis, env = parent.frame()) {
+  for (id in names(.plan)) {
+    e <- .plan[[id]]
+    if (!identical(e$axis, axis)) next
+    if (is.null(e$items)) {
+      .draw(id, NULL, env)
+    } else {
+      for (.it in .items(eval(e$items, env))) .draw(id, .it, env)
+    }
+  }
+  invisible(NULL)
 }

@@ -65,9 +65,13 @@ for name, k in sorted(K.discover().items()):
         if not pm:
             continue
         prefix = pm.group(1)
-        # every plot call: npng("name", ...) / ndev("name", ...) / npng(paste0("name__", x), ...)
-        for call in re.finditer(r'\b(?:npng|ndev)\(\s*(?:paste0\(\s*)?"([^"]+)"', body):
-            stem = prefix + call.group(1)
+        # EVERY DRAW SITE. On the plan (harness ADR-0016) a site is `.draw("<id>")` and the id
+        # is the plan's own, prefix included; a plugin still on hand-written wrappers names the
+        # stem and the script's prefix completes it.
+        sites = [(prefix + m.group(1)) for m in re.finditer(
+            r'\b(?:npng|ndev)\(\s*(?:paste0\(\s*)?"([^"]+)"', body)]
+        sites += [m.group(1) for m in re.finditer(r'\.draw\(\s*"([^"]+)"', body)]
+        for stem in sites:
             CHECKED += 1
             fn = N.function_for(decl, stem + ".png")
             if not fn and _own_claims(own, stem):
@@ -84,7 +88,7 @@ for name, k in sorted(K.discover().items()):
 # the checking. `subject.nothing_found` asks a second, cruder question - is the marker in any
 # kernel's raw text - and only the two answers together are decisive.
 if not CHECKED:
-    _kind, _why = subject.nothing_found('npng(', 'draws a panel from an embedded R script')
+    _kind, _why = subject.nothing_found('.draw(', 'draws a panel from an embedded R script')
     if _kind == "broken":
         print("FAIL")
         print("  - " + _why)

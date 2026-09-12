@@ -210,6 +210,76 @@ class FigureContextReader:
         """The sentence naming what is NOT in the panel set, or "" when nothing is missing."""
         return str((self.figure_context or {}).get("note") or "")
 
+    def write_figure_context(self):
+        """Materialise the host's figure context for R, as a TSV beside the outputs. "" if none.
+
+        TWO COLUMNS, key and value, with the colour map as one row per label. A flat file because
+        the R side must be able to read it with `read.delim` and no JSON dependency - a plugin
+        that already carries an R dependency graph should not add one to print a subtitle.
+
+        AND THE DECLARED CEILINGS, WHICH ARE NOT A SUBTITLE. `at_most` is resolved by the host
+        from the plugin's own declaration and handed here so the generated draw protocol can
+        REFUSE past it. Until it could, the ceiling was a number the plan read and the drawing
+        code did not. NOT GATED ON THE CONTEXT BLOCK: a run without a colour map still has
+        ceilings, and returning early there sent the R its old unbounded self.
+
+        MOVED HERE FROM THE ONE PLUGIN THAT HAD WRITTEN IT (harness ADR-0016, step 4): every
+        line of it was true of every plugin that draws through R and none of it named a method.
+        """
+        rows = []
+        if self.figure_context:
+            rows = [("stamp", self.figure_stamp()), ("absence", self.figure_absence())]
+            rows += [(f"colour:{k}", v) for k, v in sorted((self.figure_colours() or {}).items())]
+        rows += [(f"ceiling:{k}", int(v))
+                 for k, v in sorted((getattr(self, "figure_ceiling", None) or {}).items())]
+        rows = [(k, str(v).replace("\t", " ").replace("\n", " ")) for k, v in rows if str(v)]
+        if not rows:
+            return ""
+        path = Path(self.out) / "figure_context.tsv"
+        path.write_text("\n".join(f"{k}\t{v}" for k, v in rows) + "\n", encoding="utf-8")
+        return path
+
+    def rscript(self, body, args=(), *, name="R"):
+        """Run an embedded R script: the generated companion, then `body`, with `args` after it.
+
+        THE HOST LAUNCHES R (harness ADR-0016, step 4). The script is written beside the outputs
+        as `<name>.R` - the companion the maker generated for this plugin first, so the drawing
+        protocol and the plan are defined before the method's first line - and run with the
+        interpreter `params` names or the one on PATH, which inside a plugin's environment is
+        that environment's. Returns the finished process; the caller reads the exit code and
+        whatever its script wrote.
+
+        ALL OF THE OUTPUT IS KEPT, in `<name>.log`, and every failure line is surfaced by name.
+        A tail alone discarded four upstream plot functions failing on every unit of a whole run
+        - the loop reports each failure near the START of a long run - and nothing said so until
+        somebody counted figure kinds.
+        """
+        import subprocess as _sp
+        out = Path(self.out)
+        out.mkdir(parents=True, exist_ok=True)
+        script = out / f"{name}.R"
+        script.write_text(str(self.r_companion or "") + str(body), encoding="utf-8")
+        rs = (getattr(self, "params", None) or {}).get("rscript") or "Rscript"
+        proc = _sp.run([rs, str(script)] + [str(a) for a in args],
+                       capture_output=True, text=True)
+        text = (proc.stdout or "")
+        err = (proc.stderr or "")
+        log_path = out / f"{name}.log"
+        try:
+            log_path.write_text(text + ("\n----- stderr -----\n" + err if err.strip() else ""),
+                                encoding="utf-8")
+        except OSError:
+            log_path = None
+        fails = [ln for ln in text.splitlines() if "FAILED" in ln]
+        for ln in fails:
+            self.log(f"  R: {ln}")
+        for ln in text.splitlines()[-8:]:
+            if ln not in fails:
+                self.log(f"  R: {ln}")
+        self.log(f"  R output: {len(text.splitlines())} line(s), {len(fails)} failure(s)"
+                 + (f", full text in {log_path.name}" if log_path else " (could not be written)"))
+        return proc
+
 
 def _ceiling_for(ceilings, name):
     """(family, ceiling) for this figure id, or None when nothing bounds it.
@@ -258,8 +328,11 @@ class Context(FigureContextReader):
                  unit_members=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
                  sentinels=(), provenance=None, constraint="", cache_dir=None,
-                 config=None, figure_context=None, log=print):
+                 config=None, figure_context=None, r_companion="", log=print):
         self.adata = adata
+        #: THE GENERATED DRAWING PROTOCOL AND PLAN, as text, for `rscript` to put before every
+        #: embedded script this plugin runs. "" for a plugin that draws through no R.
+        self.r_companion = str(r_companion or "")
         #: {role: actual name in THIS object}. `ctx.keys["label"]`, never a literal column.
         self.keys = dict(keys or {})
         self.out = Path(out)
@@ -1176,7 +1249,10 @@ class CompareContext(FigureContextReader):
 
     def __init__(self, *, pair, units, out, config=None, members=None, unit_values=None,
                  interactions=None, figure_context=None, figure_position=None,
-                 figure_ceiling=None, log=print):
+                 figure_ceiling=None, r_companion="", log=print):
+        #: THE GENERATED DRAWING PROTOCOL AND PLAN, the same text the per-unit context carries:
+        #: a comparison draws MORE through it than a unit does.
+        self.r_companion = str(r_companion or "")
         #: The host's figure context - the run's stable label->colour map and the stamp. Read it
         #: through the same accessors the per-unit Context exposes; a comparison needs it MORE, not
         #: less, because a differential names two arms and a direction that appear nowhere else.

@@ -50,7 +50,10 @@ def attrs_of(cls):
 #: State that decides WHAT GETS DRAWN, as opposed to what a unit happens to be. `figures_for` and
 #: `profile_figures` are per-unit switches and have no meaning for a contrast; the rest govern
 #: figures in both phases and must exist in both.
-GOVERNING = {"figure_context", "figure_position", "figure_ceiling"}
+GOVERNING = {"figure_context", "figure_position", "figure_ceiling",
+             # the generated drawing protocol and plan, which the host launches R with
+             # (harness ADR-0016 step 4); a comparison draws MORE through it than a unit does
+             "r_companion"}
 
 c, cc = attrs_of("Context"), attrs_of("CompareContext")
 check(GOVERNING <= c, f"Context is missing {sorted(GOVERNING - c)}")

@@ -38,7 +38,14 @@ for f in sorted((ROOT / "kernels").glob("*.py")):
     # PAIR EACH CALLER WITH THE SCRIPT IT ACTUALLY WRITES. Taking the first R block that
     # mentions commandArgs paired the wrong two and reported a defect that was only the
     # pairing - a check that finds the wrong thing is worse than one that finds nothing.
-    for m in re.finditer(r"\bargv\w*\s*=\s*\[", src):
+    # TWO LAUNCH SHAPES. The host launches R now (harness ADR-0016 step 4): `ctx.rscript(_R_X,
+    # [ ...args... ])` names its script in the call and its list is the arguments alone. The
+    # older shape - `argv = [interpreter, script, ...args...]` after a `write_text(_R_X)` -
+    # is still read, because a plugin written before the host launched R is read as it was.
+    launches = [(m, m.group(1), 0) for m in
+                re.finditer(r"\.rscript\(\s*(_R_[A-Z_]+)\s*,\s*\[", src)]
+    launches += [(m, "", 2) for m in re.finditer(r"\bargv\w*\s*=\s*\[", src)]
+    for m, named, skip in sorted(launches, key=lambda t: t[0].start()):
         start = m.end() - 1
         depth, end = 0, start
         for j in range(start, len(src)):
@@ -58,11 +65,14 @@ for f in sorted((ROOT / "kernels").glob("*.py")):
                 depth -= 1
             elif ch == "," and depth == 0:
                 n_passed += 1
-        n_passed -= 2          # the interpreter and the script path are not arguments
+        n_passed -= skip       # the older shape carries the interpreter and the script path
         if n_passed <= 0:
             continue
-        before = src[max(0, m.start() - 1500):m.start()]
-        hit = re.findall(r"write_text\((_R_[A-Z_]+)", before)
+        if named:
+            hit = [named]
+        else:
+            before = src[max(0, m.start() - 1500):m.start()]
+            hit = re.findall(r"write_text\((_R_[A-Z_]+)", before)
         if not hit:
             continue
         body = blocks.get(hit[-1])

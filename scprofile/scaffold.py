@@ -244,7 +244,10 @@ R_DRAW = r'''# __NAME__ - the host-to-plugin drawing protocol, in R.
 #
 # WHAT IS DELIBERATELY NOT HERE: anything about the method. This file knows about ceilings,
 # captions, colours, devices and a phase clock - the things the HOST and the plugin agree on. It
-# names no plotting function and no biology.
+# names no plotting function and no biology - except in THE PLAN at the end of it, which is
+# generated from the plugin's own `report.figures`: one entry per figure family, and `.draw(id)`
+# where a hand-written draw site used to stand. A figure is adjusted in the plan and regenerated;
+# it is never edited here.
 
 .figcfg <- new.env(parent = emptyenv())
 .figcfg$prefix <- ""
@@ -451,6 +454,132 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
 }
 '''
 
+#: THE PLAN'S INTERPRETER, in R, appended to the protocol above after the plan's entries.
+#: `.draw` evaluates everything in the CALLER's frame - the call, the file expression, the
+#: guard, the device size and the legend's placeholders - because a site inside a method loop
+#: sees that loop's locals and nothing else, and the plan must not need the method's loop.
+R_PLAN = r'''
+# THE INTERPRETER. `.draw(id)` draws one entry of the plan where a hand-written site stood;
+# `.draw_all(axis)` draws every entry of an axis, `.item` bound over an entry's items. Every
+# expression the entry carries is evaluated in the frame `.draw` is called from - the method's
+# own locals are what the site saw, and they are what the plan's entry sees.
+.items <- function(x) {
+  x <- as.character(x)
+  x[!is.na(x) & nzchar(x)]
+}
+
+# A LEGEND IS A TEMPLATE WHOSE {...} ARE R EXPRESSIONS, evaluated where the draw is called. A
+# placeholder that fails to evaluate is reported and rendered as "?", never as a silent blank:
+# the panel is still drawn, and the log says which sentence lost which fact.
+.fill <- function(template, env) {
+  if (is.null(template) || !nzchar(template)) return("")
+  m <- gregexpr("\\{[^{}]+\\}", template)
+  holes <- regmatches(template, m)[[1]]
+  if (!length(holes)) return(template)
+  vals <- vapply(holes, function(h) {
+    ex <- substr(h, 2L, nchar(h) - 1L)
+    tryCatch(paste(as.character(eval(parse(text = ex), env)), collapse = ", "),
+             error = function(e) {
+               cat("legend placeholder failed: {", ex, "} - ", conditionMessage(e), "\n", sep = "")
+               "?"
+             })
+  }, character(1))
+  regmatches(template, m) <- list(vals)
+  template
+}
+
+.draw <- function(id, item = NULL, env = parent.frame()) {
+  e <- .plan[[id]]
+  if (is.null(e)) stop("no entry in the plan is called ", id)
+  if (!is.null(item)) assign(".item", item, envir = env)
+  if (!is.null(e$when) && !isTRUE(eval(e$when, env))) return(invisible(NULL))
+  # THE FILE STEM: the entry's own expression, or the id without this script's prefix - the
+  # prefix is put back by the device path, as it was for every hand-written site.
+  stem <- if (!is.null(e$file)) as.character(eval(e$file, env))
+          else if (nzchar(.figcfg$prefix) && startsWith(id, .figcfg$prefix))
+            substring(id, nchar(.figcfg$prefix) + 1L) else id
+  w <- if (is.null(e$w)) .figcfg$w else eval(e$w, env)
+  h <- if (is.null(e$h)) .figcfg$h else eval(e$h, env)
+  res <- if (is.null(e$res)) .figcfg$res else eval(e$res, env)
+  # THE CALL IS A PROMISE: `.draw_one` forces it inside the device, exactly as it forced the
+  # expression a hand-written site passed it.
+  .draw_one(stem, eval(e$expr, env), identical(e$device, "ndev"), w, h, res,
+            legend = .fill(e$legend, env), by = e$by)
+}
+
+.draw_all <- function(axis, env = parent.frame()) {
+  for (id in names(.plan)) {
+    e <- .plan[[id]]
+    if (!identical(e$axis, axis)) next
+    if (is.null(e$items)) {
+      .draw(id, NULL, env)
+    } else {
+      for (.it in .items(eval(e$items, env))) .draw(id, .it, env)
+    }
+  }
+  invisible(NULL)
+}
+'''
+
+
+def _r_str(s):
+    """An R string literal: one line, backslashes and double quotes escaped."""
+    s = " ".join(str(s).split())
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def render_plan(spec):
+    """The plan as R data, one `.plan[[id]]` per R-drawn entry, followed by its interpreter.
+
+    WHAT IS A SITE AND WHAT IS NOT. An entry the generated companion draws is one
+    `declare.drawn_by_companion` says so of: an upstream call, or the plugin's own R. A panel the
+    host's emit path writes gets no site, and neither does a file the tool writes as a side
+    effect of a call the method makes (`generated: False`) - it is in the plan for the
+    accounting and nothing here can draw it.
+
+    EVERY EXPRESSION IS EMBEDDED AS R, NOT AS A STRING: `quote(...)` around the call, the file,
+    the items, the guard and a computed size, so R parses them once when the companion is
+    sourced and `.draw` evaluates them in the caller's frame. A brace block keeps its lines.
+    Deterministic: the same declaration renders the same bytes, and the shipped companion is
+    checked byte for byte against what generates it.
+    """
+    from . import declare as _D
+
+    figs = ((spec or {}).get("report") or {}).get("figures") or []
+    L = ["", "# " + "=" * 96,
+         "# THE PLAN. GENERATED from `report.figures`; one entry per figure family this companion",
+         "# draws. Adjust the entry in the plugin's declaration and regenerate.",
+         "# " + "=" * 96, ".plan <- list()"]
+    for e in figs:
+        if not isinstance(e, dict) or not str(e.get("id") or "").strip():
+            continue
+        if not _D.drawn_by_companion(e) or e.get("generated") is False:
+            continue
+        fid = str(e["id"]).strip()
+        expr = str(e.get("expr") or "").strip()
+        if not expr:
+            fn = str(e.get("fn") or "").strip()
+            if not fn:
+                continue
+            expr = f"{fn}({str(e.get('args') or '').strip()})"
+        fields = [f"id = {_r_str(fid)}",
+                  f"axis = {_r_str(e.get('axis') or 'unit')}",
+                  f"by = {_r_str(e.get('drawn_by') or 'tool')}",
+                  f"fn = {_r_str(e.get('fn') or '')}",
+                  f"device = {_r_str(e.get('device') or 'png')}"]
+        for k in ("w", "h", "res"):
+            if e.get(k) is not None and str(e.get(k)).strip():
+                fields.append(f"{k} = quote({str(e[k]).strip()})")
+        for k in ("items", "when", "file"):
+            v = str(e.get(k) or "").strip()
+            if v:
+                fields.append(f"{k} = quote({v})")
+        fields.append(f"expr = quote({expr})")
+        fields.append(f"legend = {_r_str(e.get('legend') or '')}")
+        L.append(f".plan[[{_r_str(fid)}]] <- list(\n  " + ",\n  ".join(fields) + ")")
+    return "\n".join(L) + "\n" + R_PLAN
+
+
 def draws_through_r(spec):
     """Does this plugin draw in R? Read from its declared requirements, not from its source."""
     req = spec.get("requires") or {}
@@ -489,7 +618,8 @@ def _one_file(kernel, *, force=False, log=print, out_dir=None):
         if p.exists() and not force:
             skipped.append(p.name)
         else:
-            p.write_text(R_DRAW.replace("__NAME__", kernel.name), encoding="utf-8")
+            p.write_text(R_DRAW.replace("__NAME__", kernel.name) + render_plan(kernel.spec),
+                         encoding="utf-8")
             made.append(p.name)
     log(f"  {kernel.name}: wrote {', '.join(made) or 'nothing'}"
         + (f"   (kept existing {', '.join(skipped)}; --force overwrites)" if skipped else ""))
@@ -539,7 +669,7 @@ def scaffold(kernel, *, force=False, log=print, out_dir=None):
         if p.exists() and not force:
             skipped.append(fn)
             continue
-        p.write_text(tpl.replace("__NAME__", kernel.name) if fn == "draw.R"
+        p.write_text(tpl.replace("__NAME__", kernel.name) + render_plan(spec) if fn == "draw.R"
                      else tpl.format(**ctx), encoding="utf-8")
         if fn.endswith(".py"):
             p.chmod(0o755)
