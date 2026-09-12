@@ -94,11 +94,31 @@ def products_of(out: Path) -> list:
     return res
 
 
+def is_sealed(out: Path, cmd: str) -> bool:
+    """Is this run's record for `cmd` sealed - stamped once, and read-only since?
+
+    A SEALED RUN IS A RUN THE CONTRACT MUST STILL BE ABLE TO READ. The seal makes every file
+    under a run read-only, the stamps this contract wrote included, and the next reading command
+    asked of the run - `capacity --promised`, on the sealed reference - died in `begin`,
+    rewriting STATUS.capacity.json before it had read anything. Two of the maker's six run-side
+    stages were answered "PermissionError". A stamp that cannot be rewritten is left as it is,
+    said once on stderr, and the command runs.
+    """
+    import os
+    st, _run, _s, _f = _names(cmd)
+    p = Path(out) / st
+    return p.exists() and not os.access(p, os.W_OK)
+
+
 def begin(out: Path, cmd: str, *, version: str, state_version: int, sees: list, cannot_show: dict | list,
           argv: list | None = None) -> Path:
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     st, run, _, _ = _names(cmd)
+    if is_sealed(out, cmd):
+        print(f"scprofile: {out.name} is sealed; {st} is not rewritten and this command only "
+              f"reads", file=sys.stderr)
+        return out / st
     rec = {"contract": CONTRACT, "tool": "scprofile", "command": cmd, "version": version,
            "commit": commit(), "state_version": state_version, "status": "partial",
            "headline": "started", "started": _now(), "finished": None, "job": job(),
@@ -120,6 +140,12 @@ def finish(out: Path, cmd: str, *, status: str, headline: str, exit_code: int,
     out = Path(out)
     st, run, sealed_n, failed_n = _names(cmd)
     p = out / st
+    if is_sealed(out, cmd):
+        # the record stays what the seal made it; the verdict of this reading is its exit code
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {"contract": CONTRACT, "tool": "scprofile", "command": cmd, "status": status}
     try:
         rec = json.loads(p.read_text(encoding="utf-8"))
     except (OSError, ValueError):

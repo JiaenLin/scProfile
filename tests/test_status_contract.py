@@ -79,6 +79,33 @@ for f in sorted((ROOT / "kernels").glob("*.py")):
     ck(f"{f.name} declares an integer state_version", re.search(r'"state_version":\s*\d+,', src) is not None)
 
 print("")
+
+# A READING COMMAND ASKED OF A SEALED RUN. The seal makes every file read-only, including the
+# stamps this contract wrote when the run was made - and the next `capacity --promised` asked of
+# the run died in `begin`, rewriting STATUS.capacity.json, before doing any of its own reading.
+# Two of the maker's six run-side stages were answered "PermissionError" on the sealed reference.
+# A sealed run is a run the contract should be able to READ; the stamp is not rewritten and the
+# command says so on stderr, once.
+print("a sealed run can still be read")
+with tempfile.TemporaryDirectory() as td:
+    out = Path(td) / "sealed"
+    (out / "kernels").mkdir(parents=True)
+    for name in ("STATUS.capacity.json", "SEALED.capacity.txt"):
+        (out / name).write_text("{}", encoding="utf-8")
+        (out / name).chmod(0o400)
+    from scprofile import cli
+    buf_out, buf_err = io.StringIO(), io.StringIO()
+    try:
+        with redirect_stdout(buf_out), redirect_stderr(buf_err):
+            rc = cli.main(["capacity", "--out", str(out), "--promised"])
+    except PermissionError as e:
+        rc = f"raised {e}"
+    ck("capacity --promised on a sealed run returns its own verdict", rc == 0, str(rc))
+    ck("and says the stamp was not rewritten", "sealed" in buf_err.getvalue().lower(), buf_err.getvalue()[-200:])
+    ck("and the sealed stamp is untouched", (out / "STATUS.capacity.json").read_text() == "{}")
+    for name in ("STATUS.capacity.json", "SEALED.capacity.txt"):
+        (out / name).chmod(0o600)
+
 if fails:
     print(f"FAIL: {len(fails)}")
     raise SystemExit(1)

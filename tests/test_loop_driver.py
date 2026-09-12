@@ -190,6 +190,35 @@ def test_one_run_one_station_as_json():
         assert json.loads(p2.stdout)["first_blocked"] == "7 eye"
 
 
+def test_one_station_asked_in_prose_is_answered_by_that_station_alone():
+    """`--station 6b` is the maker asking one question. The answer must be the LAST thing printed:
+    the maker keeps a command's tail, and on the sealed reference the tail was the round's
+    goal restatement and its missing-outputs block - the station's own line, with the 43
+    issues and the 765 unmeasured panels it names, had scrolled off the top."""
+    import subprocess
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as td:
+        run = _run_dir(td, figures=("F1", "native_a"), audited=("F1",))
+        script = Path(__file__).resolve().parent / "loop_stations.py"
+        p = subprocess.run([sys.executable, str(script), "--run", str(run), "--station", "6b"],
+                           capture_output=True, text=True,
+                           cwd=str(Path(__file__).resolve().parents[1]))
+        lines = [l for l in p.stdout.splitlines() if l.strip()]
+        assert p.returncode == 0, p.stdout + p.stderr
+        assert "6b drawing" in lines[-1] and "NOT measured" in lines[-1], lines[-3:]
+        assert "REQUIRED OUTPUTS" not in p.stdout and "THE GOAL OF THIS LOOP" not in p.stdout
+        p2 = subprocess.run([sys.executable, str(script), "--run", str(run), "--station", "eye"],
+                            capture_output=True, text=True,
+                            cwd=str(Path(__file__).resolve().parents[1]))
+        lines2 = [l for l in p2.stdout.splitlines() if l.strip()]
+        assert p2.returncode == 1, p2.stdout + p2.stderr
+        assert any("7 eye" in l for l in lines2[-2:]), lines2[-3:]
+        assert "REQUIRED OUTPUTS" not in p2.stdout
+
+
 def test_station_selection_by_number_and_by_word():
     L = importlib.import_module("tests.loop_stations")
     assert [n for n, _ in L.select(L.STATIONS, "6b")] == ["6b drawing"]

@@ -583,6 +583,10 @@ def main(argv=None):
         if not a.json:
             mark = "  ok  " if state == PASS else "BLOCKED"
             print(f"{mark}  {name:<12} {detail}")
+            # ONE STATION ASKED: the help under it is one line, so the verdict stays within the
+            # tail the maker keeps. The whole list is the round's, printed when the round is.
+            if a.station and nxt:
+                nxt = nxt.splitlines()[0]
             if nxt and state != PASS:
                 print(f"          -> {nxt}")
             elif nxt:
@@ -601,6 +605,13 @@ def main(argv=None):
             "missing_outputs": [{"path": p, "why": w} for p, w in
                                 missing_outputs(sorted(runs, key=lambda p: p.name)[-1])],
         }, indent=1))
+        return 1 if first_blocked else 0
+    # ONE STATION ASKED IS ONE STATION ANSWERED. `--station 6b` is the maker asking a question
+    # whose answer it keeps as the command's tail; the round's goal restatement and its
+    # missing-outputs block belong to the whole round and, printed after the station, they were
+    # the tail - the station's own line, with the 43 issues and the 765 unmeasured panels it
+    # named on the sealed reference, had scrolled off the top.
+    if a.station:
         return 1 if first_blocked else 0
     print()
     if first_blocked:
