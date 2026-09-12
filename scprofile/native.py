@@ -321,8 +321,9 @@ def undrawn(declared, filenames):
     are rulings that this plugin does not draw the thing; asking them for a file would report the
     accounting as a defect. Only an entry carrying `use:` is a promise.
     """
+    import re as _re
     stems = {str(f).rsplit("/", 1)[-1] for f in (filenames or ())}
-    stems |= {s[:-4] for s in list(stems) if s.endswith(".png")}
+    stems |= {_re.sub(r"\.(png|pdf|svg|jpe?g|tiff?)$", "", s, flags=_re.I) for s in list(stems)}
     out = []
     for fn, rec in sorted((declared or {}).items()):
         use = str((rec or {}).get("use") or "")
@@ -399,7 +400,9 @@ def function_for(declared, filename):
     """
     import re
     stem = str(filename).rsplit("/", 1)[-1]
-    stem = stem[:-4] if stem.endswith(".png") else stem
+    # ANY FIGURE FORMAT. A tool that writes a PDF as a side effect of a call the method makes
+    # kept its promise; a stem that kept `.pdf` matched no id and read as never drawn.
+    stem = re.sub(r"\.(png|pdf|svg|jpe?g|tiff?)$", "", stem, flags=re.I)
     best, best_len = "", -1
     for fn, rec in (declared or {}).items():
         # THE STRUCTURED HALF FIRST. An entry that came from the plan carries its ids; a file is

@@ -59,6 +59,33 @@ check(N.undeclared({"fnC": {"skip": "not_applicable"}}, ["a/x.png"], ids=()) == 
 many = dict(N.undeclared({}, [f"u{i}/figures/litter__u{i}.pdf" for i in range(24)], ids=()))
 check(many == {"litter": 24}, "litter was not collapsed to one row with its count: %r" % (many,))
 
+
+# A PROMISE IS KEPT BY A FILE OF ANY FIGURE FORMAT. The rank-estimation plate is written as a
+# PDF by the tool itself; declared on the plan its promise reads `figures/<id>.png`, and a check
+# that swept only the PNGs reported it never drawn on a run that holds twenty-four of them
+# (ADR-0016 step 4e, first reproduction).
+import io as _io
+import tempfile as _tf
+from contextlib import redirect_stdout as _rs
+from scprofile import cli as _CLI, kernels as _K
+_cc = _K.discover().get("cellchat")
+if _cc is not None:
+    with _tf.TemporaryDirectory() as _td:
+        _run = Path(_td) / "20260101T000000Z__scprofile-abc__s"
+        _fig = _run / "kernels" / "cellchat" / "U1" / "figures"
+        _fig.mkdir(parents=True)
+        (_fig / "estimationNumCluster__functional.pdf").write_bytes(b"%PDF-1.4\n")
+        _buf = _io.StringIO()
+        with _rs(_buf):
+            _CLI._promised(_run)
+        _txt = _buf.getvalue()
+        _gap_block = _txt.split("DECLARED AND NEVER DRAWN", 1)[-1]
+        check("netClustering" not in _gap_block,
+              "a promise kept by a PDF is reported as never drawn - the sweep read the PNGs alone")
+        check("DECLARED AND NEVER DRAWN" in _txt,
+              "the other promises of a one-file run must still read as never drawn, or this "
+              "proves nothing")
+
 if FAILURES:
     print("FAIL")
     for f in FAILURES:

@@ -3470,7 +3470,9 @@ def _promised(run):
                     own.add(str(_e.get("id") if isinstance(_e, dict) else _e))
             elif isinstance(_v, dict):
                 own |= {str(x) for x in _v}
-        gaps = _N.undrawn(declared, names)
+        # A PROMISE IS KEPT BY A FILE OF ANY FIGURE FORMAT: the rank-estimation plate is a PDF
+        # the tool writes itself, and asking the PNGs alone reported it never drawn.
+        gaps = _N.undrawn(declared, allf)
         rows.append((d.name, len(declared), len(names), gaps, declared, allf, own))
     if not looked:
         print("no plugin in this run declares any upstream plot, so none was promised")

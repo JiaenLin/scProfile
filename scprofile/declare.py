@@ -255,9 +255,21 @@ def drawn_by_companion(entry) -> bool:
     migrated plugin on twelve errors and promised eleven vector files no run has written.
     """
     e = entry if isinstance(entry, dict) else {}
-    if str(e.get("drawn_by") or "plugin") == "tool":
-        return True
+    # BY WHAT THE ENTRY CARRIES, NOT BY WHO DRAWS. `drawn_by: tool` alone is not a site: a
+    # plugin written before the plan declares `drawn_by: tool` on a panel the tool's own
+    # PYTHON function drew and the plugin emitted through the host - and reading that as the
+    # companion's refused it at validation on its first real run (ADR-0016 step 7a).
     return any(str(e.get(k) if e.get(k) is not None else "").strip() for k in R_SITE_KEYS)
+
+
+#: THE KEYS THAT PUT AN ENTRY ON THE PLAN: any of these and the entry is read by the plan's rules;
+#: none of them and it is a plugin written before the plan carried the call, read as it always was.
+PLAN_KEYS = ("axis", "at_most", "items", "file", "args", "expr", "when", "device")
+
+
+def on_plan(entry) -> bool:
+    e = entry if isinstance(entry, dict) else {}
+    return any(e.get(k) is not None for k in PLAN_KEYS)
 
 
 def _check_plan_entry(f, at, out) -> None:
@@ -313,7 +325,7 @@ def _check_plan_entry(f, at, out) -> None:
         except (TypeError, ValueError):
             out.append(("ERROR", f"{at} declares at_most={f.get('at_most')!r}; it must be a "
                                  f"positive integer, the files per occurrence of the axis"))
-    if str(by or "") == "tool" and not str(f.get("fn") or "").strip() \
+    if str(by or "") == "tool" and on_plan(f) and not str(f.get("fn") or "").strip() \
             and not str(f.get("expr") or "").strip():
         out.append(("ERROR", f"{at} is drawn by the tool and names no `fn` (nor an `expr`). An "
                              f"upstream panel is a call to the tool's own function; without the "
@@ -389,8 +401,8 @@ def _check_report(spec, out) -> None:
             # own R site is its encoding of them. Neither carries a `source` table of its own or
             # a `shows` the reporter orders by, and each one's question is its legend; those
             # three are the obligations of the panel the host's emit path writes.
-            # `drawn_by_companion` is what says which this is (ADR-0016).
-            if drawn_by_companion(f):
+            # `drawn_by: tool` or `drawn_by_companion` is what says which this is (ADR-0016).
+            if str(f.get("drawn_by") or "") == "tool" or drawn_by_companion(f):
                 pass
             else:
                 if not str(f.get("question") or "").strip():

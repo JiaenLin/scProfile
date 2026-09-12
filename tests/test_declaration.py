@@ -647,6 +647,23 @@ ck("a panel the host's emit path writes still owes all three",
 ck("and the two kinds are told apart by one reader, not by two lists of field names",
    declare.drawn_by_companion(_PLAN["report"]["figures"][1])
    and not declare.drawn_by_companion(_PY["report"]["figures"][0]))
+# A PLUGIN WRITTEN BEFORE THE PLAN CARRIED THE CALL IS READ AS IT ALWAYS WAS. Its `drawn_by: tool`
+# entry is a panel the TOOL's own Python function drew and the plugin emitted - gseapy's
+# gseaplot, through the host's emit path - and it names no `fn` because nothing asked it to.
+# The rule "drawn by the tool and names no fn" refused such a plugin at validation on its
+# first real run (ADR-0016 step 7a, PBS 710972); the rule is the plan's, and applies to an
+# entry that is ON the plan.
+_LEGACY_TOOL = {**GOOD, "report": {"figures": [
+    {"id": "F2_leading_edge", "drawn_by": "tool", "shows": "result", "required": False,
+     "question": "q", "source": "figures/F2.csv", "when_absent": "no hit"}]}}
+ck("a tool-drawn entry written before the plan needs no fn", not errs(_LEGACY_TOOL),
+   str(errs(_LEGACY_TOOL)))
+ck("and it is not a site the companion draws",
+   not declare.drawn_by_companion(_LEGACY_TOOL["report"]["figures"][0]))
+_TOOL_ON_PLAN = {**GOOD, "report": {"figures": [
+    {"id": "native_x", "drawn_by": "tool", "axis": "unit", "position": "appendix", "legend": "L"}]}}
+ck("a tool-drawn entry on the plan still owes its fn or expr",
+   any("names no `fn`" in x for x in errs(_TOOL_ON_PLAN)), str(errs(_TOOL_ON_PLAN)))
 _ITEMS = {**GOOD, "report": {"figures": [
     {"id": "native_y", "drawn_by": "tool", "fn": "draw_y", "axis": "unit", "position": "appendix",
      "items": "paths", "args": "cc, signaling = .item", "legend": "L"}]}}
