@@ -104,6 +104,28 @@ measurement makes every future round cheaper, permanently. The eye is then spent
 that have no mechanical form — a scale that hides its own finding, a rank rule that returns a
 boundary, absence drawn as a measured zero, a claim the picture does not support.
 
+**And it counts what it could not measure.** The audit runs where the host writes a panel —
+`emit_figure` — and a panel the wrapped tool draws in its own interpreter never passes through
+it: no audit, no manifest record; the reporter globs it off disk later. On the run this was
+measured against that was about four panels in five, and the station's "N panels measured, none
+with a drawing issue" was silent about all of them — the found-nothing-versus-looked-and-found-
+nothing defect at the largest scale in the tool. The station now sets the pngs on disk against
+the manifest records that carry an audit, station 4's rule, and prints the difference on the
+PASS line and the BLOCKED line alike: *N drawn and NOT measured by any machine*. It does not
+block on them — a gate that demanded a measurement R cannot make is a gate somebody removes —
+but the eye station's scan set already covers every kind, and the count is what says the eye is
+their only check.
+
+### One run, one station, one object: the maker's way in
+
+`--runs DIR` is the loop as a project runs it. `--run RUNDIR` asks the same stations of one run;
+`--station 6b` (or `7,8`, or `eye`) asks only those; `--json` prints one object — state, detail
+and next per station, the first blocked station, the eye count and the missing outputs — with
+the exit code still saying blocked or not. That is the interface the plugin maker uses: the
+repository declares `audited`, `looked_at`, `written` and `delivered` as test-phase stages of a
+conversion whose command is this script, so `sch dev convert status --run RUNDIR` reads the
+loop's verdicts beside the build stages. One implementation, two callers.
+
 ## The eye scan, and its coverage rule
 
 Nothing mechanises looking, and the defects that matter are only found by it — a chord drawn as

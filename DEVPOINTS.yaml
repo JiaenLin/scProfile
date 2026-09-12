@@ -433,6 +433,65 @@ points:
             packages it never declared, one of them reached only from inside an upstream function
             where no import in this repository names it. Asked ACROSS THE RUN and not per unit,
             because a comparison panel is legitimately absent from a single-sample unit
+        # THE LOOP'S RUN-SIDE STATIONS, AS STAGES OF THE CONVERSION. Four instruments each said
+        # what "done" meant about one commit and all were right at once: stages filled, tiers
+        # green, rules held - and `tests/loop_stations.py` BLOCKED at 6b with the eye at 0 of
+        # 149. DEVELOPMENT.md says only the last is the goal, and it was the only one the maker
+        # could not see. Each station is now a test-phase stage whose command IS the loop
+        # driver, on one run, one station: the loop is implemented once and read by two callers,
+        # and `sch dev convert status --run RUNDIR` answers "is this plugin finished" in both
+        # phases (ADR-0015 in the harness). `fills: []` because these VERIFY a run rather than
+        # fill a field.
+        - name: audited
+          phase: test
+          fills: []
+          command: ["{python}", "tests/loop_stations.py", "--run", "{run}", "--station", "6b"]
+          finished_by: >
+            the station names the panels with a drawing issue a machine can see, and counts the
+            panels it could not measure. Fix the named ones in the plugin or the host - they need
+            no eye - and re-run; the unmeasured count is the eye's work, not this stage's
+          why: >
+            what a machine can see wrong in the panels, and how many panels no machine looked at.
+            A panel the wrapped tool draws in R passes through no audit; the station says how
+            many, so a clean line about a fifth of the panels cannot read as a clean run
+        - name: looked_at
+          phase: test
+          fills: []
+          command: ["{python}", "tests/loop_stations.py", "--run", "{run}", "--station", "7"]
+          finished_by: >
+            `scprofile review --out RUNDIR --plugin <plugin> --shards N` prints the outstanding
+            figures in disjoint groups; open each, and record what you saw with
+            `scprofile review --out RUNDIR --plugin <plugin> --figure <path> --note "..."`. The
+            scan set is every kind once plus the largest and smallest instance of each; a look is
+            bound to the image's digest, so scan the whole set on one build before fixing anything
+          why: >
+            THE GOAL OF THE LOOP. Every figure defect this tool has had was found by opening the
+            image while the suite was green. Nothing mechanises it; this stage counts it
+        - name: written
+          phase: test
+          fills: []
+          command: ["{python}", "tests/loop_stations.py", "--run", "{run}", "--station", "8"]
+          finished_by: >
+            `scprofile paper --out RUNDIR --plugin <plugin> --brief` prints what the run holds
+            ready to write from; register each sentence you would put in a paper with `--claim`
+            and the figures it was read off with `--cites`, then put it to review with `--round`
+            and record standing, narrowed or withdrawn. A claim is bound to the digest of every
+            figure it cites, so a redraw makes it stale and it is defended again
+          why: >
+            whether a result can be WRITTEN from these figures and survive review. Missing
+            figures surface here and nowhere else - a gap appears when somebody tries to write
+            the claim that needs it
+        - name: delivered
+          phase: test
+          fills: []
+          command: ["{python}", "tests/loop_stations.py", "--run", "{run}", "--station", "9"]
+          finished_by: >
+            the station names every required output the run does not carry - the review ledger,
+            the manuscript and its rendered page, per plugin. Produce them; a run without them is
+            not finished whatever else it wrote
+          why: >
+            every deliverable a finished run must carry is present. Last and gating: everything
+            before it can be green while the run holds no manuscript at all
 
         - name: judgement
           phase: build

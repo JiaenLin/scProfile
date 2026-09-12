@@ -122,6 +122,93 @@ def test_the_newest_earlier_finding_wins():
         assert got[rel][0] == "newer finding", f"an older finding won: {got[rel]}"
 
 
+def _run_dir(root, stamp="20260101T000000Z", commit="abc1234", figures=(), audited=()):
+    """A run directory with pngs on disk and a manifest naming SOME of them with an audit."""
+    import json
+    from pathlib import Path
+
+    run = Path(root) / f"{stamp}__scprofile-{commit}__stage"
+    figdir = run / "kernels" / "k" / "U1" / "figures"
+    figdir.mkdir(parents=True)
+    for f in figures:
+        (figdir / f"{f}.png").write_bytes(b"\x89PNG")
+    recs = [{"id": f, "path": f"kernels/k/U1/figures/{f}.png", "audit": []} for f in audited]
+    (run / "report.json").write_text(json.dumps({"kernels": {"k": {"figures": recs}}}))
+    return run
+
+
+def test_6b_counts_the_panels_it_could_not_measure():
+    """Four panels in five were drawn outside the emit path and the station's silence on them
+    read as clean. It now counts them, from disk, on the PASS line."""
+    import tempfile
+
+    L = importlib.import_module("tests.loop_stations")
+    with tempfile.TemporaryDirectory() as td:
+        run = _run_dir(td, figures=("F1", "native_a", "native_b"), audited=("F1",))
+        state, detail, _ = L.station_drawing([run])
+        assert state == L.PASS, detail
+        assert "1 panel(s) measured" in detail, detail
+        assert "2 drawn and NOT measured by any machine" in detail, detail
+
+
+def test_6b_says_nothing_about_unmeasured_when_every_panel_was_measured():
+    import tempfile
+
+    L = importlib.import_module("tests.loop_stations")
+    with tempfile.TemporaryDirectory() as td:
+        run = _run_dir(td, figures=("F1", "F2"), audited=("F1", "F2"))
+        state, detail, _ = L.station_drawing([run])
+        assert state == L.PASS, detail
+        assert "NOT measured" not in detail, detail
+
+
+def test_one_run_one_station_as_json():
+    """The maker's way in: one run, one station, one JSON object, exit code = blocked or not."""
+    import json
+    import subprocess
+    import sys
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as td:
+        run = _run_dir(td, figures=("F1",), audited=("F1",))
+        script = Path(__file__).resolve().parent / "loop_stations.py"
+        p = subprocess.run([sys.executable, str(script), "--run", str(run), "--station", "6b",
+                            "--json"], capture_output=True, text=True,
+                           cwd=str(Path(__file__).resolve().parents[1]))
+        assert p.returncode == 0, p.stdout + p.stderr
+        got = json.loads(p.stdout)
+        assert list(got["stations"]) == ["6b drawing"], got
+        assert got["stations"]["6b drawing"]["state"] == "pass", got
+        assert got["first_blocked"] is None
+        assert got["runs"] == [run.name]
+        # and a station that blocks makes the exit code say so
+        p2 = subprocess.run([sys.executable, str(script), "--run", str(run), "--station", "eye",
+                             "--json"], capture_output=True, text=True,
+                            cwd=str(Path(__file__).resolve().parents[1]))
+        assert p2.returncode == 1, p2.stdout + p2.stderr
+        assert json.loads(p2.stdout)["first_blocked"] == "7 eye"
+
+
+def test_station_selection_by_number_and_by_word():
+    L = importlib.import_module("tests.loop_stations")
+    assert [n for n, _ in L.select(L.STATIONS, "6b")] == ["6b drawing"]
+    assert [n for n, _ in L.select(L.STATIONS, "eye")] == ["7 eye"]
+    assert [n for n, _ in L.select(L.STATIONS, "7,8")] == ["7 eye", "8 paper"]
+    assert L.select(L.STATIONS, "nonsense") == []
+    assert len(L.select(L.STATIONS, "")) == len(L.STATIONS)
+
+
+def test_run_and_runs_are_exactly_one_of():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parent / "loop_stations.py"
+    p = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+    assert p.returncode != 0 and "exactly one of" in p.stderr, p.stderr
+
+
 if __name__ == "__main__":
     import sys
     bad = 0

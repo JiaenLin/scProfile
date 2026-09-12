@@ -189,13 +189,27 @@ def station_drawing(runs):
             return BLOCKED, (f"{r.name}: no panel carries a drawing audit — this run predates "
                              f"it{drew_nothing}"), \
                 "re-run so every figure is measured as it is written"
+        # WHAT THIS STATION DID NOT MEASURE, COUNTED FROM DISK. The audit runs where the host
+        # writes a panel - `emit_figure` - and a panel the wrapped tool draws in its own
+        # interpreter never passes through it: no audit, no manifest record, and the reporter
+        # globs it off disk later. Measured on the run this was written against: about four
+        # panels in five, and the station's silence on them read as clean. A station that
+        # measured a fifth of the panels and said "none with a drawing issue" was the
+        # found-nothing-versus-looked-and-found-nothing defect at the largest scale in the tool.
+        #
+        # Disk against manifest, as station 4 does: the manifest is the tool's account of
+        # itself, and the pngs are what a reader will find.
+        unmeasured = _unmeasured(r, audited)
+        um = (f"; {len(unmeasured)} drawn and NOT measured by any machine (drawn outside the "
+              f"host's emit path - the eye is their only check)" if unmeasured else "")
         hits = [(f.get("id"), a) for f in audited for a in (f.get("audit") or [])]
         by = Counter(a.get("code") for _i, a in hits)
         if hits:
             named = "; ".join(f"{i}: {a.get('code')}" for i, a in hits[:4])
             return BLOCKED, (f"{r.name}: {len(hits)} drawing issue(s) across "
                              f"{len({i for i, _a in hits})} panel(s) — "
-                             + " · ".join(f"{n} {k}" for k, n in by.items()) + drew_nothing), \
+                             + " · ".join(f"{n} {k}" for k, n in by.items()) + um
+                             + drew_nothing), \
                 f"FIX THESE FIRST, they need no eye: {named}"
         # A CLEAN RUN IS NOT A CLEAN BUILD. The same commit drew the same panels from the same
         # data twice and produced five text collisions once and none the next time - neither run
@@ -225,8 +239,17 @@ def station_drawing(runs):
                  f"Fix it, or show it cannot occur")
         extra = f", and in {len(siblings)} other run(s) of the same commit" if siblings else ""
         return PASS, (f"{r.name}: {len(audited)} panel(s) measured, none with a drawing "
-                      f"issue{extra}{drew_nothing}"), ""
+                      f"issue{extra}{um}{drew_nothing}"), ""
     return BLOCKED, "no figures in any run", "run something that draws"
+
+
+def _unmeasured(run, audited):
+    """Raster panels on disk that no manifest record with an audit names. Run-relative paths."""
+    from scprofile import review as RV
+    RASTER = (".png", ".jpg", ".jpeg")
+    on_disk = {f for f in RV.figures(run) if f.lower().endswith(RASTER)}
+    measured = {str(f.get("path") or "") for f in audited}
+    return sorted(on_disk - measured)
 
 
 def _commit_of(run):
@@ -502,31 +525,83 @@ def _eye_done(runs):
     return len(_eye_set(runs)[1])
 
 
-def main():
+def select(stations, want):
+    """The stations `--station` names: by number ("6b", "7") or by word ("eye", "paper")."""
+    if not want:
+        return list(stations)
+    keys = [w.strip().lower() for w in str(want).split(",") if w.strip()]
+    out = []
+    for name, fn in stations:
+        num, _, word = name.partition(" ")
+        if any(k == num.lower() or k == word.lower() for k in keys):
+            out.append((name, fn))
+    return out
+
+
+def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--runs", required=True, type=Path,
-                    help="a directory holding run directories")
+    # ONE RUN, OR A DIRECTORY OF THEM. `--runs` is the loop as a project runs it - every run,
+    # oldest to newest, so a station can clear a commit rather than a run. `--run` is the same
+    # stations asked of ONE run, which is how the plugin maker asks them: `sch dev convert status
+    # --run RUNDIR` declares each of the run-side stations as a test-phase stage whose command is
+    # this script, so the loop is implemented once and read by two callers.
+    ap.add_argument("--runs", type=Path, help="a directory holding run directories")
+    ap.add_argument("--run", type=Path, help="one run directory")
     ap.add_argument("--round", type=int, default=0, help="which round this is, for the record")
-    a = ap.parse_args()
-    runs = _runs(a.runs)
+    ap.add_argument("--station", default="",
+                    help="only these stations, by number or word: '6b', '7,8', 'eye'")
+    ap.add_argument("--json", action="store_true",
+                    help="one JSON object - state, detail and next per station - for an agent "
+                         "rather than the prose")
+    a = ap.parse_args(argv)
+    if bool(a.runs) == bool(a.run):
+        ap.error("pass exactly one of --runs (a directory of runs) or --run (one run)")
+    if a.run:
+        runs = [a.run] if (a.run / "report.json").is_file() else []
+        where = a.run
+    else:
+        runs = _runs(a.runs)
+        where = a.runs
     if not runs:
-        print(f"no run directories under {a.runs}", file=sys.stderr)
+        print(f"no run directory with a report.json at {where}", file=sys.stderr)
         return 2
-    print(f"THE TEST LOOP — round {a.round or '?'} — {len(runs)} run(s) under {a.runs}\n")
+    stations = select(STATIONS, a.station)
+    if not stations:
+        print(f"--station {a.station!r} names no station; the stations are "
+              + ", ".join(n for n, _ in STATIONS), file=sys.stderr)
+        return 2
+    if not a.json:
+        print(f"THE TEST LOOP — round {a.round or '?'} — {len(runs)} run(s) under {where}\n")
     first_blocked = None
-    for name, fn in STATIONS:
+    record = {}
+    for name, fn in stations:
         try:
             state, detail, nxt = fn(runs)
         except Exception as e:                                            # noqa: BLE001
             state, detail, nxt = BLOCKED, f"station raised: {e}", ""
-        mark = "  ok  " if state == PASS else "BLOCKED"
-        print(f"{mark}  {name:<12} {detail}")
-        if nxt and state != PASS:
-            print(f"          -> {nxt}")
-        elif nxt:
-            print(f"          note: {nxt}")
+        record[name] = {"state": state, "detail": detail, "next": nxt}
+        if not a.json:
+            mark = "  ok  " if state == PASS else "BLOCKED"
+            print(f"{mark}  {name:<12} {detail}")
+            if nxt and state != PASS:
+                print(f"          -> {nxt}")
+            elif nxt:
+                print(f"          note: {nxt}")
         if state != PASS and first_blocked is None:
             first_blocked = name
+    if a.json:
+        # THE SAME FACTS THE PROSE CARRIES, and nothing the prose does not. An agent reading
+        # this gets the first blocked station, the count that is the goal, and the one next
+        # command per station - which is what the prose was printing for a person.
+        print(json.dumps({
+            "runs": [r.name for r in runs],
+            "stations": record,
+            "first_blocked": first_blocked,
+            "eye": {"done": _eye_done(runs), "total": _eye_total(runs)},
+            "missing_outputs": [{"path": p, "why": w} for p, w in
+                                missing_outputs(sorted(runs, key=lambda p: p.name)[-1])],
+        }, indent=1))
+        return 1 if first_blocked else 0
     print()
     if first_blocked:
         print(f"THE LOOP IS BLOCKED AT {first_blocked}. Clear it, then run this again.")
