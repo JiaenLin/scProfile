@@ -476,6 +476,12 @@ points:
           phase: build
           kind: judgement
           fills: [summary, when_to_use, cannot_show, report, upstream]
+          # THE JUDGEMENT IS THE AGENT'S; THE VALIDATOR SAYS WHETHER IT IS WELL FORMED. A build
+          # status read 8 of 8 complete for a per-unit plugin that declared no
+          # `report.unit_metrics`, which `scprofile validate` refuses - the one check nobody
+          # ran until an agent thought to (harness docs/blind/0003, ADR-0017 step 1). A build
+          # stage's command needs no run, so the maker runs it on every status.
+          command: ["{python}", "-m", "scprofile.cli", "validate", "{name}"]
           why: >
             what no extractor can answer - what this is for, what a reader must not conclude from
             it, and the question each figure is on the page to settle

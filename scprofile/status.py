@@ -31,8 +31,22 @@ def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def commit() -> str | None:
-    git = ROOT / ".git"
+def commit(root: Path | None = None) -> str | None:
+    """The commit this tree is, from .git by file - or from HEAD.txt where there is no .git.
+
+    A TREE EXPORTED WITH `git archive` HAS NO .git. The cluster's single-kernel trees are
+    exports, and every seal they wrote read `commit=unidentified` while the run key beside it
+    named the commit. The export convention writes the hash to HEAD.txt at the tree's root
+    (harness ADR-0016, "Where things are"); that is the only place an export carries it.
+    """
+    root = Path(root) if root is not None else ROOT
+    git = root / ".git"
+    if not git.exists():
+        try:
+            head = (root / "HEAD.txt").read_text(encoding="utf-8").split()
+            return head[0] if head else None
+        except OSError:
+            return None
     try:
         if git.is_file():
             git = Path(git.read_text().split(":", 1)[1].strip())

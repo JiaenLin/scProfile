@@ -109,4 +109,22 @@ with tempfile.TemporaryDirectory() as td:
 if fails:
     print(f"FAIL: {len(fails)}")
     raise SystemExit(1)
+print("\nthe commit of an exported tree is read from HEAD.txt")
+# A TREE EXPORTED WITH `git archive` HAS NO .git. The cluster's cellchat-only tree is one, and
+# every seal it wrote read `commit=unidentified` while the run key beside it named the commit.
+# The export convention writes the short hash to HEAD.txt at the tree's root; that is the second
+# place the commit lives, and the only one an export has.
+with tempfile.TemporaryDirectory() as td:
+    tree = Path(td)
+    (tree / "HEAD.txt").write_text("344993d\n", encoding="utf-8")
+    ck("HEAD.txt answers where .git is absent", ST.commit(tree) == "344993d",
+       repr(ST.commit(tree)))
+    (tree / "HEAD.txt").unlink()
+    ck("neither .git nor HEAD.txt is None, not a crash", ST.commit(tree) is None)
+    ck("the tool's own tree still answers from .git", ST.commit() is not None
+       and re.fullmatch(r"[0-9a-f]{7,40}", str(ST.commit())) is not None, repr(ST.commit()))
+
+if fails:
+    print(f"\nFAILED: {fails}")
+    sys.exit(1)
 print("PASS: the status contract holds")
