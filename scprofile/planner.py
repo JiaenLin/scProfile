@@ -841,11 +841,17 @@ def figure_families(plugin_spec):
     """
     import re as _re
 
+    from . import declare as _D
+
     spec = plugin_spec or {}
     report = spec.get("report") or {}
 
     def _prefix_map(field):
-        m = {str(k): str(v) for k, v in (report.get(field) or {}).items()}
+        # THROUGH THE ONE DOOR. Read as `report.get(field)`, `figure_axis` was consumed here and
+        # unknown to the checker's key list, and the guard that scans every consumer for
+        # `report_get` calls could not see this one - so `validate` warned that the reporter
+        # ignores a key this function had just read.
+        m = {str(k): str(v) for k, v in (_D.report_get(report, field) or {}).items()}
         return m, sorted(m, key=len, reverse=True)
 
     axes, akeys = _prefix_map("figure_axis")

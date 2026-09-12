@@ -173,9 +173,16 @@ def report_figures(spec) -> list:
 #: Registering them here is not bookkeeping. The warning that caught their absence says the
 #: reporter IGNORES an unknown key - which was false, since both are read - and a validator
 #: telling a reader that a live setting is inert is worse than one that says nothing.
+#: `figure_axis` IS `figure_position`'s SIBLING AND WAS ONE EDIT BEHIND IT. The plugin maker's
+#: placement stage demands both (DEVPOINTS.yaml, `axis_field`), the planner reads both, and the
+#: checker allowed only the first - so a cold agent doing exactly what the maker asked was told
+#: by `validate` that the reporter ignores a key the planner had just used (docs/blind/0002 in
+#: the harness). The planner read it with `report.get(...)` rather than through `report_get`,
+#: which is why the whole-package guard in tests/test_declaration.py did not see the drift; it
+#: reads through the accessor now, so the next sibling cannot be one edit behind.
 REPORT_KEYS = ("figures", "reads_with", "unit_metrics", "unit_network",
                "provides_evidence", "comparison_stats", "subject", "figure_position",
-               "writing_template")
+               "figure_axis", "writing_template")
 
 #: THE COLUMNS A `unit_network` NAMES. `table`, `source`, `target` and `weight` are required and
 #: are the network itself; `group` and `member` are optional and each earns further panels -
