@@ -278,7 +278,44 @@ class FigureContextReader:
                 self.log(f"  R: {ln}")
         self.log(f"  R output: {len(text.splitlines())} line(s), {len(fails)} failure(s)"
                  + (f", full text in {log_path.name}" if log_path else " (could not be written)"))
+        self._record_r_panels()
         return proc
+
+    def _record_r_panels(self):
+        """Record every panel the companion drew in this context's manifest. Returns the count.
+
+        THE MANIFEST IS THE HOST'S ACCOUNT OF WHAT A UNIT PRODUCED, AND A PANEL DRAWN IN R WAS
+        NOT IN IT (harness ADR-0016 step 4f). The companion writes `captions.tsv` - its own
+        account: file, legend, who drew it - and the reporter globbed the files off disk; the
+        manifest never heard of them, so the feedback diagnosed every entry of the plan as
+        "declared and did not emit" on every unit (1,728 lines in one driver log), and station
+        6b could count what nothing had measured but not what anything had recorded.
+
+        READ FROM WHAT THE COMPANION WROTE, NEVER INVENTED: a caption with no file behind it is
+        not a panel, and a file with no caption stays what the reporter already says it is - a
+        panel NO LEGEND WAS WRITTEN for. `measured: False` because the drawing audit runs where
+        the host writes a panel, and this one was written elsewhere; the page renders such a
+        record through the native path that carries its provenance and context, never twice.
+        A compare context keeps no manifest and records nothing here.
+        """
+        figs = getattr(self, "_figures", None)
+        if figs is None:
+            return 0
+        from . import captions as _CAP
+        figdir = Path(self.out) / "figures"
+        have = {str(Path(str(f.get("path") or "")).name) for f in figs}
+        n = 0
+        for fname, rec in sorted((_CAP.read(figdir) or {}).items()):
+            path = figdir / fname
+            if fname in have or not path.is_file():
+                continue
+            figs.append({"id": str(Path(fname).stem), "path": path,
+                         "caption": str((rec or {}).get("caption") or ""),
+                         "drawn_by": str((rec or {}).get("drawn_by") or ""),
+                         "measured": False})
+            have.add(fname)
+            n += 1
+        return n
 
 
 def _ceiling_for(ceilings, name):

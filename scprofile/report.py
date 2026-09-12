@@ -175,6 +175,18 @@ def _absent_panel(decl, kind):
             f'{_e(decl.get("question") or "")}</p>{body}</div>')
 
 
+def manifest_figures_to_render(figs):
+    """The manifest's figures the manifest half of a page renders: not the companion's.
+
+    ONE RENDER, NEVER TWO (ADR-0016 step 4f). A panel the plan's companion drew is in the
+    manifest now, marked `measured: False`, so the feedback and the loop can read it - and it
+    is on disk, where `_native_unit_panels` and `_native_panels` find it and render it with its
+    provenance, its unit and its contrast direction. Rendered from the manifest as well, every
+    such panel appeared twice on the arm and sample pages. The native path keeps it.
+    """
+    return [f for f in (figs or []) if not (isinstance(f, dict) and f.get("measured") is False)]
+
+
 def _figure_section(figs, spec):
     """The figure half of a kernel page, laid out by what each panel is FOR.
 
@@ -2151,9 +2163,9 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # panels are not comparable with each other even in principle. Nothing is deleted: every
     # panel is still rendered, on its own page, one click away.
     per_unit_extra = ""
-    figs_all = list(p.get("figures") or [])
-    # AND THE PANELS THE WRAPPED TOOL DREW ITSELF, which reach the payload through nothing. See
-    # `_native_unit_panels`: they were on disk and on no page.
+    figs_all = manifest_figures_to_render(p.get("figures") or [])
+    # AND THE PANELS THE WRAPPED TOOL DREW ITSELF, placed from disk with their provenance. See
+    # `_native_unit_panels`; the manifest's own record of them is filtered out just above.
     _native_units = _native_unit_panels(out_dir, name,
                                         _decl_native,
                                         (payload_all or {}).get("unit_axis") or {})

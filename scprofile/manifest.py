@@ -361,6 +361,15 @@ def _figure(v, rel):
         if v.get("audit") is not None:
             e["audit"] = [{"code": str(a.get("code")), "detail": str(a.get("detail"))}
                           for a in v["audit"] if isinstance(a, dict)]
+        # WHO DREW IT AND WHETHER ANYTHING MEASURED IT (ADR-0016 step 4f): a panel the plan's
+        # companion drew arrives with the companion's own `drawn_by` and `measured: False`.
+        # Written only when the record says something, so a record that said nothing still
+        # says nothing - the audit's own rule, one key over.
+        for k in ("drawn_by", "native_function"):
+            if v.get(k):
+                e[k] = str(v[k])
+        if v.get("measured") is not None:
+            e["measured"] = bool(v["measured"])
         return e
     return {"id": Path(str(v)).stem, "path": rel(v), "caption": ""}
 

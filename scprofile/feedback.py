@@ -215,6 +215,14 @@ def figure_drift(kernel, payload):
     if payload.get("status") == "refused":
         return out
 
+    # AN ENTRY A PER-UNIT PLUGIN DRAWS OVER A CONTRAST OR THE COHORT IS NOT A UNIT'S TO EMIT.
+    # The plan says which axis a panel is drawn over (harness ADR-0016); a unit's payload can
+    # only have emitted what is drawn over a unit, and holding it to the rest diagnosed every
+    # contrast and cohort panel as "did not emit" on every unit of every run. An entry that
+    # names no axis is read as the unit's, which is what it meant before the plan existed.
+    if (kernel.spec or {}).get("per_unit"):
+        declared = [d for d in declared if str(d.get("axis") or "unit") == "unit"]
+
     drew = {str(f.get("id") or "") for f in (payload.get("figures") or []) if isinstance(f, dict)}
     for d in declared:
         fid = str(d.get("id") or "")

@@ -200,8 +200,15 @@ def station_drawing(runs):
         # Disk against manifest, as station 4 does: the manifest is the tool's account of
         # itself, and the pngs are what a reader will find.
         unmeasured = _unmeasured(r, audited)
-        um = (f"; {len(unmeasured)} drawn and NOT measured by any machine (drawn outside the "
-              f"host's emit path - the eye is their only check)" if unmeasured else "")
+        # AND WHICH OF THEM ANYTHING RECORDED (ADR-0016 step 4f). A panel the plan's companion
+        # drew carries a manifest record marked `measured: False`; one the reporter drew for
+        # its own pages carries none. Both are unmeasured; only the first is accounted for.
+        recorded = {str(f.get("path") or "") for f in figs if f.get("measured") is False}
+        n_rec = sum(1 for x in unmeasured if x in recorded)
+        um = (f"; {len(unmeasured)} drawn and NOT measured by any machine ({n_rec} recorded by "
+              f"the plugin's companion as drawn outside the host's emit path, "
+              f"{len(unmeasured) - n_rec} recorded by nothing - the eye is their only check)"
+              if unmeasured else "")
         hits = [(f.get("id"), a) for f in audited for a in (f.get("audit") or [])]
         by = Counter(a.get("code") for _i, a in hits)
         if hits:

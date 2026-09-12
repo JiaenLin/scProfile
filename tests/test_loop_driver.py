@@ -122,8 +122,10 @@ def test_the_newest_earlier_finding_wins():
         assert got[rel][0] == "newer finding", f"an older finding won: {got[rel]}"
 
 
-def _run_dir(root, stamp="20260101T000000Z", commit="abc1234", figures=(), audited=()):
-    """A run directory with pngs on disk and a manifest naming SOME of them with an audit."""
+def _run_dir(root, stamp="20260101T000000Z", commit="abc1234", figures=(), audited=(),
+             recorded=()):
+    """A run directory with pngs on disk and a manifest naming SOME of them with an audit, and
+    SOME as the plan's companion records them: drawn, and not measured."""
     import json
     from pathlib import Path
 
@@ -133,6 +135,8 @@ def _run_dir(root, stamp="20260101T000000Z", commit="abc1234", figures=(), audit
     for f in figures:
         (figdir / f"{f}.png").write_bytes(b"\x89PNG")
     recs = [{"id": f, "path": f"kernels/k/U1/figures/{f}.png", "audit": []} for f in audited]
+    recs += [{"id": f, "path": f"kernels/k/U1/figures/{f}.png", "measured": False,
+              "drawn_by": "tool"} for f in recorded]
     (run / "report.json").write_text(json.dumps({"kernels": {"k": {"figures": recs}}}))
     return run
 
@@ -149,6 +153,22 @@ def test_6b_counts_the_panels_it_could_not_measure():
         assert state == L.PASS, detail
         assert "1 panel(s) measured" in detail, detail
         assert "2 drawn and NOT measured by any machine" in detail, detail
+
+
+def test_6b_says_which_unmeasured_panels_carry_a_record():
+    """A panel the plan's companion drew is recorded in the manifest, marked unmeasured; one the
+    reporter drew for its own pages is recorded by nothing. The line says how many of each."""
+    import tempfile
+
+    L = importlib.import_module("tests.loop_stations")
+    with tempfile.TemporaryDirectory() as td:
+        run = _run_dir(td, figures=("F1", "native_a", "native_b"), audited=("F1",),
+                       recorded=("native_a",))
+        state, detail, _ = L.station_drawing([run])
+        assert state == L.PASS, detail
+        assert "2 drawn and NOT measured by any machine" in detail, detail
+        assert "1 recorded by the plugin's companion" in detail, detail
+        assert "1 recorded by nothing" in detail, detail
 
 
 def test_6b_says_nothing_about_unmeasured_when_every_panel_was_measured():

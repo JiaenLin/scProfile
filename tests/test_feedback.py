@@ -344,5 +344,33 @@ ck("a large but sub-machine reading is still believed - the guard is not a cap",
    _plausible is not None and abs(_plausible - 900.0) < 0.01, str(_plausible))
 
 
+# WHAT A UNIT DREW, AGAINST WHAT IT COULD HAVE DRAWN (harness ADR-0016 step 4f). A per-unit
+# plugin's plan carries panels drawn over a contrast or the cohort; a unit's payload cannot have
+# emitted those, and holding it to them diagnosed every one of them as "did not emit" on every
+# unit of every run - 1,728 lines in one driver log. And a panel the companion drew in R now
+# reaches the manifest as a record, so it is drawn, not missing.
+print("\na unit is held to the panels a unit draws, and the companion's panels count as drawn")
+import types as _ty4                                                            # noqa: E402
+_kern = _ty4.SimpleNamespace(name="k", spec={
+    "per_unit": "sample",
+    "report": {"figures": [
+        {"id": "native_ring", "drawn_by": "tool", "fn": "ring", "axis": "unit",
+         "position": "contrast", "args": "cc", "legend": "L", "kind": "chord"},
+        {"id": "nativecmp_diff", "drawn_by": "tool", "fn": "diff", "axis": "contrast",
+         "position": "contrast", "args": "m", "legend": "L", "kind": "diff_matrix"},
+        {"id": "F1_host", "question": "q", "shows": "result", "source": "t.csv",
+         "legend": "L"}]}})
+_pay = {"status": "ok", "figures": [
+    {"id": "F1_host", "path": "figures/F1_host.png", "caption": "c", "audit": []},
+    {"id": "native_ring", "path": "figures/native_ring.png", "caption": "c",
+     "drawn_by": "tool", "measured": False}]}
+_d4 = [x for x in FB.figure_drift(_kern, _pay) if x.layer == FB.DECLARATION]
+ck("no contrast panel is charged to a unit, and a recorded R panel is drawn",
+   not _d4, "; ".join(x.why[:90] for x in _d4))
+_pay2 = {"status": "ok", "figures": [_pay["figures"][0]]}
+_d5 = [x for x in FB.figure_drift(_kern, _pay2) if x.layer == FB.DECLARATION]
+ck("a unit-axis panel the unit did not draw is still charged to it",
+   len(_d5) == 1 and "native_ring" in _d5[0].why, "; ".join(x.why[:90] for x in _d5))
+
 print("\n" + ("the loop holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
