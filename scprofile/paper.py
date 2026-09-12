@@ -247,6 +247,19 @@ def outstanding(out, plugin=""):
 def summarise(out, plugin=""):
     """One line per claim plus a tally. Printed by `scprofile paper` and by `check --out`."""
     rows = status(out, plugin)
+    if not rows and not plugin:
+        # THE CLAIMS ARE PER PLUGIN. Asked without one, this said NO CLAIMS RECORDED about a
+        # run whose plugin ledger held 33 defended claims (blind 0004): a tool statement
+        # contradicting its own, one flag apart. Name the ledgers that exist.
+        held = []
+        for led in sorted(Path(out).glob(f"kernels/*/{LEDGER[:-6]}.*.jsonl")):
+            p = led.parent.name
+            n = len([r for r in read_ledger(out, p) if r.get("kind") == "claim"])
+            if n:
+                held.append(f"  {p}: {n} claim(s) in {led.relative_to(Path(out))} - "
+                            f"`scprofile paper --out {out} --plugin {p}`")
+        if held:
+            return "no cohort-level claims; the claims are per plugin:\n" + "\n".join(held)
     if not rows:
         return ("NO CLAIMS RECORDED. The paper test has not been run on this figure set: nobody "
                 "has written down what it is supposed to show, so nothing has been able to "
@@ -343,8 +356,22 @@ def brief(out, plugin=""):
     return "\n\n".join(texts) if texts else f"No plugin ran in {root}; nothing to write from."
 
 
+def _cmd(out, plugin, rest):
+    """`scprofile paper --out <out> [--plugin <p>] <rest>` - a printed command that works as
+    printed. The `NEXT:` line omitted `--plugin` and, run as printed, refused "no claim in this
+    run" on a run whose plugin ledger held the claim (found by a cold reviewer, blind 0004)."""
+    return (f"scprofile paper --out {out}" + (f" --plugin {plugin}" if plugin else "")
+            + " " + rest)
+
+
+def round_command(out, plugin, cid):
+    """The command that puts one claim to a round, as an agent should run it."""
+    return _cmd(out, plugin, f"--round {cid} --verdict standing|narrowed|withdrawn --why '...' "
+                             f"--reviewer <who>")
+
+
 def next_step(out, plugin=""):
-    """(headline, command) - what to do next, always with something runnable.
+    """(headline, command) - what to do next, always with something runnable, as printed.
 
     A STATUS THAT DOES NOT SAY WHAT TO DO NEXT IS A REPORT SOMEBODY HAS TO INTERPRET. Every
     other gate in this tool names its own remedy; this one drives a loop, so it names the step.
@@ -353,31 +380,29 @@ def next_step(out, plugin=""):
     have_draft = bool(read_draft(out, plugin))
     if not rows:
         return ("Nothing has been written from these figures yet. Start by reading the brief.",
-                "scprofile paper --out {out} --brief")
+                _cmd(out, plugin, "--brief"))
     todo = [c for c, st, _n, _t in rows if st == UNREVIEWED]
     if todo:
         return (f"{len(todo)} claim(s) have never been put to a reviewer. Review them, and "
                 f"record what the review DID - `withdrawn` is the verdict that teaches.",
-                "scprofile paper --out {out} --round " + todo[0]
-                + " --verdict standing|narrowed|withdrawn --why '...'")
+                round_command(out, plugin, todo[0]))
     stale = [c for c, st, _n, _t in rows if st == STALE]
     if stale:
         return (f"{len(stale)} claim(s) cite a figure that has been REDRAWN since the claim was "
                 f"made. The section describes pictures that no longer exist; defend them again.",
-                "scprofile paper --out {out} --round " + stale[0]
-                + " --verdict standing|narrowed|withdrawn --why '...'")
+                round_command(out, plugin, stale[0]))
     if not have_draft:
         return ("Every claim is defended and no section has been written. The ledger holds the "
                 "sentences and not the document they came from.",
-                "scprofile paper --out {out} --write section.md")
+                _cmd(out, plugin, "--write section.md"))
     if not (_report_dir(out, plugin) / page_name(plugin)).is_file():
         return ("The section is written and every claim defended. Render it into the run.",
-                "scprofile paper --out {out} --render")
+                _cmd(out, plugin, "--render"))
     withdrawn = [c for c, st, _n, _t in rows if st == WITHDRAWN]
     if not withdrawn:
         return ("Every claim survived unchanged, which is also what a loop looks like when "
                 "nobody pushed. Consider another round against a different standard.",
-                "scprofile paper --out {out} --brief")
+                _cmd(out, plugin, "--brief"))
     return ("The loop has run: claims written, reviewed, and the section rendered into the run.",
             "")
 

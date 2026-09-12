@@ -75,6 +75,27 @@ with tempfile.TemporaryDirectory() as _td:
     ck("a run with nothing to write from says so and names `report`",
        "report" in PA.brief(Path(_td) / "nowhere", "p"), PA.brief(Path(_td) / "nowhere", "p")[:80])
 
+print("\nevery printed next command names the plugin it is about, and a run-level summary "
+      "names the per-plugin ledgers")
+# FOUND BY THE REVIEWER (harness docs/blind/0004): the `NEXT:` line printed after every listing
+# omitted `--plugin`, so run exactly as printed it refused "no claim ... in this run"; and
+# `scprofile paper --out RUN` with no plugin said NO CLAIMS RECORDED on a run whose plugin
+# ledger held 33 defended claims. A printed command works as printed, or it is a defect.
+with tempfile.TemporaryDirectory() as _td:
+    _run = Path(_td) / "run"
+    (_run / "kernels" / "p" / "figures").mkdir(parents=True)
+    (_run / "kernels" / "p" / "figures" / "F1.png").write_bytes(b"x")
+    _c = PA.claim(_run, "in arm A the share of X is higher than in arm B by nine points",
+                  ["kernels/p/figures/F1.png"], author="composed", plugin="p")
+    _head, _cmd = PA.next_step(_run, "p")
+    ck("the next command names the plugin", "--plugin p" in _cmd and _c["id"] in _cmd, _cmd)
+    ck("the round command helper names it too",
+       "--plugin p" in PA.round_command(_run, "p", _c["id"]), PA.round_command(_run, "p", _c["id"]))
+    _s = PA.summarise(_run)
+    ck("a run-level summary names the plugin ledger that holds the claims",
+       "NO CLAIMS RECORDED" not in _s and "--plugin p" in _s and "1 claim" in _s, _s[:160])
+    ck("and an empty run still reads as not run", "NO CLAIMS RECORDED" in PA.summarise(Path(_td)))
+
 print("\nan empty ledger says so, rather than passing")
 ck("no claims reads as NOT RUN, not as clean", "NO CLAIMS RECORDED" in PA.summarise(root))
 ck("and nothing is outstanding only because nothing exists", PA.outstanding(root) == [])

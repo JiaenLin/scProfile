@@ -1120,8 +1120,12 @@ def claims(run, plugin, spec=None, design=None):
     made = []
     for label in _order(f, design, _controls(run)):
         d = f[label]
+        # THE SENTENCE AND ITS EVIDENCE ARE ONE CLAIM (found by a cold reviewer, blind 0004):
+        # a total cited the per-pair network and the per-pathway ranking, on which no total
+        # appears, and was narrowed thirteen times over; the plate that shows the totals is the
+        # `how_much_total` route's. The network and the ranking follow, as the reading of it.
         if d["ratio"]:
-            cites = figs_for(label, ("who_changed", "what_carries_it"))
+            cites = figs_for(label, ("how_much_total", "who_changed", "what_carries_it"))
             if cites:
                 made.append((
                     f"In the contrast {label}, the {d['against']} arm carries "
@@ -1136,8 +1140,11 @@ def claims(run, plugin, spec=None, design=None):
                     f"In the contrast {label}, {d['n_significant']} of {d['n_tested']} elements "
                     f"differ significantly between the arms by the method's own between-arm "
                     f"test, led by {names}.", cites))
+        # AN ELEMENT DETECTED IN ONE ARM IS SHOWN WHERE ELEMENTS ARE SHOWN PER ARM - the ranking
+        # and the pair plates - not on the population presence grid, which has no element on it
+        # and which seven such claims cited and were withdrawn for (blind 0004).
         if d["only_against"] or d["only_reference"]:
-            cites = figs_for(label, ("presence_or_magnitude", "what_carries_it"))
+            cites = figs_for(label, ("what_carries_it", "specificity"))
             if cites:
                 made.append((
                     f"In the contrast {label}, {len(d['only_against'])} element(s) are detected "

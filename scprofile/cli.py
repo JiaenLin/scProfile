@@ -2831,9 +2831,8 @@ def _paper(a):
             print(f"scprofile: REFUSED - {e}", file=sys.stderr)
             return REFUSE
         print(f"claim {rec['id']} recorded, citing {len(rec['cites'])} figure(s).")
-        print("  Now put it to a reviewer and record what happened:")
-        print(f"    scprofile paper --out {out} --round {rec['id']} "
-              f"--verdict standing|narrowed|withdrawn --why '...'")
+        print("  Now a SECOND agent puts it to a round and records what happened:")
+        print(f"    {PA.round_command(out, a.plugin, rec['id'])}")
         return 0
 
     if a.brief:
