@@ -918,9 +918,14 @@ def panel(out, *, run_key="", plugin=""):
     # index the run's native panels by (contrast label, the function that drew them)
     by = {}
     for f in native:
-        fn = _NAT.function_for(declared, str(f.get("path") or ""))
+        # AND UNDER ITS PLAN ENTRY, for a `plan:<id>` route: the plugin's own panel names no
+        # tool function, so without this second key nothing could reach it (compose._native_index
+        # files it the same way).
+        fn, fid = _NAT.who_drew(spec, declared, str(f.get("path") or ""))
         if fn:
             by.setdefault((str(f.get("label") or ""), fn), []).append(f)
+        if fid:
+            by.setdefault((str(f.get("label") or ""), "plan:" + fid), []).append(f)
     # HOST PANELS RESOLVE THROUGH THE PANEL REGISTRY. `panels.IMPLEMENTED` records where each
     # kind is drawn, ending in the id stem the figure carries; matching on that stem is how a
     # `host:` route finds its plate. Without this every need served by a host panel read as a
@@ -985,6 +990,10 @@ def panel(out, *, run_key="", plugin=""):
             # have always matched this way; the tool's now do too.
                     for h in (by.get((label, fn)) or []) + (by.get(("", fn)) or []):
                         found.append((fn, h))
+                elif r.startswith("plan:"):
+                    fid = r.split(":", 1)[1]
+                    for h in (by.get((label, r)) or []) + (by.get(("", r)) or []):
+                        found.append((f"{fid} (drawn by the plugin, on its plan)", h))
                 elif r.startswith("host:"):
                     kind = r.split(":", 1)[1]
                     stem = stems.get(kind)

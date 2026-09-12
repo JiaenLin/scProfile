@@ -693,6 +693,8 @@ def spec_text(sections):
             for e in ev:
                 if e["route"] == "native":
                     how = f"the tool's own {e['provider']}"
+                elif e["route"] == "plan":
+                    how = f"the plugin's own panel `{e['provider']}`, on its figure plan"
                 elif e["route"] == "host":
                     how = f"host panel `{e['provider']}`"
                 else:

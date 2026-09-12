@@ -153,6 +153,48 @@ def names_file(fid, stem, per_item=False) -> bool:
     return stem == fid or stem.startswith(fid + "__") or (per_item and stem.startswith(fid + "_"))
 
 
+def entry_for(spec, filename) -> str:
+    """Which entry of the figure plan claims this file, or "" - whoever drew it.
+
+    THE SAME INVERSION AS `function_for`, ONE LEVEL UP. `function_for` names the tool function
+    behind a file and so reaches only the entries drawn by the tool; a panel the plugin draws
+    itself is on the plan under its own id and under no function, and a `plan:<id>` route
+    (`evidence.resolve`) is met by whatever file that entry claims - the id exactly, or the id
+    as the head of a per-item family (`names_file`). The longest id wins, so the flow family's
+    files are not swallowed by the shorter id they also begin with.
+    """
+    import re
+    from . import declare as _DC
+    stem = str(filename).rsplit("/", 1)[-1]
+    stem = re.sub(r"\.(png|pdf|svg|jpe?g|tiff?)$", "", stem, flags=re.I)
+    best, best_len = "", -1
+    for e in _DC.report_figures(spec):
+        fid = str(e.get("id") or "").strip()
+        if fid and names_file(fid, stem, per_item_entry(e)) and len(fid) > best_len:
+            best, best_len = fid, len(fid)
+    return best
+
+
+def who_drew(spec, declared, filename):
+    """(tool function, plan entry id) behind a file - the plan first, the older form after.
+
+    THE ENTRY THAT CLAIMS THE FILE SAYS WHO DREW IT. `function_for` reads only the entries the
+    tool draws, so a file of the plugin's own family that shares its head with a tool family's
+    id - a per-thousand bar filed under the raw bar's id - was credited to the tool's function
+    on the panel page. The plan's longest id decides which entry a file belongs to; the function
+    is that entry's, and only when the tool drew it. A plugin on the older form has no plan and
+    is read from `native_plots` as before.
+    """
+    from . import declare as _DC
+    fid = entry_for(spec, filename)
+    if not fid:
+        return function_for(declared, filename), ""
+    e = next((x for x in _DC.report_figures(spec)
+              if str(x.get("id") or "").strip() == fid), {})
+    tool = str(e.get("drawn_by") or "tool") == "tool"
+    return (str(e.get("fn") or "").strip() if tool else ""), fid
+
+
 def account(inventory, declared, every=None):
     """Check every upstream plot is used or validly skipped. Returns (used, skipped, problems).
 

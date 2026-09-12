@@ -206,6 +206,11 @@ SENTENCE_EVIDENCE = (
 def _native_index(run, plugin, spec):
     """({(contrast, function): [path]}, {need: [route]}) - what this run actually drew.
 
+    THE KEY IS THE FUNCTION FOR A `native:` ROUTE AND THE ROUTE ITSELF FOR A `plan:` ONE. A
+    panel the plugin draws itself is on the plan under an id and under no function, so it is
+    filed a second time under `plan:<id>` - the string the route carries - and a `plan:` route is
+    met by looking itself up. One index, two ways in; no function name carries a colon.
+
     ONLY FILES THAT EXIST enter the index. Everything downstream - the numbering, the citations,
     the figures printed under them - is built from it, so filtering here is what guarantees the
     prose cannot cite a number that has no picture under it, without any consumer having to
@@ -232,9 +237,11 @@ def _native_index(run, plugin, spec):
         rel = str(x.get("path") or "")
         if not rel or not (Path(run) / rel).is_file():
             continue
-        fn = _NAT.function_for(declared, rel)
+        fn, fid = _NAT.who_drew(spec, declared, rel)
         if fn:
             by.setdefault((str(x.get("label") or ""), fn), []).append(rel)
+        if fid:
+            by.setdefault((str(x.get("label") or ""), "plan:" + fid), []).append(rel)
     # HOST PANELS RESOLVE THE SAME WAY THEY DO IN THE PANEL. A `host:` route was simply skipped
     # here, so a need the host answers - the census, the difference matrix, the per-unit totals -
     # produced a plate the panel placed and the paper never carried. That is the panel and the
@@ -291,6 +298,13 @@ def _figs_for(by, routes, label, needs, host=(), scope="all"):
                     got += by.get((label, fn)) or []
                 if scope != "contrast":
                     got += by.get(("", fn)) or []
+            elif r.startswith("plan:"):
+                # THE PLUGIN'S OWN PANEL, BY THE ENTRY THAT CLAIMS THE FILE - the same two
+                # lookups as a native plate, because it is placed by the same rule.
+                if scope != "cohort":
+                    got += by.get((label, r)) or []
+                if scope != "contrast":
+                    got += by.get(("", r)) or []
             elif r.startswith("host:") and not got:
                 stem = stems.get(r.split(":", 1)[1])
                 if not stem:

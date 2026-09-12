@@ -89,7 +89,9 @@ FOR_QUESTION = {
 #: The routes a need can be met by, best first. NATIVE is first on principle, not on preference:
 #: the wrapped tool's own function is the statistic and the encoding its authors chose, and a
 #: reimplementation is a second implementation to keep in step.
-ROUTES = ("native", "host", "unresolved")
+#: `plan` sits between them: the plugin's OWN drawing of the tool's numbers, an entry of its
+#: figure plan (harness ADR-0016) that names no tool function because no tool function draws it.
+ROUTES = ("native", "plan", "host", "unresolved")
 
 
 def needs_for(question_kind):
@@ -102,8 +104,9 @@ def declared_evidence(plugin_spec):
     """{need_id: [route strings]} a plugin says it can supply. `{}` when it declares none.
 
     A plugin declares this in `report.provides_evidence`, as a list of routes per need, each of
-    the form `native:<function>` or `host:<panel kind>`. It is the plugin's own statement about
-    what it can answer, and nothing else in the tool may assert it on the plugin's behalf.
+    the form `native:<function>`, `plan:<figure id>` or `host:<panel kind>`. It is the plugin's
+    own statement about what it can answer, and nothing else in the tool may assert it on the
+    plugin's behalf.
     """
     return dict(((plugin_spec or {}).get("report") or {}).get("provides_evidence") or {})
 
@@ -111,14 +114,17 @@ def declared_evidence(plugin_spec):
 def resolve(need_id, plugin_spec):
     """How this need would be met: (route, provider, why).
 
-    `native` when the wrapped tool ships a function for it, `host` when a registered panel kind
-    serves it, `unresolved` when neither - and unresolved is an answer, not a failure.
+    `native` when the wrapped tool ships a function for it, `plan` when an entry of the plugin's
+    own figure plan draws it, `host` when a registered panel kind serves it, `unresolved` when
+    none of them - and unresolved is an answer, not a failure.
     """
     routes = declared_evidence(plugin_spec).get(need_id) or []
     for r in routes:
         kind, _, provider = str(r).partition(":")
         if kind == "native" and provider:
             return ("native", provider, "the wrapped tool's own function")
+        if kind == "plan" and provider:
+            return ("plan", provider, "the plugin's own panel, an entry of its figure plan")
         if kind == "host" and provider:
             return ("host", provider, "a registered host panel kind")
     return ("unresolved", "", "neither the wrapped tool nor the host provides this evidence")

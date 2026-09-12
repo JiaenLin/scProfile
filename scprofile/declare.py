@@ -428,6 +428,21 @@ def _check_report(spec, out) -> None:
             _check_plan_entry(f, at, out)
     _check_skips(block.get("skips"), out)
 
+    # A ROUTE TO THE PLAN NAMES AN ENTRY OF IT. `plan:<id>` (evidence.resolve) is met by the file
+    # that entry claims; an id the plan does not carry is a need declared answered and a plate no
+    # run can draw, which reads on every page as "no plate" and on no page as the typo it is.
+    ids = {str(f.get("id") or "").strip() for f in figs} if isinstance(figs, list) else set()
+    routes = block.get("provides_evidence")
+    if isinstance(routes, dict):
+        for need, rs in sorted(routes.items()):
+            for r in (rs if isinstance(rs, (list, tuple)) else [rs]):
+                kind, _, fid = str(r).partition(":")
+                if kind == "plan" and fid not in ids:
+                    out.append(("ERROR", f"`report.provides_evidence.{need}` routes to "
+                                         f"`plan:{fid}`, and `report.figures` carries no entry "
+                                         f"with that id. A plan route is met by the files of the "
+                                         f"entry it names; name one that is on the plan."))
+
     # A PAGE HAS A BUDGET AND A PLUGIN IS NOT THE ONLY THING SPENDING IT. The reporter adds its
     # own panels to any page whose plugin writes a per-cell column - the per-arm views, capped at
     # `BY_ARM_PANEL_CAP` - so a plugin's declared figures are not the page's figure count. One

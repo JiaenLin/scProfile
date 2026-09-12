@@ -331,6 +331,11 @@ points:
             skips: report.skips
             axis: axis
             position: position
+            # WHERE THE PLAN'S PANELS ARE ROUTED TO THE NEEDS THEY ANSWER: `native:<fn>` reaches
+            # the entries drawn by the tool with that fn, `plan:<id>` reaches the entry itself,
+            # `host:` the host's own panels. A panel the plugin draws itself off the unit axis
+            # that no route reaches is drawn on every run and placed in no document.
+            routes: report.provides_evidence
           each_item_declares:
             drawn_by: [tool, plugin]
             axis: [unit, contrast, cohort]

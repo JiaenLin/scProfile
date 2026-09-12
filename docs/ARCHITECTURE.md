@@ -113,12 +113,15 @@ which populations changed, what carries the difference, whether it is sending or
 whether it is abundance or per-cell signal, whether absence is absence or reduction, and so on.
 The registry names no method, no plugin and no drawing.
 
-`FOR_QUESTION` maps question kinds to needs. `resolve()` decides how each need is met: the wrapped
-tool's own function first, a host panel second, unresolved third. Unresolved is an answer — it
-says the dataset cannot answer that part.
+`FOR_QUESTION` maps question kinds to needs. `resolve()` decides how each need is met, in the
+order the plugin lists its routes: the wrapped tool's own function (`native:<function>`), the
+plugin's own panel on its figure plan (`plan:<figure id>`, an entry drawn by the plugin's R over
+the tool's numbers), a host panel (`host:<panel kind>`), or unresolved. Unresolved is an answer —
+it says the dataset cannot answer that part.
 
 A plugin declares what it can supply in `report.provides_evidence`. Nothing outside the plugin
-asserts it.
+asserts it. A `plan:` route must name an entry of `report.figures`, and the plate it places is
+whichever file that entry claims (`native.entry_for`).
 
 ## `units.py` — what one run of a plugin is computed over
 

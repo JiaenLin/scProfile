@@ -88,6 +88,19 @@ def test_coverage_is_zero_for_a_plugin_declaring_nothing():
     assert met == 0 and total > 0
 
 
+def test_a_plan_route_resolves_to_the_plugins_own_panel():
+    """`plan:<id>` names an entry of the figure plan the plugin draws itself (harness ADR-0016).
+
+    Eleven of cellchat's panels are its own R over the tool's numbers; after the migration wrote
+    them as `drawn_by: plugin`, no `native:` route could claim them and three answered needs read
+    as gaps. The route names the entry, and the plate is whatever file that entry claims.
+    """
+    spec = {"report": {"provides_evidence": {"who_changed": ["plan:nativecmp_interaction"]}}}
+    route, provider, _ = E.resolve("who_changed", spec)
+    assert (route, provider) == ("plan", "nativecmp_interaction"), (route, provider)
+    assert "plan" in E.ROUTES, E.ROUTES
+
+
 if __name__ == "__main__":
     import sys
     bad = 0

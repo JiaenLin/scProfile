@@ -675,6 +675,27 @@ _KIND = {**GOOD, "report": {"figures": [
 ck("a kind outside the registry is refused",
    any("registered panel kind" in x for x in errs(_KIND)), str(errs(_KIND)))
 
+# THE STANDARD READS THE PLAN FROM THE PAYLOAD, WHICH RECORDS THE WHOLE DECLARATION. `kinds_beside`
+# handed the recorded spec to the accessor that reads a report BLOCK, found no figures, and
+# reported n/a on every page of the reproduction - so the criterion passed without measuring a
+# thing (ADR-0016 step 4e, PBS 710973, R10).
+print("\nthe standard binds a page's figures to kinds from the recorded declaration")
+import json as _json2
+import tempfile as _tf2
+from scprofile import standard as _STD
+with _tf2.TemporaryDirectory() as _td:
+    _run = Path(_td)
+    (_run / "report").mkdir()
+    (_run / "report.json").write_text(_json2.dumps({"kernels": {"k": {"spec": {
+        **GOOD, "report": {"figures": [
+            {"id": "native_ring", "drawn_by": "tool", "fn": "f", "axis": "unit",
+             "position": "appendix", "kind": "chord", "args": "cc", "legend": "L",
+             "items": "paths", "at_most": 3, "file": 'paste0("ring__", .item)'}]}}}}}))
+    _k = _STD.kinds_beside(_run / "report", ["native_ring__A.png", "other.png"])
+    ck("a figure of a per-item family is bound to its entry's kind",
+       _k is not None and _k.get("native_ring__A.png") == "chord", str(_k))
+    ck("a file no entry names is bound to nothing", _k is not None and "other.png" not in _k)
+
 # EVERY SHIPPED PLUGIN, NOT A FIXTURE. The convenient fixture hides the bug it was built to
 # catch: nothing in this suite read the kernels the tool actually ships, so twelve errors on
 # three of them survived a green run of everything here.
@@ -685,6 +706,26 @@ for _n, _k in sorted(discover().items()):
     _f = _V.validate_plugin(_k) + _V.validate_references(_k)
     _bad = [x.check for x in _f if x.level == "ERROR"]
     ck(f"{_n} declares itself without error", not _bad, "; ".join(_bad))
+
+# A PANEL THE PLUGIN DRAWS ITSELF OFF THE UNIT AXIS IS REACHED BY A ROUTE, or it is drawn on every
+# run and placed in no document. After the migration wrote cellchat's eleven cohort-level
+# interaction panels honestly, as `drawn_by: plugin`, no `native:` route could claim them and
+# three answered needs read as gaps on the panel page (PBS 710973, R6). A plugin that declares
+# routes at all owes one to each such panel: `plan:<id>` under the need it answers.
+print("\nevery panel a plugin draws itself, off the unit axis, is reached by a route")
+for _n, _k in sorted(discover().items()):
+    _spec = getattr(_k, "spec", None) or {}
+    _routes = ((_spec.get("report") or {}).get("provides_evidence") or {})
+    if not _routes:
+        continue
+    _reached = {str(r).split(":", 1)[1] for rs in _routes.values() for r in (rs or [])
+                if str(r).startswith("plan:")}
+    _own = [str(e.get("id")) for e in declare.report_figures(_spec)
+            if str(e.get("drawn_by") or "tool") != "tool"
+            and str(e.get("axis") or "") in ("contrast", "cohort")]
+    _lost = [i for i in _own if i not in _reached]
+    ck(f"{_n}: every panel it draws itself off the unit axis has a plan route", not _lost,
+       f"no route reaches {_lost}")
 
 print("\n" + ("the declaration holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

@@ -389,9 +389,16 @@ PLUGIN = {
             # network shows the SHAPE of the change, the heatmap lets a reader find a PAIR. The
             # heatmap was drawn on every run and placed in no paper, which is a figure the run
             # pays for and nobody sees.
+            # AND THE PLAN'S OWN PANELS, BY ENTRY. The interaction heatmaps, the flow and the
+            # pair panels are this plugin's R over the tool's numbers - `drawn_by: plugin` on
+            # the plan, under no tool function - so a `native:` route cannot reach them, and
+            # on the first reproduction eleven of them were drawn and placed in no document.
+            # `plan:<id>` is the route to an entry itself (the maker's plan worksheet names
+            # every unrouted one).
             "who_changed": ["native:netVisual_diffInteraction", "native:netVisual_heatmap",
-                            "host:diff_matrix"],
-            "what_carries_it": ["native:rankNet", "host:flow_compare"],
+                            "plan:nativecmp_interaction", "host:diff_matrix"],
+            "what_carries_it": ["native:rankNet", "plan:nativecmp_interaction_flow",
+                                "plan:nativecmp_interaction_flow_log", "host:flow_compare"],
             # The scatter puts each population in one sending-against-receiving plane; the role
             # heatmaps say WHICH programmes it sends and receives, per arm, over the same
             # pathway set. Two halves of one need, and only the first was reaching a reader.
@@ -404,12 +411,14 @@ PLUGIN = {
             # the paper, not the panel, not even the brief that tells an agent what to look at.
             # That is the failure recorded three comments above this line, for a different
             # figure, which is how little it takes to repeat.
-            "specificity": ["native:netVisual_bubble", "native:interaction_lr", "host:matrix"],
+            "specificity": ["native:netVisual_bubble", "plan:nativecmp_interaction_lr",
+                            "plan:nativecmp_interaction_lr_scatter", "host:matrix"],
             # THE TOTALS, WHICH THE SECTION STATES FIRST AND HAD NO PICTURE OF.
             # `compareInteractions` is CellChat's own bar for the two arms of this contrast;
             # `unit_totals` puts every arm AND every sample on one axis - the same quantity at
             # the confidence scale.
-            "how_much_total": ["native:compareInteractions", "host:unit_totals"],
+            "how_much_total": ["native:compareInteractions",
+                               "plan:nativecmp_compareInteractions_per1k", "host:unit_totals"],
             # The samples inside an arm, on the axis their arm is on, which is what "do the
             # animals agree" actually needs. The census answers a different half of it.
             "consistency": ["host:unit_totals", "host:unit_presence"],

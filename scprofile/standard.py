@@ -196,10 +196,11 @@ def kinds_beside(report_dir, basenames):
         return None
     entries = []
     for _name, pl in (payload.get("kernels") or {}).items():
-        block = (pl or {}).get("spec") if isinstance(pl, dict) else None
-        # THROUGH THE ACCESSOR: the block is the report block, and `figures_in` is how every
-        # reader of it reads its panels.
-        for e in _DC.figures_in(block):
+        spec = (pl or {}).get("spec") if isinstance(pl, dict) else None
+        # THE PAYLOAD RECORDS THE WHOLE DECLARATION, and `report_figures` is the accessor that
+        # takes one; handed to the accessor for a report BLOCK it found no figures and every page
+        # read n/a - a criterion passing without measuring, on the reproduction it was for.
+        for e in _DC.report_figures(spec if isinstance(spec, dict) else {}):
             if e.get("id") and e.get("kind"):
                 entries.append((str(e["id"]), str(e["kind"]), _NAT.per_item_entry(e)))
     if not entries:
