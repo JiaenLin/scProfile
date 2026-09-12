@@ -119,6 +119,19 @@ points:
     must_declare: [api, version, state_version, summary, when_to_use, wraps, cannot_show,
                    inject, provides, produces, config, requires, cost, cores,
                    memory_gb_per_100k, report, upstream]
+    # HOW EACH REQUIRED KEY NO STAGE FILLS IS MADE TRUE. `must_declare` says a key has to exist;
+    # this says what refuses it when it is wrong, and a key with neither a stage nor an entry
+    # here is printed CHECKED BY NOBODY on every status. Measured when this was written: `cores`
+    # and `cost` had been required, present-checked and trusted by the scheduler for the whole
+    # life of the tool, with the scaffold template itself saying "cores is a CLAIM: check it".
+    # They are left out of this map ON PURPOSE - the red line is the record - until
+    # `capacity --cores` exists and a test-phase stage reads it, which is the shape `measure`
+    # already has for memory (KNOWN_ISSUES.md).
+    truth:
+      wraps: input               # the upstream the conversion is driven by; never its output
+      api: validator             # scprofile validate refuses an api the host does not implement
+      provides: validator        # walked against the capability graph
+      state_version: validator   # refused when absent or not an integer
     example: abundance
     # This tool has its own scaffolder and it is better than a generic one - it renders the
     # commented one-file template from the format's own knowledge. `sch dev new` defers to it.
