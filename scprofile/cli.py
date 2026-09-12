@@ -3172,9 +3172,20 @@ def _review(a):
     print(f"{out}")
     print("  " + ", ".join(f"{n} {k}" for k, n in sorted(counts.items())))
     todo = [(r, st, w) for r, st, w in rows if st != RV.REVIEWED]
+    # THE ONE SELECTION IS THE LIST (harness ADR-0017; found by a looker in docs/blind/0004):
+    # asked for its plugin's status, an agent was handed every unreviewed figure of the run -
+    # 918 names - and could not read whether its own shard was among them. The scan set's
+    # outstanding are listed by name; the rest are a count, and `--all-figures` is the audit.
+    unlisted = 0
+    if a.plugin and not getattr(a, "all_figures", False):
+        sel = set(RV.scan_set(out, a.plugin))
+        if sel:
+            unlisted = sum(1 for r, _st, _w in todo if r not in sel)
+            todo = [(r, st, w) for r, st, w in todo if r in sel]
     if todo:
         # NAMES, NOT JUST A COUNT. A number is ignorable; a list of filenames is a task.
-        print(f"\n  {len(todo)} figure(s) have not been looked at, or were redrawn since:")
+        print(f"\n  {len(todo)} figure(s) of the scan set have not been looked at, or were "
+              f"redrawn since:")
         for r, st, w in todo:
             print(f"    {st:10s} {r}")
             if st == RV.STALE:
@@ -3182,7 +3193,11 @@ def _review(a):
         print("\n  Open each one. Then record what you saw:")
         print(f"    scprofile review --out {out} --figure <path> --note \"...\"")
     else:
-        print("\n  every figure has been looked at, and none has been redrawn since.")
+        print("\n  every figure of the scan set has been looked at, and none has been redrawn "
+              "since.")
+    if unlisted:
+        print(f"  {unlisted} other figure(s) drawn by the run are outside the scan set and not "
+              f"listed (--all-figures lists them).")
     if a.strict and todo:
         return REFUSE
     return 0

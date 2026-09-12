@@ -31,7 +31,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 
 import scprofile.review as RV                                                   # noqa: E402
 
@@ -189,6 +190,38 @@ with tempfile.TemporaryDirectory() as td:
     check(len(got2) == 3 and made[("native_ring", "unitB")] in got2,
           f"without a paper list the set is one instance per kind, the largest: {got2}")
     check(RV.scan_set(run, "q") == [], "another plugin's set is empty, not this one's")
+
+print("\nthe status lists the scan set's outstanding, and says how many others are not listed")
+# FOUND BY A LOOKER (harness docs/blind/0004): asked for the plugin's status after its shard, the
+# command printed every unreviewed figure of the run - 918 names, 75 KB - and the agent could
+# not read whether its own 23 were among them. The one selection is the list; the rest is a
+# count, and `--all-figures` is the audit.
+import subprocess
+with tempfile.TemporaryDirectory() as td:
+    run = Path(td) / "runT"
+    d = run / "kernels" / "p"
+    for unit, sz in (("unitA", 3), ("unitB", 9)):
+        u = d / unit / "figures"
+        u.mkdir(parents=True)
+        for kind in ("native_ring", "native_dot"):
+            (u / f"{kind}__{unit}.png").write_bytes(b"P" * sz)
+    (run / "report.json").write_text('{"kernels": {"p": {}}}', encoding="utf-8")
+    (d / "FIGURES.txt").write_text("kernels/p/unitA/figures/native_ring__unitA.png\n",
+                                   encoding="utf-8")
+    env = dict(os.environ, PYTHONPATH=str(ROOT))
+    out = subprocess.run([sys.executable, "-m", "scprofile.cli", "review", "--out", str(run),
+                          "--plugin", "p"], capture_output=True, text=True, env=env,
+                         cwd=str(ROOT)).stdout
+    listed = [l.split()[-1] for l in out.splitlines() if "kernels/p/" in l and "unreviewed" in l]
+    check(sorted(listed) == ["kernels/p/unitA/figures/native_ring__unitA.png",
+                             "kernels/p/unitB/figures/native_dot__unitB.png"],
+          f"the status lists something other than the scan set's outstanding: {listed}")
+    check("2 other figure(s)" in out and "--all-figures" in out,
+          f"the status does not say how many drawn figures it left unlisted: {out[-300:]!r}")
+    out_all = subprocess.run([sys.executable, "-m", "scprofile.cli", "review", "--out", str(run),
+                              "--plugin", "p", "--all-figures"], capture_output=True, text=True,
+                             env=env, cwd=str(ROOT)).stdout
+    check(out_all.count("unreviewed ") == 4, f"--all-figures does not list every figure drawn")
 
 print("\nconcurrent writers do not corrupt the ledger")
 with tempfile.TemporaryDirectory() as td:
