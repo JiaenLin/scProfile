@@ -274,12 +274,65 @@ the numbers.** Declaring it wrongly does not fail; it produces a comparison that
 An unrecognised key here is an **ERROR**, not a warning: a misspelt column name removes panels
 in silence, and a plugin that has lost three looks exactly like one that declared less.
 
-## `report.figure_position`, `report.figure_axis` and `at_most` — the figure plan
+## `report.figures` — the figure plan
+
+Every figure a plugin draws in R is an entry of `report.figures`, and the entry carries the call
+(harness ADR-0016): the generated companion `kernels/<plugin>.draw.R` draws from it, and the
+plugin's embedded R calls `.draw("<id>")` where a hand-written site used to stand. Adjusting a
+figure is editing its entry; `scprofile scaffold <plugin> --force` regenerates the companion, and
+a companion edited by hand reads as drifted. Together with the design table the plan determines
+the figure count before any compute is scheduled: `scprofile plan` prints it, `capacity
+--promised` holds the finished run against it, and the maker's `sch dev convert plan` prints the
+plan as a table with what each entry lacks and which need reaches it.
+
+```python
+"report": {
+    "figures": [
+        {"id": "native_heatmap_count", "kind": "matrix", "drawn_by": "tool",
+         "fn": "netVisual_heatmap", "axis": "unit", "position": "contrast", "at_most": 1,
+         "args": 'cc, measure = "count", color.use = .gcol',
+         "legend": "Interactions counted between every ordered pair of {ngrp} populations."},
+        {"id": "nativecmp_chord_cell", "kind": "chord", "drawn_by": "tool",
+         "fn": "netVisual_chord_cell", "axis": "contrast", "position": "contrast",
+         "items": "shared", "at_most": 8, "file": 'paste0("chord_cell__", p)',
+         "args": "merged, signaling = p", "legend": "The {p} pathway, both arms."},
+        {"id": "nativecmp_interaction", "kind": "interaction", "drawn_by": "plugin",
+         "axis": "cohort", "position": "conclusion", "at_most": 3,
+         "file": 'paste0("interaction_", ms, "__", safe)',
+         "expr": "{ ComplexHeatmap::draw(...) }",
+         "legend": "Does the {fac} response depend on {stratum}? ..."},
+    ],
+    "skips": {"netVisual_embedding": {"skip": "not_applicable", "evidence": "..."}},
+    "provides_evidence": {"who_changed": ["native:netVisual_heatmap",
+                                          "plan:nativecmp_interaction", "host:diff_matrix"]},
+},
+```
+
+- **`drawn_by`** is `tool` — the wrapped tool's own function `fn`, called with `args` — or
+  `plugin` — this plugin's own R over the tool's numbers, in `expr`. The two are different claims
+  about provenance, and the accounting of the tool's exports is built on the distinction.
+- **`axis`** (`unit`, `contrast`, `cohort`) is what the family multiplies over; **`position`**
+  (`overview`, `contrast`, `conclusion`, `appendix`) is where a result places it, and `appendix`
+  means drawn and cited by no sentence.
+- **`at_most`** is the ceiling **in files, per occurrence of the axis**. A per-item family names
+  the R vector it iterates in `items` and the expression naming each file in `file`; `when`
+  guards the draw; `device`, `w`, `h` and `res` are the device's.
+- **`legend`** is a template whose `{...}` placeholders are R expressions evaluated where the
+  draw is called — the numbers exist there and nowhere else. **`kind`** names a registered panel
+  kind and binds the exit standard's rules to the caption.
+- **`profile: True`** on a unit-axis entry puts it on the profile page; **`generated: False`**
+  marks a file the tool writes as a side effect of a call, a promise kept by any figure format.
+- **`report.skips`** is every export of the tool the plan does not call, with a reason from the
+  closed vocabulary and its evidence. **`provides_evidence`** routes each need a comparison has to
+  the panels that answer it: `native:<fn>`, `plan:<id>` for the plugin's own panel, or
+  `host:<kind>`; a panel the plugin draws itself that no route reaches is drawn on every run and
+  placed in no document, and the maker's plan table names it.
+
+### The older form, which the eight held-out plugins still carry
 
 Three declarations decide **which** figures a run draws, **how many** of each, and which of them
-a result is written from. Together with the design table they determine the figure count before
-any compute is scheduled: `scprofile plan` prints it, and `capacity --promised` holds the finished
-run against it.
+a result is written from; the same readers apply them until the last such plugin is on the plan,
+and `sch dev convert plan --migrate` prints the paste-ready entries built from them.
 
 ```python
 "report": {
@@ -324,8 +377,9 @@ two numbers kept in step by hand. The declaration is the only place the number b
 
 `capacity --promised` asks two questions of every run and refuses on either:
 
-- **declared and never drawn** — a plot named in `native_plots` that produced no file anywhere in
-  the run. The reader was promised a panel and did not get one.
+- **declared and never drawn** — an entry of the plan (on the older form, a plot named in
+  `native_plots`) that produced no file anywhere in the run. The reader was promised a panel and
+  did not get one.
 - **drawn and declared by nothing** — output the run produced that no declaration accounts for.
   A wrapped tool that writes a diagnostic into the working directory is doing something ordinary;
   the point is that nothing else in the run can tell it from output someone asked for. Declare it,

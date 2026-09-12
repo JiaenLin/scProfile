@@ -1,15 +1,17 @@
 """A plugin that draws through R is GIVEN the wrapper that honours its ceilings.
 
-`sch dev convert placement` requires a plugin's draw wrappers to refuse past the declared ceiling,
-because the host cannot reach into another interpreter's graphics device. A requirement the tool
-makes and does not satisfy is a requirement every author meets by hand: while this was
-hand-written, one plugin carried three copies of the same helper, one per embedded script, and
-nothing checked any of them.
+The plan's `at_most` is a ceiling the drawing side must refuse past, because the host cannot
+reach into another interpreter's graphics device. A requirement the tool makes and does not
+satisfy is a requirement every author meets by hand: while this was hand-written, one plugin
+carried three copies of the same helper, one per embedded script, and nothing checked any of
+them. The generated companion is the one wrapper now, and this holds it to refusing before it
+draws.
 
-THE RULE IS READ FROM THIS REPOSITORY'S OWN DECLARATION, not restated here. `DEVPOINTS.yaml` says
-what the drawing code must name and what leaving a wrapper looks like; if that declaration changes
-this test follows it, which is the only way the generated wrapper and the check that demands it
-cannot drift apart.
+THE TWO WORDS WERE READ FROM `DEVPOINTS.yaml`'s `enforced_by`, the key the maker's ceiling-guard
+instrument read off hand-written wrappers; that instrument and the key retired with the
+harness's draw-site extractor (ADR-0016 step 5), because the only wrapper left is this generated
+one. The words are this test's now: the companion reads `ceiling:<family>` rows out of
+`figure_context.tsv`, and leaving a wrapper in R is `return`.
 """
 import re
 import sys
@@ -28,13 +30,9 @@ def check(ok, msg):
         FAILURES.append(msg)
 
 
-text = (ROOT / "DEVPOINTS.yaml").read_text(encoding="utf-8")
-m = re.search(r"enforced_by:\s*\n\s*token:\s*(\S+)\s*\n\s*returns:\s*(\S+)", text)
-check(m is not None, "DEVPOINTS.yaml declares no `enforced_by`, so nothing says what a wrapper "
-                     "must read; the check that demands it cannot be satisfied on purpose")
-
+m = True
 if m:
-    token, returns = m.group(1), m.group(2)
+    token, returns = "ceiling", "return"
     body = S.R_DRAW
 
     # THE SAME SHAPE THE MAKER LOOKS FOR: a conditional naming the token that leaves.

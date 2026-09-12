@@ -362,21 +362,10 @@ points:
           # computed before a job is submitted. Read as a prefix map like `figure_position`, so a
           # plugin whose families are named by phase states it in two rules.
           axes: [unit, contrast, cohort]
-          # A CEILING THE DRAWING CODE DOES NOT READ IS A COMMENT. Measured: a plugin declaring
-          # 49 ceilings, every guard stripped out of its embedded R, and the whole build phase
-          # green - `placement` reporting every family bounded and `status` reporting build 7 of
-          # 7 complete. Deleting a DECLARATION turns this stage red at once; deleting the code
-          # that honours it turned nothing red, and that asymmetry is what let general mechanism
-          # be hand-written into one plugin and called finished.
-          #
-          # `token` is what this format calls the thing where the drawing code reads it -
-          # `figure_context.tsv` carries `ceiling:<family>` rows. `returns` is what leaving a
-          # wrapper looks like in the language it is written in. Neither is known to `sch/`.
-          # LEGACY, like the four above it: what a hand-written draw wrapper must read - the
-          # ceiling-guard instrument reads this and retires with the extractor in step 5.
-          enforced_by:
-            token: ceiling
-            returns: return
+          # THE CEILING IS HONOURED BY THE GENERATED COMPANION (`.at_ceiling`, from the plan's
+          # `at_most`), and `generated_by` below is what proves the companion is generated. The
+          # check that read a hand-written draw wrapper for its guard (`enforced_by`) retired
+          # with the harness's draw-site extractor - ADR-0016 step 5.
           generated_by:
             command: ["{python}", "-m", "scprofile.cli", "scaffold", "{name}",
                       "--dir", "{out}", "--force"]
@@ -384,7 +373,7 @@ points:
             `sch dev convert plan --root . --point kernel --name <plugin>` prints every entry
             with what it lacks and, given `--python`, the upstream function's parameters beside
             each `fn`. A plugin still on `native_plots` and the prefix maps: `--migrate` prints
-            the paste-ready plan built from them and from its draw sites. Then
+            the paste-ready plan built from them. Then
             `scprofile scaffold <plugin> --force` regenerates the companion from the plan
           why: >
             WHICH FIGURES A RESULT IS WRITTEN FROM, HOW MANY OF EACH, DRAWN BY WHAT WITH WHICH
