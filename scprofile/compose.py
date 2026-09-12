@@ -596,12 +596,7 @@ def profile_figures(run, plugin, spec, unit):
     from . import native as _NAT
 
     declared = _NAT.declared_from(spec)
-    keep = {fn for fn, d in declared.items() if isinstance(d, dict) and d.get("profile")}
-    # A PLAN ENTRY SAYS `profile` ON ITSELF, not on the function - fold those in by function.
-    for e in (((spec or {}).get("report") or {}).get("figures") or []):
-        if isinstance(e, dict) and e.get("profile") and e.get("fn") \
-                and str(e.get("drawn_by") or "tool") == "tool":
-            keep.add(str(e["fn"]))
+    keep = _NAT.profile_functions(spec)
     if not (keep and unit):
         return []
     d = Path(run) / "kernels" / plugin / str(unit) / "figures"

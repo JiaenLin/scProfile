@@ -623,6 +623,41 @@ ck("the tier vocabulary is stated once, not restated by the checker",
 ck("and the checker defaults a missing tier exactly as the status reader does",
    _refs.tier_of({}) == _refs.DEFAULT_TIER == "fetch")
 
+# THE PLAN CARRIES THE CALL (harness ADR-0016). One list, `report.figures`, now holds three
+# kinds of entry, and the validator must ask each for what it owes and nothing else: an upstream
+# panel is a call to the tool's function; the plugin's own R drawing of the tool's numbers is a
+# site the generated companion runs - it owes a legend, and its numbers are the tables the site
+# writes beside it; a panel the host's emit path writes owes a question, a `shows` and a `source`.
+# Asking the second kind for the third kind's fields refused a migrated plugin on twelve errors,
+# every one of them a field the reporter would never read for that panel.
+print("\nthe plan carries the call: each kind of entry owes what it owes")
+_PLAN = {**GOOD, "report": {"figures": [
+    {"id": "native_x", "drawn_by": "tool", "fn": "draw_x", "axis": "unit", "position": "appendix",
+     "args": "cc", "legend": "L"},
+    {"id": "nativecmp_own", "drawn_by": "plugin", "axis": "cohort", "position": "conclusion",
+     "at_most": 2, "file": 'paste0("own__", s)', "expr": "plot(m)", "legend": "L"},
+]}}
+ck("an upstream entry and the plugin's own R site owe no question, shows or source",
+   not errs(_PLAN), str(errs(_PLAN)))
+_PY = {**GOOD, "report": {"figures": [
+    {"id": "F1_x", "drawn_by": "plugin", "axis": "unit", "position": "appendix"}]}}
+_m = errs(_PY)
+ck("a panel the host's emit path writes still owes all three",
+   sum(("`question`" in x) + ("shows=" in x) + ("`source`" in x) for x in _m) == 3, str(_m))
+ck("and the two kinds are told apart by one reader, not by two lists of field names",
+   declare.drawn_by_companion(_PLAN["report"]["figures"][1])
+   and not declare.drawn_by_companion(_PY["report"]["figures"][0]))
+_ITEMS = {**GOOD, "report": {"figures": [
+    {"id": "native_y", "drawn_by": "tool", "fn": "draw_y", "axis": "unit", "position": "appendix",
+     "items": "paths", "args": "cc, signaling = .item", "legend": "L"}]}}
+ck("a per-item family with no ceiling is refused",
+   any("at_most" in x for x in errs(_ITEMS)), str(errs(_ITEMS)))
+_KIND = {**GOOD, "report": {"figures": [
+    {"id": "native_z", "drawn_by": "tool", "fn": "draw_z", "axis": "unit", "position": "appendix",
+     "args": "cc", "legend": "L", "kind": "no_such_kind"}]}}
+ck("a kind outside the registry is refused",
+   any("registered panel kind" in x for x in errs(_KIND)), str(errs(_KIND)))
+
 # EVERY SHIPPED PLUGIN, NOT A FIXTURE. The convenient fixture hides the bug it was built to
 # catch: nothing in this suite read the kernels the tool actually ships, so twelve errors on
 # three of them survived a green run of everything here.

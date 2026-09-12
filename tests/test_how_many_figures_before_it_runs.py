@@ -90,6 +90,22 @@ check(nocap["files"] == 7, f"an unbounded family did not count as one per axis: 
 check(by["perunit_brace"]["files"] == 30,
       f"a three-member brace family was not counted as three files: {by.get('perunit_brace')}")
 
+# THE PLUGIN'S OWN R SITE IS NOT THE HOST'S EMIT PATH. A plan entry drawn by the plugin in R -
+# the difference of two differences CellChat has no plot for - is written by the generated
+# companion's device, and the host writes no vector copy for it; counting one per such panel
+# claimed eleven files on one cohort that no run has ever produced. The host's own panel keeps
+# its copy.
+rspec = {"report": {"figures": [
+    {"id": "own_r", "drawn_by": "plugin", "axis": "cohort", "position": "conclusion", "at_most": 2,
+     "expr": "plot(m)", "legend": "L"},
+    {"id": "own_py", "drawn_by": "plugin", "axis": "cohort", "position": "conclusion",
+     "shows": "result", "question": "q", "source": "s.csv"}]}}
+rby = {r["family"]: r for r in PL.figure_plan(rspec, units=1, contrasts=0, cohort=1)["rows"]}
+check(rby["own_r"]["vector"] == 0 and rby["own_r"]["files"] == 2,
+      f"a plugin-drawn R site was given a vector copy the host never writes: {rby['own_r']}")
+check(rby["own_py"]["vector"] == 1,
+      f"the host's own conclusion panel lost its vector copy: {rby['own_py']}")
+
 if FAILURES:
     print("FAIL")
     for f in FAILURES:

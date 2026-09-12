@@ -10,6 +10,14 @@ that costs nothing.
 
 RECORD DELIBERATELY, NEVER AUTOMATICALLY:  python3 tests/test_the_figure_plan_is_the_same_plan.py --record
 A baseline a test writes for itself cannot fail the first time it runs.
+
+RECORDED TWICE, and the second time is written down. The first baseline was read by the prose
+reader, which placed a brace family by its STEM: `native_heatmap` for `native_heatmap_{count,
+weight}.png` misses the `native_heatmap_` rule by one underscore and fell to the `native_`
+default, appendix, while the reporter - matching the file names themselves - placed those 36
+files at contrast. The migrated plan says contrast per member, as the run did; the files, the
+vector copies and the total were identical at the re-record, and the reason is in the harness's
+ADR-0016 status table, step 3.
 """
 import json
 import sys

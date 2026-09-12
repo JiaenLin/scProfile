@@ -11,7 +11,6 @@ the same inversion the report uses to caption a panel - to name a declared funct
 An unclaimed panel fails. It is deliberately the same code path as the captions, so a caption
 that would read "(drawn by an undeclared function)" fails here first.
 """
-import ast
 import re
 import sys
 from pathlib import Path
@@ -21,46 +20,58 @@ sys.path.insert(0, str(ROOT / "tests"))
 
 import subject                                                            # noqa: E402
 sys.path.insert(0, str(ROOT))
-from scprofile import native as N                                         # noqa: E402
+from scprofile import kernels as K, native as N                           # noqa: E402
 
 FAILURES = []
 CHECKED = 0
 
 
-def _declaration(src):
-    m = re.search(r'"native_plots":\s*\{', src)
-    if not m:
-        return None
-    i = src.index("{", m.start())
-    depth = 0
-    for j in range(i, len(src)):
-        if src[j] == "{":
-            depth += 1
-        elif src[j] == "}":
-            depth -= 1
-            if depth == 0:
-                break
-    try:
-        return ast.literal_eval(src[i:j + 1])
-    except Exception:                                                     # noqa: BLE001
-        return None
+def _own_ids(spec):
+    """The ids of the panels the plugin draws ITSELF, from the plan (harness ADR-0016).
+
+    A plan entry drawn by the plugin names no upstream function, on purpose: the interaction
+    panels are a difference of two differences the tool has no plot for. A site that draws one is
+    claimed by that entry - by the id, or the id followed by the per-item separator - and the
+    caption says "drawn by this plugin", which is the truth and not a gap.
+    """
+    figs = ((spec or {}).get("report") or {}).get("figures") or []
+    return [(str(e.get("id")), N.per_item_entry(e)) for e in figs
+            if isinstance(e, dict) and e.get("id")
+            and str(e.get("drawn_by") or "plugin") != "tool"
+            and any(e.get(k) is not None for k in ("fn", "axis", "at_most", "expr"))]
 
 
-for f in sorted((ROOT / "kernels").glob("*.py")):
+def _own_claims(own, stem):
+    return any(N.names_file(i, stem, per) for i, per in own)
+
+
+# READ THROUGH THE ONE READER. `native.declared_from` is what the accounting and the captions
+# read; a plugin migrated onto the plan has no `native_plots` to parse out of its source, and a
+# reader that parsed the source stopped checking that plugin the day it migrated - silently,
+# with a green line.
+for name, k in sorted(K.discover().items()):
+    f = k.path
     src = f.read_text()
-    decl = _declaration(src)
-    if not decl:
+    decl = N.declared_from(k.spec or {})
+    own = _own_ids(k.spec or {})
+    if not decl and not own:
         continue
-    for var, prefix in (("_R_RUN", "native_"), ("_R_COMPARE", "nativecmp_")):
-        m = re.search(var + r'\s*=\s*r?"""(.*?)"""', src, re.S)
-        if not m:
+    # EVERY EMBEDDED SCRIPT, WITH THE PREFIX IT DECLARES. Two fixed names read two of a
+    # plugin's four scripts and hard-coded what `.figures(prefix = ...)` already says; the
+    # per-unit script of the plugin this was written for was never scanned.
+    for m in re.finditer(r"^(_R_[A-Z_]+)\s*=\s*r?(\"\"\"|\'\'\')(.*?)\2", src, re.S | re.M):
+        body = m.group(3)
+        pm = re.search(r'\.figures\(\s*prefix\s*=\s*"([^"]*)"', body)
+        if not pm:
             continue
-        body = m.group(1)
+        prefix = pm.group(1)
         # every plot call: npng("name", ...) / ndev("name", ...) / npng(paste0("name__", x), ...)
         for call in re.finditer(r'\b(?:npng|ndev)\(\s*(?:paste0\(\s*)?"([^"]+)"', body):
             stem = prefix + call.group(1)
             CHECKED += 1
             fn = N.function_for(decl, stem + ".png")
+            if not fn and _own_claims(own, stem):
+                continue
             if not fn:
                 FAILURES.append(f"{f.name}: {stem}.png is drawn but no declared function "
                                 f"claims it - a caption cannot say what drew it")

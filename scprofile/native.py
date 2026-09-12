@@ -121,15 +121,36 @@ def declared_from(spec):
         if str(e.get("drawn_by") or "tool") != "tool":
             continue                       # the plugin's own drawing of the tool's numbers
         fn = str(e["fn"]).strip()
-        rec = out.setdefault(fn, {"use": "", "ids": []})
+        rec = out.setdefault(fn, {"use": "", "ids": [], "per_item": []})
         fid = str(e.get("id") or "").strip()
         if fid and fid not in rec["ids"]:
             rec["ids"].append(fid)
+            if per_item_entry(e):
+                rec["per_item"].append(fid)
     for fn, rec in out.items():
         rec["use"] = ", ".join(f"figures/{i}.png" for i in rec["ids"])
     for fn, d in sorted(((report.get("skips") if isinstance(report, dict) else None) or {}).items()):
         out[str(fn)] = dict(d) if isinstance(d, dict) else {"skip": str(d)}
     return out
+
+
+def per_item_entry(entry) -> bool:
+    """Does this plan entry name its files by an expression - one file per item, not `<id>.png`."""
+    e = entry if isinstance(entry, dict) else {}
+    return e.get("file") is not None or e.get("items") is not None
+
+
+def names_file(fid, stem, per_item=False) -> bool:
+    """Does a plan entry's id claim this file stem.
+
+    THE ID IS THE ONE STATIC THING ABOUT A PER-ITEM FAMILY'S FILE NAMES. `file` is an R
+    expression evaluated where the draw is called; what can be read without running it is that
+    every file begins with the id, because the migration took the id from the expression's own
+    literal head with its trailing underscores stripped - and a head may leave ONE underscore:
+    `paste0("role_heatmap_", pat)` writes <prefix>role_heatmap_outgoing.png. A single-file entry
+    is its id exactly; `<id>__<item>` is the default per-item form.
+    """
+    return stem == fid or stem.startswith(fid + "__") or (per_item and stem.startswith(fid + "_"))
 
 
 def account(inventory, declared):
@@ -209,8 +230,29 @@ def unreviewed(spec):
     return str((((spec or {}).get("wraps") or {}).get("plots_unreviewed") or "")).strip()
 
 
+def profile_functions(spec):
+    """The upstream functions whose panels make a unit's PROFILE, from the declaration.
+
+    ONE READER FOR THE PROFILE SET. A `native_plots` record says `profile` on the function; a
+    plan entry (harness ADR-0016) says it on itself, and its `fn` is the function. The profile
+    page, the paper's reference-unit plates and the guard-vs-page check all read this, so the
+    three cannot disagree about what the profile is.
+    """
+    declared = declared_from(spec)
+    keep = {str(fn) for fn, d in declared.items() if isinstance(d, dict) and d.get("profile")}
+    for e in (((spec or {}).get("report") or {}).get("figures") or []):
+        if isinstance(e, dict) and e.get("profile") and e.get("fn") \
+                and str(e.get("drawn_by") or "tool") == "tool":
+            keep.add(str(e["fn"]))
+    return keep
+
+
 def accounting_debt(specs):
-    """(owing, undeclared) - wrappers with no `native_plots`, and those admitting to neither.
+    """(owing, undeclared) - wrappers with no accounting, and those admitting to neither.
+
+    THE ACCOUNTING IS READ THROUGH `declared_from`: plan entries naming an upstream `fn`, or
+    `native_plots` for a plugin not yet on the plan. Read from `native_plots` alone, a migrated
+    plugin counted as owing the whole of its upstream's figures the day it declared all of them.
 
     `specs` is {plugin_name: spec}. `undeclared` is the regression: a wrapper that neither
     accounts for its upstream's figures nor says in its own file that nobody has looked at them.
@@ -226,7 +268,7 @@ def accounting_debt(specs):
     # recorded rather than discarded. None is the admission alone.
     owing = sorted(n for n, sp in (specs or {}).items()
                    if requires_accounting(sp)
-                   and (unreviewed(sp) or not (sp or {}).get("native_plots")))
+                   and (unreviewed(sp) or not declared_from(sp)))
     undeclared = [n for n in owing if not unreviewed((specs or {}).get(n))]
     return owing, undeclared
 
@@ -285,7 +327,7 @@ def undeclared(declared, filenames, ids=()):
     the same declaration with the same matcher, and until this existed a plugin could litter a run
     with files it had never mentioned and every gate in the tool would report the run as clean.
 
-    MEASURED. One cohort of 1187 figures carried 24 `estimationNumCluster*.pdf` written by the
+    MEASURED. One cohort of 1187 figures carried 24 PDFs of a rank-estimation plate written by the
     NMF rank estimation inside an upstream function - not by any call this plugin makes, not named
     by any entry in `native_plots`, linked from no page, and cited by no sentence. They are the
     wrapped tool writing into the working directory, which is a thing wrapped tools do. The point
@@ -327,8 +369,8 @@ def function_for(declared, filename):
     against the tool's own documentation and a picture that appeared.
 
     A declaration may name one file, a brace family (`native_circle_{count,weight}.png`) or a
-    placeholder (`native_contribution__<pathway>.png`). Each is turned into a pattern; the
-    LONGEST literal prefix wins, so `nativecmp_diff_heatmap_count` beats a shorter declaration
+    placeholder (`<prefix>contribution__<pathway>.png`). Each is turned into a pattern; the
+    LONGEST literal prefix wins, so `<prefix>diff_heatmap_count` beats a shorter declaration
     that also matches. A placeholder matches a name that reaches it and stops, which is what a
     file whose suffix is filled in at run time looks like before the value is known.
     """
@@ -343,9 +385,10 @@ def function_for(declared, filename):
         # an entry that has ids.
         ids = (rec or {}).get("ids")
         if ids:
+            per = {str(x) for x in ((rec or {}).get("per_item") or ())}
             for fid in ids:
                 fid = str(fid)
-                if (stem == fid or stem.startswith(fid + "__")) and len(fid) > best_len:
+                if names_file(fid, stem, fid in per) and len(fid) > best_len:
                     best, best_len = fn, len(fid)
             continue
         use = str((rec or {}).get("use") or "")

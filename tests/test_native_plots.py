@@ -137,7 +137,7 @@ def test_an_accounting_and_an_admission_together_mean_PARTIAL():
     accounting stays at zero for months.
     """
     specs = _all_specs()
-    paid = [n for n, sp in specs.items() if sp.get("native_plots")]
+    paid = [n for n, sp in specs.items() if N.declared_from(sp)]
     assert paid, "no plugin accounts for its upstream's figures, so the ratchet measures nothing"
     owing, _ = N.accounting_debt(specs)
     for n in paid:
@@ -151,7 +151,7 @@ def test_a_partial_admission_says_what_is_left():
     """An admission beside an accounting must name the remainder, or it is a leftover."""
     specs = _all_specs()
     for n, sp in specs.items():
-        if sp.get("native_plots") and N.unreviewed(sp):
+        if N.declared_from(sp) and N.unreviewed(sp):
             said = N.unreviewed(sp).lower()
             assert any(w in said for w in ("remain", "left", "still", "of the", "outstanding")), (
                 f"{n} declares both and its admission does not say what is left: {said[:90]}")

@@ -296,7 +296,7 @@ def outstanding(out, plugin=""):
 SHARD_FLOOR = 12
 
 #: A figure's KIND: what it is a picture of, with the unit or contrast it was drawn for stripped
-#: off. `native_circle_weight__S1` and `native_circle_weight__arm_a` are one kind drawn
+#: off. `<stem>__S1` and `<stem>__arm_a` are one kind drawn
 #: twice; a defect in how that kind is drawn is present in both and in every other instance.
 #:
 #: The stem is cut at the first `__`, which is the separator every figure id here uses between

@@ -915,17 +915,17 @@ def figure_families(plugin_spec):
             continue
         cap = rec.get("at_most")
         # THE DIRECTORY IS WRITTEN ONCE AND THE FILES FOLLOW IT. A `use:` reads
-        # "figures/native_circle_count.png and native_circle_weight.png" - English, not a list -
-        # and a pattern requiring `figures/` on every name found the first and missed the second,
-        # so an entire family of 18 files was absent from the plan and from every count built on
-        # it. The extension is what makes a token a figure; a table is excluded by naming .csv.
+        # "figures/<stem>_count.png and <stem>_weight.png" - English, not a list - and a pattern
+        # requiring `figures/` on every name found the first and missed the second, so an entire
+        # family of 18 files was absent from the plan and from every count built on it. The
+        # extension is what makes a token a figure; a table is excluded by naming .csv.
         for raw in _re.findall(r"(?:figures/)?([A-Za-z0-9_{},<>-]+?)\.(?:png|pdf|svg)",
                                str(rec.get("use") or "")):
             stem = _re.split(r"__|\{|<", raw)[0].rstrip("_")
             n = cap.get(stem, cap.get(raw)) if isinstance(cap, dict) else cap
             # A BRACE FAMILY NAMES AS MANY FILES AS IT HAS MEMBERS, and the declaration was
-            # already saying so. `native_dot_{outgoing,incoming}.png` is two files;
-            # `nativecmp_barplot_{count,weight}.png` is two. Collapsing the brace into the stem
+            # already saying so. `<stem>_{outgoing,incoming}.png` is two files;
+            # `<stem>_{count,weight}.png` is two. Collapsing the brace into the stem
             # and counting one undercounted five families by eighteen and six files each - 84 in
             # all - and the fix is in this reader, not in any plugin: nothing had to be declared
             # that had not been declared already.
@@ -940,8 +940,11 @@ def figure_families(plugin_spec):
             continue
         fams.setdefault(fid, 1)
         # OWN MEANS THE HOST'S EMIT PATH WROTE IT - a vector copy exists only there. A plan entry
-        # drawn by the tool is an upstream PNG from another interpreter's device.
-        if str(e.get("drawn_by") or "plugin") != "tool":
+        # drawn by the tool is an upstream PNG from another interpreter's device, and so is the
+        # plugin's own R site (`declare.drawn_by_companion`): the companion's device writes it
+        # and the host writes no copy. Counting one per such panel promised eleven conclusion
+        # files on one cohort that no run has produced.
+        if not _D.drawn_by_companion(e):
             own.add(fid)
     # WHICH FAMILIES CAN HAVE A VECTOR COPY AT ALL. Only the ones the plugin draws through the
     # host's own figure writer; an upstream plot arrives as a PNG from the wrapped tool's device

@@ -295,7 +295,10 @@ points:
             reference nobody declared is one the plan cannot warn about
         - name: inventory
           phase: build
-          fills: [native_plots]
+          # READ FROM THE PLAN (harness ADR-0016, step 3): an entry's `fn` is an export used and
+          # `report.skips` names the ones not called. `native_plots` was the prose this replaced;
+          # the eight held-out plugins are still read from it by the reader's fallback.
+          fills: [report.figures]
           # PRESENT IS NOT FINISHED. A wrapper part-way through declares some entries AND an
           # admission naming what is left; without this the field's presence read as done.
           outstanding_if: wraps.plots_unreviewed
@@ -326,6 +329,8 @@ points:
             call: args
             expression: expr
             skips: report.skips
+            axis: axis
+            position: position
           each_item_declares:
             drawn_by: [tool, plugin]
             axis: [unit, contrast, cohort]
@@ -395,7 +400,10 @@ points:
             it in report.json; `capacity --memory` is what reads it back out
         - name: promised
           phase: test
-          fills: [native_plots]
+          # THE PROMISE IS THE PLAN (harness ADR-0016, step 3): `native.declared_from` reads an
+          # entry's `fn` and its id as the file that function writes, and `native_plots` only
+          # for a plugin not yet on the plan.
+          fills: [report.figures]
           # A COMMAND, like `measure`, because only a run can answer it. `{run}` is filled from
           # `--run`.
           command: ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--promised"]

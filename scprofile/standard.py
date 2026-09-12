@@ -279,7 +279,7 @@ def check_page(path, *, exempt=(), recorded=()):
     # same five plots ten times over. A check that CANNOT fail is worse than no check: it
     # reports the very defect it was written for as absent.
     # THE PATH, NOT THE BASENAME. Keying on the filename alone made every per-unit page a page
-    # of "repeats": eighteen units each draw `native_signalingRole_scatter.png`, and those are
+    # of "repeats": eighteen units each draw a panel under the same file name, and those are
     # eighteen DIFFERENT figures of eighteen different units. The defect this criterion exists
     # to catch - one plot shown ten times - is a repeated PATH, and keying on the path still
     # catches it exactly while no longer reporting distinct figures as duplicates.

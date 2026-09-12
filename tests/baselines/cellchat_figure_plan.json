@@ -8,9 +8,9 @@
   "unit": 648
  },
  "by_position": {
-  "appendix": 702,
+  "appendix": 666,
   "conclusion": 11,
-  "contrast": 180,
+  "contrast": 216,
   "overview": 4
  },
  "families": [
@@ -147,10 +147,16 @@
    "appendix"
   ],
   [
-   "native_heatmap",
-   2,
+   "native_heatmap_count",
+   1,
    "unit",
-   "appendix"
+   "contrast"
+  ],
+  [
+   "native_heatmap_weight",
+   1,
+   "unit",
+   "contrast"
   ],
   [
    "native_hierarchy",
@@ -177,8 +183,14 @@
    "appendix"
   ],
   [
-   "native_signalingRole_heatmap",
-   2,
+   "native_signalingRole_heatmap_in",
+   1,
+   "unit",
+   "contrast"
+  ],
+  [
+   "native_signalingRole_heatmap_out",
+   1,
    "unit",
    "contrast"
   ],
@@ -201,8 +213,14 @@
    "appendix"
   ],
   [
-   "nativecmp_barplot",
-   2,
+   "nativecmp_barplot_count",
+   1,
+   "contrast",
+   "appendix"
+  ],
+  [
+   "nativecmp_barplot_weight",
+   1,
    "contrast",
    "appendix"
   ],
@@ -231,14 +249,26 @@
    "overview"
   ],
   [
-   "nativecmp_diffInteraction",
-   2,
+   "nativecmp_diffInteraction_count",
+   1,
    "contrast",
    "contrast"
   ],
   [
-   "nativecmp_diff_heatmap",
-   2,
+   "nativecmp_diffInteraction_weight",
+   1,
+   "contrast",
+   "contrast"
+  ],
+  [
+   "nativecmp_diff_heatmap_count",
+   1,
+   "contrast",
+   "contrast"
+  ],
+  [
+   "nativecmp_diff_heatmap_weight",
+   1,
    "contrast",
    "contrast"
   ],
@@ -268,7 +298,13 @@
   ],
   [
    "nativecmp_interaction_flow",
-   4,
+   2,
+   "cohort",
+   "conclusion"
+  ],
+  [
+   "nativecmp_interaction_flow_log",
+   2,
    "cohort",
    "conclusion"
   ],
@@ -285,8 +321,14 @@
    "conclusion"
   ],
   [
-   "nativecmp_rankNet",
-   2,
+   "nativecmp_rankNet_stacked",
+   1,
+   "contrast",
+   "contrast"
+  ],
+  [
+   "nativecmp_rankNet_unstacked",
+   1,
    "contrast",
    "contrast"
   ],

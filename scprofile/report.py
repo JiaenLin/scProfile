@@ -2192,7 +2192,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # AND THE WRAPPED TOOL'S OWN, marked the same way in its own declaration block. The profile
     # page should show what the METHOD draws, not what the host reimplements: where a tool ships
     # a per-unit plot for the same question, that is the panel a reader should meet.
-    _prof_fns = {fn for fn, rec in (_decl_native or {}).items() if (rec or {}).get("profile")}
+    _prof_fns = _NATd.profile_functions(p.get("spec") or {})
     arm_figs = [f for f in figs_all if f.get("unit") and _is_group(f)
                 and str(f.get("id")) not in _prof_ids
                 and str(f.get("native_function") or "") not in _prof_fns]

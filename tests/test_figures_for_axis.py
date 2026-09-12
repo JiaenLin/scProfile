@@ -167,8 +167,10 @@ from scprofile.kernels import discover                                    # noqa
 
 for _n, _k in sorted(discover().items()):
     _sp = getattr(_k, "spec", None) or {}
-    _decl = _sp.get("native_plots") or {}
-    _marked = {fn for fn, rec in _decl.items() if (rec or {}).get("profile")}
+    # THROUGH THE ONE READER (harness ADR-0016): the plan marks `profile` on an entry, the
+    # older form on the function, and `profile_functions` folds both by function.
+    _decl = _NAT.declared_from(_sp)
+    _marked = _NAT.profile_functions(_sp)
     # READ FROM THE SOURCE, not by importing: a plugin runs in its own interpreter and may not
     # import in the host's - which is the whole reason the declaration is data rather than code.
     _plots = ()
@@ -186,7 +188,7 @@ for _n, _k in sorted(discover().items()):
         _fn = _NAT.function_for(_decl, f"native_{_pl}.png")
         check(_fn in _marked,
               f"{_n}: the profile plot {_pl!r} resolves to {_fn!r}, which is not marked "
-              f"`profile` in native_plots - the guard and the page disagree about what the "
+              f"`profile` in the declaration - the guard and the page disagree about what the "
               f"profile is")
 
 if FAILURES:

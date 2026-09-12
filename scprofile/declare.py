@@ -236,6 +236,30 @@ def report_get(spec, key, default=None):
     return (spec or {}).get(key, default)
 
 
+#: THE FIELDS THAT MAKE A PLAN ENTRY AN R DRAW SITE: a call, or a fact only the generated
+#: companion reads. An entry drawn by the plugin that carries none of them is a panel the host's
+#: own emit path writes - the `F1_` plates.
+R_SITE_KEYS = ("expr", "args", "file", "items", "when", "device")
+
+
+def drawn_by_companion(entry) -> bool:
+    """True when the generated companion draws this entry; False when the host's emit path does.
+
+    ONE LIST, THREE KINDS OF ENTRY (harness ADR-0016), and every consumer must tell them apart
+    the same way. An upstream panel is a call to the tool's function. The plugin's own R drawing
+    of the tool's numbers - the interaction panels, a difference of two differences CellChat has
+    no plot for - is a site the companion runs from `expr` or `fn(args)`, with `file`, `items`,
+    `when` and `device` as the companion's facts. A panel the host's emit path writes carries
+    none of those; it is the entry that owes a `question`, a `shows` and a `source`, and the only
+    one a vector copy exists for. Telling the second kind apart by its `drawn_by` alone refused a
+    migrated plugin on twelve errors and promised eleven vector files no run has written.
+    """
+    e = entry if isinstance(entry, dict) else {}
+    if str(e.get("drawn_by") or "plugin") == "tool":
+        return True
+    return any(str(e.get(k) if e.get(k) is not None else "").strip() for k in R_SITE_KEYS)
+
+
 def _check_plan_entry(f, at, out) -> None:
     """The plan fields of one `report.figures` entry (ADR-0016): present ones must be well formed.
 
@@ -361,11 +385,12 @@ def _check_report(spec, out) -> None:
                                      f"both be reported present or absent."))
             else:
                 seen.add(fid)
-            # AN UPSTREAM PANEL IS THE TOOL'S ENCODING OF THE TOOL'S NUMBERS. It carries no
-            # `source` table of its own, no `shows` the reporter orders by, and its question is
-            # its legend; those three are the plugin-drawn panel's obligations. `drawn_by: tool`
-            # is what says which this is (ADR-0016).
-            if str(f.get("drawn_by") or "") == "tool":
+            # AN UPSTREAM PANEL IS THE TOOL'S ENCODING OF THE TOOL'S NUMBERS, and the plugin's
+            # own R site is its encoding of them. Neither carries a `source` table of its own or
+            # a `shows` the reporter orders by, and each one's question is its legend; those
+            # three are the obligations of the panel the host's emit path writes.
+            # `drawn_by_companion` is what says which this is (ADR-0016).
+            if drawn_by_companion(f):
                 pass
             else:
                 if not str(f.get("question") or "").strip():
