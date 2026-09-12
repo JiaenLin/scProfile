@@ -942,6 +942,13 @@ PLUGIN = {
             # panel: the prose bounded `compareInteractions_<measure>` at four over both, so the
             # ceiling is split two and two. Drawn by this plugin - the tool's bar with the host's
             # per-sample points and a division CellChat does not offer.
+            # THE FILE CARRIES THE FAMILY'S ID IN FRONT. The hand-written site named these
+            # `compareInteractions_<measure>_per1k`, which no family's id prefixes: every reader of
+            # the plan - the ceiling, the caption's provenance, the promise - attributes a file
+            # to the LONGEST id it begins with, and those four files all fell to the raw family,
+            # whose ceiling of two they then exceeded (found by `capacity --promised` on the
+            # sealed reference, ADR-0016 step 1). Named by the plan's own form now, the one
+            # figure whose file name the migration changed - on purpose, and predicted.
             {
                 'id': 'nativecmp_compareInteractions_per1k',
                 'drawn_by': 'plugin',
@@ -949,7 +956,7 @@ PLUGIN = {
                 'position': 'overview',
                 'items': 'c("count", "weight")',
                 'at_most': 2,
-                'file': 'paste0("compareInteractions_", ms, "_per1k")',
+                'file': 'paste0("compareInteractions_per1k_", ms)',
                 'expr': 'gg',
                 'w': 'max(1500, 340 * length(objs))',
                 'h': 1300,

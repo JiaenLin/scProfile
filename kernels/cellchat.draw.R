@@ -700,7 +700,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   w = quote(max(1500, 340 * length(objs))),
   h = quote(1300),
   items = quote(c("count", "weight")),
-  file = quote(paste0("compareInteractions_", ms, "_per1k")),
+  file = quote(paste0("compareInteractions_per1k_", ms)),
   expr = quote(gg),
   legend = "The same totals divided by the cells each fit used, per 1,000 cells. A SECOND SCALE, NOT A CORRECTION: the quantity does not rise linearly with cell number, so dividing puts the arithmetic on the page rather than removing the dependence. {if (.decomposed) paste0( \"Each open point is one animal's share OF THIS ARM'S OWN FIT, \", \"credited by that animal's share of the arm's cells in the two \", \"populations of each pair - half for sending, half for receiving. \", \"That split is exact, so the bar is the cell-weighted mean of its \", \"own points and a point may fall on either side of it. It is a \", \"DERIVED attribution, not something CellChat reports: the method \", \"fits the arm's pooled cells and says nothing about which animal \", \"carried which edge. Each animal's INDEPENDENT fit is the raw panel \", \"beside this one.\") else paste0( \"Each point is one sample's OWN fit divided by ITS OWN cells. A \", \"pooled arm and a single sample are not comparable on this scale - \", \"a smaller fit finds proportionally more - so read the points \", \"against each other, not against the bar.\")}")
 .plan[["native_individual"]] <- list(
