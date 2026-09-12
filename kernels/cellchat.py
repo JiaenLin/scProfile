@@ -495,6 +495,7 @@ PLUGIN = {
         "figures": [
             {
                 'id': 'nativecmp_rankNet_stacked',
+                'kind': 'flow_compare',
                 'drawn_by': 'tool',
                 'fn': 'rankNet',
                 'axis': 'contrast',
@@ -507,6 +508,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_rankNet_unstacked',
+                'kind': 'flow_compare',
                 'drawn_by': 'tool',
                 'fn': 'rankNet',
                 'axis': 'contrast',
@@ -519,6 +521,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_interaction_flow',
+                'kind': 'interaction',
                 'drawn_by': 'plugin',
                 'axis': 'cohort',
                 'position': 'conclusion',
@@ -532,6 +535,7 @@ PLUGIN = {
             # split two and two, and `when` is the site's guard.
             {
                 'id': 'nativecmp_interaction_flow_log',
+                'kind': 'interaction',
                 'drawn_by': 'plugin',
                 'axis': 'cohort',
                 'position': 'conclusion',
@@ -545,26 +549,29 @@ PLUGIN = {
             },
             {
                 'id': 'native_circle_count',
+                'kind': 'circle',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_circle',
                 'axis': 'unit',
                 'position': 'contrast',
                 'profile': True,
                 'expr': '{\n netVisual_circle(cc@net$count, vertex.weight = as.numeric(table(cc@idents)),\n weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,\n title.name = "interactions")\n .stampf()\n }',
-                'legend': 'Every population is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is HOW MANY ligand-receptor interactions were inferred from the sender to the receiver, and edge colour is the sender. The ring is a layout and nothing more - a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.',
+                'legend': 'Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is HOW MANY ligand-receptor interactions were inferred from the sender to the receiver, and edge colour is the sender. The ring is a layout and nothing more - a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.',
             },
             {
                 'id': 'native_circle_weight',
+                'kind': 'circle',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_circle',
                 'axis': 'unit',
                 'position': 'contrast',
                 'profile': True,
                 'expr': '{\n netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),\n weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,\n title.name = "interaction strength")\n .stampf()\n }',
-                'legend': 'The same network drawn on STRENGTH rather than count: edge width is the summed communication probability from sender to receiver, not the number of pairs behind it. Count and strength disagree freely - a population can send many weak interactions or one strong one - which is why both are drawn. Node size is the number of cells, and the ring is a layout that carries no meaning.',
+                'legend': 'The same network of {ngrp} populations drawn on STRENGTH rather than count: edge width is the summed communication probability from sender to receiver, not the number of pairs behind it. Count and strength disagree freely - a population can send many weak interactions or one strong one - which is why both are drawn. Node size is the number of cells, and the ring is a layout that carries no meaning.',
             },
             {
                 'id': 'native_heatmap_count',
+                'kind': 'matrix',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_heatmap',
                 'axis': 'unit',
@@ -576,6 +583,7 @@ PLUGIN = {
             },
             {
                 'id': 'native_heatmap_weight',
+                'kind': 'matrix',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_heatmap',
                 'axis': 'unit',
@@ -587,6 +595,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_diff_heatmap_count',
+                'kind': 'diff_matrix',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_heatmap',
                 'axis': 'contrast',
@@ -601,6 +610,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_diff_heatmap_weight',
+                'kind': 'diff_matrix',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_heatmap',
                 'axis': 'contrast',
@@ -633,6 +643,7 @@ PLUGIN = {
             # plugin's to make and to get right.
             {
                 'id': 'nativecmp_interaction',
+                'kind': 'interaction',
                 'drawn_by': 'plugin',
                 'axis': 'cohort',
                 'position': 'conclusion',
@@ -644,6 +655,7 @@ PLUGIN = {
             },
             {
                 'id': 'native_signalingRole_scatter',
+                'kind': 'role_scatter',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_signalingRole_scatter',
                 'axis': 'unit',
@@ -658,6 +670,7 @@ PLUGIN = {
             # the figure - no metric reports it.
             {
                 'id': 'nativecmp_signalingRole_scatter_pair',
+                'kind': 'role_shift',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_signalingRole_scatter',
                 'axis': 'contrast',
@@ -668,6 +681,7 @@ PLUGIN = {
             },
             {
                 'id': 'native_signalingRole_heatmap_out',
+                'kind': 'role_heatmap',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_signalingRole_heatmap',
                 'axis': 'unit',
@@ -679,6 +693,7 @@ PLUGIN = {
             },
             {
                 'id': 'native_signalingRole_heatmap_in',
+                'kind': 'role_heatmap',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_signalingRole_heatmap',
                 'axis': 'unit',
@@ -698,6 +713,7 @@ PLUGIN = {
             # Computed from the same centrality the panels draw, over both objects.
             {
                 'id': 'nativecmp_signalingRole_heatmap',
+                'kind': 'role_heatmap',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_signalingRole_heatmap',
                 'axis': 'contrast',
@@ -715,6 +731,7 @@ PLUGIN = {
             # probability - so the quantity was unreadable from the plate.
             {
                 'id': 'nativecmp_interaction_lr',
+                'kind': 'interaction',
                 'drawn_by': 'plugin',
                 'fn': 'interaction_lr',
                 'axis': 'cohort',
@@ -747,6 +764,7 @@ PLUGIN = {
             # lines, losing the end of the sentence that says what the dashed line is.
             {
                 'id': 'nativecmp_interaction_lr_scatter',
+                'kind': 'interaction',
                 'drawn_by': 'plugin',
                 'fn': 'interaction_lr',
                 'axis': 'cohort',
@@ -758,6 +776,7 @@ PLUGIN = {
             },
             {
                 'id': 'native_bubble',
+                'kind': 'other',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_bubble',
                 'axis': 'unit',
@@ -770,6 +789,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_bubble_comparison',
+                'kind': 'other',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_bubble',
                 'axis': 'contrast',
@@ -782,6 +802,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_bubble_focused',
+                'kind': 'other',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_bubble',
                 'axis': 'contrast',
@@ -797,6 +818,7 @@ PLUGIN = {
             # small in the middle of a large canvas. `height` is CellChat's own argument for the body.
             {
                 'id': 'native_patterns',
+                'kind': 'patterns',
                 'drawn_by': 'tool',
                 'fn': 'identifyCommunicationPatterns',
                 'axis': 'unit',
@@ -810,6 +832,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_rankSimilarity_functional',
+                'kind': 'similarity',
                 'drawn_by': 'tool',
                 'fn': 'rankSimilarity',
                 'axis': 'contrast',
@@ -817,10 +840,11 @@ PLUGIN = {
                 'w': 1600,
                 'h': 2000,
                 'args': 'm, type = "functional"',
-                'legend': 'Pathways ranked by HOW FAR THEY MOVED in the joint functional embedding - the largest values are the pathways whose participating populations differ most between the arms. It ranks a change in ROLE, not a change in amount: a pathway can carry the same flow in both arms and still rank highly here.',
+                'legend': 'The {length(union(a@netP$pathways, b@netP$pathways))} pathways either arm inferred, ranked by HOW FAR THEY MOVED in the joint functional embedding - the largest values are the pathways whose participating populations differ most between the arms. It ranks a change in ROLE, not a change in amount: a pathway can carry the same flow in both arms and still rank highly here.',
             },
             {
                 'id': 'native_database_category',
+                'kind': 'other',
                 'drawn_by': 'tool',
                 'fn': 'showDatabaseCategory',
                 'axis': 'unit',
@@ -830,6 +854,7 @@ PLUGIN = {
             },
             {
                 'id': 'native_aggregate_circle',
+                'kind': 'circle',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_aggregate',
                 'axis': 'unit',
@@ -837,10 +862,11 @@ PLUGIN = {
                 'at_most': 1,
                 'file': 'paste0("aggregate_circle__", pw)',
                 'args': 'cc, signaling = pw, layout = "circle"',
-                'legend': 'The inferred network for the {pw} pathway alone, aggregated over every ligand-receptor pair in it. Nodes are populations, edge width is the summed communication probability from sender to receiver, and the ring is a layout that carries no meaning. One pathway, one unit, no comparison.',
+                'legend': 'The inferred network for the {pw} pathway alone - the strongest of the {dim(cc@netP$prob)[3]} pathways inferred in this unit, and the only one drawn this way - aggregated over every ligand-receptor pair in it. Nodes are populations, edge width is the summed communication probability from sender to receiver, and the ring is a layout that carries no meaning. One pathway, one unit, no comparison.',
             },
             {
                 'id': 'nativecmp_aggregate_circle',
+                'kind': 'circle',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_aggregate',
                 'axis': 'contrast',
@@ -851,10 +877,11 @@ PLUGIN = {
                 'w': 2800,
                 'h': 1500,
                 'expr': '{\n graphics::par(mfrow = c(1, 2), xpd = TRUE)\n for (i in seq_along(object.list))\n netVisual_aggregate(object.list[[i]], signaling = pw, layout = "circle",\n edge.weight.max = wmax,\n signaling.name = paste(pw, names(object.list)[i]))\n }',
-                'legend': 'The {pw} pathway drawn once per arm, side by side, ON A SHARED MAXIMUM EDGE WEIGHT so the two rings are comparable - which this plugin imposes and the tool does not. Nodes are populations, edge width is the inferred communication probability, and position on the ring carries no meaning. A missing edge in one arm is an inference that arm did not make.',
+                'legend': "The {pw} pathway - one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order - drawn once per arm, side by side, ON A SHARED MAXIMUM EDGE WEIGHT so the two rings are comparable - which this plugin imposes and the tool does not. Nodes are populations, edge width is the inferred communication probability, and position on the ring carries no meaning. A missing edge in one arm is an inference that arm did not make.",
             },
             {
                 'id': 'native_chord_gene',
+                'kind': 'chord',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_chord_gene',
                 'axis': 'unit',
@@ -862,10 +889,11 @@ PLUGIN = {
                 'at_most': 1,
                 'file': 'paste0("chord_gene__", pw)',
                 'args': 'cc, signaling = pw, lab.cex = 0.6, legend.pos.y = 30',
-                'legend': 'The {pw} pathway opened up to the GENES behind it: each ribbon runs from a ligand on the sending side to its receptor on the receiving side, and ribbon width is that pair inferred communication probability. The ordering around the circle is a layout. This is the gene-level view of the numbers the aggregate circle sums.',
+                'legend': 'The {pw} pathway - the strongest of the {dim(cc@netP$prob)[3]} pathways inferred in this unit - opened up to the GENES behind it: each ribbon runs from a ligand on the sending side to its receptor on the receiving side, and ribbon width is that pair inferred communication probability. The ordering around the circle is a layout. This is the gene-level view of the numbers the aggregate circle sums.',
             },
             {
                 'id': 'native_contribution',
+                'kind': 'contribution',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_contribution',
                 'axis': 'unit',
@@ -873,10 +901,11 @@ PLUGIN = {
                 'at_most': 1,
                 'file': 'paste0("contribution__", pw)',
                 'args': 'cc, signaling = pw',
-                'legend': 'Which ligand-receptor pairs actually carry the {pw} pathway. One bar per pair, length is that pair share of the pathway total inferred communication probability. A pathway drawn as a single edge elsewhere on this page is usually a handful of pairs, and often one - this is where that shows.',
+                'legend': 'Which ligand-receptor pairs actually carry the {pw} pathway. One bar per pair, length is that pair share of the pathway total inferred communication probability, so the bars sum to 100% of the pathway. A pathway drawn as a single edge elsewhere on this page is usually a handful of pairs, and often one - this is where that shows.',
             },
             {
                 'id': 'native_signalingRole_network',
+                'kind': 'role_heatmap',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_signalingRole_network',
                 'axis': 'unit',
@@ -888,6 +917,7 @@ PLUGIN = {
             },
             {
                 'id': 'native_hierarchy',
+                'kind': 'other',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_hierarchy1',
                 'axis': 'unit',
@@ -902,6 +932,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_barplot_count',
+                'kind': 'unit_totals',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_barplot',
                 'axis': 'contrast',
@@ -914,6 +945,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_barplot_weight',
+                'kind': 'unit_totals',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_barplot',
                 'axis': 'contrast',
@@ -926,6 +958,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_compareInteractions',
+                'kind': 'unit_totals',
                 'drawn_by': 'tool',
                 'fn': 'compareInteractions',
                 'axis': 'cohort',
@@ -951,6 +984,7 @@ PLUGIN = {
             # figure whose file name the migration changed - on purpose, and predicted.
             {
                 'id': 'nativecmp_compareInteractions_per1k',
+                'kind': 'unit_totals',
                 'drawn_by': 'plugin',
                 'axis': 'cohort',
                 'position': 'overview',
@@ -964,6 +998,7 @@ PLUGIN = {
             },
             {
                 'id': 'native_individual',
+                'kind': 'circle',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_individual',
                 'axis': 'unit',
@@ -972,10 +1007,11 @@ PLUGIN = {
                 'file': 'paste0("individual__", gsub("[^A-Za-z0-9]+", "_", as.character(lr[1, 1])))',
                 'device': 'ndev',
                 'args': 'cc, signaling = pw, pairLR.use = lr[1, ], layout = "circle"',
-                'legend': 'A single ligand-receptor pair from the {pw} pathway, drawn on its own rather than aggregated with the rest. Nodes are populations, edge width is that one pair inferred communication probability, and the ring is a layout. This is the finest grain the method infers - every other network panel here sums pairs like this one.',
+                'legend': 'A single ligand-receptor pair from the {pw} pathway - {as.character(lr[1, 1])}, the first of {nrow(lr)} pairs enriched in it - drawn on its own rather than aggregated with the rest. Nodes are populations, edge width is that one pair inferred communication probability, and the ring is a layout. This is the finest grain the method infers - every other network panel here sums pairs like this one.',
             },
             {
                 'id': 'estimationNumCluster',
+                'kind': 'other',
                 'drawn_by': 'tool',
                 'fn': 'netClustering',
                 'axis': 'unit',
@@ -986,6 +1022,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_chord_cell',
+                'kind': 'chord',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_chord_cell',
                 'axis': 'contrast',
@@ -996,10 +1033,11 @@ PLUGIN = {
                 'w': 1800,
                 'h': 1800,
                 'args': 'object.list[[i]], signaling = pw, lab.cex = 0.45, small.gap = 1, big.gap = 8, title.name = paste(pw, names(object.list)[i])',
-                'legend': 'The {pw} pathway as a chord diagram, one per arm: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning.',
+                'legend': "The {pw} pathway as a chord diagram, one per arm - one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning.",
             },
             {
                 'id': 'nativecmp_diffInteraction_count',
+                'kind': 'diff_matrix',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_diffInteraction',
                 'axis': 'contrast',
@@ -1011,6 +1049,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_diffInteraction_weight',
+                'kind': 'diff_matrix',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_diffInteraction',
                 'axis': 'contrast',
@@ -1022,15 +1061,17 @@ PLUGIN = {
             },
             {
                 'id': 'native_embedding_functional',
+                'kind': 'similarity',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_embedding',
                 'axis': 'unit',
                 'position': 'appendix',
                 'args': 'ccE, type = "functional", label.size = 3.5',
-                'legend': 'Every pathway placed in two dimensions by FUNCTIONAL similarity - pathways land near each other when they act between the same populations, whatever genes they use. THE AXES HAVE NO UNITS and neither does the distance: this is a layout of a similarity matrix, so read which pathways cluster and never how far apart two of them are.',
+                'legend': 'Every one of the {dim(cc@netP$prob)[3]} pathways inferred in this unit placed in two dimensions by FUNCTIONAL similarity - pathways land near each other when they act between the same populations, whatever genes they use. THE AXES HAVE NO UNITS and neither does the distance: this is a layout of a similarity matrix, so read which pathways cluster and never how far apart two of them are.',
             },
             {
                 'id': 'native_embeddingZoomIn_functional',
+                'kind': 'similarity',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_embeddingZoomIn',
                 'axis': 'unit',
@@ -1038,19 +1079,21 @@ PLUGIN = {
                 'w': 2400,
                 'h': 2000,
                 'args': 'ccE, type = "functional", nCol = 2',
-                'legend': 'The functional-similarity embedding again, one panel per cluster so that crowded labels can be read. The same coordinates as the whole-page version, cropped - no pathway has moved. The axes still have no units.',
+                'legend': 'The functional-similarity embedding of the same {dim(cc@netP$prob)[3]} pathways again, one panel per cluster so that crowded labels can be read. The same coordinates as the whole-page version, cropped - no pathway has moved. The axes still have no units.',
             },
             {
                 'id': 'nativecmp_embeddingPairwise_functional',
+                'kind': 'similarity',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_embeddingPairwise',
                 'axis': 'contrast',
                 'position': 'appendix',
                 'args': 'm, type = "functional", label.size = 3.5',
-                'legend': 'Both arms pathways embedded TOGETHER by functional similarity, so the same pathway from each arm appears as two points and the distance between them is how far its role shifted. The axes have no units and neither does any single distance; only the pairing is meant to be read.',
+                'legend': 'The {length(union(a@netP$pathways, b@netP$pathways))} pathways either arm inferred, embedded TOGETHER by functional similarity, so the same pathway from each arm appears as two points and the distance between them is how far its role shifted. The axes have no units and neither does any single distance; only the pairing is meant to be read.',
             },
             {
                 'id': 'nativecmp_embeddingPairwiseZoomIn_functional',
+                'kind': 'similarity',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_embeddingPairwiseZoomIn',
                 'axis': 'contrast',
@@ -1058,10 +1101,11 @@ PLUGIN = {
                 'w': 2600,
                 'h': 2200,
                 'args': 'm, type = "functional", nCol = 2',
-                'legend': 'The joint embedding again, one panel per cluster so the paired points can be told apart. The same coordinates, cropped - nothing has moved. The axes still have no units.',
+                'legend': 'The joint embedding of the same {length(union(a@netP$pathways, b@netP$pathways))} pathways again, one panel per cluster so the paired points can be told apart. The same coordinates, cropped - nothing has moved. The axes still have no units.',
             },
             {
                 'id': 'native_dot',
+                'kind': 'patterns',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_dot',
                 'axis': 'unit',
@@ -1076,6 +1120,7 @@ PLUGIN = {
             },
             {
                 'id': 'native_river',
+                'kind': 'patterns',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_river',
                 'axis': 'unit',
@@ -1090,6 +1135,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_diff_signalingRole',
+                'kind': 'role_shift',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_diff_signalingRole_scatter',
                 'axis': 'contrast',
@@ -1099,6 +1145,7 @@ PLUGIN = {
             },
             {
                 'id': 'nativecmp_signalingChanges',
+                'kind': 'role_shift',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_signalingChanges_scatter',
                 'axis': 'contrast',
@@ -1110,6 +1157,7 @@ PLUGIN = {
             },
             {
                 'id': 'native_geneExpression',
+                'kind': 'other',
                 'drawn_by': 'tool',
                 'fn': 'plotGeneExpression',
                 'axis': 'unit',
@@ -1123,6 +1171,7 @@ PLUGIN = {
             },
             {
                 'id': 'F1_database_coverage',
+                'kind': 'coverage',
                 'drawn_by': 'plugin',
                 'axis': 'unit',
                 'position': 'appendix',
@@ -1135,6 +1184,7 @@ PLUGIN = {
             },
             {
                 'id': 'F2_population_power',
+                'kind': 'unit_presence',
                 'drawn_by': 'plugin',
                 'axis': 'unit',
                 'position': 'appendix',
@@ -1146,6 +1196,7 @@ PLUGIN = {
             },
             {
                 'id': 'F3_permutation',
+                'kind': 'other',
                 'drawn_by': 'plugin',
                 'axis': 'unit',
                 'position': 'appendix',
@@ -1158,6 +1209,7 @@ PLUGIN = {
             },
             {
                 'id': 'F4_network',
+                'kind': 'matrix',
                 'drawn_by': 'plugin',
                 'axis': 'unit',
                 'position': 'appendix',
@@ -1169,6 +1221,7 @@ PLUGIN = {
             },
             {
                 'id': 'F6_signaling_roles',
+                'kind': 'role_scatter',
                 'drawn_by': 'plugin',
                 'axis': 'unit',
                 'position': 'appendix',
@@ -1181,6 +1234,7 @@ PLUGIN = {
             },
             {
                 'id': 'F7_pathway_roles',
+                'kind': 'role_heatmap',
                 'drawn_by': 'plugin',
                 'axis': 'unit',
                 'position': 'appendix',
@@ -1193,6 +1247,7 @@ PLUGIN = {
             },
             {
                 'id': 'F8_pathway_rank',
+                'kind': 'flow_rank',
                 'drawn_by': 'plugin',
                 'axis': 'unit',
                 'position': 'appendix',
@@ -1205,6 +1260,7 @@ PLUGIN = {
             },
             {
                 'id': 'F9_patterns',
+                'kind': 'patterns',
                 'drawn_by': 'plugin',
                 'axis': 'unit',
                 'position': 'appendix',
@@ -1217,6 +1273,7 @@ PLUGIN = {
             },
             {
                 'id': 'F10_pathway_similarity',
+                'kind': 'similarity',
                 'drawn_by': 'plugin',
                 'axis': 'unit',
                 'position': 'appendix',
@@ -1229,6 +1286,7 @@ PLUGIN = {
             },
             {
                 'id': 'F5_dotplot',
+                'kind': 'other',
                 'drawn_by': 'plugin',
                 'axis': 'unit',
                 'position': 'appendix',

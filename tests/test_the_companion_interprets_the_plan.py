@@ -42,7 +42,9 @@ SPEC = {"requires": {"r": ["base"]}, "report": {"figures": [
     {"id": "nativecmp_chord", "drawn_by": "tool", "fn": "plot", "axis": "contrast",
      "position": "contrast", "items": "shared", "at_most": 6,
      "file": 'paste0("chord__", .item)', "args": "1, main = .item",
-     "legend": 'The {.item} pathway, "quoted".'},
+     # THE CEILING NAMED FROM THE PLAN, NOT RETYPED: a legend that said "at most 8" while the
+     # entry said 6 is the two-numbers-kept-in-step-by-hand defect the plan exists to end
+     "legend": 'The {.item} pathway, "quoted", at most {.entry$at_most} drawn.'},
     # the plugin's own R: a brace block on a side-effect device, sized by an expression
     {"id": "nativecmp_own", "drawn_by": "plugin", "axis": "contrast", "position": "conclusion",
      "at_most": 1, "device": "ndev", "w": "n * 100", "h": 300,
@@ -65,12 +67,13 @@ check(".draw <- function(id, item = NULL, env = parent.frame())" in text,
       "the companion defines no `.draw`")
 check(".draw_all <- function(axis, env = parent.frame())" in text,
       "the companion defines no `.draw_all`")
-check('The {.item} pathway, \\"quoted\\".' in text,
+check('The {.item} pathway, \\"quoted\\", at most {.entry$at_most} drawn.' in text,
       "a legend's double quotes are not escaped in the R string literal")
 check("expr = quote({\n x <- 1:3\n plot(x)\n })" in text,
       "a brace block lost its lines on the way into the companion")
 check("w = quote(n * 100)" in text and "h = quote(300)" in text,
       "a device size is not carried as an expression the draw evaluates")
+check("at_most = 6" in text, "the ceiling is not in the plan's R entry, so no legend can name it")
 
 companion = SC.R_DRAW.replace("__NAME__", "t") + text
 rscript = shutil.which("Rscript")
@@ -102,8 +105,9 @@ shared <- c("A", NA, "", "B")
         caps = (fig / "captions.tsv").read_text(encoding="utf-8") if (fig / "captions.tsv").is_file() else ""
         check("Counts for 3 populations." in caps,
               f"a legend placeholder was not filled from the caller's frame: {caps!r}")
-        check('The A pathway, "quoted".' in caps and 'The B pathway, "quoted".' in caps,
-              f"`.item` did not reach the legend of a per-item entry: {caps!r}")
+        check('The A pathway, "quoted", at most 6 drawn.' in caps
+              and 'The B pathway, "quoted", at most 6 drawn.' in caps,
+              f"`.item` and `.entry$at_most` did not reach the legend of a per-item entry: {caps!r}")
         check("Own, 3 points." in caps, f"the plugin's own site lost its legend: {caps!r}")
         check("\tplugin" in caps and "\ttool" in caps,
               f"the provenance did not travel from the entry to the caption: {caps!r}")

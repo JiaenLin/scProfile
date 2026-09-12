@@ -492,6 +492,9 @@ R_PLAN = r'''
   e <- .plan[[id]]
   if (is.null(e)) stop("no entry in the plan is called ", id)
   if (!is.null(item)) assign(".item", item, envir = env)
+  # THE ENTRY, VISIBLE TO ITS OWN LEGEND: `{.entry$at_most}` names the ceiling from the plan,
+  # once, where a legend that retyped it said 8 while the declaration said 6.
+  assign(".entry", e, envir = env)
   if (!is.null(e$when) && !isTRUE(eval(e$when, env))) return(invisible(NULL))
   # THE FILE STEM: the entry's own expression, or the id without this script's prefix - the
   # prefix is put back by the device path, as it was for every hand-written site.
@@ -567,6 +570,8 @@ def render_plan(spec):
                   f"by = {_r_str(e.get('drawn_by') or 'tool')}",
                   f"fn = {_r_str(e.get('fn') or '')}",
                   f"device = {_r_str(e.get('device') or 'png')}"]
+        if e.get("at_most") is not None:
+            fields.append(f"at_most = {int(e['at_most'])}")
         for k in ("w", "h", "res"):
             if e.get(k) is not None and str(e.get(k)).strip():
                 fields.append(f"{k} = quote({str(e[k]).strip()})")

@@ -41,6 +41,13 @@ WHY EACH ONE EXISTS. Measured on a real multi-sample, two-factor cohort whose re
                 merely been produced, and whole comparisons the design supports had no sentence
                 about them at all. Shipping an uncited plate is allowed; doing it silently is not,
                 and naming it in a supporting-material line counts as citing it.
+  kinds         The plan binds every figure to a panel kind, and a kind carries rules; two of
+                them have a mechanical form. R3, a cut names what it removed, and R4, the
+                denominator is declared, both mean the caption states a count or a fraction -
+                "8 of 49 pathways", "at most 8", "the strongest of 31". A chord drawn for eight
+                pathways out of forty-nine whose caption said "one per arm" was a cut nobody
+                could see (harness ADR-0016, step 6). Read from the plan beside the page; a page
+                with no plan is n/a, said so.
   sections      A section of prose citing no figure asserts something a reader cannot check on
                 the page it is made on. It caught a document whose section on the study's own
                 headline question - the interaction - ran to ninety words of arithmetic and
@@ -154,7 +161,56 @@ ARM_HINT = re.compile(
 #: them can fail, and the module docstring explains each. All three read this tuple, so a
 #: criterion cannot be documented and not implemented, or implemented and never proven.
 CRITERIA = ("overview", "arms", "repeats", "count", "captions", "cited",
-            "caveats", "hidden", "identifiers", "contradiction", "sections", "authored")
+            "caveats", "hidden", "identifiers", "contradiction", "sections", "authored", "kinds")
+
+#: THE RULES A KIND CARRIES THAT A CAPTION CAN BE HELD TO BY A MACHINE. R3 (a cut names what it
+#: removed) and R4 (the denominator is declared) both come down to a count or a fraction in the
+#: caption; the other rules are about the picture, and the eye is their check.
+MECHANICAL_RULES = ("R3_cut_names_omitted", "R4_denominator_declared")
+_STATES_A_COUNT = re.compile(
+    r"\d+(?:[.,]\d+)?\s*%|\b\d+\s+of\s+(?:the\s+)?\d+|\b(?:at most|top|strongest|largest|first|up to)"
+    r"\s+\d+\b|\bone of (?:the )?\d+|\b\d+\s+(?:pathway|pair|population|gene|unit|sample|cell|"
+    r"interaction|ligand|receptor|term)", re.I)
+
+
+def states_a_count(caption):
+    """Does a caption state a count or a fraction - the mechanical form of R3 and R4."""
+    return _STATES_A_COUNT.search(caption or "") is not None
+
+
+def kinds_beside(report_dir, basenames):
+    """{figure basename: kind} from the plan in the payload beside a report, or None.
+
+    THE PLAN IS `report.figures` of each kernel's report block in `report.json` (harness
+    ADR-0016); a file is an entry's when its stem is the id, or the id followed by the separator
+    a per-item family uses - the same rule `native.names_file` applies for captions and ceilings,
+    so the standard cannot bind a figure to a kind the accounting would not. None when there is
+    no payload beside the report, or no entry declares a kind: unmeasurable, said as such.
+    """
+    from . import declare as _DC, native as _NAT
+    d = Path(report_dir)
+    src = (d if d.name != "report" else d.parent) / "report.json"
+    try:
+        payload = json.loads(src.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    entries = []
+    for _name, pl in (payload.get("kernels") or {}).items():
+        block = (pl or {}).get("spec") if isinstance(pl, dict) else None
+        # THROUGH THE ACCESSOR: the block is the report block, and `figures_in` is how every
+        # reader of it reads its panels.
+        for e in _DC.figures_in(block):
+            if e.get("id") and e.get("kind"):
+                entries.append((str(e["id"]), str(e["kind"]), _NAT.per_item_entry(e)))
+    if not entries:
+        return None
+    out = {}
+    for b in basenames:
+        stem = b.rsplit(".", 1)[0]
+        hits = [(len(fid), kind) for fid, kind, per in entries if _NAT.names_file(fid, stem, per)]
+        if hits:
+            out[b] = max(hits)[1]
+    return out
 
 
 def _text(html):
@@ -260,7 +316,7 @@ def declared_exemptions(html):
     return out
 
 
-def check_page(path, *, exempt=(), recorded=()):
+def check_page(path, *, exempt=(), recorded=(), kinds=None):
     """Every criterion, measured on one rendered page. Returns [(id, ok, detail)].
 
     `recorded` is what the PLUGIN said about its own result and the page must therefore show -
@@ -296,6 +352,33 @@ def check_page(path, *, exempt=(), recorded=()):
             out.append((cid, True, "exempt: " + declared.get(cid, "no reason given")))
             return
         out.append((cid, bool(ok), detail))
+
+    # WHAT A KIND DEMANDS OF A CAPTION. Each figure whose file the plan binds to a kind that
+    # carries a mechanical rule must state a count or a fraction in its visible caption.
+    if kinds is None:
+        ck("kinds", True, "n/a: no plan beside this page binds its figures to kinds")
+    else:
+        from . import panels as _P
+        bad, bound = [], 0
+        for block in re.findall(r"<figure[^>]*>(.*?)</figure>", html, re.S):
+            m = re.search(r'src="([^"]+)"', block)
+            if not m:
+                continue
+            base = m.group(1).rsplit("/", 1)[-1]
+            kind = kinds.get(base)
+            if not kind:
+                continue
+            bound += 1
+            k = _P.BY_ID.get(kind)
+            need = [r for r in (k.rules if k else ()) if r in MECHANICAL_RULES]
+            cm = re.search(r"<figcaption[^>]*>(.*?)</figcaption>", block, re.S)
+            vis = _text(re.sub(r"<details[^>]*>.*?</details>", " ", cm.group(1) if cm else "",
+                               flags=re.S))
+            if need and not states_a_count(vis):
+                bad.append(f"{base} ({kind}: {', '.join(r.split('_', 1)[0] for r in need)})")
+        ck("kinds", not bad,
+           f"{len(bad)} of {bound} kind-bound figure(s) whose caption states no count or "
+           f"fraction: {', '.join(bad[:6])}" if bad else f"{bound} kind-bound figure(s)")
 
     ck("overview", "The cohort" in html or "the cohort" in txt.lower()[:4000],
        "no cohort overview: a reader meets a number before learning what was compared")
@@ -499,13 +582,20 @@ def check_report(report_dir, *, exempt=None):
         parent = d / f"{f.stem[:-len(suffix)]}.html"
         if parent.exists() and f.name in parent.read_text(encoding="utf-8"):
             appendix.add(f.stem)
+    # THE KINDS, ONCE PER REPORT: every figure file any page shows, bound through the plan.
+    _srcs = set()
+    for f in pages:
+        _srcs |= {m.rsplit("/", 1)[-1] for m in
+                  re.findall(r'src="([^"]+\.png)"', f.read_text(encoding="utf-8"))}
+    _kinds = kinds_beside(d, sorted(_srcs))
     for f in pages:
         if f.stem in appendix:
             continue
         # THREE STATES: no payload at all, a payload whose page predates the field, and a
         # measured list. Only the last is a check; the other two say so.
         _rec = None if unmeasurable else claims.get(f.stem, ())
-        res[f.stem] = check_page(f, exempt=set(exempt.get(f.stem, ())), recorded=_rec)
+        res[f.stem] = check_page(f, exempt=set(exempt.get(f.stem, ())), recorded=_rec,
+                                 kinds=_kinds)
     return res
 
 
@@ -594,6 +684,8 @@ def _mutate(cid):
         return BASELINE.replace("What else it shows.", "Strongest signal: A0A079HLR9.")
     if cid == "contradiction":
         return BASELINE                    # the claim is supplied, and the page never shows it
+    if cid == "kinds":
+        return BASELINE                    # the kind is supplied, and the caption states no count
     raise KeyError(cid)                    # a criterion with no counterexample is not provable
 
 
@@ -620,9 +712,9 @@ def selfcheck():
     with tempfile.TemporaryDirectory() as td:
         page = Path(td) / "p.html"
 
-        def run(html, recorded=()):
+        def run(html, recorded=(), kinds=None):
             page.write_text(html, encoding="utf-8")
-            return {c: (o, d) for c, o, d in check_page(page, recorded=recorded)}
+            return {c: (o, d) for c, o, d in check_page(page, recorded=recorded, kinds=kinds)}
 
         clean = run(BASELINE)
         for cid in CRITERIA:
@@ -634,7 +726,10 @@ def selfcheck():
                                         f"{clean[cid][1]}"))
                 continue
             broken = run(_mutate(cid),
-                         recorded=(_MISSING_CLAIM,) if cid == "contradiction" else ())
+                         recorded=(_MISSING_CLAIM,) if cid == "contradiction" else (),
+                         # a chord carries R3: its caption must name the cut, and BASELINE's
+                         # "What it shows, by arm." names none
+                         kinds={"a.png": "chord"} if cid == "kinds" else None)
             out.append((cid, not broken[cid][0],
                         "does not fire on the page written to break it"))
         for cid in sorted(set(clean) - set(CRITERIA)):
