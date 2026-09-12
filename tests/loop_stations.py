@@ -272,13 +272,6 @@ def _commit_of(run):
     return ""
 
 
-def _kind(fig):
-    """A figure id with its unit suffix removed - the KIND, which is where a defect lives."""
-    stem = Path(fig).stem
-    stem = re.sub(r"__.*$", "", stem)
-    return re.sub(r"^[a-z0-9]+_(?=[A-Z]|[CNPF]\d)", "", stem)
-
-
 def carried_findings(runs, current):
     """What was last SEEN on each figure path, in earlier runs of this project.
 
@@ -308,59 +301,53 @@ def carried_findings(runs, current):
     return out
 
 
+def _scan(r):
+    """(the scan set of one run, the figures of it with a recorded look) - run-relative paths.
+
+    ONE SET, `review.scan_set`, per plugin and unioned: what the paper numbers plus one instance
+    of every other kind (harness ADR-0017). The ledgers are per plugin; a figure path inside a
+    ledger is relative to the RUN root wherever it was written, which is what makes the union
+    meaningful without rewriting anything.
+    """
+    from scprofile import review as RV
+    want = set()
+    for p in plugins_in(r):
+        want |= set(RV.scan_set(r, p))
+    done = set()
+    for led in [r / RV.LEDGER] + [r / "kernels" / p / RV.LEDGER for p in plugins_in(r)]:
+        done |= {row["figure"] for row in _lines(led)}
+    return want, want & done, done
+
+
 def station_eye(runs):
     """7. Are the pictures right? A ledger entry per figure in the scan set.
 
     TWO THINGS THIS GOT WRONG ON ITS FIRST RUN, both of which made the worklist wrong rather
-    than merely long:
-
-      IT SCANNED THE PDF AND THE PNG OF THE SAME PANEL. `review` counts every image suffix, and
-      "the largest and smallest instance of a kind" then selected the two FORMATS of one panel
-      instead of two units of it - so the rule that exists to cover the units that break layouts
-      covered one unit twice. Raster only: the vector is the same picture.
-
-      IT PICKED THE RUN WITH THE MOST GAPS. That is whichever run has the most figures, and it
-      is usually an old one. The loop tests the TOOL, and the newest run is the one the current
-      code produced; scanning an old run's figures reports on code that has already changed.
+    than merely long: it scanned the PDF and the PNG of one panel as two instances, and it
+    picked the run with the most gaps, which is the oldest. Raster only; the newest run. And a
+    third, found when a cold agent was to be driven through it (ADR-0017): it asked for a set
+    of its own - every kind's largest and smallest, by a definition of a kind that was its own
+    too - while the review command split the paper's list; the set is `review.scan_set` now,
+    read by every caller alike.
     """
     from scprofile import review as RV
-    RASTER = (".png", ".jpg", ".jpeg")
     # Newest by run key, which begins with a UTC stamp - so sorting the names sorts by time.
     for r in sorted(runs, key=lambda p: p.name, reverse=True):
-        figs = [f for f in RV.figures(r) if f.lower().endswith(RASTER)]
-        if not figs:
+        want, seen, done = _scan(r)
+        if not want:
             continue
-        kinds = {}
-        for f in figs:
-            kinds.setdefault(_kind(f), []).append(f)
-        # THE COVERAGE RULE, from docs/TEST_LOOP.md: every kind once, plus every cohort panel,
-        # and where a kind is per-unit take the largest and smallest instance - the two that
-        # break a layout.
-        want = set()
-        for _k, fs in kinds.items():
-            fs = sorted(fs, key=lambda p: (r / p).stat().st_size)
-            want.add(fs[0])
-            want.add(fs[-1])
-        # THE LEDGERS ARE PER PLUGIN NOW, so the scan set is checked against their union. A
-        # figure path inside a ledger is relative to the RUN root wherever it was written, which
-        # is what makes the union meaningful without rewriting anything.
-        done = set()
-        for _led in [r / RV.LEDGER] + [r / "kernels" / _p / RV.LEDGER for _p in plugins_in(r)]:
-            done |= {row["figure"] for row in _lines(_led)}
-        todo = sorted(want - done)
-        # KINDS AND INSTANCES ARE DIFFERENT NUMBERS AND BOTH BELONG ON THE LINE. The first
-        # version reported only the named instances, so three real looks at a kind's MIDDLE
-        # instance scored 0/45 - the coverage rule is about KINDS, and a look at any instance of
-        # one is evidence about the drawing code even when it is not the instance asked for.
-        # Reporting zero progress for work that was done is how a gate gets ignored.
-        seen_kinds = {_kind(f) for f in done}
-        worst = (r, todo, len(want), len(figs), len(kinds), len(seen_kinds & set(kinds)))
+        allf = len([f for f in RV.figures(r) if f.lower().endswith((".png", ".jpg", ".jpeg"))])
+        kinds = {RV.kind_of(f) for f in want}
+        # KINDS AND INSTANCES ARE DIFFERENT NUMBERS AND BOTH BELONG ON THE LINE: a look at any
+        # instance of a kind is evidence about the drawing code even when it is not the
+        # instance asked for, and reporting zero for it is how a gate gets ignored.
+        seen_kinds = {RV.kind_of(f) for f in done} & kinds
+        todo = sorted(want - seen)
         break
     else:
         return BLOCKED, "no figures in any run", "run something that draws"
-    r, todo, want, allf, nk, seenk = worst
-    head = (f"{r.name}: {seenk}/{nk} kind(s) have a recorded look, "
-            f"{want - len(todo)}/{want} of the named scan set ({allf} figures in the run)")
+    head = (f"{r.name}: {len(seen_kinds)}/{len(kinds)} kind(s) have a recorded look, "
+            f"{len(seen)}/{len(want)} of the named scan set ({allf} figures in the run)")
     if todo:
         # WHAT WAS LAST SEEN ON THIS PANEL, beside the name of the panel to open. A redraw
         # correctly destroys the review; it should not also destroy the knowledge.
@@ -371,53 +358,64 @@ def station_eye(runs):
             _prev = _carried.get(_f)
             if _prev:
                 _lines_out.append(f"    last seen ({_prev[1][:24]}): {_prev[0][:150]}")
+        plugs = plugins_in(r)
+        cmd = (f"scprofile review --out {r} --plugin {plugs[0] if plugs else '<plugin>'} "
+               f"--shards {max(1, -(-len(todo) // 25))}")
         return BLOCKED, head, \
-            f"OPEN THESE AND RECORD WHAT YOU SEE:\n      " + "\n      ".join(_lines_out) \
-            + (f"\n      ... and {len(todo) - 8} more" if len(todo) > 8 else "") \
-            + ("\n      (a look at another instance of a kind counts toward the KIND, not "
-               "toward the named largest and smallest, which are the two that break layouts)"
-               if seenk else "")
+            (f"OPEN THESE AND RECORD WHAT YOU SEE (the whole list, split for several agents: "
+             f"{cmd}):\n      " + "\n      ".join(_lines_out)
+             + (f"\n      ... and {len(todo) - 8} more" if len(todo) > 8 else "")
+             + ("\n      (a look at another instance of a kind counts toward the KIND, not "
+                "toward the named instance)" if seen_kinds else ""))
     return PASS, head, ""
 
 
 def station_paper(runs):
-    """8. Does any of it support a claim?"""
+    """8. Does any of it support a claim? Per plugin, as the reporter writes it.
+
+    THE NEWEST RUN, LIKE THE EYE STATION - and for the same reason it took a fix there: a
+    finished loop on an old run made the station green while the run the current code produced
+    had no claim written from it at all.
+
+    PER PLUGIN (harness ADR-0017). The claims ledger and the rendered section are one plugin's,
+    under `kernels/<plugin>/` and `report/<plugin>_paper.html`; this read the run-level ledger
+    and looked for `report/paper.html`, so a run carrying 24 composed claims and a rendered
+    page per plugin read "no claim written from the newest run", and the station could never
+    pass on any run the reporter had made.
+    """
     from scprofile import paper as PA
-    # THE NEWEST RUN, LIKE THE EYE STATION - and for the same reason it took a fix there. This
-    # scanned every run and stopped at the first COMPLETE one, so a finished loop on an old run
-    # made the station green while the run the current code produced had no claim written from
-    # it at all. A loop that reports on a run two commits back is testing code that has changed.
-    best = None
-    for r in sorted(runs, key=lambda p: p.name, reverse=True):
-        rows = PA.status(r)
-        if not rows and best is not None:
+    newest = sorted(runs, key=lambda p: p.name, reverse=True)
+    for r in newest:
+        if not (r / "report.json").exists():
             continue
-        withdrawn = sum(1 for _c, st, _n, _t in rows if st == PA.WITHDRAWN)
-        out = PA.outstanding(r)
-        rendered = (r / "report" / "paper.html").is_file()
-        best = (r, rows, withdrawn, out, rendered)
-        break
-    if best is None:
-        return BLOCKED, "no run to write from", "run something first"
-    if not best[1]:
-        # NAME THE RUN. "no claim in any run" was the message even when older runs had plenty -
-        # what is true is that the NEWEST one has none, and the difference is the whole point of
-        # testing the run the current code produced.
-        return BLOCKED, f"{best[0].name}: no claim written from the newest run", \
-            f"scprofile paper --out {best[0]} --brief"
-    r, rows, withdrawn, out, rendered = best
-    if not rows:
-        return BLOCKED, f"{r.name}: no claim written from the newest run", \
-            f"scprofile paper --out {r} --brief"
-    if out:
-        return BLOCKED, f"{r.name}: {len(out)} claim(s) undefended or stale", \
-            f"scprofile paper --out {r} --round <id> --verdict ... --why '...'"
-    if not rendered:
-        return BLOCKED, f"{r.name}: claims defended, section not rendered into the run", \
-            f"scprofile paper --out {r} --render"
-    return PASS, (f"{r.name}: {len(rows)} claim(s), {withdrawn} withdrawn, section rendered"), \
-        ("" if withdrawn else "no claim was ever withdrawn — that is also what a loop looks "
-                              "like when nobody pushed")
+        plugs = plugins_in(r)
+        if not plugs:
+            continue
+        n_claims, n_withdrawn, gaps = 0, 0, []
+        for p in plugs:
+            rows = PA.status(r, p)
+            if not rows:
+                gaps.append((f"{p}: no claim written",
+                             f"scprofile paper --out {r} --plugin {p} --brief"))
+                continue
+            n_claims += len(rows)
+            n_withdrawn += sum(1 for _c, st, _n, _t in rows if st == PA.WITHDRAWN)
+            out = PA.outstanding(r, p)
+            if out:
+                gaps.append((f"{p}: {len(out)} claim(s) undefended or stale",
+                             f"scprofile paper --out {r} --plugin {p} --round {out[0][0]} "
+                             f"--verdict standing|narrowed|withdrawn --why '...'"))
+                continue
+            if not (r / "report" / PA.page_name(p)).is_file():
+                gaps.append((f"{p}: claims defended, section not rendered into the run",
+                             f"scprofile paper --out {r} --plugin {p} --render"))
+        if gaps:
+            return BLOCKED, f"{r.name}: " + "; ".join(g for g, _c in gaps), gaps[0][1]
+        return PASS, (f"{r.name}: {n_claims} claim(s) over {len(plugs)} plugin(s), "
+                      f"{n_withdrawn} withdrawn, section(s) rendered"), \
+            ("" if n_withdrawn else "no claim was ever withdrawn — that is also what a loop "
+                                    "looks like when nobody pushed")
+    return BLOCKED, "no run to write from", "run something first"
 
 
 #: THE DELIVERABLES A FINISHED RUN MUST CARRY, by path relative to the run directory. A run that
@@ -429,11 +427,15 @@ REQUIRED_OUTPUTS = (
     ("report/index.html", "the assembled report"),
 )
 
-#: AND PER PLUGIN, because a run mounts several methods and each owes its own result. These are
-#: resolved under `kernels/<plugin>/` - see `kernels.plugin_out`.
+#: AND PER PLUGIN, because a run mounts several methods and each owes its own result. Each is
+#: a template of a RUN-RELATIVE path: the ledger and the section live in the plugin's own
+#: directory (`kernels.plugin_out`), the rendered page beside the plugin's other pages in the
+#: run's report directory (`paper.page_name`). The page was resolved under `kernels/<plugin>/`
+#: before harness ADR-0017, where the reporter never writes it, so the station named it missing
+#: on every run that had it.
 REQUIRED_PER_PLUGIN = (
-    ("FIGURE_REVIEW.jsonl", "the ledger of what was actually looked at"),
-    ("PAPER.{plugin}.md", "this plugin's result section, written from its figures"),
+    ("kernels/{plugin}/FIGURE_REVIEW.jsonl", "the ledger of what was actually looked at"),
+    ("kernels/{plugin}/PAPER.{plugin}.md", "this plugin's result section, written from its figures"),
     ("report/{plugin}_paper.html", "its manuscript and figure panel, rendered"),
 )
 
@@ -457,7 +459,7 @@ def missing_outputs(run):
     gone = [(p, why) for p, why in REQUIRED_OUTPUTS if not (run / p).exists()]
     for plug in plugins_in(run):
         for tmpl, why in REQUIRED_PER_PLUGIN:
-            rel = f"kernels/{plug}/" + tmpl.format(plugin=plug)
+            rel = tmpl.format(plugin=plug)
             if not (run / rel).exists():
                 gone.append((rel, why))
     return gone
@@ -499,28 +501,16 @@ STATIONS = (
 
 
 def _eye_set(runs):
-    """The named scan set of the newest run that drew anything, and what has been looked at.
+    """The scan set of the newest run that drew anything, and what has been looked at.
 
     Computed here as well as in the station so the GOAL can be printed as a count on every
     blocked round, including rounds blocked earlier than station 7 - the distance to the goal
     does not depend on which station happens to be in the way.
     """
-    from scprofile import review as RV
-    RASTER = (".png", ".jpg", ".jpeg")
     for r in sorted(runs, key=lambda p: p.name, reverse=True):
-        figs = [f for f in RV.figures(r) if f.lower().endswith(RASTER)]
-        if not figs:
-            continue
-        kinds = {}
-        for f in figs:
-            kinds.setdefault(_kind(f), []).append(f)
-        want = set()
-        for _k, fs in kinds.items():
-            fs = sorted(fs, key=lambda p: (r / p).stat().st_size)
-            want.add(fs[0])
-            want.add(fs[-1])
-        done = {row["figure"] for row in _lines(r / RV.LEDGER)}
-        return want, want & done
+        want, seen, _done = _scan(r)
+        if want:
+            return want, seen
     return set(), set()
 
 

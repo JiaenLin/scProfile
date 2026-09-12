@@ -3112,12 +3112,13 @@ def _review(a):
         if getattr(a, "all_figures", False):
             src = ""
         elif not src and a.plugin:
-            # THE PAPER'S SET BY DEFAULT, when the run wrote one. A run holds every figure it
-            # drew; the brief's list holds the ones the writing step blocks on, and sending
-            # agents to appendix panels first is work before the work.
-            from . import brief as _BR
-            cand = out / "kernels" / a.plugin / _BR.FIGURE_LIST
-            src = str(cand) if cand.is_file() else ""
+            # THE ONE SELECTION BY DEFAULT (harness ADR-0017): the paper's figures plus one
+            # instance of every kind the paper does not show - the set station 7 counts and the
+            # agenda names, so the shards an agent works through are the set that is then read
+            # back as done. `--all-figures` is the audit of everything drawn.
+            only = RV.scan_set(out, a.plugin)
+            print(f"# restricted to the {len(only)} figure(s) of the scan set: the paper's own "
+                  f"and one instance of every other kind (--all-figures for everything drawn)")
         if src:
             try:
                 # SPLITLINES, NEVER split(). A figure path can contain SPACES - a contrast

@@ -308,6 +308,49 @@ def kind_of(rel):
     return re.sub(r"_[A-Za-z0-9]*[0-9]$", "", stem)
 
 
+def _size(path):
+    try:
+        return Path(path).stat().st_size
+    except OSError:
+        return -1
+
+
+def scan_set(out, plugin=""):
+    """The figures an agent reads: every figure the paper numbers, plus the largest instance of
+    every kind the paper does not show. Run-relative paths, sorted.
+
+    ONE SELECTION (harness ADR-0017). Station 7 asked for every kind's largest and smallest
+    instance and printed eight names; the agenda asked for the figures the paper cites;
+    `--shards` split a third list; the station and the sampler each had their own definition of
+    a kind. An agent that did exactly what one said was told by the other that nothing was
+    done. This is the one set every reader counts: what a reader is shown - `FIGURES.txt`,
+    written beside the brief - and one look at every other kind drawn, because a defect in how
+    a kind is drawn is in every instance of it and one instance establishes it; the largest is
+    the one that breaks a layout. `--all-figures` remains the audit of everything drawn.
+    """
+    root = Path(out)
+    raster = (".png", ".jpg", ".jpeg")
+    figs = [f for f in figures(out) if f.lower().endswith(raster)]
+    if plugin:
+        figs = [f for f in figs if f.startswith(f"kernels/{plugin}/")]
+    paper = []
+    if plugin:
+        from .brief import FIGURE_LIST
+        lst = root / "kernels" / plugin / FIGURE_LIST
+        if lst.is_file():
+            paper = [x.strip() for x in lst.read_text(encoding="utf-8").splitlines()
+                     if x.strip() and (root / x.strip()).is_file()]
+    have = {kind_of(p) for p in paper}
+    by = {}
+    for f in figs:
+        k = kind_of(f)
+        if k in have:
+            continue
+        if k not in by or _size(root / f) > _size(root / by[k]):
+            by[k] = f
+    return sorted(set(paper) | set(by.values()))
+
+
 def by_kind(out, plugin="", per_kind=1, only=None):
     """Up to `per_kind` OUTSTANDING figures of every kind. Coverage before volume.
 

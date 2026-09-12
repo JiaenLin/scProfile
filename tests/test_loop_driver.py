@@ -44,8 +44,83 @@ def test_required_outputs_names_the_manuscript_per_plugin():
     per_plug = [p for p, _ in L.REQUIRED_PER_PLUGIN]
     assert "report/index.html" in run_level
     assert any("PAPER." in p for p in per_plug), per_plug
-    assert any("_paper.html" in p for p in per_plug), per_plug
-    assert "FIGURE_REVIEW.jsonl" in per_plug
+    assert any(p.startswith("report/") and p.endswith("_paper.html") for p in per_plug), per_plug
+    assert any(p.endswith("FIGURE_REVIEW.jsonl") for p in per_plug), per_plug
+
+
+def test_the_paper_station_reads_each_plugins_own_ledger_and_page():
+    """The newest real run carried 24 composed claims and a rendered page per plugin, and the
+    station said "no claim written from the newest run": it read the run-level ledger and looked
+    for report/paper.html, neither of which a per-plugin run writes (harness ADR-0017)."""
+    import tempfile
+    from pathlib import Path
+    from scprofile import paper as PA
+
+    L = importlib.import_module("tests.loop_stations")
+    with tempfile.TemporaryDirectory() as td:
+        run = Path(td) / "20260101T000000Z__scprofile-a__s"
+        (run / "report").mkdir(parents=True)
+        (run / "report.json").write_text('{"kernels": {"k": {}}}')
+        figs = run / "kernels" / "k" / "figures"
+        figs.mkdir(parents=True)
+        (figs / "F1.png").write_bytes(b"x")
+        rec = PA.claim(run, "in arm A the share of X is higher than in arm B by nine points",
+                       ["kernels/k/figures/F1.png"], author="composed", plugin="k")
+        (run / "report" / "k_paper.html").write_text("<p>")
+        state, detail, nxt = L.station_paper([run])
+        assert state == L.BLOCKED and "undefended" in detail, detail
+        assert "--plugin k" in nxt, nxt
+        PA.review(run, rec["id"], PA.STANDING, "put to a second agent and it held",
+                  reviewer="agent-2", plugin="k")
+        state, detail, _ = L.station_paper([run])
+        assert state == L.PASS, detail
+
+
+def test_the_outputs_station_looks_for_the_page_where_the_reporter_writes_it():
+    """`report/<plugin>_paper.html` lives beside the plugin's other pages in the RUN's report
+    directory; the station resolved it under kernels/<plugin>/ and named it missing on every run
+    that had it (harness ADR-0017)."""
+    import tempfile
+    from pathlib import Path
+
+    L = importlib.import_module("tests.loop_stations")
+    with tempfile.TemporaryDirectory() as td:
+        run = Path(td) / "20260101T000000Z__scprofile-a__s"
+        (run / "report").mkdir(parents=True)
+        (run / "report.json").write_text('{"kernels": {"k": {}}}')
+        (run / "report" / "index.html").write_text("<p>")
+        (run / "report" / "k_paper.html").write_text("<p>")
+        d = run / "kernels" / "k"
+        (d / "figures").mkdir(parents=True)
+        (d / "figures" / "F1.png").write_bytes(b"x")
+        (d / "FIGURE_REVIEW.jsonl").write_text("")
+        (d / "PAPER.k.md").write_text("a section")
+        assert L.missing_outputs(run) == [], L.missing_outputs(run)
+
+
+def test_the_eye_station_counts_the_one_selection():
+    """One set, read by the station, the review command and the agenda alike: the paper's
+    figures plus one instance of every kind it does not show. The loop's own definition of a
+    kind is gone; `review.kind_of` is the one."""
+    import tempfile
+    from pathlib import Path
+
+    L = importlib.import_module("tests.loop_stations")
+    assert not hasattr(L, "_kind"), "the loop still defines its own kind"
+    with tempfile.TemporaryDirectory() as td:
+        run = Path(td) / "20260101T000000Z__scprofile-a__s"
+        (run / "report").mkdir(parents=True)
+        (run / "report.json").write_text('{"kernels": {"k": {}}}')
+        d = run / "kernels" / "k"
+        for unit, sz in (("U1", 2), ("U2", 5)):
+            (d / unit / "figures").mkdir(parents=True)
+            for kind in ("native_ring", "native_dot"):
+                (d / unit / "figures" / f"{kind}__{unit}.png").write_bytes(b"P" * sz)
+        (d / "FIGURES.txt").write_text("kernels/k/U1/figures/native_ring__U1.png\n")
+        state, detail, nxt = L.station_eye([run])
+        assert state == L.BLOCKED, detail
+        assert "0/2 of the named scan set" in detail, detail
+        assert "--plugin k --shards" in nxt, nxt
 
 
 def test_a_plugin_missing_its_section_is_named():

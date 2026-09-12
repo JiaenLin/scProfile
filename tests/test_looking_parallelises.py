@@ -154,6 +154,42 @@ with tempfile.TemporaryDirectory() as td:
     check(made[0] not in RV.by_kind(run, "p", 2),
           "a figure already looked at was sampled again")
 
+print("\none selection: the paper's figures plus one instance of every kind it does not show")
+# HARNESS ADR-0017. Station 7 asked for every kind's largest and smallest instance and printed
+# eight names; the agenda asked for the figures the paper cites; `--shards` split a third list.
+# An agent that did exactly what one said was told by the other that nothing was done. One set:
+# what a reader is shown, and one look at every other kind drawn.
+with tempfile.TemporaryDirectory() as td:
+    run = Path(td) / "runS"
+    d = run / "kernels" / "p"
+    made = {}
+    for unit, sz in (("unitA", 3), ("unitB", 9)):
+        u = d / unit / "figures"
+        u.mkdir(parents=True)
+        for kind in ("native_ring", "native_dot"):
+            f = u / f"{kind}__{unit}.png"
+            f.write_bytes(b"P" * sz)
+            made[(kind, unit)] = str(f.relative_to(run))
+    (d / "figures").mkdir()
+    (d / "figures" / "F1_cover.png").write_bytes(b"PP")
+    (run / "report.json").write_text('{"kernels": {"p": {}}}', encoding="utf-8")
+    (d / "FIGURES.txt").write_text(made[("native_ring", "unitA")]
+                                   + "\nkernels/p/figures/F1_cover.png\n", encoding="utf-8")
+    got = RV.scan_set(run, "p")
+    check(made[("native_ring", "unitA")] in got and "kernels/p/figures/F1_cover.png" in got,
+          "the paper's own figures are in the set")
+    check(made[("native_dot", "unitB")] in got,
+          "a kind the paper does not show is represented by its largest instance")
+    check(made[("native_dot", "unitA")] not in got, "and by one instance only")
+    check(made[("native_ring", "unitB")] not in got, "a kind the paper shows is not doubled")
+    check(len(got) == 3, f"{len(got)} in the set: {sorted(got)}")
+    check(got == sorted(got), "the set is sorted, so two readers list it in one order")
+    (d / "FIGURES.txt").unlink()
+    got2 = RV.scan_set(run, "p")
+    check(len(got2) == 3 and made[("native_ring", "unitB")] in got2,
+          f"without a paper list the set is one instance per kind, the largest: {got2}")
+    check(RV.scan_set(run, "q") == [], "another plugin's set is empty, not this one's")
+
 print("\nconcurrent writers do not corrupt the ledger")
 with tempfile.TemporaryDirectory() as td:
     run, made = _fixture(td, per_dir=(8,))

@@ -302,15 +302,15 @@ def tasks(run, plugin, spec=None, how=None):
     #
     # THE FULL SET IS STILL REPORTED, in the step's own title, because "90 outstanding" on a run
     # holding 1187 figures would read as a run whose figures had almost all been looked at.
-    paper = set()
+    # THE ONE SELECTION (harness ADR-0017): the set station 7 counts and `review --shards`
+    # splits - the paper's figures plus one instance of every kind the paper does not show. An
+    # empty set is not an empty gate: before the brief has written the paper's list the set is
+    # one instance per kind, and a run with no figures at all gates on everything drawn.
     try:
-        paper = set(C.figure_index(run, plugin, spec, pay.get("design") or {}))
+        sel = set(R.scan_set(run, plugin))
     except Exception:                                                     # noqa: BLE001
-        paper = set()
-    # AN EMPTY INDEX IS NOT AN EMPTY GATE. Before the composer has run there is no numbering, and
-    # intersecting with nothing would report every figure as looked at and unblock the writing of
-    # a section against a paper that does not exist yet.
-    out = [(r, st) for r, st in drawn_out if str(r) in paper] if paper else drawn_out
+        sel = set()
+    out = [(r, st) for r, st in drawn_out if str(r) in sel] if sel else drawn_out
     exists, authored = _authored(run, plugin)
     claims = list((run / "kernels" / plugin).glob("PAPER_CLAIMS*.jsonl"))
     tmpl = B.template_of(spec)
@@ -348,8 +348,8 @@ def tasks(run, plugin, spec=None, how=None):
           "do": f"scprofile write --out {run} --plugin {plugin}"},
          {"id": "look",
           "title": (f"Open the figures ({len(out)} outstanding"
-                    + (f" of {len(drawn_out)} drawn, the rest placed `appendix` by the plugin "
-                       f"and cited by no sentence" if len(drawn_out) > len(out) else "")
+                    + (f" of {len(drawn_out)} drawn; the set is the paper's figures plus one "
+                       f"instance of every other kind" if len(drawn_out) > len(out) else "")
                     + ")"),
           "state": DONE if (started and not out) else (PENDING if started else BLOCKED),
           "why": "every figure defect found in this project was found by opening the image "

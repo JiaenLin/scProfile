@@ -47,9 +47,10 @@ Three properties make it a test rather than a writing exercise:
   panel that should exist does not. It becomes visible when somebody tries to write the sentence
   that needs it and finds nothing to cite.
 
-The station's output is `PAPER.md` and `report/paper.html` inside the run — the section, the
-claims, their verdicts, and every cited figure inline — so the writing travels with the figures
-it was read off and carries the same run key.
+The station's output is per plugin — `kernels/<plugin>/PAPER.<plugin>.md`, its claims ledger
+beside it, and `report/<plugin>_paper.html` — the section, the claims, their verdicts, and
+every cited figure inline — so the writing travels with the figures it was read off and carries
+the same run key.
 
 ## The stations, in order
 
@@ -135,12 +136,16 @@ those passed a green suite.
 **But "look at every figure" is not a rule anybody follows twice.** A run of a few hundred
 figures is a few dozen *kinds* repeated over units, and a drawing defect lives in the kind. So:
 
-> **Scan every distinct figure KIND once, plus every panel on the page a reader meets first.**
-> Kind is the id with its unit suffix removed. Where a kind is drawn per unit, scan the instance
-> from the LARGEST unit and the SMALLEST — the two that break layouts.
+> **Read every figure the paper numbers, plus one instance of every KIND the paper does not
+> show — the largest, the one that breaks a layout.** Kind is `review.kind_of`: the id with its
+> unit or contrast suffix removed.
 
-That is a stated, repeatable rule with stated coverage, and the driver prints the worklist. A
-scan that covers three quarters of the kinds is a scan that says so.
+That is one stated set, `review.scan_set`, and every reader counts it: station 7, the agenda's
+look task, and `scprofile review --plugin <p> --shards N`, which prints it whole and split for
+several agents (`--all-figures` is the audit of everything drawn). On the 2×2 cohort it is 139
+of 945 figures. It replaced two sets and two definitions of a kind (harness ADR-0017), under
+which an agent that did exactly what one command said was told by the next that nothing was
+done. A scan that covers three quarters of the kinds is a scan that says so.
 
 ---
 

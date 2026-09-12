@@ -61,7 +61,10 @@ keep = C.figure_index("run", "p", spec={"report": {"figure_position": {
 check("perthing_two.png" in keep and "perthing_one.png" not in keep,
       "a plugin cannot state a rule and its exception together: %r" % (sorted(keep),))
 
-# ---- the writing step waits on the paper's figures, not on every panel drawn ----------------
+# ---- the writing step waits on the ONE SELECTION, not on every panel drawn -----------------
+# The set is `review.scan_set` (harness ADR-0017): the paper's figures plus one instance of
+# every kind the paper does not show. A second instance of an appendix kind is outside it and
+# blocks nothing; the paper's own figures, and the one instance of an uncited kind, do.
 with tempfile.TemporaryDirectory() as d:
     run = Path(d)
     (run / "report.json").write_text(json.dumps({"design": {}, "kernels": {"p": {"spec": {}}}}),
@@ -69,30 +72,32 @@ with tempfile.TemporaryDirectory() as d:
     (run / "kernels" / "p").mkdir(parents=True)
     (run / "kernels" / "p" / "WRITING_BRIEF.md").write_text("brief", encoding="utf-8")
 
-    C.figure_index = lambda run_, plugin_, spec_=None, design_=None: {"body_of_age.png": 1}
+    R.scan_set = lambda out, plugin="": ["body_of_age.png", "perthing_one.png"]
     A._authored = lambda run_, plugin_: (False, False)
 
-    # every paper figure looked at; an APPENDIX panel still outstanding
-    R.outstanding = lambda out, plugin="": [("perthing_one.png", "unreviewed")]
+    # every figure of the set looked at; a SECOND instance of the appendix kind outstanding
+    R.outstanding = lambda out, plugin="": [("perthing_two.png", "unreviewed")]
     st = {t["id"]: t["state"] for t in A.tasks(run, "p")}
     check(st.get("write") != A.BLOCKED,
-          "the writing step is blocked by a figure no sentence cites - the whole point of the "
-          "declaration is that it is not")
+          "the writing step is blocked by an instance outside the selection - one look per kind "
+          "is the rule, not one per panel")
 
-    # a PAPER figure outstanding must still block it
+    # a figure of the set outstanding must still block it: the paper's own, or the one
+    # instance of a kind the paper does not show
+    for fig in ("body_of_age.png", "perthing_one.png"):
+        R.outstanding = lambda out, plugin="", fig=fig: [(fig, "unreviewed")]
+        st = {t["id"]: t["state"] for t in A.tasks(run, "p")}
+        check(st.get("write") == A.BLOCKED,
+              f"{fig} is in the selection, unreviewed, and the writing step is not blocked")
+
+    # AN EMPTY SELECTION IS NOT AN EMPTY GATE. A run with no figures on disk and no paper list
+    # has an empty set, and intersecting against nothing would report every figure as looked
+    # at and unblock the writing of a section against a paper that does not exist.
+    R.scan_set = lambda out, plugin="": []
     R.outstanding = lambda out, plugin="": [("body_of_age.png", "unreviewed")]
     st = {t["id"]: t["state"] for t in A.tasks(run, "p")}
     check(st.get("write") == A.BLOCKED,
-          "a figure the paper cites is unreviewed and the writing step is not blocked")
-
-    # AN EMPTY INDEX IS NOT AN EMPTY GATE. Before the composer has run there is no numbering at
-    # all, and intersecting against nothing would report every figure as looked at and unblock
-    # the writing of a section against a paper that does not exist.
-    C.figure_index = lambda run_, plugin_, spec_=None, design_=None: {}
-    R.outstanding = lambda out, plugin="": [("body_of_age.png", "unreviewed")]
-    st = {t["id"]: t["state"] for t in A.tasks(run, "p")}
-    check(st.get("write") == A.BLOCKED,
-          "an unnumbered run unblocked the writing step: an empty index read as nothing left")
+          "an empty selection unblocked the writing step: nothing read as nothing left")
 
 if FAILURES:
     print("FAIL")
