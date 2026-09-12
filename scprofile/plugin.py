@@ -1142,11 +1142,12 @@ class Context(FigureContextReader):
                 index=[f"c{i}" for i in range(n_cells)]),
             var=pd.DataFrame(index=gv))
         A.layers["counts"] = A.X.copy()
-        import scanpy as sc
-        B = A.copy()
-        sc.pp.normalize_total(B, target_sum=1e4)
-        sc.pp.log1p(B)
-        A.layers["lognorm"] = B.X.copy()
+        # THE HOST'S OWN ARITHMETIC, NOT SCANPY'S: counts scaled to ten thousand per cell, log1p,
+        # an empty cell left at zero. Importing scanpy to make this layer failed every plugin's
+        # selftest on an interpreter that had anndata and no scanpy, before the plugin ran at
+        # all - found by the first cold agent to write a plugin on the plan (blind 0003).
+        lib = X.sum(axis=1, keepdims=True).astype("float64")
+        A.layers["lognorm"] = np.log1p(X / np.where(lib == 0, 1.0, lib) * 1e4).astype("float32")
         return A
 
     def effect(self, acquire, release=None):

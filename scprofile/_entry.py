@@ -163,7 +163,11 @@ def selftest(plugin_path, log=print):
         return None
     import tempfile
     with tempfile.TemporaryDirectory() as d:
-        ctx = Context(None, keys={}, out=d, cores=1, log=log)
+        # WHAT A RUN IS HANDED: the generated companion, so a selftest can draw through `.draw`
+        # the way `main` and `_compare` do. Without it the one place a plugin proves its own call
+        # was the one place the plan could not be drawn from (blind conversion 0003).
+        ctx = Context(None, keys={}, out=d, cores=1, log=log,
+                      r_companion=_companion_text(plugin_path))
         fn(ctx)
     log(f"  {Path(plugin_path).stem}: selftest passed")
     return True
