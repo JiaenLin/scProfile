@@ -262,6 +262,40 @@ ck("and are separated by the declutter the plugins already use",
    "text_overlap" not in a and "annotations_apart" in r, f"after {a}, repairs {r}")
 
 
+def _label_on_ytick(ax, fig):
+    """A placed label over a y tick label at the axes' left edge: the residue the first cohort run
+    left (a pathway name over a colour-bar tick, twice; a population name over an axis tick)."""
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_yticks([0.0, 0.5, 1.0])
+    ax.tick_params(labelsize=9)
+    ax.scatter([0.02], [0.5])
+    ax.annotate("PECAM1", (0.02, 0.5), fontsize=9, xytext=(-20, 0), textcoords="offset points",
+                ha="left", va="center")
+
+
+b, a, r = repaired(_label_on_ytick)
+ck("a placed label over a y tick label is found", "text_overlap" in b, str(b))
+ck("and the label is moved inward, off the axis's own text",
+   "text_overlap" not in a and "annotation_inward" in r, f"after {a}, repairs {r}")
+
+
+def _label_on_xtick(ax, fig):
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_xticks([0.0, 0.5, 1.0])
+    ax.tick_params(labelsize=9)
+    ax.scatter([0.5], [0.02])
+    ax.annotate("APP", (0.5, 0.02), fontsize=9, xytext=(0, -12), textcoords="offset points",
+                ha="center", va="top")
+
+
+b, a, r = repaired(_label_on_xtick)
+ck("a placed label over an x tick label is found", "text_overlap" in b, str(b))
+ck("and moved up, inward", "text_overlap" not in a and "annotation_inward" in r,
+   f"after {a}, repairs {r}")
+
+
 def _residue(ax, fig):
     """Two texts placed in DATA coordinates: moving either changes what it says. Left alone."""
     ax.set_xlim(0, 1)

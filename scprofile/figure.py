@@ -1176,6 +1176,34 @@ def _legend_out(fig, r):
             ("legend", id(ax)))
 
 
+#: How far a placed label may be moved inward, in points, to clear the axes' own text.
+_INWARD_CAP_PT = 40.0
+
+
+def _annotation_inward(fig, f, ann, dec):
+    """Move an offset-point annotation off a tick or axis label, away from that axis's edge."""
+    side = dec.get("side") or ("x" if dec["kind"] == "xlabel" else "y")
+    try:
+        pos = dec["axis"].get_ticks_position() if dec.get("axis") is not None else "default"
+    except Exception:                                                     # noqa: BLE001
+        pos = "default"
+    dx = dy = 0.0
+    if side == "y":
+        step = min(_INWARD_CAP_PT, _pts(fig, f["w"]) + 2.0)
+        dx = -step if pos == "right" else step
+    else:
+        step = min(_INWARD_CAP_PT, _pts(fig, f["h"]) + 2.0)
+        dy = -step if pos == "top" else step
+    try:
+        ox, oy = ann.xyann
+        ann.set_position((ox + dx, oy + dy))
+    except Exception:                                                     # noqa: BLE001
+        return None
+    return ("annotation_inward", f"{str(ann.get_text())[:24]!r} moved {abs(dx or dy):.0f} pt "
+                                 f"inward, clear of the {side} axis's {str(f['b'].get_text() if f['a'] is ann else f['a'].get_text())!r}",
+            ("inward", id(ann)))
+
+
 def repair_one(fig, f):
     """(code, what, key) - one repair for one finding, or None when the repertoire has none.
 
@@ -1188,6 +1216,7 @@ def repair_one(fig, f):
       corner_hide        ... and if that did not hold -> the y axis's corner label hidden
       axis_offset        ticks of two axes on one side -> the second spine moved outward
       legend_out         a placed label over a legend's text -> the legend outside the axes
+      annotation_inward  a placed label over a tick or axis label -> the label moved inward
       annotations_apart  two offset-point annotations -> `_separate`, the plugins' own declutter
     Anything else is residue. A text in data coordinates is never moved: moving it changes what
     it says.
@@ -1214,6 +1243,15 @@ def repair_one(fig, f):
         return _offset_axis(fig, f, ra, rb)
     if "legend" in (ka, kb) and not (ka == "legend" and kb == "legend"):
         return _legend_out(fig, ra if ka == "legend" else rb)
+    # A PLACED LABEL OVER THE AXES' OWN TEXT AT ITS EDGE: the one class the first cohort run
+    # left as residue (a pathway name over a y tick label, three panels). The label is movable
+    # and the tick is not, so the label moves INWARD - away from the edge the decoration lives
+    # on - by the overlap and a pad, in offset points, never in data coordinates.
+    if {ka, kb} == {"annotation", "tick"} or {ka, kb} in ({"annotation", "xlabel"},
+                                                          {"annotation", "ylabel"}):
+        ann, dec = (ta, rb) if ka == "annotation" else (tb, ra)
+        if ann.axes is dec["ax"]:
+            return _annotation_inward(fig, f, ann, dec)
     if ka == "annotation" and kb == "annotation" and ra["ax"] is rb["ax"]:
         _separate(ra["ax"], [ta, tb])
         return ("annotations_apart", f"{str(ta.get_text())[:24]!r} and "

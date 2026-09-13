@@ -108,7 +108,8 @@ y; a data-placed label had landed on a legend. A fix in the plugin holds for one
 `figure.audit_and_repair` mends the classes it can, generically, where the artists are still
 live - a numeric axis thinned by one label, category labels rotated, a second axis's spine moved
 outward, x labels moved down clear of the y axis's corner, a duplicated tick hidden, a legend
-moved outside, two annotations separated, the stamp placed below everything - re-audits, and
+moved outside, a placed label moved inward off a tick label, two annotations separated, the
+stamp placed below everything - re-audits, and
 records the residue with the repairs that were tried. Nothing shrinks type, widens past the
 column or moves a number. Station 6b prints what was repaired beside what remains; what remains
 is what the repertoire does not answer, and the line says where such a class belongs.
