@@ -898,9 +898,15 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         exe, _why = _interp(_k, prefix) if _k is not None else (None, "no such kernel")
     except Exception:                                                     # noqa: BLE001
         exe = None
+    # NO INTERPRETER LAUNCHES NOTHING AND RECORDS EVERYTHING ALREADY DRAWN (harness ADR-0019,
+    # found on the rerun of blind 0006). The run's own report launched the phase and recorded
+    # its plates; the declared after-line `scprofile report --out` then rebuilt the pages with no
+    # --prefix, resolved no interpreter, returned here, and wrote panels.json with `native: []` -
+    # so the drawing station read 249 plates "recorded by nothing". An interpreter is needed to
+    # launch a comparison; recording one that is on disk needs none.
     if not exe:
-        print(f"  native compare: no interpreter resolved for {name}; skipped")
-        return drawn
+        print(f"  native compare: no interpreter resolved for {name}; nothing is launched, and "
+              f"the comparisons already on disk are recorded")
     # THE PROBE IS A LAUNCH TOO, and it was the one with the third hardcoded limit: 300s that no
     # `--timeout` could lower, in an environment with none of the thread caps. It loads the
     # plugin, so both of those matter.
@@ -913,14 +919,25 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
     # Dropping `cores=cores` from this call is not an equivalent mutation: BLAS sizes its pool
     # during the plugin import this probe performs.
     _probe_limit = _PROBE_TIMEOUT if not timeout else min(_PROBE_TIMEOUT, timeout)
-    try:
-        q = subprocess.run([str(exe), str(entry), "--phases", str(plugin_file)],
-                           capture_output=True, text=True, timeout=_probe_limit,
-                           env=_phase_env(exe, cores=cores))
-        if "compare" not in (q.stdout or ""):
+    if exe:
+        try:
+            q = subprocess.run([str(exe), str(entry), "--phases", str(plugin_file)],
+                               capture_output=True, text=True, timeout=_probe_limit,
+                               env=_phase_env(exe, cores=cores))
+            if "compare" not in (q.stdout or ""):
+                return drawn
+        except Exception:                                                     # noqa: BLE001
             return drawn
-    except Exception:                                                     # noqa: BLE001
-        return drawn
+    elif not ((kdir / _RS.COMPARE_DIRNAME).is_dir()
+              and any(d.is_dir() for d in (kdir / _RS.COMPARE_DIRNAME).glob("*"))):
+        return drawn                      # nothing was ever drawn, and nothing can be launched
+
+    def _launch_or_record(**kw):
+        """The launch, or - with no interpreter - the record a previous launch left."""
+        if exe:
+            return _compare_launch(**kw)
+        prev = _read_json(Path(kw["cdir"]) / "out.json")
+        return dict(prev, reused=True, recorded_only=True) if prev else None
     # FROM HERE ON THE PLUGIN HAS THE PHASE, so the phase exists and gets a record whatever
     # happens next - including the case where every pair turns out to be unlaunchable, which is
     # a fact about the design and was previously indistinguishable from the phase not existing.
@@ -1020,14 +1037,19 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             "plugin_spec": ((_k.spec or {}) if _k is not None else {}),
         }
         cdir = kdir / _RS.COMPARE_DIRNAME / str(label)
-        _launches.append(_compare_launch(
+        _rec_ = _launch_or_record(
             exe=exe, entry=entry, plugin_file=plugin_file, cdir=cdir, spec=spec_json,
             kernel=name, version=_version, kind="arm_pair", label=str(label),
-            cores=cores, timeout=timeout))
+            cores=cores, timeout=timeout)
         # A FIGURE THE HOST DRAWS AND NEVER PLACES CANNOT BE CITED. These were written into
         # compare/<contrast>/figures/ and left there - absent from the page, from panels.json,
         # from the review ledger and therefore from every writing brief, so a manuscript could
         # not quote the tool's own comparison even though the run had drawn it.
+        if _rec_ is None:
+            _unlaunchable.append({"pair": str(label),
+                                  "why": "no interpreter resolved and nothing drawn before"})
+            continue
+        _launches.append(_rec_)
         drawn += _native_panels(cdir / "figures", str(label), declared, out_dir, lo, hi)
 
     # ---------------------------------------------------------------------------------------
@@ -1178,14 +1200,16 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             "figure_context": _fig_ctx(out_dir),
         }
         print(f"  native compare across {len(_cross)} crossed arm(s): " + ", ".join(_cross))
-        _launches.append(_compare_launch(
+        _rec_ = _launch_or_record(
             exe=exe, entry=entry, plugin_file=plugin_file, cdir=cdir, spec=spec_json,
             kernel=name, version=_version, kind="across_arms", label=_COHORT_COMPARE,
-            cores=cores, timeout=timeout))
+            cores=cores, timeout=timeout)
         # NO LABEL. A panel drawn over every arm answers its question for EVERY contrast,
         # so it is not filed under one of them - the same rule the host's own cohort panels
         # already follow, and the consumers match an unlabelled panel against any contrast.
-        drawn += _native_panels(cdir / "figures", "", declared, out_dir, "", "")
+        if _rec_ is not None:
+            _launches.append(_rec_)
+            drawn += _native_panels(cdir / "figures", "", declared, out_dir, "", "")
     else:
         _unlaunchable.append({"pair": _COHORT_COMPARE, "why": _across_gate})
     # ---------------------------------------------------------------------------------------

@@ -179,5 +179,38 @@ with tempfile.TemporaryDirectory() as td:
     ck("and the next step is the look, not the worksheet", nxt.startswith("look at the scan set first"),
        nxt[:160])
 
+print("\na rebuild of the pages records the compare plates already drawn, with no interpreter to launch")
+# FOUND ON THE RERUN OF BLIND 0006: the run's own report recorded the compare phase's 249 plates
+# as the companion's (`measured: False`), then the declared after-line `scprofile report --out`
+# rebuilt the pages with no --prefix, resolved no interpreter, returned before the pair loop and
+# wrote panels.json with `native: []` - and station 6b read 249 figures "recorded by nothing".
+# An interpreter is needed to LAUNCH a comparison; recording one that is on disk needs none.
+with tempfile.TemporaryDirectory() as td:
+    from scprofile.kernels import discover as _disc
+    _k = _disc().get("cellchat")
+    out = Path(td) / "20260101T000000Z__scprofile-abc1234__stage"
+    kdir = out / "kernels" / "cellchat"
+    for u in ("young", "aged"):
+        (kdir / u).mkdir(parents=True)
+    cdir = kdir / "compare" / "age"
+    (cdir / "figures").mkdir(parents=True)
+    (cdir / "figures" / "nativecmp_barplot_count.png").write_bytes(b"\x89PNG")
+    (cdir / "figures" / "captions.tsv").write_text(
+        "file\tcaption\tdrawn_by\nnativecmp_barplot_count.png\tone bar per population\ttool\n")
+    (cdir / "out.json").write_text(json.dumps({"kernel": "cellchat", "kind": "arm_pair", "label": "age",
+                                               "version": str(_k.spec.get("version")), "ok": True,
+                                               "figures": ["figures/nativecmp_barplot_count.png"]}))
+    (cdir / "in.json").write_text("{}")
+    design = {"s1": {"age": "young"}, "s2": {"age": "aged"}}
+    units = [{"unit": "young", "dir": "kernels/cellchat/young"}, {"unit": "aged", "dir": "kernels/cellchat/aged"}]
+    pairs = [("age", "age", "young", "aged", {"age": "young"}, {"age": "aged"})]
+    drawn = RP._native_compare("cellchat", _k.spec, {}, design, pairs, out, units, prefix=None,
+                               declared=dict(_k.spec.get("native_plots") or {}))
+    recs = [t for t in drawn if isinstance(t, tuple) and "nativecmp_barplot_count" in str(t[1])]
+    ck("the plate on disk is recorded without an interpreter", bool(recs), str(drawn)[:300])
+    ck("and its record says the companion drew it, unmeasured",
+       recs and isinstance(recs[0][-1], dict) and recs[0][-1].get("measured") is False
+       and recs[0][-1].get("drawn_by") == "tool", str(recs[0][-1] if recs else recs))
+
 print("\n" + ("every figure is measured" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
