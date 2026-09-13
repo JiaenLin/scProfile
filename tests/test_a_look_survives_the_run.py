@@ -18,6 +18,7 @@ contract test creating a run under /tmp caught it on the first execution.
 
 Checked on real files with real digests, because the whole mechanism is about bytes.
 """
+import os
 import sys
 from pathlib import Path
 
@@ -72,6 +73,18 @@ with tempfile.TemporaryDirectory() as td:
           "a carried look is still counted as outstanding, so the brief will demand it again")
     check("kernels/p/figures/redrawn.png" in out,
           "a redrawn figure is not outstanding, so a changed image passes as looked at")
+
+    # AND THE LISTING SAYS THE SAME AS THE COUNT (harness ADR-0020, the second rerun): the
+    # status counted the carried look as reviewed and the shards left it out, and the listing
+    # under it printed the same figure under "have not been looked at ... Open each one" -
+    # fifty-six of them on the rerun, every one already looked at on identical bytes.
+    import subprocess
+    p = subprocess.run([sys.executable, "-m", "scprofile.cli", "review", "--out", str(b),
+                        "--plugin", "p"], capture_output=True, text=True, cwd=str(ROOT),
+                       env={**os.environ, "PYTHONPATH": str(ROOT)})
+    listed = p.stdout.split("Open each one")[0] if "Open each one" in p.stdout else ""
+    check("same.png" not in listed,
+          "the listing tells the reader to open a figure whose look carried:\n" + p.stdout[:600])
 
     # THE RUN'S OWN ACCOUNT IS STILL COMPLETE - the carry is in addition, not instead.
     check("kernels/p/figures/same.png" in R.read_ledger(a, "p"),

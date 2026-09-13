@@ -3220,7 +3220,10 @@ def _review(a):
         return 0
     print(f"{out}")
     print("  " + ", ".join(f"{n} {k}" for k, n in sorted(counts.items())))
-    todo = [(r, st, w) for r, st, w in rows if st != RV.REVIEWED]
+    # A CARRIED LOOK IS A LOOK, here as in `outstanding` (harness ADR-0020): the count above
+    # said reviewed (carried) and this list said "not looked at ... Open each one" of the same
+    # fifty-six figures on the second rerun.
+    todo = [(r, st, w) for r, st, w in rows if st not in (RV.REVIEWED, RV.CARRIED_OK)]
     # THE ONE SELECTION IS THE LIST (harness ADR-0017; found by a looker in docs/blind/0004):
     # asked for its plugin's status, an agent was handed every unreviewed figure of the run -
     # 918 names - and could not read whether its own shard was among them. The scan set's
