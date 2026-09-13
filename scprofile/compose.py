@@ -152,6 +152,27 @@ def findings(run, plugin, spec=None):
     return out
 
 
+def caption_states(caption, values, tol=0.005):
+    """True when every value in `values` appears among the numbers a caption prints, to within
+    `tol` of itself - the host prints a total to four significant figures and a sentence to two
+    decimals, and neither is the other's string."""
+    try:
+        nums = [float(t) for t in re.findall(r"(?<![\w.])\d+(?:,\d{3})*(?:\.\d+)?(?![\w.])",
+                                             str(caption or "").replace(",", ""))]
+    except ValueError:
+        return False
+    if not nums:
+        return False
+    for v in values:
+        try:
+            v = float(v)
+        except (TypeError, ValueError):
+            return False
+        if not any(abs(n - v) <= tol * max(abs(v), 1e-9) for n in nums):
+            return False
+    return True
+
+
 def _n(x, digits=2):
     return f"{x:,.{digits}f}" if isinstance(x, float) else f"{x:,}"
 
@@ -1143,6 +1164,18 @@ def claims(run, plugin, spec=None, design=None):
         if d["ratio"]:
             cites = figs_for(label, ("how_much_total", "who_changed", "what_carries_it"),
                              prefer=_prefer, avoid=_avoid)
+            # THE PLATE ON THE SENTENCE'S OWN BASIS, FIRST (harness ADR-0021, step 1; found by
+            # the reviewer of blind 0007): these totals are the host's, over the elements the
+            # two arms share; the plugin's `how_much_total` plate totals each arm over the pool
+            # of every arm, so the same arm showed one number on the plate and another in the
+            # sentence, and every composed ratio claim was narrowed for it. The host's own
+            # contrast plates state the shared-basis totals in their caption; a plate whose
+            # caption states both of this sentence's totals is cited before the route's.
+            stated = [str(x.get("path")) for x in host
+                      if str(x.get("label") or "") == label
+                      and caption_states(x.get("caption"), [d["total_reference"],
+                                                            d["total_against"]])]
+            cites = stated + [c for c in cites if c not in stated]
             if cites:
                 made.append((
                     f"In the contrast {label}, the {d['against']} arm carries "
