@@ -246,8 +246,13 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   at_most = 1,
   w = quote(1600),
   h = quote(2000),
-  expr = quote(rankNet(m, mode = "comparison", stacked = TRUE, do.stat = TRUE, paired.test = FALSE)),
-  legend = "Every pathway ranked by its RELATIVE information flow, each bar split between the two arms. Because the bars are normalised this shows how a pathway flow is DIVIDED between arms and not how much flow it carries: a rare pathway and a dominant one can look identical here. Read the unstacked panel beside it for the amounts.")
+  expr = quote({
+ gg <- rankNet(m, mode = "comparison", stacked = TRUE, do.stat = TRUE, paired.test = FALSE)
+ gg + ggplot2::labs(caption = paste0(
+ "Pathway-name colour follows the bar key: black = tested in both arms; ",
+ "a name coloured like one arm's bar = found only in that arm, untested in the other."))
+ }),
+  legend = "Every pathway ranked by its RELATIVE information flow, each bar split between the two arms. Because the bars are normalised this shows how a pathway flow is DIVIDED between arms and not how much flow it carries: a rare pathway and a dominant one can look identical here. Read the unstacked panel beside it for the amounts. PATHWAY-NAME COLOUR follows the same two-arm key as the bars: black means tested in both arms, and a name coloured like one arm means CellChat found that pathway only there.")
 .plan[["nativecmp_rankNet_unstacked"]] <- list(
   id = "nativecmp_rankNet_unstacked",
   axis = "contrast",
@@ -267,7 +272,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   device = "png",
   at_most = 2,
   file = quote(paste0("interaction_flow__", safe)),
-  expr = quote({ ggplot2::ggplot(both, ggplot2::aes(x = d2, y = d1)) + ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") + ggplot2::geom_hline(yintercept = 0, colour = "grey85") + ggplot2::geom_vline(xintercept = 0, colour = "grey85") + ggplot2::geom_point(ggplot2::aes(colour = interaction), size = 2.4) + ggrepel::geom_text_repel(data = top, ggplot2::aes(label = name), size = 3, max.overlaps = 20, min.segment.length = 0) + ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b", midpoint = 0) + ggplot2::coord_equal(xlim = c(-lim, lim), ylim = c(-lim, lim)) + ggplot2::labs(x = paste0(eff_lbl, " within ", st[2], " (the control)"), y = paste0(eff_lbl, " within ", st[1]), colour = paste0("larger in\n", st[1], " (+) /\n", st[2], " (-)"), title = paste0("Does the ", fac, " response depend on ", as.character(rows$stratum_factor[1]), "?"), subtitle = paste0("One point per pathway. Each axis is the ", eff_lbl, " within one stratum. The dashed line is NO ", "interaction - the same response in both. ABOVE it the ", "response is larger in ", st[1], "; below it, larger in ", st[2], ", which is the control.")) + ggplot2::theme_classic() }),
+  expr = quote({ ggplot2::ggplot(both, ggplot2::aes(x = d2, y = d1)) + ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") + ggplot2::geom_hline(yintercept = 0, colour = "grey85") + ggplot2::geom_vline(xintercept = 0, colour = "grey85") + ggplot2::geom_point(ggplot2::aes(colour = interaction), size = 2.4) + ggrepel::geom_text_repel(data = top, ggplot2::aes(label = name), size = 3, max.overlaps = 20, min.segment.length = 0) + ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b", midpoint = 0) + ggplot2::coord_equal(xlim = c(-lim, lim), ylim = c(-lim, lim)) + ggplot2::labs(x = paste0(eff_lbl, " within ", st[2], " (the control)"), y = paste0(eff_lbl, " within ", st[1]), colour = paste0("larger in\n", st[1], " (+) /\n", st[2], " (-)"), title = paste0("Does the ", fac, " response depend on ", as.character(rows$stratum_factor[1]), "?"), subtitle = paste0("ABOVE the dashed line: larger response in ", st[1], "   BELOW: larger in ", st[2], " (control)")) + ggplot2::theme_classic() }),
   legend = "Does the {fac} response depend on {as.character(rows$stratum_factor[1])}? One point per signalling pathway. The vertical axis is the {eff_lbl} within {st[1]}; the horizontal axis is the same response within {st[2]}, which is the control. The dashed line is NO interaction - an identical response in both strata - so a point's distance from it IS the interaction, and points ABOVE it respond more in {st[1]}. Every value is rankNet's own per-pathway contribution; the method provides no test for a difference of two differences and none is claimed.")
 .plan[["nativecmp_interaction_flow_log"]] <- list(
   id = "nativecmp_interaction_flow_log",
@@ -291,7 +296,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   expr = quote({
  netVisual_circle(cc@net$count, vertex.weight = as.numeric(table(cc@idents)),
  weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
- title.name = "interactions")
+ vertex.label.cex = 0.65, title.name = "interactions")
  .stampf()
  }),
   legend = "Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is HOW MANY ligand-receptor interactions were inferred from the sender to the receiver, and edge colour is the sender. The ring is a layout and nothing more - a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.")
@@ -304,7 +309,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   expr = quote({
  netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),
  weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
- title.name = "interaction strength")
+ vertex.label.cex = 0.65, title.name = "interaction strength")
  .stampf()
  }),
   legend = "The same network of {ngrp} populations drawn on STRENGTH rather than count: edge width is the summed communication probability from sender to receiver, not the number of pairs behind it. Count and strength disagree freely - a population can send many weak interactions or one strong one - which is why both are drawn. Node size is the number of cells, and the ring is a layout that carries no meaning.")
@@ -389,7 +394,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   by = "tool",
   fn = "netAnalysis_signalingRole_scatter",
   device = "png",
-  expr = quote(netAnalysis_signalingRole_scatter(cc, color.use = .gcol)),
+  expr = quote(netAnalysis_signalingRole_scatter(cc, color.use = .gcol, label.size = 2.4)),
   legend = "Each population placed by how much inferred signalling it SENDS (horizontal) against how much it RECEIVES (vertical), for this unit alone. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested.")
 .plan[["nativecmp_signalingRole_scatter_pair"]] <- list(
   id = "nativecmp_signalingRole_scatter_pair",
@@ -433,6 +438,8 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   fn = "netAnalysis_signalingRole_heatmap",
   device = "ndev",
   at_most = 2,
+  w = quote(1800),
+  h = quote(1700),
   items = quote(c("outgoing", "incoming")),
   file = quote(paste0("signalingRole_heatmap_", pat)),
   expr = quote({
@@ -451,11 +458,11 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
  yr <- max(sapply(object.list, .cen, how = "right"), na.rm = TRUE)
  hs <- lapply(seq_along(object.list), function(i)
  netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = pat, signaling = allp,
- title = names(object.list)[i], width = 6, height = 14,
+ title = names(object.list)[i], width = 6, height = 14, font.size = 7,
  ylim.top = c(0, yt), ylim.right = c(0, yr)))
  ComplexHeatmap::draw(hs[[1]] + hs[[2]], ht_gap = grid::unit(0.5, "cm"))
  }),
-  legend = "Pathways down the rows, populations across the columns, for {pat} signalling - one heatmap per arm, side by side ON ONE SHARED COLOUR SCALE AND SHARED MARGINAL AXES, which this plugin imposes so that the two can be compared. Colour is centrality, not communication probability. A pathway present in one arm and absent in the other is drawn as zeros in the arm that lacks it.")
+  legend = "Pathways down the rows, populations across the columns, for {pat} signalling - one heatmap per arm, side by side ON ONE SHARED COLOUR SCALE AND SHARED MARGINAL AXES, which this plugin imposes so that the two can be compared. Colour is centrality, not communication probability. A pathway present in one arm and absent in the other is drawn as zeros in the arm that lacks it. A row whose right-hand marginal bar renders as a single solid block rather than the usual thin proportional bar is CellChat's own centrality output for that pathway, not a rendering choice of this plugin's.")
 .plan[["nativecmp_interaction_lr"]] <- list(
   id = "nativecmp_interaction_lr",
   axis = "cohort",
@@ -463,6 +470,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   fn = "interaction_lr",
   device = "png",
   at_most = 2,
+  w = quote(2200),
   file = quote(paste0("interaction_lr__", safe)),
   expr = quote({
  dd <- lr$d
@@ -494,6 +502,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   fn = "interaction_lr",
   device = "png",
   at_most = 2,
+  w = quote(2400),
   file = quote(paste0("interaction_lr_scatter__", safe)),
   expr = quote({
  dd <- lr$d
@@ -581,6 +590,8 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   file = quote(paste0("patterns_", pat)),
   expr = quote({
  ccp <- identifyCommunicationPatterns(cc, pattern = pat, k = 3, width = 5, height = 16)
+ grid::grid.text(paste0("communication patterns - ", pat),
+ x = 0.5, y = 0.97, gp = grid::gpar(fontface = "bold", fontsize = 13))
  assign(paste0("ccp_", pat), ccp, envir = globalenv())
  NULL
  }),
@@ -593,7 +604,10 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   device = "png",
   w = quote(1600),
   h = quote(2000),
-  expr = quote(rankSimilarity(m, type = "functional")),
+  expr = quote({
+ gg <- rankSimilarity(m, type = "functional")
+ gg + ggplot2::theme(axis.text.x = ggplot2::element_text(), axis.ticks.x = ggplot2::element_line())
+ }),
   legend = "The {length(union(a@netP$pathways, b@netP$pathways))} pathways either arm inferred, ranked by HOW FAR THEY MOVED in the joint functional embedding - the largest values are the pathways whose participating populations differ most between the arms. It ranks a change in ROLE, not a change in amount: a pathway can carry the same flow in both arms and still rank highly here.")
 .plan[["native_database_category"]] <- list(
   id = "native_database_category",
@@ -601,7 +615,12 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   by = "tool",
   fn = "showDatabaseCategory",
   device = "png",
-  expr = quote(showDatabaseCategory(cc@DB)),
+  expr = quote({
+ graphics::par(oma = c(0, 0, 3, 0))
+ showDatabaseCategory(cc@DB)
+ graphics::mtext("CellChat's reference database (not this dataset) - left to right: interaction type, heterodimer vs. other, evidence source",
+ side = 3, outer = TRUE, cex = 0.75, font = 2, line = 0.5)
+ }),
   legend = "What is in the DATABASE, not what is in this object. The composition of the reference by interaction category - secreted signalling, extracellular-matrix receptor, and cell-cell contact. It describes the prior every inference on this page was drawn from, and it would look the same on any dataset.")
 .plan[["native_aggregate_circle"]] <- list(
   id = "native_aggregate_circle",
@@ -611,7 +630,10 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   device = "png",
   at_most = 1,
   file = quote(paste0("aggregate_circle__", pw)),
-  expr = quote(netVisual_aggregate(cc, signaling = pw, layout = "circle")),
+  expr = quote({
+ netVisual_aggregate(cc, signaling = pw, layout = "circle", signaling.name = pw)
+ .stampf()
+ }),
   legend = "The inferred network for the {pw} pathway alone - the strongest of the {dim(cc@netP$prob)[3]} pathways inferred in this unit, and the only one drawn this way - aggregated over every ligand-receptor pair in it. Nodes are populations, edge width is the summed communication probability from sender to receiver, and the ring is a layout that carries no meaning. One pathway, one unit, no comparison.")
 .plan[["nativecmp_aggregate_circle"]] <- list(
   id = "nativecmp_aggregate_circle",
@@ -649,7 +671,10 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   device = "png",
   at_most = 1,
   file = quote(paste0("contribution__", pw)),
-  expr = quote(netAnalysis_contribution(cc, signaling = pw)),
+  expr = quote({
+ gg <- netAnalysis_contribution(cc, signaling = pw)
+ gg + ggplot2::theme(axis.text.x = ggplot2::element_text(), axis.ticks.x = ggplot2::element_line())
+ }),
   legend = "Which ligand-receptor pairs actually carry the {pw} pathway. One bar per pair, length is that pair share of the pathway total inferred communication probability, so the bars sum to 100% of the pathway. A pathway drawn as a single edge elsewhere on this page is usually a handful of pairs, and often one - this is where that shows.")
 .plan[["native_signalingRole_network"]] <- list(
   id = "native_signalingRole_network",
@@ -668,7 +693,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   fn = "netVisual_hierarchy1",
   device = "ndev",
   at_most = 1,
-  w = quote(2800),
+  w = quote(3400),
   h = quote(1500),
   file = quote(paste0("hierarchy__", pw)),
   expr = quote({
@@ -689,8 +714,15 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   at_most = 1,
   w = quote(2200),
   h = quote(1700),
-  expr = quote(netVisual_barplot(m, comparison = c(1, 2), measure = "count", sources.use = seq_along(group_new), x.lab.rot = TRUE)),
-  legend = "The total NUMBER of inferred interactions in each arm, one bar per arm, from one fit on that arm pooled cells. It is a single number per arm with no spread behind it, so a difference here is NOT a tested difference - it is the arithmetic the rest of the comparison starts from.")
+  expr = quote({
+ gg <- netVisual_barplot(m, comparison = c(1, 2), measure = "count",
+ sources.use = seq_along(group_new), x.lab.rot = TRUE)
+ gg + ggplot2::labs(
+ y = paste0("Difference in number of interactions  (", name_b, " minus ", name_a, ")"),
+ title = paste0("Differential number of interactions by population  -  ",
+ name_b, " minus ", name_a))
+ }),
+  legend = "Which populations account for the change in the NUMBER of inferred interactions between the two arms: one bar per population - not one bar per arm - its height the population's outgoing edges in {name_b} minus the same in {name_a}, the reference. Positive means more interactions in {name_b}; negative means more in {name_a}. A single fit per arm behind each side of the subtraction, so this is arithmetic, not a tested difference.")
 .plan[["nativecmp_barplot_weight"]] <- list(
   id = "nativecmp_barplot_weight",
   axis = "contrast",
@@ -700,8 +732,15 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   at_most = 1,
   w = quote(2200),
   h = quote(1700),
-  expr = quote(netVisual_barplot(m, comparison = c(1, 2), measure = "weight", sources.use = seq_along(group_new), x.lab.rot = TRUE)),
-  legend = "The same totals on interaction STRENGTH rather than count. One fit per arm, one bar, no spread and no test. Count and strength can point in opposite directions, which is why both bars are drawn rather than one.")
+  expr = quote({
+ gg <- netVisual_barplot(m, comparison = c(1, 2), measure = "weight",
+ sources.use = seq_along(group_new), x.lab.rot = TRUE)
+ gg + ggplot2::labs(
+ y = paste0("Difference in interaction strength  (", name_b, " minus ", name_a, ")"),
+ title = paste0("Differential interaction strength by population  -  ",
+ name_b, " minus ", name_a))
+ }),
+  legend = "The same per-population differential on interaction STRENGTH rather than count: one bar per population, its height the summed communication probability of its outgoing edges in {name_b} minus the same in {name_a}, the reference. Positive means stronger signalling in {name_b}; negative means stronger in {name_a}. Count and strength can move in opposite directions for the same population, which is why both bars are drawn.")
 .plan[["nativecmp_compareInteractions"]] <- list(
   id = "nativecmp_compareInteractions",
   axis = "cohort",
@@ -746,7 +785,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   device = "ndev",
   at_most = 8,
   w = quote(1800),
-  h = quote(1800),
+  h = quote(1300),
   file = quote(paste0("chord_cell__", safe, "__", gsub("[^A-Za-z0-9]+", "_", names(object.list)[i]))),
   expr = quote(netVisual_chord_cell(object.list[[i]], signaling = pw, lab.cex = 0.45, small.gap = 1, big.gap = 8, title.name = paste(pw, names(object.list)[i]))),
   legend = "The {pw} pathway as a chord diagram, one per arm - one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning.")
@@ -757,8 +796,8 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   fn = "netVisual_diffInteraction",
   device = "ndev",
   at_most = 1,
-  expr = quote({ netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count", color.use = .ccol); .diffkey() }),
-  legend = "Which population pairs differ in the NUMBER of inferred interactions. Each node is a population; an edge is drawn where the two arms differ, its width in proportion to the size of that difference. Red is higher in {name_b}; blue is higher in {name_a}, the reference. An absent edge means the two arms agree, not that the pair does not signal.")
+  expr = quote({ netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count", color.use = .ccol); .diffkey("count") }),
+  legend = "Which population pairs differ in the NUMBER of inferred interactions. Each node is a population; an edge is drawn where the two arms differ, its width in proportion to the size of that difference, though CellChat draws no numeric scale for that width - read it as rank, not magnitude. Red is higher in {name_b}; blue is higher in {name_a}, the reference. An absent edge means the two arms agree, not that the pair does not signal; a population absent from the ring altogether is named on the plate, either with no counterpart in the other arm or, if present in both, unchanged between them.")
 .plan[["nativecmp_diffInteraction_weight"]] <- list(
   id = "nativecmp_diffInteraction_weight",
   axis = "contrast",
@@ -766,8 +805,8 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   fn = "netVisual_diffInteraction",
   device = "ndev",
   at_most = 1,
-  expr = quote({ netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight", color.use = .ccol); .diffkey() }),
-  legend = "The same comparison on interaction STRENGTH rather than count. Red is higher in {name_b}; blue is higher in {name_a}, the reference. Strength and count can disagree: a pair can gain interactions while each is weaker, and the two panels are drawn side by side for that reason.")
+  expr = quote({ netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight", color.use = .ccol); .diffkey("weight") }),
+  legend = "The same comparison on interaction STRENGTH rather than count. Edge width has no printed numeric scale here either - read it as rank, not magnitude. Red is higher in {name_b}; blue is higher in {name_a}, the reference. Strength and count can disagree: a pair can gain interactions while each is weaker, and the two panels are drawn side by side for that reason. A population absent from the ring is named on the plate, either with no counterpart in the other arm or, if present in both, unchanged between them on this measure.")
 .plan[["native_embedding_functional"]] <- list(
   id = "native_embedding_functional",
   axis = "unit",
@@ -839,7 +878,9 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   expr = quote({
  gg <- tryCatch(netAnalysis_diff_signalingRole_scatter(m), error = function(e) NULL)
  if (is.null(gg)) stop("netAnalysis_diff_signalingRole_scatter returned nothing")
- gg
+ gg + ggplot2::labs(
+ x = paste0("Change in outgoing strength  (", name_b, " minus ", name_a, ")"),
+ y = paste0("Change in incoming strength  (", name_b, " minus ", name_a, ")"))
  }),
   legend = "Each population placed by how much its OUTGOING signalling changed between the arms against how much its INCOMING changed. The origin is a population that did not shift. It is a difference of two inferences, so a point far from the origin means the two fits disagree there - not that anything was measured to change.")
 .plan[["nativecmp_signalingChanges"]] <- list(
