@@ -211,7 +211,10 @@ def write_brief(run, plugin, spec=None, design=None):
         L += ["## USE THESE HEADINGS, VERBATIM, IN THIS ORDER", "",
               "They are the panel's section names, so a reader moving between the two documents "
               "lands in the same place:", ""]
-        for _c in _cm(design):
+        # THE SAME CALL THE TABLE ABOVE WAS ORDERED BY (harness ADR-0018, found by blind 0005's
+        # writer): with the run's controls. Without them the headings came out in another order
+        # and the writer had to choose between two lists in one brief.
+        for _c in _cm(design, controls=ctl):
             L += [f"  {str(_c.get('kind', '')).upper():12s} {_c.get('label', '')}"
                   f"   -- {_c.get('question', '')}"]
         L += ["", "A question with no panel is a gap to report, not a section to skip.", ""]

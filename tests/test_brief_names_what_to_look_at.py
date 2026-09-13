@@ -138,6 +138,36 @@ with tempfile.TemporaryDirectory() as d:
               "the brief swallowed a broken review ledger instead of warning that nothing is "
               "marked")
 
+# ONE ORDER FOR THE CONTRASTS (found by the writer, blind 0005): the brief's table "in reading
+# order" and its "USE THESE HEADINGS, VERBATIM, IN THIS ORDER" listed the same four contrasts in
+# two orders, because the table asked the design panel with the run's controls and the headings
+# asked it without. The writer had to choose. One call, one order.
+import scprofile.design_panel as _DP                                      # noqa: E402
+_orig_cm = _DP.comparisons
+def _cm_stub(design, controls=None):
+    labs = ["age", "diet"] if controls else ["diet", "age"]
+    return [{"kind": "simple", "label": l, "question": f"does {l} matter"} for l in labs]
+_DP.comparisons = _cm_stub
+C.findings = lambda run, plugin, spec: {"age": {"ratio": 2.0, "reference": "y", "against": "a",
+                                                "ratio_per_cell": 1.5, "n_significant": 3,
+                                                "n_tested": 4},
+                                        "diet": {"ratio": 1.5, "reference": "c", "against": "h",
+                                                 "ratio_per_cell": 1.2, "n_significant": 1,
+                                                 "n_tested": 4}}
+C._controls = lambda run: {"age": "y", "diet": "c"}
+C._order = lambda f, design, controls=None: [c["label"] for c in _cm_stub(design, controls=controls)]
+with tempfile.TemporaryDirectory() as d:
+    (Path(d) / "report.json").write_text('{"controls": {"age": "y"}}', encoding="utf-8")
+    p = B.write_brief(d, "plug", spec={"report": {"subject": "widgets"}}, design=_design)
+    txt = Path(p).read_text(encoding="utf-8") if p else ""
+    rows = [l.split("|")[1].strip() for l in txt.splitlines()
+            if l.startswith("| ") and l.split("|")[1].strip() in ("age", "diet")]
+    heads = [l.split()[1] for l in txt.splitlines()
+             if l.strip().startswith("SIMPLE") and l.split()[1] in ("age", "diet")]
+    check(rows == heads and rows, "the brief's contrasts table and its verbatim headings list the "
+                                  "contrasts in different orders: %r vs %r" % (rows, heads))
+_DP.comparisons = _orig_cm
+
 if FAILURES:
     print("FAIL")
     for f in FAILURES:

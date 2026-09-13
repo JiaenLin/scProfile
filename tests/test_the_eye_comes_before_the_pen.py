@@ -154,6 +154,34 @@ with tempfile.TemporaryDirectory() as td:
     ck("and its do says what unblocks it, not 'write it'",
        "look again" in pr.stdout and "do:  write it" not in pr.stdout, pr.stdout[-400:])
 
+    print("\nthe section waits too: a draft citing a plate with an open finding is refused")
+    # FOUND BY THE WRITER (blind 0005): the agenda called the write task blocked, `--claim` refused
+    # a marked plate, and `--write` accepted a section resting on the same plates - then the agenda
+    # printed the task done with the blocked reason under it. One rule for the section, the
+    # claims, the agenda and `next`: the pen waits on the paper's figures.
+    C.figure_index = lambda run, plugin, spec=None, design=None: {F1: 1, F2: 2, F3: 3}
+    draft_bad = ("Under the reference arm the total rises, as Figure 1 shows, and the share of "
+                 "one pathway falls by nine points against the other arm (Figure 3). " * 4)
+    why3 = refuses(PA.write_draft, run, draft_bad, author="w", plugin="p")
+    ck("a section citing a marked figure is refused", bool(why3), "it was accepted")
+    ck("and the refusal names the figure and the finding",
+       "Figure 1" in why3 and NOTE_BAD[:30] in why3, why3)
+    draft_ok = ("The share of one pathway falls by nine points against the other arm, as "
+                "Figure 3 shows, and nothing else in the set is cited here. " * 5)
+    ck("a section citing only clean figures is carried in",
+       PA.write_draft(run, draft_ok, author="w", plugin="p").is_file())
+    tasks3 = {t["id"]: t for t in AG.tasks(run, "p", how=AG.LOCAL)}
+    ck("a write task that is done does not print the reason it was blocked",
+       tasks3["write"]["state"] == AG.DONE and "open finding" not in tasks3["write"]["why"],
+       str(tasks3["write"]))
+    ck("and defend is not done while a claim is undefended",
+       tasks3["defend"]["state"] != AG.DONE, str(tasks3["defend"]))
+    PA.review(run, ok["id"], PA.STANDING, "put to a second reader against its own scale and it held",
+              reviewer="r", plugin="p")
+    tasks4 = {t["id"]: t for t in AG.tasks(run, "p", how=AG.LOCAL)}
+    ck("defend is done once every claim has a verdict", tasks4["defend"]["state"] == AG.DONE,
+       str(tasks4["defend"]))
+
     print("\nwhen the findings clear, the pen opens")
     R.record(run, F1, NOTE_OK, reviewer="looker-3", plugin="p")
     run2 = make_run(Path(td) / "second", residue_on=())

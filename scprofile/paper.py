@@ -30,6 +30,7 @@ are not written down gets used as though it had none.
 from __future__ import annotations
 
 import hashlib
+import re
 import json
 import time
 import os as _os
@@ -455,6 +456,26 @@ def write_draft(out, text, *, author="", plugin=""):
     if len(body.split()) < MIN_CLAIM_WORDS * 4:
         raise Refused(f"a result section of {len(body.split())} words is a note, not a section. "
                       f"Write what you would submit.")
+    # THE SECTION WAITS TOO (harness ADR-0018, found by blind 0005's writer): the agenda called
+    # the write task blocked and `--claim` refused a marked plate, and this accepted a section
+    # resting on the same plates. One rule for the section, the claims, the agenda and `next`:
+    # a figure the run's own record calls wrong is cited by nothing until it is redrawn.
+    cited = sorted({int(n) for n in re.findall(r"\bFig(?:ure|\.)?\s*(\d+)", body)})
+    if cited:
+        from . import review as _RV
+        try:
+            openf = _RV.open_findings(out, plugin)
+        except Exception:                                                 # noqa: BLE001
+            openf = {}
+        by_num = {n: path for path, n in (_figure_index(out, plugin) or {}).items()}
+        bad = [n for n in cited if openf.get(by_num.get(n, ""))]
+        if bad:
+            n = bad[0]
+            raise Refused(f"the section cites Figure {n} ({by_num[n]}), which carries an open "
+                          f"finding: {openf[by_num[n]][0][:180]}. A section cannot rest on a "
+                          f"plate the run's own record calls wrong - fix it in the plan or the "
+                          f"plugin, rerun, look again, then carry the section in "
+                          f"({len(bad)} cited figure(s) carry one)")
     _root(out, plugin).mkdir(parents=True, exist_ok=True)
     (_root(out, plugin) / draft_name(plugin)).write_text(body, encoding="utf-8")
     _append(out, {"kind": "draft", "words": len(body.split()), "author": str(author or ""),

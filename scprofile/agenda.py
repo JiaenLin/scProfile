@@ -322,6 +322,14 @@ def tasks(run, plugin, spec=None, how=None):
         openf = {k: v for k, v in openf.items() if k in sel}
     exists, authored = _authored(run, plugin)
     claims = list((run / "kernels" / plugin).glob("PAPER_CLAIMS*.jsonl"))
+    # DEFENDED MEANS EVERY CLAIM HAS A VERDICT (harness ADR-0018, found by blind 0005's writer):
+    # a claims file existing read as "defended", and `next` told a writer the result was
+    # defended with 27 claims unreviewed. The ledger's own status decides.
+    try:
+        from . import paper as _PA
+        undefended = _PA.outstanding(run, plugin) if claims else []
+    except Exception:                                                     # noqa: BLE001
+        undefended = []
     tmpl = B.template_of(spec)
 
     how = mode(how)
@@ -405,7 +413,9 @@ def tasks(run, plugin, spec=None, how=None):
                     else BLOCKED if openf
                     else PENDING if (started and not out)
                     else BLOCKED),
-          "why": ((f"{len(openf)} figure(s) of the scan set carry an open finding - "
+          "why": (("the authored section is in the run beside the figures it cites")
+                  if authored else
+                  (f"{len(openf)} figure(s) of the scan set carry an open finding - "
                    + ", ".join(Path(k).name for k in sorted(openf)[:4])
                    + (" ..." if len(openf) > 4 else "")
                    + ": fix them in the plan or the plugin, rerun, look again. The pen waits "
@@ -438,9 +448,12 @@ def tasks(run, plugin, spec=None, how=None):
           "do": f"scprofile paper --out {run} --plugin {plugin} --write <file>   then   "
                 f"scprofile paper --out {run} --plugin {plugin} --render"},
          {"id": "defend", "title": "Record the claims and what review did to them",
-          "state": DONE if claims else (PENDING if authored else BLOCKED),
-          "why": "a claim is bound to the figures it cites, so a redraw makes it stale and the "
-                 "ledger refuses a citation the run does not contain",
+          "state": (DONE if (claims and not undefended)
+                    else PENDING if (authored or claims) else BLOCKED),
+          "why": ((f"{len(undefended)} claim(s) have no verdict yet: a second agent, not the "
+                  f"author, puts each to a round") if undefended else
+                  "a claim is bound to the figures it cites, so a redraw makes it stale and the "
+                  "ledger refuses a citation the run does not contain"),
           "do": f'scprofile paper --out {run} --plugin {plugin} --claim "..." --cites <figs>'}]
     return t
 
