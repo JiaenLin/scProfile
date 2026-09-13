@@ -211,13 +211,29 @@ def station_drawing(runs):
               if unmeasured else "")
         hits = [(f.get("id"), a) for f in audited for a in (f.get("audit") or [])]
         by = Counter(a.get("code") for _i, a in hits)
+        # WHAT THE HOST MENDED BEFORE IT MEASURED (harness ADR-0018). The audit repairs the
+        # classes it can where the artists are still live and records the residue; a clean run
+        # that needed forty repairs is a different fact from one that needed none, and a residue
+        # means nothing without what was tried.
+        reps = [(f.get("id"), rp) for f in audited for rp in (f.get("repairs") or [])]
+        n_rep_panels = len({i for i, _r in reps})
+        mended = (f"the host repaired {len(reps)} on {n_rep_panels} panel(s)"
+                  if reps else "the host repaired nothing")
         if hits:
-            named = "; ".join(f"{i}: {a.get('code')}" for i, a in hits[:4])
-            return BLOCKED, (f"{r.name}: {len(hits)} drawing issue(s) across "
-                             f"{len({i for i, _a in hits})} panel(s) — "
+            tried = {}
+            for i, rp in reps:
+                tried.setdefault(i, set()).add(str(rp.get("code")))
+            named = "; ".join(f"{i}: {a.get('code')}"
+                              + (f" (tried: {', '.join(sorted(tried[i]))})" if i in tried
+                                 else "")
+                              for i, a in hits[:4])
+            return BLOCKED, (f"{r.name}: {len(hits)} drawing issue(s) remain across "
+                             f"{len({i for i, _a in hits})} panel(s) after {mended} — "
                              + " · ".join(f"{n} {k}" for k, n in by.items()) + um
                              + drew_nothing), \
-                f"FIX THESE FIRST, they need no eye: {named}"
+                (f"FIX THESE, they are what the host's repertoire does not answer: {named}. "
+                 f"A class that is general belongs in the repertoire (scprofile/figure.py); "
+                 f"one that is this panel's belongs in the plan or the plugin")
         # A CLEAN RUN IS NOT A CLEAN BUILD. The same commit drew the same panels from the same
         # data twice and produced five text collisions once and none the next time - neither run
         # adopted anything, so both drew afresh. A mechanical defect that comes and goes is
@@ -246,7 +262,7 @@ def station_drawing(runs):
                  f"Fix it, or show it cannot occur")
         extra = f", and in {len(siblings)} other run(s) of the same commit" if siblings else ""
         return PASS, (f"{r.name}: {len(audited)} panel(s) measured, none with a drawing "
-                      f"issue{extra}{um}{drew_nothing}"), ""
+                      f"issue; {mended}{extra}{um}{drew_nothing}"), ""
     return BLOCKED, "no figures in any run", "run something that draws"
 
 

@@ -936,6 +936,13 @@ class Context(FigureContextReader):
             t = fig.text(0.0, -0.006, line, ha="left", va="top", fontsize=5.2,
                          color="#5A5A5A", transform=fig.transFigure)
             t._scprofile_provenance = True
+            # BELOW THE LOWEST ARTIST, NOT AT A FIXED y (harness ADR-0018). Six panels of one
+            # run carried a bottom tick label through the stamp: the canvas had been shrunk to
+            # the column after the stamp was placed, and tick labels in points then reached
+            # further below the box. Placed from the rendered box, after `fit_column`, the
+            # stamp cannot collide with what is above it.
+            from . import figure as _FS
+            _FS.stamp_below(fig, t)
         except Exception:                                                 # noqa: BLE001
             pass                # a stamp that will not draw must never lose the figure
 
@@ -1012,7 +1019,6 @@ class Context(FigureContextReader):
             self.log(f"  {name}: emitted with no legend. The report will say so on the page - "
                      f"pass `caption=` where the panel is drawn, where the numbers that describe "
                      f"it still exist.")
-        self._stamp_provenance(fig)
         # THE CONVENTION WINS WHERE THERE IS ONE. `figure.use()` sets savefig.dpi to 400 for
         # publication; a hard `dpi=200` here silently overrode it, so a plugin that had asked for
         # the journal settings got half the resolution it asked for. Where nothing has been set,
@@ -1034,41 +1040,36 @@ class Context(FigureContextReader):
             _F.fit_column(fig)
         except Exception:                                                 # noqa: BLE001
             pass                    # a figure that will not measure is still a figure to write
+        # THE STAMP GOES ON AFTER THE FIT, placed from the rendered box - see
+        # `_stamp_provenance`. Stamped before the fit it sat where the shrunk canvas's tick
+        # labels then reached.
+        self._stamp_provenance(fig)
         # RE-SOLVE THE LABELS IN THE LAYOUT THEY WILL BE SAVED IN. `fit_column` above resizes
         # the canvas after the plugin has finished drawing, so every declutter the plugin solved
         # was solved against a geometry that no longer exists - the points move with the resize
         # and the labels do not. The host was measuring collisions it had created itself and
         # reporting them as plugin defects, and no fix inside a plugin could have reached them.
         #
-        # MEASURED ON BOTH SIDES, because a fix nobody measured is a hypothesis. What the audit
-        # saw before the re-solve is recorded next to what it saw after, so the next run says
-        # whether re-solving helps rather than leaving it to be argued about.
-        _before = []
-        try:
-            from . import figure as _FR
-            _before = [c for c, _ in _FR.audit(fig)]
-            _FR.resolve_overlaps(fig)
-        except Exception:                                                 # noqa: BLE001
-            pass                    # a label set that will not re-solve keeps its placement
-        # WHAT A MACHINE CAN SEE, MEASURED HERE, WHERE THE ARTISTS ARE STILL LIVE. Three of the
-        # eleven defects found by opening panels one at a time were mechanical - text over text,
-        # a label clipped by the canvas, a size channel with no key - and every one shipped
-        # because nothing looked at the figure between drawing it and writing it. The eye is the
-        # only check for the other eight; spending it on these three is waste.
+        # THEN THE AUDIT REPAIRS WHAT IT CAN AND RECORDS WHAT IS LEFT (harness ADR-0018). What a
+        # machine can see - text over text, a label clipped by the canvas, a size channel with
+        # no key - is measured here, where the artists are still live; the collisions the
+        # column fit or the data made are mended by the host's own repertoire, generically, and
+        # re-measured; the residue is recorded on the panel with the repairs that were tried.
         #
         # RECORDS, NEVER REFUSES. A panel this catches is usually still worth shipping, and a
         # gate that blocks a run over a label two pixels out is a gate somebody removes.
+        _before, _audit, _repairs = [], [], []
         try:
             from . import figure as _FA
-            _audit = _FA.audit(fig)
+            _FA.resolve_overlaps(fig)
+            _before, _audit, _repairs = _FA.audit_and_repair(fig)
         except Exception:                                                 # noqa: BLE001
-            _audit = []
-        if _before and len(_audit) < len(_before):
-            self.log(f"  {name}: re-solving cleared {len(_before) - len(_audit)} drawing "
-                     f"issue(s) the canvas change had created")
-        if _audit:
-            self.log(f"  {name}: {len(_audit)} drawing issue(s) a machine can see"
-                     f" ({len(_before)} before the host re-solved)")
+            pass                    # a panel that will not measure is still a panel to write
+        if _before or _repairs:
+            self.log(f"  {name}: {len(_before)} drawing issue(s) found, {len(_repairs)} "
+                     f"repair(s) by the host"
+                     + (f" ({', '.join(sorted({c for c, _w in _repairs}))})" if _repairs
+                        else "") + f", {len(_audit)} remain")
             for _code, _detail in _audit[:4]:
                 self.log(f"      {_code}: {_detail}")
         want_in = float(fig.get_size_inches()[0])
@@ -1111,7 +1112,11 @@ class Context(FigureContextReader):
                               # A LIST ALWAYS, empty when the figure measured clean. See the
                               # note in `manifest._figure`: clean and unmeasured must not look
                               # the same downstream.
-                              "audit": [{"code": c, "detail": d} for c, d in (_audit or [])]})
+                              "audit": [{"code": c, "detail": d} for c, d in (_audit or [])],
+                              # WHAT THE HOST MENDED, present only when it mended something -
+                              # the drawn_by rule: a record that says nothing says nothing.
+                              **({"repairs": [{"code": c, "what": w} for c, w in _repairs]}
+                                 if _repairs else {})})
         if close:
             try:
                 import matplotlib.pyplot as plt

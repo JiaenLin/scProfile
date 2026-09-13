@@ -161,6 +161,35 @@ def test_every_broken_panel_is_caught():
     assert not missed, f"the audit passed a panel broken on purpose: {missed}"
 
 
+def test_no_sound_panel_is_repaired():
+    """THE REPAIR HAS A FALSE-POSITIVE RATE TOO (harness ADR-0018). A repair applied to a sound
+    panel is a change nobody asked for, so the sound half must come back untouched."""
+    changed = []
+    for mk in SOUND:
+        fig = mk()
+        before, after, reps = F.audit_and_repair(fig)
+        plt.close(fig)
+        if reps or after:
+            changed.append(f"{mk.__name__}: repairs {[c for c, _ in reps]}, after "
+                           f"{[c for c, _ in after]}")
+    assert not changed, f"the host changed a panel built to be sound: {changed}"
+
+
+def test_a_repairable_broken_panel_is_clean_after_and_an_unrepairable_one_is_not():
+    """The repertoire answers a class or it does not, and both answers are recorded."""
+    fig, want = broken_ticks_run_together()
+    before, after, reps = F.audit_and_repair(fig)
+    plt.close(fig)
+    assert want in {c for c, _ in before}
+    assert want not in {c for c, _ in after}, f"ticks still collide after {reps}"
+    assert reps, "a clean panel with no repair recorded is a repair nobody can audit"
+    fig, want = broken_text_on_text()
+    before, after, reps = F.audit_and_repair(fig)
+    plt.close(fig)
+    assert want in {c for c, _ in after}, "two texts in data coordinates must be left alone"
+    assert not reps
+
+
 def test_the_control_has_both_halves():
     """A control with only one half can be satisfied by a threshold at either extreme."""
     assert len(SOUND) >= 4, "too few sound panels to measure a false-positive rate"
@@ -174,7 +203,7 @@ def test_the_decoration_classes_are_actually_covered():
     plt.close(fig)
     src = (F.__file__)
     text = open(src).read()
-    for hook in ("get_xticklabels", "ax.title", "xaxis.label", "get_legend"):
+    for hook in ("get_major_ticks", "ax.title", "xaxis.label", "get_legend"):
         assert hook in text, f"the audit does not collect {hook}, so a whole class is invisible"
 
 

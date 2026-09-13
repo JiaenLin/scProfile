@@ -27,6 +27,7 @@ kernels live in pinned environments and this module is imported into all of them
 from __future__ import annotations
 
 import hashlib
+import re
 from pathlib import Path
 
 #: Journal column widths in inches. Most journals want one or the other, exactly.
@@ -620,6 +621,14 @@ def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"),
         fit_column(fig)
     except Exception:                                                     # noqa: BLE001
         pass                       # a figure that will not measure is still a figure to write
+    # THE SAME AUDIT AND THE SAME REPAIRS AS `emit_figure` (harness ADR-0018): two save paths,
+    # one implementation, so a panel written here is measured and mended like every other.
+    _audit, _repairs = [], []
+    try:
+        resolve_overlaps(fig)
+        _before, _audit, _repairs = audit_and_repair(fig)
+    except Exception:                                                     # noqa: BLE001
+        pass
     want_in = float(fig.get_size_inches()[0])
     written = {}
     for ext in formats:
@@ -634,6 +643,9 @@ def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"),
         entry["vector"] = str(written["pdf"])
     if source is not None:
         entry["source"] = str(source)
+    entry["audit"] = [{"code": c, "detail": d_} for c, d_ in _audit]
+    if _repairs:
+        entry["repairs"] = [{"code": c, "what": w} for c, w in _repairs]
     log(f"    {name}  " + ", ".join(sorted(written)) + (f"  [{Path(source).name}]" if source
                                                         else "  [NO SOURCE DATA]"))
     import matplotlib.pyplot as plt
@@ -801,6 +813,203 @@ _AUDIT_MIN_PT = 4.0
 _AUDIT_OVERLAP = 0.20
 
 
+#: What the audit calls a DECORATION: text that lives in the margin on purpose. Tick labels,
+#: axis labels, titles and legends sit outside the axes by design and `bbox_inches="tight"`
+#: grows the canvas to hold them, so they join the overlap check and never the clipping check.
+_DECOR = ("tick", "title", "xlabel", "ylabel", "legend")
+
+#: Numeric tick text, including matplotlib's mathtext for a log axis.
+_NUMERIC = re.compile(r"^[-−+]?[\d.,]+%?$|^\$\\mathdefault\{10\^\{[-−]?\d+\}\}\$$")
+
+
+def _texts_of(fig, rend):
+    """[(text, box, role)] - every text the audit polices, with WHAT each one is.
+
+    THE ROLE IS WHAT MAKES A FINDING REPAIRABLE (harness ADR-0018). A tick knows its axis and
+    its side; a legend entry knows its legend; an annotation knows whether it was placed in
+    offset points, which the host may move, or in data coordinates, which it may not. The audit
+    used to keep only a set of ids; a finding then said WHAT collided and nothing could act on it.
+
+    EVERY TEXT ON THE PANEL, NOT ONLY THE ONES A PLUGIN DREW. An earlier version collected
+    `ax.texts` and `fig.texts` alone and never saw tick labels, axis titles or legend entries -
+    most of the text on a scientific figure, and where the misses were: an eye scan of 84 panels
+    found five text collisions this check had passed, all of that kind.
+    """
+    def _bb(a):
+        try:
+            b = a.get_window_extent(renderer=rend)
+            return b if b.width > 0 and b.height > 0 else None
+        except Exception:                                                 # noqa: BLE001
+            return None
+
+    out = []
+
+    def _take(t, role):
+        if t is None or not (t.get_visible() and str(t.get_text()).strip()):
+            return
+        if float(t.get_fontsize() or 0) < _AUDIT_MIN_PT:
+            return
+        b = _bb(t)
+        if b is not None:
+            out.append((t, b, role))
+
+    from matplotlib.text import Annotation as _Ann
+    for ax in fig.get_axes():
+        for t in ax.texts:
+            movable = (isinstance(t, _Ann)
+                       and str(getattr(t, "anncoords", "")) == "offset points")
+            _take(t, {"kind": "annotation" if movable else "text", "ax": ax})
+        _take(ax.title, {"kind": "title", "ax": ax})
+        _take(ax.xaxis.label, {"kind": "xlabel", "ax": ax})
+        _take(ax.yaxis.label, {"kind": "ylabel", "ax": ax})
+        for axis, side in ((ax.xaxis, "x"), (ax.yaxis, "y")):
+            for t in _drawn_ticklabels(axis):
+                _take(t, {"kind": "tick", "ax": ax, "axis": axis, "side": side})
+        lg = ax.get_legend()
+        if lg is not None:
+            # Texts inside ONE legend are excluded from each other below: matplotlib lays a
+            # legend out and its entries cannot collide, so comparing them is pure false positive.
+            for t in lg.get_texts():
+                _take(t, {"kind": "legend", "ax": ax, "legend": lg})
+            _take(lg.get_title(), {"kind": "legend", "ax": ax, "legend": lg})
+    for lg in getattr(fig, "legends", []):
+        for t in lg.get_texts():
+            _take(t, {"kind": "legend", "ax": None, "legend": lg})
+        _take(lg.get_title(), {"kind": "legend", "ax": None, "legend": lg})
+    for t in fig.texts:
+        kind = "stamp" if getattr(t, "_scprofile_provenance", False) else "figtext"
+        _take(t, {"kind": kind, "ax": None})
+    return out
+
+
+def _rotated(t):
+    return (getattr(t, "get_rotation", lambda: 0)() or 0) % 180 != 0
+
+
+def _drawn_ticklabels(axis):
+    """The major tick labels matplotlib will actually draw: those inside the view interval.
+
+    `get_ticklabels()` returns a Text for every tick the locator proposed, including ticks
+    OUTSIDE the axis limits, which matplotlib lays out and never draws - a log axis limited to
+    1e4 still carries a '10^3' label at a negative x. Measuring those against real text is a
+    collision nobody can see.
+    """
+    try:
+        lo, hi = sorted(float(v) for v in axis.get_view_interval())
+        out = []
+        for tick in axis.get_major_ticks():
+            loc = float(tick.get_loc())
+            if lo - 1e-9 * max(1.0, abs(lo)) <= loc <= hi + 1e-9 * max(1.0, abs(hi)):
+                out.append(tick.label1)
+        return out
+    except Exception:                                                     # noqa: BLE001
+        return list(axis.get_ticklabels())
+
+
+def audit_findings(fig):
+    """[finding] - what is measurably wrong with this figure, with the artists involved.
+
+    A finding is a dict: `code`, `detail` (where, and by how much), and for a collision the two
+    texts `a` and `b` with their roles `ra` and `rb` and the overlap `w`, `h`, `frac`. `audit`
+    is the string view of this; `repair` is what acts on it.
+    """
+    out = []
+    try:
+        fig.canvas.draw()
+        rend = fig.canvas.get_renderer()
+    except Exception:                                                     # noqa: BLE001
+        return out                       # a figure that will not render is not this check's job
+    texts = _texts_of(fig, rend)
+
+    # ---- text on text -------------------------------------------------------------------
+    for i in range(len(texts)):
+        for j in range(i + 1, len(texts)):
+            (ta, a, ra), (tb, b, rb) = texts[i], texts[j]
+            w = min(a.x1, b.x1) - max(a.x0, b.x0)
+            h = min(a.y1, b.y1) - max(a.y0, b.y0)
+            if w <= 0 or h <= 0:
+                continue
+            small = min(a.width * a.height, b.width * b.height) or 1.0
+            if ra["kind"] == "legend" and rb["kind"] == "legend" \
+                    and ra["legend"] is rb["legend"]:
+                continue            # one legend lays its own entries out; they cannot collide
+            da, db = ra["kind"] in _DECOR, rb["kind"] in _DECOR
+            # A ROTATED DECORATION IS EXCLUDED, and this is a limit rather than a nicety.
+            # `get_window_extent` returns an AXIS-ALIGNED box, so two tick labels rotated 45
+            # degrees along one axis have boxes that overlap by construction - which is WHY
+            # they are rotated. Measured: one heatmap reported FOURTEEN collisions among its own
+            # x tick labels the moment decorations entered this check, and an eye scan of 84
+            # panels found not one rotated tick label unreadable. What this loses: a genuine
+            # collision between two rotated labels is found only by the eye.
+            if (_rotated(ta) or _rotated(tb)) and (da or db):
+                continue
+            # TWO TEXTS ON ONE BASELINE HAVE NO TOLERANCE. The 20% area rule is right for
+            # annotations, placed independently; two tick labels or two titles sit on a shared
+            # baseline, so ANY horizontal overlap is glyphs touching: `0.00.20.40.60.81.0` was
+            # passed by the area rule at 12%, and is the least readable thing in the run it came
+            # from.
+            same_baseline = (da and db and abs((a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2) <= 1.5
+                             and w > 0.5)
+            frac = (w * h) / small
+            if same_baseline or frac >= _AUDIT_OVERLAP:
+                # WHERE, AND BY HOW MUCH. A pair of names with no position sent three separate
+                # attempts to rebuild the panel from its own coordinates, all of which came back
+                # clean while the real panel stayed broken.
+                out.append({"code": "text_overlap",
+                            "detail": f"{str(ta.get_text())[:24]!r} over "
+                                      f"{str(tb.get_text())[:24]!r} — {frac:.0%} of the "
+                                      f"smaller, at ({max(a.x0, b.x0):.0f},"
+                                      f"{max(a.y0, b.y0):.0f})px",
+                            "a": ta, "b": tb, "ra": ra, "rb": rb, "w": w, "h": h, "frac": frac})
+
+    # ---- outside the canvas -------------------------------------------------------------
+    # `bbox_inches="tight"` GROWS the canvas for anything outside it, so this catches only what
+    # is clipped by an artist's own clip box - which is what truncated a title and a label.
+    # FIGURE-LEVEL TEXT IS OUTSIDE THE CANVAS ON PURPOSE (the provenance stamp), and a
+    # decoration lives in the margin on purpose; the first version reported every correctly
+    # stamped panel as clipped, on all 223 of a real run.
+    fw, fh = fig.canvas.get_width_height()
+    for t, b, r in texts:
+        if r["kind"] in _DECOR or r["kind"] in ("figtext", "stamp") or not t.get_clip_on():
+            continue
+        over = []
+        if b.x0 < -1:
+            over.append(f"left by {-b.x0:.0f}px")
+        if b.y0 < -1:
+            over.append(f"bottom by {-b.y0:.0f}px")
+        if b.x1 > fw + 1:
+            over.append(f"right by {b.x1 - fw:.0f}px")
+        if b.y1 > fh + 1:
+            over.append(f"top by {b.y1 - fh:.0f}px")
+        if over:
+            out.append({"code": "off_canvas",
+                        "detail": f"{str(t.get_text())[:32]!r} runs off the canvas: "
+                                  + ", ".join(over) + f" (canvas {fw:.0f}x{fh:.0f}px)",
+                        "a": t, "b": None, "ra": r, "rb": None})
+
+    # ---- a size channel with no key -----------------------------------------------------
+    # A FIGURE-LEVEL LEGEND IS A LEGEND: `legend_outside` returns `fig.legend(...)`, so a check
+    # that looked only at the axes reported 14 correctly keyed panels as unkeyed in one run.
+    for ax in fig.get_axes():
+        sized = False
+        for c in ax.collections:
+            try:
+                sizes = c.get_sizes()
+            except Exception:                                             # noqa: BLE001
+                continue
+            if sizes is not None and len(sizes) > 1 and float(max(sizes)) > 0:
+                if float(max(sizes)) / (float(min(sizes)) or 1.0) >= 1.5:
+                    sized = True
+        if sized and ax.get_legend() is None and not any(
+                a.get_legend() is not None for a in fig.get_axes()) and not fig.legends:
+            out.append({"code": "size_unkeyed",
+                        "detail": "a scatter varies marker size and nothing on the figure "
+                                  "keys it",
+                        "a": None, "b": None, "ra": None, "rb": None})
+            break
+    return out
+
+
 def audit(fig):
     """[(code, detail)] - what is measurably wrong with this figure. Empty is the good case.
 
@@ -812,209 +1021,247 @@ def audit(fig):
       off_canvas     an artist rendered outside the figure. Found by eye twice: a title cut to
                      "observed difference betwe" and a label starting before its own axis.
       size_unkeyed   a scatter drawing more than one marker size, with no legend anywhere
-                     on the figure - axes-level or figure-level. Both count: `legend_outside`
-                     places a real key on the figure rather than on an axes.
-                     A size channel a reader cannot decode is decoration that looks like
-                     evidence, and it shipped on two panels at once.
+                     on the figure - axes-level or figure-level.
     """
-    out = []
+    return [(f["code"], f["detail"]) for f in audit_findings(fig)]
+
+
+# -----------------------------------------------------------------------------------------------
+# THE REPAIRS (harness ADR-0018). Every collision on the run this was written against was the
+# host's or the data's: the canvas shrank to the column after the plugin had finished and the type
+# did not; the provenance stamp sat at a fixed y; a data-placed label landed on a legend. A fix in
+# the plugin holds for one dataset. So the host repairs the classes it can - generically, where
+# the artists are still live - and re-audits; what it cannot repair is recorded with what it
+# tried. Nothing here shrinks type, widens past the column or moves a number.
+# -----------------------------------------------------------------------------------------------
+
+def stamp_below(fig, t):
+    """Place the provenance stamp `t` just below everything else. True when it moved.
+
+    A FIXED y BELOW THE FIGURE BOX WAS THE HOST'S OWN COLLISION: six panels of one run carried a
+    bottom tick label through the stamp, because the canvas had shrunk after the stamp was placed
+    and the tick labels, in points, reached further below the box than before. The lowest
+    rendered artist is the only honest reference, so the stamp is placed from it.
+    """
     try:
+        was = tuple(t.get_position())
+        t.set_visible(False)
         fig.canvas.draw()
-        rend = fig.canvas.get_renderer()
+        bb = fig.get_tightbbox(fig.canvas.get_renderer())
+        t.set_visible(True)
+        w, h = fig.get_size_inches()
+        x = max(0.0, float(bb.x0) / float(w))
+        y = float(bb.y0) / float(h) - 0.05 / float(h)
+        t.set_position((x, y))
+        return tuple(t.get_position()) != was
     except Exception:                                                     # noqa: BLE001
-        return out                       # a figure that will not render is not this check's job
-
-    def _bb(a):
         try:
-            b = a.get_window_extent(renderer=rend)
-            return b if b.width > 0 and b.height > 0 else None
+            t.set_visible(True)
         except Exception:                                                 # noqa: BLE001
-            return None
+            pass
+        return False
 
-    # ---- text on text -------------------------------------------------------------------
-    # EVERY TEXT ON THE PANEL, NOT ONLY THE ONES A PLUGIN DREW. This collected `ax.texts` and
-    # `fig.texts` - annotations and explicit `text()` calls - and nothing else, so it never saw
-    # tick labels, axis titles, axis labels or legend entries. That is most of the text on a
-    # scientific figure, and it is where the misses were: an eye scan of 84 panels found five
-    # text collisions this check had passed, and ALL FIVE were of that kind - two axis titles
-    # running together, two subplot titles overprinting, and three sets of tick labels merged
-    # into an unreadable run.
-    #
-    # A check that spares the eye is only worth what it covers. Covering a third of the text on
-    # a panel and reporting silence is worse than not running, because the silence is read as a
-    # result.
-    #
-    # Texts inside ONE legend are excluded from each other: matplotlib lays a legend out and its
-    # entries cannot collide, so comparing them is pure false positive.
-    def _own_legend(t):
-        a = t
-        for _ in range(6):
-            a = getattr(a, "_legend", None) or getattr(a, "get_parent", lambda: None)() \
-                or getattr(a, "axes", None)
-            if a is None:
-                return None
-            if a.__class__.__name__ == "Legend":
-                return id(a)
+
+def _pts(fig, px):
+    return float(px) * 72.0 / float(fig.dpi)
+
+
+def _visible_labels(axis):
+    return [t for t in _drawn_ticklabels(axis)
+            if t.get_visible() and str(t.get_text()).strip()]
+
+
+def _numeric_axis(axis):
+    labs = _visible_labels(axis)
+    return bool(labs) and all(_NUMERIC.match(str(t.get_text()).strip()) for t in labs)
+
+
+def _thin_axis(fig, ra):
+    """Thin a numeric axis by one label, or rotate a categorical one. None when at the floor."""
+    axis, ax, side = ra["axis"], ra["ax"], ra["side"]
+    n = len(_visible_labels(axis))
+    if _numeric_axis(axis):
+        if n <= 3:
+            return None                        # three labels is a scale; fewer is not
+        from matplotlib.ticker import LogLocator, MaxNLocator
+        scale = ax.get_xscale() if side == "x" else ax.get_yscale()
+        if scale == "log":
+            axis.set_major_locator(LogLocator(numticks=max(3, n - 1)))
+        else:
+            axis.set_major_locator(MaxNLocator(nbins=max(2, n - 2)))
+        return ("tick_thin", f"{side} ticks thinned from {n} labels", ("thin", id(axis)))
+    if side == "x" and not any(_rotated(t) for t in _visible_labels(axis)):
+        for t in axis.get_ticklabels():
+            t.set_rotation(45)
+            t.set_horizontalalignment("right")
+            t.set_rotation_mode("anchor")
+        return ("tick_rotate", f"{n} category labels on x rotated 45°", ("rotate", id(axis)))
+    return None
+
+
+def _pad_corner(fig, f, ra, rb):
+    """An x tick over a y tick at the shared corner: the x labels move down by the overlap.
+
+    EVERY LABEL IS KEPT. Hiding the y axis's origin label was the first answer, and it is the
+    wrong one for a colour bar, whose extreme label is its scale. Padding the horizontal axis
+    separates the two and loses nothing; if it did not hold, the second pass hides the y label.
+    """
+    rx, ry = (ra, rb) if ra["side"] == "x" else (rb, ra)
+    tx, ty = (f["a"], f["b"]) if ra["side"] == "x" else (f["b"], f["a"])
+    axis = rx["axis"]
+    if getattr(axis, "_scprofile_padded", False):
+        ty.set_visible(False)
+        return ("corner_hide", f"the y axis's corner label {ty.get_text()!r} hidden",
+                ("hide", id(ty)))
+    try:
+        cur = float(axis.majorTicks[0].get_pad()) if axis.majorTicks else 3.5
+    except Exception:                                                     # noqa: BLE001
+        cur = 3.5
+    step = _pts(fig, f["h"]) + 1.0
+    axis.set_tick_params(pad=cur + step)
+    axis._scprofile_padded = True
+    return ("tick_pad", f"x tick labels moved {step:.0f} pt down, clear of {ty.get_text()!r}",
+            ("pad", id(axis)))
+
+
+def _spine_of(ra):
+    """The spine the ticks of `ra` hang from: bottom/top for x, left/right for y."""
+    pos = ra["axis"].get_ticks_position()
+    if ra["side"] == "x":
+        return "top" if pos == "top" else "bottom"
+    return "right" if pos == "right" else "left"
+
+
+def _offset_axis(fig, f, ra, rb):
+    """Tick labels of two axes on one side overlap: the second axes' spine moves outward."""
+    axes = list(fig.get_axes())
+    cand = [ra, rb]
+    # THE AXES ALREADY OFFSET IS THE SECOND ONE; failing that, the later one drawn.
+    def _outward(r):
+        sp = r["ax"].spines[_spine_of(r)]
+        pos = sp.get_position()
+        return isinstance(pos, tuple) and pos[0] == "outward"
+    second = next((r for r in cand if _outward(r)), None)
+    if second is None:
+        second = max(cand, key=lambda r: axes.index(r["ax"]) if r["ax"] in axes else -1)
+    name = _spine_of(second)
+    sp = second["ax"].spines[name]
+    pos = sp.get_position()
+    cur = float(pos[1]) if isinstance(pos, tuple) and pos[0] == "outward" else 0.0
+    step = _pts(fig, f["h"] if second["side"] == "x" else f["w"]) + 2.0
+    sp.set_position(("outward", cur + step))
+    return ("axis_offset", f"the {name} spine of a second axes moved {step:.0f} pt outward",
+            ("offset", id(sp)))
+
+
+def _legend_out(fig, r):
+    """A legend inside the axes under a placed label: the legend goes outside."""
+    lg, ax = r["legend"], r["ax"]
+    if ax is None:
+        return None                                  # a figure legend is outside already
+    handles = (getattr(lg, "legend_handles", None) or getattr(lg, "legendHandles", None)
+               or [])
+    labels = [t.get_text() for t in lg.get_texts()]
+    title = lg.get_title().get_text() if lg.get_title() is not None else ""
+    if not handles or not labels:
         return None
+    try:
+        lg.remove()
+    except Exception:                                                     # noqa: BLE001
+        return None
+    new = legend_outside(fig, ax, handles, labels, markerscale=1.0)
+    if title:
+        new.set_title(title)
+    return ("legend_out", "the legend moved outside the axes, clear of the labels",
+            ("legend", id(ax)))
 
-    texts, fig_level, legend_of, decoration = [], set(), {}, set()
 
-    def _take(t, *, in_legend=None, decor=False):
-        if not (t.get_visible() and str(t.get_text()).strip()):
-            return
-        if float(t.get_fontsize() or 0) < _AUDIT_MIN_PT:
-            return
-        texts.append((t, _bb(t)))
-        if in_legend is not None:
-            legend_of[id(t)] = in_legend
-        if decor:
-            # A DECORATION LIVES IN THE MARGIN ON PURPOSE. Tick labels, axis labels, titles and
-            # legends sit outside the axes by design and `bbox_inches="tight"` grows the canvas
-            # to hold them, so measuring them against the canvas reports every correct panel as
-            # broken - which is what happened the moment they were added: eight off-canvas
-            # findings on a three-bar test figure. They join the OVERLAP check, which is what
-            # they were added for, and not the clipping check.
-            decoration.add(id(t))
+def repair_one(fig, f):
+    """(code, what, key) - one repair for one finding, or None when the repertoire has none.
 
-    for ax in fig.get_axes():
-        for t in ax.texts:
-            _take(t)
-        _take(ax.title, decor=True)
-        _take(ax.xaxis.label, decor=True)
-        _take(ax.yaxis.label, decor=True)
-        for t in list(ax.get_xticklabels()) + list(ax.get_yticklabels()):
-            _take(t, decor=True)
-        for lg in ([ax.get_legend()] if ax.get_legend() else []):
-            for t in lg.get_texts():
-                _take(t, in_legend=id(lg), decor=True)
-            _take(lg.get_title(), in_legend=id(lg), decor=True)
-    for lg in getattr(fig, "legends", []):
-        for t in lg.get_texts():
-            _take(t, in_legend=id(lg), decor=True)
-        _take(lg.get_title(), in_legend=id(lg), decor=True)
-    for t in fig.texts:
-        if t.get_visible() and str(t.get_text()).strip() \
-                and float(t.get_fontsize() or 0) >= _AUDIT_MIN_PT:
-            texts.append((t, _bb(t)))
-            fig_level.add(id(t))
-    texts = [(t, b) for t, b in texts if b is not None]
-    for i in range(len(texts)):
-        for j in range(i + 1, len(texts)):
-            a, b = texts[i][1], texts[j][1]
-            w = min(a.x1, b.x1) - max(a.x0, b.x0)
-            h = min(a.y1, b.y1) - max(a.y0, b.y0)
-            if w <= 0 or h <= 0:
-                continue
-            small = min(a.width * a.height, b.width * b.height) or 1.0
-            ta, tb = texts[i][0], texts[j][0]
-            if legend_of.get(id(ta)) is not None \
-                    and legend_of.get(id(ta)) == legend_of.get(id(tb)):
-                continue            # one legend lays its own entries out; they cannot collide
-            # TWO TEXTS ON ONE BASELINE HAVE NO TOLERANCE. The 20% area rule is right for
-            # annotations, which are placed independently and can overlap slightly at their
-            # corners without becoming unreadable. It is wrong for two tick labels or two
-            # titles: those sit on a shared baseline, so ANY horizontal overlap is glyphs
-            # touching, and the result reads as one run of characters - `0.00.20.40.60.81.0`
-            # was passed by the area rule at 12%, and is the least readable thing in the run
-            # it came from.
-            #
-            # Measured on the real case: '0.0' spans 19.1 to 40.9 px and '0.2' spans 38.3 to
-            # 60.1, an overlap of 2.6 px, which is 12% of the smaller box and 100% of what a
-            # reader needs to tell two numbers apart.
-            # A ROTATED DECORATION IS EXCLUDED, and this is a limit rather than a nicety.
-            # `get_window_extent` returns an AXIS-ALIGNED box, so two tick labels rotated 45
-            # degrees along one axis have boxes that overlap by construction - which is WHY they
-            # are rotated - and their rotated rectangles still graze at the corners. Measured on
-            # a real run the moment decorations entered this check: one heatmap reported
-            # FOURTEEN collisions among its own x tick labels.
-            #
-            # The ground truth is the eye. Eighty-four panels were read one at a time and not one
-            # rotated tick label was reported as unreadable; the five collisions that scan DID
-            # find were all unrotated - two axis titles, two subplot titles, three sets of
-            # horizontal tick labels. So rotated decorations are left to matplotlib's own layout.
-            #
-            # WHAT THIS LOSES: a genuine collision between two rotated labels is not caught, and
-            # only the eye will find it. That is a smaller loss than fourteen false findings on
-            # one panel, which is how a gate stops being read.
-            if (getattr(ta, "get_rotation", lambda: 0)() or 0) % 180 != 0 \
-                    or (getattr(tb, "get_rotation", lambda: 0)() or 0) % 180 != 0:
-                if id(ta) in decoration or id(tb) in decoration:
-                    continue
-            _same_baseline = (id(ta) in decoration and id(tb) in decoration
-                              and abs((a.y0 + a.y1) / 2 - (b.y0 + b.y1) / 2) <= 1.5
-                              and w > 0.5)
-            if _same_baseline or (w * h) / small >= _AUDIT_OVERLAP:
-                # WHERE, AND BY HOW MUCH - see the note on `off_canvas` below. A pair of
-                # names with no position sent three separate attempts to rebuild the panel
-                # from its own coordinates, all of which came back clean while the real panel
-                # stayed broken. The overlap fraction and the location make the finding
-                # actionable without re-deriving it.
-                out.append(("text_overlap",
-                            f"{str(texts[i][0].get_text())[:24]!r} over "
-                            f"{str(texts[j][0].get_text())[:24]!r} — "
-                            f"{(w * h) / small:.0%} of the smaller, at "
-                            f"({max(a.x0, b.x0):.0f},{max(a.y0, b.y0):.0f})px"))
+    The repertoire, in order:
+      stamp_below        a tick label over the provenance stamp -> the stamp below everything
+      tick_thin          two ticks of one numeric axis on one baseline -> one label fewer
+      tick_rotate        two category labels on x -> rotated 45°, right-aligned
+      tick_dedupe        the same tick text twice at one place -> the later copy hidden
+      tick_pad           an x tick over a y tick at the corner -> x labels moved down
+      corner_hide        ... and if that did not hold -> the y axis's corner label hidden
+      axis_offset        ticks of two axes on one side -> the second spine moved outward
+      legend_out         a placed label over a legend's text -> the legend outside the axes
+      annotations_apart  two offset-point annotations -> `_separate`, the plugins' own declutter
+    Anything else is residue. A text in data coordinates is never moved: moving it changes what
+    it says.
+    """
+    if f.get("code") != "text_overlap" or f.get("a") is None or f.get("b") is None:
+        return None
+    ta, tb, ra, rb = f["a"], f["b"], f["ra"], f["rb"]
+    ka, kb = ra["kind"], rb["kind"]
+    if "stamp" in (ka, kb):
+        t = ta if ka == "stamp" else tb
+        if stamp_below(fig, t):
+            return ("stamp_below", "the provenance stamp moved below the lowest artist",
+                    ("stamp", id(t)))
+        return None
+    if ka == "tick" and kb == "tick":
+        if ra["axis"] is rb["axis"]:
+            return _thin_axis(fig, ra)
+        if str(ta.get_text()).strip() == str(tb.get_text()).strip() and f["frac"] >= 0.5:
+            tb.set_visible(False)
+            return ("tick_dedupe", f"{str(tb.get_text())!r} drawn twice at one place; the "
+                                   f"later copy hidden", ("hide", id(tb)))
+        if ra["side"] != rb["side"]:
+            return _pad_corner(fig, f, ra, rb)
+        return _offset_axis(fig, f, ra, rb)
+    if "legend" in (ka, kb) and not (ka == "legend" and kb == "legend"):
+        return _legend_out(fig, ra if ka == "legend" else rb)
+    if ka == "annotation" and kb == "annotation" and ra["ax"] is rb["ax"]:
+        _separate(ra["ax"], [ta, tb])
+        return ("annotations_apart", f"{str(ta.get_text())[:24]!r} and "
+                                     f"{str(tb.get_text())[:24]!r} separated",
+                ("apart", id(ta), id(tb)))
+    return None
 
-    # ---- outside the canvas -------------------------------------------------------------
-    # `bbox_inches="tight"` GROWS the canvas for anything outside it, so this catches only what
-    # is clipped by an artist's own clip box - which is what truncated a title and a label.
-    # FIGURE-LEVEL TEXT IS OUTSIDE THE CANVAS ON PURPOSE. A provenance stamp is placed just
-    # below the figure precisely so `bbox_inches="tight"` GROWS the canvas to hold it - the
-    # mechanism this tool uses on every panel - and `Text.clip_on` is True by default there,
-    # so the first version of this check reported every correctly-stamped figure as clipped.
-    # It fired on the first real run, on all 223 panels, for the one thing that was right.
-    #
-    # A gate that fires on correct behaviour is a gate somebody removes, and this project has
-    # paid for that lesson four times today. Only AXES-level text can be clipped by the canvas
-    # in a way tight bbox will not rescue.
-    fw, fh = fig.canvas.get_width_height()
-    for t, b in texts:
-        if id(t) in fig_level or id(t) in decoration or not t.get_clip_on():
+
+def repair(fig, findings):
+    """[(code, what)] - the repairs applied for `findings`, each target once per pass."""
+    done, seen = [], set()
+    for f in findings:
+        step = repair_one(fig, f)
+        if step is None:
             continue
-        # WHERE, AND BY HOW MUCH. A report that says only THAT a label is off the canvas sends
-        # the reader to rebuild the panel from its own coordinates to find out where it went -
-        # which was tried, three times, on a different defect, and every reconstruction came
-        # back clean while the real panel stayed broken. A measurement that cannot be acted on
-        # without re-deriving it is half a mechanism, so the edge and the overflow in points are
-        # part of the finding.
-        over = []
-        if b.x0 < -1:
-            over.append(f"left by {-b.x0:.0f}px")
-        if b.y0 < -1:
-            over.append(f"bottom by {-b.y0:.0f}px")
-        if b.x1 > fw + 1:
-            over.append(f"right by {b.x1 - fw:.0f}px")
-        if b.y1 > fh + 1:
-            over.append(f"top by {b.y1 - fh:.0f}px")
-        if over:
-            out.append(("off_canvas",
-                        f"{str(t.get_text())[:32]!r} runs off the canvas: "
-                        + ", ".join(over)
-                        + f" (canvas {fw:.0f}x{fh:.0f}px)"))
+        code, what, key = step
+        if key in seen:
+            continue
+        seen.add(key)
+        done.append((code, what))
+    return done
 
-    # ---- a size channel with no key -----------------------------------------------------
-    for ax in fig.get_axes():
-        sized = False
-        for c in ax.collections:
-            try:
-                sizes = c.get_sizes()
-            except Exception:                                             # noqa: BLE001
-                continue
-            if sizes is not None and len(sizes) > 1 and float(max(sizes)) > 0:
-                if float(max(sizes)) / (float(min(sizes)) or 1.0) >= 1.5:
-                    sized = True
-        # A FIGURE-LEVEL LEGEND IS A LEGEND. `legend_outside`, which is the host's own helper
-        # and what the figure standard tells a plugin to use for a key that will not fit inside
-        # the axes, returns `fig.legend(...)` - so the key it places is attached to the FIGURE
-        # and no axes carries one. This check looked only at the axes and reported 14 correctly
-        # keyed panels as unkeyed, in one run, all from the same plugin: it was blind to the one
-        # placement the standard recommends.
-        #
-        # A gate that fires on correct behaviour is a gate somebody switches off, and this one
-        # would have sent someone to add a second legend to a panel that already had one.
-        if sized and ax.get_legend() is None and not any(
-                a.get_legend() is not None for a in fig.get_axes()) and not fig.legends:
-            out.append(("size_unkeyed",
-                        "a scatter varies marker size and nothing on the figure keys it"))
+
+#: How many audit-repair-audit rounds a panel gets. Three: each round answers one class per
+#: target, and a panel that is not clean after three is one the repertoire does not answer.
+REPAIR_PASSES = 3
+
+
+def audit_and_repair(fig, passes=REPAIR_PASSES):
+    """(before, after, repairs) - audit, repair what the repertoire answers, audit again.
+
+    `before` and `after` are `[(code, detail)]` as `audit` returns them; `repairs` is
+    `[(code, what)]`. The column is re-fitted after a pass that changed anything, because a
+    repair may move an artist into the margin and the width is enforced, not hoped for.
+    """
+    before = audit_findings(fig)
+    found, repairs = before, []
+    for _ in range(int(passes)):
+        if not any(f["code"] == "text_overlap" for f in found):
             break
-    return out
+        did = repair(fig, found)
+        if not did:
+            break
+        repairs.extend(did)
+        try:
+            fit_column(fig)
+        except Exception:                                                 # noqa: BLE001
+            pass
+        found = audit_findings(fig)
+    view = lambda fs: [(f["code"], f["detail"]) for f in fs]              # noqa: E731
+    return view(before), view(found), repairs

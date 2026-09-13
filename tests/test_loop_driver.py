@@ -198,7 +198,7 @@ def test_the_newest_earlier_finding_wins():
 
 
 def _run_dir(root, stamp="20260101T000000Z", commit="abc1234", figures=(), audited=(),
-             recorded=()):
+             recorded=(), repaired=(), residue=()):
     """A run directory with pngs on disk and a manifest naming SOME of them with an audit, and
     SOME as the plan's companion records them: drawn, and not measured."""
     import json
@@ -209,7 +209,11 @@ def _run_dir(root, stamp="20260101T000000Z", commit="abc1234", figures=(), audit
     figdir.mkdir(parents=True)
     for f in figures:
         (figdir / f"{f}.png").write_bytes(b"\x89PNG")
-    recs = [{"id": f, "path": f"kernels/k/U1/figures/{f}.png", "audit": []} for f in audited]
+    recs = [{"id": f, "path": f"kernels/k/U1/figures/{f}.png",
+             "audit": ([{"code": "text_overlap", "detail": "'a' over 'b'"}] if f in residue
+                       else []),
+             **({"repairs": [{"code": "tick_thin", "what": "x ticks thinned from 6 labels"}]}
+                if f in repaired else {})} for f in audited]
     recs += [{"id": f, "path": f"kernels/k/U1/figures/{f}.png", "measured": False,
               "drawn_by": "tool"} for f in recorded]
     (run / "report.json").write_text(json.dumps({"kernels": {"k": {"figures": recs}}}))
@@ -244,6 +248,29 @@ def test_6b_says_which_unmeasured_panels_carry_a_record():
         assert "2 drawn and NOT measured by any machine" in detail, detail
         assert "1 recorded by the plugin's companion" in detail, detail
         assert "1 recorded by nothing" in detail, detail
+
+
+def test_6b_counts_what_the_host_repaired_beside_what_remains():
+    """The audit repairs before it records (harness ADR-0018), and the station says both: a
+    clean run that needed forty repairs is a different fact from one that needed none, and a
+    residue means nothing without what was tried."""
+    import tempfile
+
+    L = importlib.import_module("tests.loop_stations")
+    with tempfile.TemporaryDirectory() as td:
+        run = _run_dir(td, figures=("F1", "F2", "F3"), audited=("F1", "F2", "F3"),
+                       repaired=("F1", "F2"))
+        state, detail, _ = L.station_drawing([run])
+        assert state == L.PASS, detail
+        assert "the host repaired 2 on 2 panel(s)" in detail, detail
+    with tempfile.TemporaryDirectory() as td:
+        run = _run_dir(td, figures=("F1", "F2"), audited=("F1", "F2"), repaired=("F1", "F2"),
+                       residue=("F2",))
+        state, detail, nxt = L.station_drawing([run])
+        assert state == L.BLOCKED, detail
+        assert "1 drawing issue(s) remain" in detail, detail
+        assert "the host repaired 2" in detail, detail
+        assert "tick_thin" in nxt, nxt
 
 
 def test_6b_says_nothing_about_unmeasured_when_every_panel_was_measured():

@@ -361,6 +361,12 @@ def _figure(v, rel):
         if v.get("audit") is not None:
             e["audit"] = [{"code": str(a.get("code")), "detail": str(a.get("detail"))}
                           for a in v["audit"] if isinstance(a, dict)]
+        # AND WHAT THE HOST REPAIRED BEFORE IT MEASURED (harness ADR-0018), carried when the
+        # emit point wrote it: the residue above means nothing without what was tried.
+        if v.get("repairs") is not None:
+            e["repairs"] = [{"code": str(r.get("code")), "what": str(r.get("what"))}
+                            for r in (v["repairs"] if isinstance(v["repairs"], list) else [])
+                            if isinstance(r, dict)]
         # WHO DREW IT AND WHETHER ANYTHING MEASURED IT (ADR-0016 step 4f): a panel the plan's
         # companion drew arrives with the companion's own `drawn_by` and `measured: False`.
         # Written only when the record says something, so a record that said nothing still

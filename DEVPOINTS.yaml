@@ -434,13 +434,19 @@ points:
           fills: []
           command: ["{python}", "tests/loop_stations.py", "--run", "{run}", "--station", "6b"]
           finished_by: >
-            the station names the panels with a drawing issue a machine can see, and counts the
-            panels it could not measure. Fix the named ones in the plugin or the host - they need
-            no eye - and re-run; the unmeasured count is the eye's work, not this stage's
+            the host repairs what its repertoire answers where the panel is written - a tick
+            over a tick, an axis over an axis, a label over a legend, its own stamp - and the
+            station prints what it repaired beside what remains (harness ADR-0018). What remains
+            is a collision the repertoire does not answer: a class that is general belongs in
+            the repertoire, in scprofile/figure.py, so no plugin meets it again; one that is
+            this panel's belongs in the plan entry or the plugin. Re-run to see it clear. The
+            unmeasured count is the eye's work, and the eye's own findings are read by this
+            stage too, once the scan set has been looked at
           why: >
-            what a machine can see wrong in the panels, and how many panels no machine looked at.
-            A panel the wrapped tool draws in R passes through no audit; the station says how
-            many, so a clean line about a fifth of the panels cannot read as a clean run
+            what a machine can see wrong in the panels after the host mended what it could, and
+            how many panels no machine looked at. A panel the wrapped tool draws in R passes
+            through no audit and no repair; the station says how many, so a clean line about a
+            fifth of the panels cannot read as a clean run
         - name: looked_at
           phase: test
           fills: []

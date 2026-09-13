@@ -101,6 +101,18 @@ still live, and recorded on the panel. Station 6b reads them. It **reports and n
 panel it catches is usually still worth shipping, and a gate that blocks a run over a label two
 pixels out is a gate somebody removes.
 
+**And it repairs before it records** (harness ADR-0018). Read one by one, every collision on
+the run this was measured against was the host's or the data's: the canvas had been shrunk to
+the column after the plugin finished and the type had not; the provenance stamp sat at a fixed
+y; a data-placed label had landed on a legend. A fix in the plugin holds for one dataset. So
+`figure.audit_and_repair` mends the classes it can, generically, where the artists are still
+live - a numeric axis thinned by one label, category labels rotated, a second axis's spine moved
+outward, x labels moved down clear of the y axis's corner, a duplicated tick hidden, a legend
+moved outside, two annotations separated, the stamp placed below everything - re-audits, and
+records the residue with the repairs that were tried. Nothing shrinks type, widens past the
+column or moves a number. Station 6b prints what was repaired beside what remains; what remains
+is what the repertoire does not answer, and the line says where such a class belongs.
+
 **This is what makes the loop converge.** Each defect class that moves from the eye to a
 measurement makes every future round cheaper, permanently. The eye is then spent on the kinds
 that have no mechanical form — a scale that hides its own finding, a rank rule that returns a
