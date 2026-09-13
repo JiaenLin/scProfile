@@ -482,6 +482,37 @@ def rasterize_points(ax):
         c.set_rasterized(True)
 
 
+def full_bbox(fig, renderer=None):
+    """The box that holds EVERYTHING drawn - the figure's tight box grown to every text.
+
+    A CENTRED TITLE WIDER THAN ITS AXES IS NOT IN THE TIGHT BOX (harness ADR-0020, found by the
+    second look of blind 0006): `Figure.get_tightbbox` reads an axis title's extent clipped to
+    what the layout gave it, so a long axis title on the last of four panels, or a colour-bar
+    title running up the right edge, reached past the box and was cut at the image's edge - the
+    eye read "per 1,000 ce" and a closing parenthesis missing, on a real run, and no audit saw it
+    because the audit skips text the axes do not clip. So the box the figure is fitted to and
+    saved in is the tight box unioned with every visible text's own extent, in inches.
+    """
+    from matplotlib.transforms import Bbox
+    if renderer is None:
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+    bb = fig.get_tightbbox(renderer)
+    boxes = [bb] if bb is not None else []
+    dpi = float(fig.dpi)
+    for t in fig.findobj(match=lambda a: hasattr(a, "get_text")):
+        try:
+            if not t.get_visible() or not str(t.get_text()).strip():
+                continue
+            w = t.get_window_extent(renderer)
+            if w.width <= 0 or w.height <= 0:
+                continue
+            boxes.append(Bbox([[w.x0 / dpi, w.y0 / dpi], [w.x1 / dpi, w.y1 / dpi]]))
+        except Exception:                                                 # noqa: BLE001
+            continue
+    return Bbox.union(boxes) if boxes else bb
+
+
 def fit_column(fig, target=None):
     """Shrink a figure back to the column width it declared. Returns the width in mm.
 
@@ -528,7 +559,7 @@ def fit_column(fig, target=None):
     for _ in range(10):
         fig.canvas.draw()
         try:
-            got = fig.get_tightbbox(fig.canvas.get_renderer()).width
+            got = full_bbox(fig, fig.canvas.get_renderer()).width
         except Exception:                                                 # noqa: BLE001
             return fig.get_size_inches()[0] * 25.4
         if got <= want + 0.5 / 25.4:
@@ -653,9 +684,17 @@ def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"),
         _d = _mpl.rcParams.get("savefig.dpi")
         dpi = _d if isinstance(_d, (int, float)) else 200
     written = {}
+    # THE BOX WRITTEN IS THE BOX THAT HOLDS EVERYTHING (see `full_bbox`): "tight" cut a long
+    # axis title and a colour-bar title at the image's edge.
+    try:
+        import matplotlib as _mpl
+        _pad = float(_mpl.rcParams.get("savefig.pad_inches", 0.1) or 0.0)
+        _box = full_bbox(fig).padded(_pad)
+    except Exception:                                                     # noqa: BLE001
+        _box = "tight"
     for ext in formats:
         f = d / f"{name}.{ext}"
-        fig.savefig(f, format=ext, dpi=dpi, bbox_inches="tight")
+        fig.savefig(f, format=ext, dpi=dpi, bbox_inches=_box)
         written[ext] = f
     # WHAT WAS WRITTEN, NOT WHAT WAS ASKED FOR. See `check_written_width`.
     if "png" in written:

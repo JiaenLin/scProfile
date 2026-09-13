@@ -178,5 +178,57 @@ with tempfile.TemporaryDirectory() as td:
                                                           src.find("difference\\nbetween arms") + 800],
        "no legend near the difference column")
 
+# ---------------------------------------------------------------------------------------------
+# THE SECOND LOOK (harness ADR-0020, step 1). Two cold lookers on the rerun found ten more things
+# on the host's own panels. Each check below is one finding, in the looker's words, failing on
+# the drawing as it was.
+#
+#   C1 diff (x2), P2 totals   a colour-bar title and an axis title cut at the image's edge
+#   C3 flow                   a dagger and a shaded band that nothing on the panel explains
+#   C4 role shift             labels crowding together, touching
+#   C5 interaction            two colours with no key
+#   N3 matrix                 the "no edge" key drawn over real cells
+#   N4 role                   nine labels piled at the origin, unreadable
+#   N7 contribution           bars that sum to 80% of a total with nothing saying so
+#   across the design         an asterisk on a header with no footnote
+# ---------------------------------------------------------------------------------------------
+from PIL import Image                                                           # noqa: E402
+
+
+def border_ink(path, px=3):
+    """Dark pixels in the outermost `px` columns and rows of a PNG - a text cut at the edge."""
+    a = np.asarray(Image.open(path).convert("L"))
+    return {"right": int((a[:, -px:] < 250).sum()), "left": int((a[:, :px] < 250).sum()),
+            "top": int((a[:px, :] < 250).sum()), "bottom": int((a[-px:, :] < 250).sum())}
+
+
+print("\nC1 and P2: a title that reaches past the figure box is saved whole, never cut")
+with tempfile.TemporaryDirectory() as td:
+    fig, axes = plt.subplots(1, 4, figsize=(F.DOUBLE, 3.0), layout="constrained", sharey=True)
+    for ax, lab in zip(axes, ["edges", "interaction strength", "edges per 1,000 cells",
+                              "interaction strength per 1,000 cells"]):
+        ax.barh(range(14), np.arange(14) + 1, height=0.72)
+        ax.set_xlabel(lab, fontsize=7)
+        ax.tick_params(labelsize=6)
+    axes[0].set_yticks(range(14), [f"unit {i}" for i in range(14)], fontsize=6)
+    e = F.save(fig, Path(td), "totals", caption="c", formats=("png",), dpi=200,
+               log=lambda *a, **k: None, stamp="the cohort   ·   14 units")
+    ink = border_ink(e["path"])
+    ck("the fourth panel's axis title is not cut at the right edge", ink["right"] == 0, str(ink))
+    fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.92), layout="constrained")
+    names = [f"Compartment/Lineage/Population number {i}" for i in range(13)]
+    im = ax.imshow(np.random.default_rng(0).normal(size=(13, 13)), cmap="RdBu_r", vmin=-1, vmax=1)
+    ax.set_xticks(range(13), names, rotation=45, ha="right", fontsize=5)
+    ax.set_yticks(range(13), names, fontsize=5)
+    ax.set_xlabel("receiver")
+    ax.set_ylabel("sender")
+    cb = fig.colorbar(im, ax=ax, fraction=0.045, pad=0.02)
+    cb.set_label("aged minus young   (% of the arm's own total, significant only)", fontsize=6)
+    e = F.save(fig, Path(td), "diff", caption="c", formats=("png",), dpi=200,
+               log=lambda *a, **k: None, stamp="age   ·   4 vs 6 samples, cells pooled per arm")
+    ink = border_ink(e["path"])
+    ck("the colour-bar title is not cut at the top or right edge", ink["top"] == 0 and ink["right"] == 0,
+       str(ink))
+
 print("\n" + ("the host's panels answer the eye" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
