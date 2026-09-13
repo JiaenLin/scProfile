@@ -429,6 +429,17 @@ def draw(per_sample, design, path, *, cells=None, width=None):
             if i == 0:
                 ttl = f + ("*" if alias.get(f) else "")
                 ax.set_title(ttl, fontsize=8, weight="bold", pad=4)
+                if alias.get(f):
+                    # THE ASTERISK HAS ITS FOOTNOTE ON THE PANEL (harness ADR-0020): the header
+                    # carried the mark and the caption the reason, and the eye read a panel that
+                    # explained nothing. One line per aliased factor, at the foot of the grid.
+                    _fn = (f"* {f} is aliased with {', '.join(str(a) for a in alias[f])}: every "
+                           f"sample that differs in one differs in the other, so a difference "
+                           f"here is equally either's")
+                    if _fn not in [t.get_text() for t in fig.texts]:
+                        fig.text(0.0, -0.01 - 0.028 * sum(1 for t in fig.texts
+                                                            if t.get_text().startswith("* ")),
+                                 _fn, ha="left", va="top", fontsize=5.6, color="#555")
             if j == 0:
                 ax.set_ylabel(m, fontsize=7.5)
             else:

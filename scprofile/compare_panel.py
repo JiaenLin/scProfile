@@ -359,7 +359,14 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
             ax.set_yticks(y)
             ax.set_yticklabels([f"{k} †" if k in _one else k for k in keys], fontsize=5)
             ax.set_xlabel("information flow  (" + _wunit + ")")
-            ax.legend(fontsize=5.5, frameon=False, loc="lower right")
+            # THE DAGGER AND THE BAND ARE KEYED ON THE PANEL (harness ADR-0020): the caption said
+            # what they meant and the eye read a panel that did not.
+            _h, _l = ax.get_legend_handles_labels()
+            if _one:
+                from matplotlib.patches import Patch
+                _h.append(Patch(facecolor="#B0B0B0", alpha=0.35, edgecolor="none"))
+                _l.append("† shaded: scored in one arm only (an absence, not a zero)")
+            ax.legend(_h, _l, fontsize=5.5, frameon=False, loc="lower right")
             ax.tick_params(axis="y", length=0)
             for sp in ("top", "right", "left"):
                 ax.spines[sp].set_visible(False)
@@ -829,6 +836,14 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     flips = int(_rev.sum())
     col = ["#D55E00" if r else "#0072B2" for r in _rev]
     ax.scatter(dx, dy, s=22, c=col, edgecolor="white", lw=0.35, zorder=2)
+    # THE TWO COLOURS ARE KEYED ON THE PANEL (harness ADR-0020): the eye read orange and blue
+    # points and nothing on the figure saying which was which.
+    from matplotlib.lines import Line2D
+    ax.legend([Line2D([], [], marker="o", ls="", color="#D55E00", markersize=4.5),
+               Line2D([], [], marker="o", ls="", color="#0072B2", markersize=4.5)],
+              [f"direction reverses between levels (at least {FLIP_FLOOR:g} of the axis both ways)",
+               "same direction in both, or below that floor"],
+              fontsize=5, frameon=False, loc="upper left", handletextpad=0.4)
     texts = []
     for i in order[:8]:
         texts.append(ax.annotate(str(keys[i])[:22], (dx[i], dy[i]), fontsize=5.4,

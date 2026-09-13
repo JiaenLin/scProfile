@@ -73,6 +73,8 @@ def texts_of(fig):
     out = []
     for ax in fig.get_axes():
         out += [t.get_text() for t in ax.texts]
+        out += [ax.get_title(), ax.get_xlabel(), ax.get_ylabel()]
+        out += [t.get_text() for t in ax.get_xticklabels() + ax.get_yticklabels()]
         lg = ax.get_legend()
         if lg is not None:
             out += [t.get_text() for t in lg.get_texts()]
@@ -229,6 +231,86 @@ with tempfile.TemporaryDirectory() as td:
     ink = border_ink(e["path"])
     ck("the colour-bar title is not cut at the top or right edge", ink["top"] == 0 and ink["right"] == 0,
        str(ink))
+
+# THE TEXT OF A PANEL AS IT IS SAVED. The compare and design panels save through `figure.save`
+# and return paths; this wraps the save to keep every text the figure carried, name by name.
+_SAVED = {}
+_orig_save = F.save
+
+
+def _capturing_save(fig, out_dir, name, **kw):
+    _SAVED[name] = texts_of(fig)
+    return _orig_save(fig, out_dir, name, **kw)
+
+
+def edges_pairs(pops, strength=1.0, pathways=("P1", "P2", "P3")):
+    e = edges_for(pops, strength, pathways)
+    e["pair"] = e["source"].str[:3] + "-" + e["target"].str[:3] + "-" + e["pathway"]
+    return e
+
+
+print("\nC3: the dagger and the shaded band are keyed on the panel")
+F.save = _capturing_save
+try:
+    with tempfile.TemporaryDirectory() as td:
+        per = {"s1": edges_for(POPS, 1.0), "s2": edges_for(POPS, 1.1),
+               "s3": edges_for(POPS, 2.0, ("P1", "P2", "P3", "P4")),
+               "s4": edges_for(POPS, 2.2, ("P1", "P2", "P3", "P4"))}     # P4 scored in one arm only
+        design = {"s1": {"age": "young"}, "s2": {"age": "young"}, "s3": {"age": "aged"},
+                  "s4": {"age": "aged"}}
+        spec = ("age", "age", "young", "aged", {"age": "young"}, {"age": "aged"})
+        CP.draw_contrast(per, design, spec, Path(td), "p", weight="prob", group_col="pathway")
+        flow = [v for k, v in _SAVED.items() if "C3_flow" in k]
+        ck("the flow panel drew with a one-arm group", bool(flow) and "†" in flow[0], str(flow)[:200])
+        ck("and the panel itself says what the dagger and the band mean",
+           bool(flow) and "one arm only" in flow[0], flow[0][:300] if flow else "no panel")
+
+    print("\nC5: the interaction panel keys its two colours")
+    with tempfile.TemporaryDirectory() as td:
+        per = {}
+        design = {}
+        k = 0
+        for age in ("young", "aged"):
+            for diet in ("a", "b"):
+                for rep in (1, 2):
+                    k += 1
+                    e = edges_for(POPS, 1.0 + 0.7 * (age == "aged") + 0.4 * (diet == "b")
+                                  + 0.9 * (age == "aged" and diet == "b"))
+                    e["pathway"] = [("P1", "P2", "P3", "P4")[n % 4] for n in range(len(e))]
+                    per[f"s{k}"] = e
+                    design[f"s{k}"] = {"age": age, "diet": diet}
+        specs = CP.interaction_specs(design)
+        ck("the design has one interaction", len(specs) == 1, str(specs))
+        CP.draw_interaction(per, design, specs[0], Path(td), "p", weight="prob", group_col="pathway")
+        inter = [v for k, v in _SAVED.items() if "C5_interaction" in k]
+        ck("the panel keys what orange and blue mean",
+           bool(inter) and "direction" in inter[0].lower() and ("revers" in inter[0].lower()
+                                                                or "flip" in inter[0].lower()),
+           inter[0][:300] if inter else "no panel")
+
+    print("\nacross the design: the asterisk on a header has its footnote on the panel")
+    with tempfile.TemporaryDirectory() as td:
+        per_sample = {f"s{i}": {"cells": 100.0 + i, "edges": 10.0 + i} for i in range(1, 9)}
+        dsg = {f"s{i}": {"age": "young" if i <= 4 else "aged", "diet": "a" if i % 2 else "b",
+                         "chemistry": "v2" if i <= 4 else "v3"} for i in range(1, 9)}
+        dest = Path(td) / "p_across_design.png"
+        DP.draw(per_sample, dsg, dest)
+        grid = [v for k, v in _SAVED.items() if "across_design" in k]
+        ck("age is marked as aliased on its header", bool(grid) and "age*" in grid[0], str(grid)[:200])
+        ck("and the panel carries the footnote", bool(grid) and "aliased" in grid[0].lower()
+           and "chemistry" in grid[0], grid[0][:400] if grid else "no panel")
+finally:
+    F.save = _orig_save
+
+print("\nN7: bars that carry less than the whole say how much, and how many carry the rest")
+d = Draw()
+big = edges_pairs(POPS, pathways=("P1",) * 6 + ("P2",))          # one dominant pathway, many pairs
+NP.contribution(d, big, POPS, "pathway", "pair", top=5)
+fig = d.figs["N7_contribution"][0]
+txt = texts_of(fig)
+ck("the panel says how much of the total the drawn bars carry", "%" in txt and "carry" in txt, txt[:300])
+ck("and how many pairs carry the rest", "the rest" in txt, txt[:300])
+plt.close(fig)
 
 print("\n" + ("the host's panels answer the eye" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

@@ -62,6 +62,10 @@ EMITTERS = {
     "scprofile/paper.py": 1,             # <b>age</b> varies together with chemistry ...
     "scprofile/planner.py": 2,           # ALIASED with ... / are PARTLY confounded (75% of ...
     "scprofile/report.py": 2,            # Identical split to `chemistry` - one panel, not two
+    # THE PANEL ITSELF, a new audience (harness ADR-0020): the design grid marked an aliased
+    # factor's header with an asterisk and the eye read a panel that explained nothing, so the
+    # footnote is on the figure - one more place, pinned here on purpose.
+    "scprofile/design_panel.py": 1,      # * age is aliased with chemistry: every sample that ...
 }
 
 

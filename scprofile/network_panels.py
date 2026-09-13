@@ -677,6 +677,14 @@ def contribution(ctx, edges, pops, group_col, member_col, *, fid="N7_contributio
     ax.set_yticks(list(ys), [str(i) for i in shown.index], fontsize=6)
     ax.invert_yaxis()
     ax.set_xlabel(f"share of {g}'s total strength", fontsize=7)
+    # WHAT THE DRAWN BARS ADD UP TO, ON THE PANEL (harness ADR-0020): fourteen bars titled as
+    # shares of a total summed to four fifths of it, and nothing on the figure said the rest
+    # was carried by pairs not drawn.
+    _carried = 100.0 * float(shown.sum()) / (float(mem.sum()) or 1.0)
+    ax.text(0.98, 0.02, (f"these {len(shown)} pair(s) carry {_carried:.0f}% of the total; "
+                         f"{len(hidden)} more carry the rest") if len(hidden) else
+            f"these {len(shown)} pair(s) carry the whole total",
+            transform=ax.transAxes, ha="right", va="bottom", fontsize=5.2, color="#555")
     ax.tick_params(axis="x", labelsize=6)
     # THE GROUP'S NAME BELONGS IN THE TITLE. With an arm label passed in, the first version put
     # only the arm there and the group survived solely in an axis label - so a panel lifted out
