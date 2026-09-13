@@ -463,6 +463,15 @@ def worksheet(out, plugin, plugin_file=None):
     quotes the eye, shows an answer already given, and states the two answers: edit the entry
     or the code and bump the version; or `--answer` why the plate stays, for a looker to settle.
     It ends with the prediction the rerun is submitted with.
+
+    ONE PLAN ENTRY IS ONE KIND, AND THE EYE IS QUOTED WHOLE (found by the cold author of blind
+    0006). A per-item entry draws `patterns_incoming` and `patterns_outgoing` from one
+    declaration; grouped by the drawn stem it surfaced as two headings, and a reader answering
+    "each kind once" fixed the same entry twice. So a finding is grouped under the plan entry
+    that claims its file where there is one, and under its drawn kind where there is none (the
+    host's panels, a plate not on the plan). And the note was cut at 300 characters, which cut
+    the actionable half of a two-clause finding often enough that the author read the ledger
+    instead of the sheet: the words are the whole point of the sheet, so they are printed whole.
     """
     import json as _json
     from collections import Counter
@@ -486,7 +495,8 @@ def worksheet(out, plugin, plugin_file=None):
 
     by_kind = {}
     for rel, ws in sorted(of.items()):
-        by_kind.setdefault(kind_of(rel), []).append((rel, ws))
+        claimed = _NAT.entry_for(spec, Path(rel).name)
+        by_kind.setdefault(claimed if claimed in entries else kind_of(rel), []).append((rel, ws))
     L = [f"# THE AUDIT'S WORKSHEET - {plugin} on {root.name}: {len(of)} open finding(s) on "
          f"{len(by_kind)} kind(s); answer each kind ONCE, the instances follow", ""]
     owners = Counter()
@@ -528,10 +538,9 @@ def worksheet(out, plugin, plugin_file=None):
         for rel, ws in items:
             L.append(f"   - {rel}")
             for w in ws:
-                L.append(f"       {w[:300]}")
+                L.append(f"       {w}")
             if rel in ans:
-                L.append(f"       answered by {ans[rel].get('by')}: "
-                         f"{str(ans[rel].get('answer'))[:200]}")
+                L.append(f"       answered by {ans[rel].get('by')}: {ans[rel].get('answer')}")
         if owner != "HOST":
             L += ["   ANSWER, one of:",
                   "     edit the entry or the code, bump `version` (the reuse key), run the "

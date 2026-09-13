@@ -154,6 +154,43 @@ with tempfile.TemporaryDirectory() as td:
     ck("the status names the answered figure as needing a look",
        "answered" in pr.stdout and "N2_chord" in pr.stdout, pr.stdout[-500:])
 
+print("\none plan entry is one kind on the worksheet, and the eye's words are printed whole")
+# FOUND BY THE COLD AUTHOR OF BLIND 0006: a per-item entry - `items` drawing patterns_incoming
+# and patterns_outgoing from ONE declaration - surfaced as two headings, so a reader answering
+# "each kind once" fixed the same entry twice; and the eye's note was cut at 300 characters,
+# which sometimes cut the actionable half, so the author read the ledger instead of the sheet.
+F_IN = "kernels/p/U1/figures/native_patterns_incoming.png"
+F_OUT = "kernels/p/U1/figures/native_patterns_outgoing.png"
+SPEC_ITEMS = {"report": {"figures": [
+    {"id": "native_patterns", "drawn_by": "tool", "fn": "drawPatterns", "axis": "unit",
+     "items": 'c("outgoing", "incoming")', "file": 'paste0("patterns_", pat)',
+     "legend": "the {pat} patterns"}]}}
+LONG = ("the top third of the canvas is blank and neither heatmap's own title says incoming or "
+        "outgoing, so the two pages read identically on their own; the row order and the file "
+        "name are the only tell, and a reader comparing them side by side has nothing on the "
+        "plate to hold on to; the colour bar also carries no negative tick although the loading "
+        "matrix has negative cells, so the sign of a loading cannot be read from the colour at "
+        "all, which is the actionable half of this note")
+with tempfile.TemporaryDirectory() as td:
+    run = Path(td) / "20260101T000000Z__scprofile-abc1234__stage"
+    for rel in (F_IN, F_OUT):
+        (run / rel).parent.mkdir(parents=True, exist_ok=True)
+        (run / rel).write_bytes(b"\x89PNG" + rel.encode())
+    (run / "report.json").write_text(json.dumps({"kernels": {PLUG: {
+        "spec": SPEC_ITEMS,
+        "figures": [{"id": "native_patterns", "path": F_IN, "measured": False, "drawn_by": "tool"},
+                    {"id": "native_patterns", "path": F_OUT, "measured": False, "drawn_by": "tool"}]}}}))
+    (run / "kernels" / PLUG / "FIGURES.txt").write_text(F_IN + "\n")
+    R.record(run, F_IN, LONG, reviewer="looker-2", plugin=PLUG, defect=True)
+    R.record(run, F_OUT, "the same blank third above the outgoing pair, nothing names the page",
+             reviewer="looker-2", plugin=PLUG, defect=True)
+    ws = R.worksheet(run, PLUG)
+    ck("two files of one entry are one kind to answer", "2 open finding(s) on 1 kind(s)" in ws,
+       ws[:200])
+    ck("headed by the entry's own id", "## native_patterns   [TOOL]   2 instance(s)" in ws,
+       ws[:600])
+    ck("the eye's words are printed whole", LONG in ws, ws[ws.find("eye (looker-2)"):][:500])
+
 print("\nthe stages say it: the audit's worksheet, and the answered figures the eye owes")
 dev = (ROOT / "DEVPOINTS.yaml").read_text(encoding="utf-8")
 aud = dev[dev.index("- name: audited"):dev.index("- name: written")]
