@@ -198,7 +198,7 @@ def test_the_newest_earlier_finding_wins():
 
 
 def _run_dir(root, stamp="20260101T000000Z", commit="abc1234", figures=(), audited=(),
-             recorded=(), repaired=(), residue=()):
+             recorded=(), repaired=(), residue=(), looked=(), defects=()):
     """A run directory with pngs on disk and a manifest naming SOME of them with an audit, and
     SOME as the plan's companion records them: drawn, and not measured."""
     import json
@@ -217,6 +217,22 @@ def _run_dir(root, stamp="20260101T000000Z", commit="abc1234", figures=(), audit
     recs += [{"id": f, "path": f"kernels/k/U1/figures/{f}.png", "measured": False,
               "drawn_by": "tool"} for f in recorded]
     (run / "report.json").write_text(json.dumps({"kernels": {"k": {"figures": recs}}}))
+    # THE EYE'S LEDGER, where a test wants one: a look per figure in `looked`, bound to the
+    # bytes on disk, marked a defect when the figure is in `defects` (harness ADR-0018).
+    if looked:
+        import hashlib
+        led = run / "kernels" / "k" / "FIGURE_REVIEW.jsonl"
+        led.parent.mkdir(parents=True, exist_ok=True)
+        lines = []
+        for f in looked:
+            rel = f"kernels/k/U1/figures/{f}.png"
+            lines.append(json.dumps({"figure": rel,
+                                     "sha256": hashlib.sha256((figdir / f"{f}.png")
+                                                              .read_bytes()).hexdigest(),
+                                     "note": f"a look at {f}: the arms are not labelled here",
+                                     "reviewer": "looker-1", "at": "2026-01-01T00:00:00Z",
+                                     **({"defect": True} if f in defects else {})}))
+        led.write_text("\n".join(lines) + "\n")
     return run
 
 
@@ -227,7 +243,8 @@ def test_6b_counts_the_panels_it_could_not_measure():
 
     L = importlib.import_module("tests.loop_stations")
     with tempfile.TemporaryDirectory() as td:
-        run = _run_dir(td, figures=("F1", "native_a", "native_b"), audited=("F1",))
+        run = _run_dir(td, figures=("F1", "native_a", "native_b"), audited=("F1",),
+                       looked=("F1", "native_a", "native_b"))
         state, detail, _ = L.station_drawing([run])
         assert state == L.PASS, detail
         assert "1 panel(s) measured" in detail, detail
@@ -242,7 +259,7 @@ def test_6b_says_which_unmeasured_panels_carry_a_record():
     L = importlib.import_module("tests.loop_stations")
     with tempfile.TemporaryDirectory() as td:
         run = _run_dir(td, figures=("F1", "native_a", "native_b"), audited=("F1",),
-                       recorded=("native_a",))
+                       recorded=("native_a",), looked=("F1", "native_a", "native_b"))
         state, detail, _ = L.station_drawing([run])
         assert state == L.PASS, detail
         assert "2 drawn and NOT measured by any machine" in detail, detail
@@ -259,7 +276,7 @@ def test_6b_counts_what_the_host_repaired_beside_what_remains():
     L = importlib.import_module("tests.loop_stations")
     with tempfile.TemporaryDirectory() as td:
         run = _run_dir(td, figures=("F1", "F2", "F3"), audited=("F1", "F2", "F3"),
-                       repaired=("F1", "F2"))
+                       repaired=("F1", "F2"), looked=("F1", "F2", "F3"))
         state, detail, _ = L.station_drawing([run])
         assert state == L.PASS, detail
         assert "the host repaired 2 on 2 panel(s)" in detail, detail
@@ -273,12 +290,39 @@ def test_6b_counts_what_the_host_repaired_beside_what_remains():
         assert "tick_thin" in nxt, nxt
 
 
+def test_6b_reads_the_eye_and_owes_until_it_has_looked(tmp=None):
+    """The eye comes before the pen (harness ADR-0018): the audit reads the eye's defects beside
+    the machine's residue, and a scan set nobody has looked at is not a clean audit."""
+    import tempfile
+
+    L = importlib.import_module("tests.loop_stations")
+    with tempfile.TemporaryDirectory() as td:
+        run = _run_dir(td, figures=("F1", "F2", "F3"), audited=("F1", "F2", "F3"))
+        state, detail, nxt = L.station_drawing([run])
+        assert state == L.BLOCKED, detail
+        assert "the eye has looked at 0 of 3" in detail, detail
+        assert "review" in nxt, nxt
+    with tempfile.TemporaryDirectory() as td:
+        run = _run_dir(td, figures=("F1", "F2", "F3"), audited=("F1", "F2", "F3"),
+                       looked=("F1", "F2", "F3"), defects=("F2",))
+        state, detail, nxt = L.station_drawing([run])
+        assert state == L.BLOCKED, detail
+        assert "1 eye finding" in detail, detail
+        assert "F2" in nxt and "not labelled" in nxt, nxt
+    with tempfile.TemporaryDirectory() as td:
+        run = _run_dir(td, figures=("F1", "F2", "F3"), audited=("F1", "F2", "F3"),
+                       looked=("F1", "F2", "F3"))
+        state, detail, _ = L.station_drawing([run])
+        assert state == L.PASS, detail
+        assert "the eye has looked at 3 of 3" in detail, detail
+
+
 def test_6b_says_nothing_about_unmeasured_when_every_panel_was_measured():
     import tempfile
 
     L = importlib.import_module("tests.loop_stations")
     with tempfile.TemporaryDirectory() as td:
-        run = _run_dir(td, figures=("F1", "F2"), audited=("F1", "F2"))
+        run = _run_dir(td, figures=("F1", "F2"), audited=("F1", "F2"), looked=("F1", "F2"))
         state, detail, _ = L.station_drawing([run])
         assert state == L.PASS, detail
         assert "NOT measured" not in detail, detail
@@ -293,7 +337,7 @@ def test_one_run_one_station_as_json():
     from pathlib import Path
 
     with tempfile.TemporaryDirectory() as td:
-        run = _run_dir(td, figures=("F1",), audited=("F1",))
+        run = _run_dir(td, figures=("F1",), audited=("F1",), looked=("F1",))
         script = Path(__file__).resolve().parent / "loop_stations.py"
         p = subprocess.run([sys.executable, str(script), "--run", str(run), "--station", "6b",
                             "--json"], capture_output=True, text=True,
@@ -304,9 +348,10 @@ def test_one_run_one_station_as_json():
         assert got["stations"]["6b drawing"]["state"] == "pass", got
         assert got["first_blocked"] is None
         assert got["runs"] == [run.name]
-        # and a station that blocks makes the exit code say so
-        p2 = subprocess.run([sys.executable, str(script), "--run", str(run), "--station", "eye",
-                             "--json"], capture_output=True, text=True,
+        # and a station that blocks makes the exit code say so: a run nobody has looked at
+        run_b = _run_dir(Path(td) / "b", figures=("F1",), audited=("F1",))
+        p2 = subprocess.run([sys.executable, str(script), "--run", str(run_b), "--station",
+                             "eye", "--json"], capture_output=True, text=True,
                             cwd=str(Path(__file__).resolve().parents[1]))
         assert p2.returncode == 1, p2.stdout + p2.stderr
         assert json.loads(p2.stdout)["first_blocked"] == "7 eye"
@@ -323,7 +368,8 @@ def test_one_station_asked_in_prose_is_answered_by_that_station_alone():
     from pathlib import Path
 
     with tempfile.TemporaryDirectory() as td:
-        run = _run_dir(td, figures=("F1", "native_a"), audited=("F1",))
+        run = _run_dir(td, figures=("F1", "native_a"), audited=("F1",),
+                       looked=("F1", "native_a"))
         script = Path(__file__).resolve().parent / "loop_stations.py"
         p = subprocess.run([sys.executable, str(script), "--run", str(run), "--station", "6b"],
                            capture_output=True, text=True,
@@ -332,8 +378,9 @@ def test_one_station_asked_in_prose_is_answered_by_that_station_alone():
         assert p.returncode == 0, p.stdout + p.stderr
         assert "6b drawing" in lines[-1] and "NOT measured" in lines[-1], lines[-3:]
         assert "REQUIRED OUTPUTS" not in p.stdout and "THE GOAL OF THIS LOOP" not in p.stdout
-        p2 = subprocess.run([sys.executable, str(script), "--run", str(run), "--station", "eye"],
-                            capture_output=True, text=True,
+        run_b = _run_dir(Path(td) / "b", figures=("F1", "native_a"), audited=("F1",))
+        p2 = subprocess.run([sys.executable, str(script), "--run", str(run_b), "--station",
+                             "eye"], capture_output=True, text=True,
                             cwd=str(Path(__file__).resolve().parents[1]))
         lines2 = [l for l in p2.stdout.splitlines() if l.strip()]
         assert p2.returncode == 1, p2.stdout + p2.stderr

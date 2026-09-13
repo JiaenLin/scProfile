@@ -163,8 +163,12 @@ class Refused(Exception):
     """A note that does not evidence a look. Raised, never returned - see the module docstring."""
 
 
-def record(out, figure, note, *, reviewer="", plugin=""):
+def record(out, figure, note, *, reviewer="", plugin="", defect=False):
     """Append one review. REFUSES a note that cannot have come from looking.
+
+    `defect=True` marks a look that says THE PANEL MUST CHANGE (harness ADR-0018): the verdict a
+    machine can read, so the audit stage counts it, the agenda's write task waits on it and a
+    claim cannot cite the plate. Without it a look describes.
 
     The refusals are deliberately few and mechanical: emptiness, brevity, and being identical
     to another figure's note. A check that tried to judge whether a sentence was INSIGHTFUL
@@ -186,7 +190,8 @@ def record(out, figure, note, *, reviewer="", plugin=""):
                           f"the one thing checked directly.")
     rec = {"figure": rel, "sha256": digest(path), "note": text,
            "reviewer": str(reviewer or ""), "at": time.strftime("%Y-%m-%dT%H:%M:%SZ",
-                                                                time.gmtime())}
+                                                                time.gmtime()),
+           **({"defect": True} if defect else {})}
     ledger_path(root, plugin).parent.mkdir(parents=True, exist_ok=True)
     _append_line(ledger_path(root, plugin), json.dumps(rec))
     return rec
@@ -283,6 +288,63 @@ def status(out, plugin=""):
             continue
         rows.append((rel, REVIEWED, str(rec.get("note", ""))[:120]))
     return rows
+
+
+def defects(out, plugin=""):
+    """[(relpath, note, reviewer, run)] - looks marked a defect whose image is unchanged.
+
+    THE EYE'S VERDICT, MACHINE-READABLE (harness ADR-0018). Fifty-eight of one run's 139 notes
+    named a defect and nothing could count them. The latest look per figure decides: a later
+    clean look on the same bytes supersedes a defect; a redraw clears it, as it clears every
+    look; a sibling run's look on the same bytes carries. `run` names the sibling when it does.
+    """
+    root = Path(out)
+    led = read_ledger(out, plugin)
+    carried = read_carried(out, plugin)
+    out_ = []
+    for rel in figures(out):
+        now = digest(root / rel)
+        rec = led.get(rel)
+        run_name = ""
+        if rec is None:
+            rec = carried.get(now) if now else None
+            if rec is None:
+                continue
+            run_name = str(rec.get("run") or "")
+        elif now and rec.get("sha256") and now != rec["sha256"]:
+            continue                          # stale: the look was of an image that is gone
+        if rec.get("defect") is True:
+            out_.append((rel, str(rec.get("note", "")), str(rec.get("reviewer", "")), run_name))
+    return out_
+
+
+def open_findings(out, plugin=""):
+    """{relpath: [finding]} - the machine's residue after repair and the eye's open defects.
+
+    ONE LIST FOR EVERY READER (harness ADR-0018): the audit stage, the agenda's write task, the
+    claim ledger and the brief all ask "which figures does this run's own record call wrong",
+    and they must agree. A machine finding is `machine: <code>: <where>`; an eye finding is
+    `eye (<who>): <the looker's words>`.
+    """
+    root = Path(out)
+    found = {}
+    try:
+        doc = json.loads((root / RUN_MARKER).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        doc = {}
+    for name, pl in (doc.get("kernels") or {}).items():
+        if plugin and name != plugin:
+            continue
+        for f in (pl.get("figures") or []) if isinstance(pl, dict) else []:
+            rel = str(f.get("path") or "")
+            for a in (f.get("audit") or []):
+                if isinstance(a, dict):
+                    found.setdefault(rel, []).append(
+                        f"machine: {a.get('code')}: {a.get('detail')}")
+    for rel, note, who, run_name in defects(out, plugin):
+        found.setdefault(rel, []).append(
+            f"eye ({who or 'unnamed'}{', on ' + run_name if run_name else ''}): {note}")
+    return found
 
 
 def outstanding(out, plugin=""):

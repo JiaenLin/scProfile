@@ -219,6 +219,21 @@ def station_drawing(runs):
         n_rep_panels = len({i for i, _r in reps})
         mended = (f"the host repaired {len(reps)} on {n_rep_panels} panel(s)"
                   if reps else "the host repaired nothing")
+        # THE EYE'S HALF (harness ADR-0018). The eye comes before this stage now: its defects
+        # are read here beside the machine's residue, and a scan set nobody has looked at is
+        # not a clean audit - "found nothing" and "looked and found nothing" must not read the
+        # same. Coverage is station 7's count; the verdict is this station's.
+        from scprofile import review as RV
+        want, seen, _done = _scan(r)
+        eye = []
+        for _p in plugins_in(r):
+            eye += [(rel, note, who) for rel, note, who, _run in RV.defects(r, _p)]
+        looked = (f"the eye has looked at {len(seen)} of {len(want)}" if want
+                  else "the eye has nothing to look at")
+        eyes = (f"; {len(eye)} eye finding(s) on {len({x[0] for x in eye})} panel(s)"
+                if eye else "")
+        eye_named = "; ".join(f"{rel.rsplit('/', 1)[-1]} ({who or 'unnamed'}): {note[:90]}"
+                              for rel, note, who in eye[:4])
         if hits:
             tried = {}
             for i, rp in reps:
@@ -229,11 +244,25 @@ def station_drawing(runs):
                               for i, a in hits[:4])
             return BLOCKED, (f"{r.name}: {len(hits)} drawing issue(s) remain across "
                              f"{len({i for i, _a in hits})} panel(s) after {mended} — "
-                             + " · ".join(f"{n} {k}" for k, n in by.items()) + um
-                             + drew_nothing), \
+                             + " · ".join(f"{n} {k}" for k, n in by.items()) + eyes + "; "
+                             + looked + um + drew_nothing), \
                 (f"FIX THESE, they are what the host's repertoire does not answer: {named}. "
                  f"A class that is general belongs in the repertoire (scprofile/figure.py); "
-                 f"one that is this panel's belongs in the plan or the plugin")
+                 f"one that is this panel's belongs in the plan or the plugin"
+                 + (f". AND THE EYE'S: {eye_named}" if eye else ""))
+        if eye:
+            return BLOCKED, (f"{r.name}: no drawing issue remains after {mended}{eyes}; "
+                             + looked + um + drew_nothing), \
+                (f"FIX THESE, the eye's findings, in the plan or the plugin, then rerun and "
+                 f"look again: {eye_named}")
+        if want - seen:
+            plugs = plugins_in(r)
+            return BLOCKED, (f"{r.name}: no drawing issue remains after {mended}; {looked} — "
+                             f"the audit is not clean until the eye has"
+                             + um + drew_nothing), \
+                (f"look at the scan set first: scprofile review --out {r} --plugin "
+                 f"{plugs[0] if plugs else '<plugin>'} --shards N, and record each look "
+                 f"(--defect where the panel must change)")
         # A CLEAN RUN IS NOT A CLEAN BUILD. The same commit drew the same panels from the same
         # data twice and produced five text collisions once and none the next time - neither run
         # adopted anything, so both drew afresh. A mechanical defect that comes and goes is
@@ -262,7 +291,8 @@ def station_drawing(runs):
                  f"Fix it, or show it cannot occur")
         extra = f", and in {len(siblings)} other run(s) of the same commit" if siblings else ""
         return PASS, (f"{r.name}: {len(audited)} panel(s) measured, none with a drawing "
-                      f"issue; {mended}{extra}{um}{drew_nothing}"), ""
+                      f"issue; {mended}; {looked} and marked no defect{extra}{um}"
+                      f"{drew_nothing}"), ""
     return BLOCKED, "no figures in any run", "run something that draws"
 
 

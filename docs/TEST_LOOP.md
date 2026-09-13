@@ -19,7 +19,7 @@ had was found by opening an image while the suite was green.
 | 5 | `merge` | Does a run record what it took from elsewhere? | the run's own merge record |
 | 6 | `report` | Did the documents assemble? | rendered reports |
 | 6b | `drawing` | What can a MACHINE see wrong in the panels? | the per-figure audit in `report.json` |
-| 7 | `eye` | Are the pictures right? | a recorded look per figure, bound to its sha256 |
+| 7 | `eye` | Are the pictures right? | a recorded look per figure, bound to its sha256, `--defect` where the panel must change |
 | 8 | `paper` | Can a result be WRITTEN from these figures, and survive review? | claims, citations and verdicts |
 | 9 | `outputs` | Did the run produce every deliverable? | the five required files |
 
@@ -145,6 +145,12 @@ loop's verdicts beside the build stages. One implementation, two callers.
 Nothing mechanises looking, and the defects that matter are only found by it — a chord drawn as
 a starburst, labels driven off the axes, an absent population drawn at the origin. Every one of
 those passed a green suite.
+
+**A look carries a verdict** (harness ADR-0018). `--defect` marks a look that says the panel
+must change; without it a look describes. Station 6b reads the eye's defects beside the machine's
+residue and owes while either exists, or while the scan set is unlooked — so the stage order is
+`looked_at`, then `audited`, then `written`, and the agenda's write task, `scprofile next` and
+`paper --claim` refuse a figure with an open finding. The pen waits for the figures.
 
 **But "look at every figure" is not a rule anybody follows twice.** A run of a few hundred
 figures is a few dozen *kinds* repeated over units, and a drawing defect lives in the kind. So:

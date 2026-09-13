@@ -3090,11 +3090,14 @@ def _review(a):
             print("scprofile: --figure and --note go together", file=sys.stderr)
             return REFUSE
         try:
-            rec = RV.record(out, a.figure, a.note, reviewer=a.reviewer, plugin=a.plugin)
+            rec = RV.record(out, a.figure, a.note, reviewer=a.reviewer, plugin=a.plugin,
+                            defect=bool(getattr(a, "defect", False)))
         except RV.Refused as e:
             print(f"scprofile: REFUSED - {e}", file=sys.stderr)
             return REFUSE
-        print(f"recorded: {rec['figure']}  ({rec['sha256'][:12]})")
+        print(f"recorded: {rec['figure']}  ({rec['sha256'][:12]})"
+              + ("  DEFECT - the panel must change; the pen waits on it" if rec.get("defect")
+                 else ""))
         return 0
 
     # THE SPLIT IS THE TOOL'S TO MAKE, NOT THE AGENT'S TO INVENT. Looking at the figures is the
@@ -3158,7 +3161,9 @@ def _review(a):
             print("# Each shard is one agent's work. Record every look against THIS run "
                   "directory:")
             print(f"#   scprofile review --out {out} --plugin {a.plugin or '<plugin>'} "
-                  f"--figure <path> --note \"...\"")
+                  f"--figure <path> --note \"...\" [--defect]")
+            print("# --defect marks a panel that MUST CHANGE: the audit counts it and the pen "
+                  "waits on it. Without it a look describes.")
             print("# The ledger is append-only and locked per write, so agents may record "
                   "concurrently.")
         return 0
@@ -3197,7 +3202,21 @@ def _review(a):
     if unlisted:
         print(f"  {unlisted} other figure(s) drawn by the run are outside the scan set and not "
               f"listed (--all-figures lists them).")
-    if a.strict and todo:
+    # WHAT THE RUN'S OWN RECORD CALLS WRONG (harness ADR-0018): the machine's residue and the
+    # eye's defects, the list every other reader of this run agrees on.
+    openf = RV.open_findings(out, a.plugin)
+    if a.plugin and not getattr(a, "all_figures", False):
+        sel = set(RV.scan_set(out, a.plugin))
+        if sel:
+            openf = {k: v for k, v in openf.items() if k in sel}
+    if openf:
+        print(f"\n  {len(openf)} figure(s) carry an open finding - fix in the plan or the "
+              f"plugin, rerun, look again; no claim may cite them until then:")
+        for rel in sorted(openf):
+            print(f"    {rel}")
+            for w in openf[rel][:2]:
+                print(f"      {w[:150]}")
+    if a.strict and (todo or openf):
         return REFUSE
     return 0
 
@@ -4129,6 +4148,11 @@ def main(argv=None):
     rv.add_argument("--note", help="what you saw. Refused if empty, too short, or copied "
                                    "from another figure's note")
     rv.add_argument("--reviewer", default="", help="who looked")
+    rv.add_argument("--defect", action="store_true",
+                    help="with --figure and --note: this look says the panel MUST CHANGE. The "
+                         "audit stage counts it, the agenda's write task waits on it, and a "
+                         "claim cannot cite the plate until it is redrawn or a later look on the "
+                         "same image says otherwise")
     rv.add_argument("--strict", action="store_true",
                     help="exit non-zero while any figure is unreviewed or has been redrawn "
                          "since it was reviewed. For a gate, a CI step, or a job script.")

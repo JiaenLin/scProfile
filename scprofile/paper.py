@@ -168,6 +168,19 @@ def claim(out, text, cites, *, author="", plugin=""):
     missing = [c for c in cites if not (root / c).is_file()]
     if missing:
         raise Refused(f"no such figure in this run: {', '.join(missing)}")
+    # A CLAIM CANNOT REST ON A PLATE THE RUN'S OWN RECORD CALLS WRONG (harness ADR-0018).
+    # Blind 0004 wrote claims on two-panel heatmaps its own lookers had condemned an hour
+    # earlier, and the reviewer withdrew them for the lookers' reason. The eye comes first.
+    from . import review as _RV
+    try:
+        openf = _RV.open_findings(out, plugin)
+    except Exception:                                                     # noqa: BLE001
+        openf = {}
+    bad = [c for c in cites if openf.get(c)]
+    if bad:
+        raise Refused(f"{bad[0]} carries an open finding: {openf[bad[0]][0][:180]}. A claim "
+                      f"cannot rest on a plate the run's own record calls wrong - fix it in the "
+                      f"plan or the plugin, rerun, look again")
     cid = hashlib.sha256(words.lower().encode()).hexdigest()[:12]
     return _append(out, {"kind": "claim", "id": cid, "text": words,
                          "cites": {c: _digest(root / c) for c in cites},
@@ -376,6 +389,21 @@ def next_step(out, plugin=""):
     A STATUS THAT DOES NOT SAY WHAT TO DO NEXT IS A REPORT SOMEBODY HAS TO INTERPRET. Every
     other gate in this tool names its own remedy; this one drives a loop, so it names the step.
     """
+    # THE FIGURES FIRST (harness ADR-0018): while the run's own record calls a figure of the
+    # scan set wrong, the next step is to fix it, whatever the ledger holds.
+    try:
+        from . import review as _RV
+        openf = _RV.open_findings(out, plugin)
+        sel = set(_RV.scan_set(out, plugin)) if plugin else set()
+        if sel:
+            openf = {k: v for k, v in openf.items() if k in sel}
+    except Exception:                                                     # noqa: BLE001
+        openf = {}
+    if openf:
+        names = ", ".join(Path(k).name for k in sorted(openf)[:3])
+        return (f"{len(openf)} figure(s) carry an open finding ({names}): the pen waits. Fix "
+                f"them in the plan or the plugin, rerun, look again.",
+                f"scprofile review --out {out} --plugin {plugin or '<plugin>'}")
     rows = status(out, plugin)
     have_draft = bool(read_draft(out, plugin))
     if not rows:

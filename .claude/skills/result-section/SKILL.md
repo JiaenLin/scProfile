@@ -156,9 +156,12 @@ itself, and which template this method declares. Every entry names the file it c
 **Then open every figure the brief lists, and record what you saw:**
 
     scprofile review --out <run> --plugin <p> --figure <path> --note "what you saw"
+    scprofile review --out <run> --plugin <p> --figure <path> --note "what is wrong" --defect
 
 A note is refused if it is too short to be a look, or copied from another figure. The record is
 bound to the image's sha256, so a redrawn figure loses its review and comes back onto the list.
+`--defect` says the panel MUST CHANGE: the audit stage counts it, and no claim may cite that
+figure until it is redrawn or a later look says otherwise. The pen waits for the figures.
 
 **If the run is on a cluster and you are not**, you cannot open anything until the images are
 on your side. The run writes the set as a transfer list — `kernels/<plugin>/FIGURES.txt`, one

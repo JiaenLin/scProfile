@@ -264,10 +264,24 @@ def write_brief(run, plugin, spec=None, design=None):
         L.append(f"> **The review ledger could not be read ({_e}), so nothing below is marked "
                  f"as outstanding. Treat every figure as unreviewed.**")
         L.append("")
+    # AND WHAT THE RUN'S OWN RECORD CALLS WRONG (harness ADR-0018), marked on the line: a
+    # writer who reads the brief sees which plate no claim may cite yet, and why.
+    openf = {}
+    try:
+        openf = R.open_findings(run, plugin) or {}
+    except Exception as _e:                                               # noqa: BLE001
+        L.append(f"> **The run's findings could not be read ({_e}), so no figure below is "
+                 f"marked as carrying one.**")
+        L.append("")
     ordered = [path for path, _n in sorted(idx.items(), key=lambda kv: kv[1])]
     for path, n in sorted(idx.items(), key=lambda kv: kv[1]):
         mark = " **(not yet looked at)**" if path in outstanding else ""
+        if path in openf:
+            mark += f" **(open finding: {openf[path][0][:120]} - no claim may cite it)**"
         L.append(f"- Figure {n}: `{path}`{mark}")
+    if openf:
+        L += ["", f"{len(openf)} figure(s) carry an open finding. The pen waits on them: fix in "
+                  f"the plan or the plugin, rerun, look again."]
     L += [""]
 
     cav = ((pay.get("kernels") or {}).get(plugin) or {}).get("caveats") or []

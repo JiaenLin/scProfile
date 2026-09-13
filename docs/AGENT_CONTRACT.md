@@ -80,6 +80,12 @@ Two ordering rules follow, both paid for:
   old set cites the wrong plates while reading perfectly.
 - **Fix the figures before looking at them.** A review is bound to the image, so redrawing
   destroys it. A sweep taken before a fix round is a sweep thrown away.
+- **Mark what must change, and the pen waits on it.** `scprofile review ... --defect` records a
+  look that says the panel must change. The audit stage reads those beside the machine's own
+  findings; the agenda's write task, `scprofile next` and `paper --claim` refuse a figure with
+  an open finding until it is redrawn or a later look on the same image says otherwise. The
+  order the tool enforces is look at everything, fix what the looks and the audit name, rerun,
+  look at what was redrawn, and only then write (harness ADR-0018).
 
 **You should never have to remember what comes next.** Two commands answer it:
 
@@ -160,6 +166,7 @@ is computed, and the record is append-only. **So fan it out across several agent
 
     scprofile review --out <run> --plugin <p> --shards 4            # all four, to dispatch
     scprofile review --out <run> --plugin <p> --shards 4 --shard 1  # one agent's list
+    scprofile review --out <run> --plugin <p> --figure <path> --note "..." --defect   # must change
 
 **Start with coverage, not volume.** A run draws one kind many times — a circle plot per unit,
 a role heatmap per contrast — and a defect in a kind is present in every instance of it. Reading

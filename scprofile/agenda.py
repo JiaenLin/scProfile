@@ -311,6 +311,15 @@ def tasks(run, plugin, spec=None, how=None):
     except Exception:                                                     # noqa: BLE001
         sel = set()
     out = [(r, st) for r, st in drawn_out if str(r) in sel] if sel else drawn_out
+    # WHAT THE RUN'S OWN RECORD CALLS WRONG (harness ADR-0018): the machine's residue after
+    # repair and the eye's `--defect` looks. The pen waits on them; a look recorded is not a
+    # figure settled.
+    try:
+        openf = R.open_findings(run, plugin)
+    except Exception:                                                     # noqa: BLE001
+        openf = {}
+    if sel:
+        openf = {k: v for k, v in openf.items() if k in sel}
     exists, authored = _authored(run, plugin)
     claims = list((run / "kernels" / plugin).glob("PAPER_CLAIMS*.jsonl"))
     tmpl = B.template_of(spec)
@@ -384,19 +393,28 @@ def tasks(run, plugin, spec=None, how=None):
                    f"report/*_paper.html and *_panel.html - as the writing run the harness's "
                    f"job seals (jobs/writing_seal.pbs)."] if how == PBS else []) + _fanout(run, plugin,
                                                                                    len(out)),
-          "do": f'scprofile review --out {run} --plugin {plugin} --figure <path> --note "..."'},
+          "do": f'scprofile review --out {run} --plugin {plugin} --figure <path> --note "..." '
+                f'[--defect]   (--defect: this panel MUST CHANGE - the audit counts it and the '
+                f'pen waits on it)'},
          {"id": "write", "title": "Write the result",
           # AN EMPTY OUTSTANDING LIST IS NOT A FINISHED ONE. Before the run there are no
           # figures at all, so "nothing outstanding" was read as "all looked at" and writing
           # showed as available on a run that did not exist yet - which is precisely the order
           # this list exists to enforce.
           "state": (DONE if authored
+                    else BLOCKED if openf
                     else PENDING if (started and not out)
                     else BLOCKED),
-          "why": f"against {B.SKILL}/SKILL.md"
-                 + (f" and the template this plugin declares, "
-                    f"{B.SKILL}/templates/{tmpl}.md" if tmpl
-                    else ", which names no template for this plugin"),
+          "why": ((f"{len(openf)} figure(s) of the scan set carry an open finding - "
+                   + ", ".join(Path(k).name for k in sorted(openf)[:4])
+                   + (" ..." if len(openf) > 4 else "")
+                   + ": fix them in the plan or the plugin, rerun, look again. The pen waits "
+                     "for the figures (harness ADR-0018)")
+                  if openf else
+                  f"against {B.SKILL}/SKILL.md"
+                  + (f" and the template this plugin declares, "
+                     f"{B.SKILL}/templates/{tmpl}.md" if tmpl
+                     else ", which names no template for this plugin")),
           # THE FIGURE SET MUST BE SETTLED BEFORE THE SECTION IS WRITTEN. A section cites figures
           # by the number the paper gives them, and adding or removing one figure renumbers every
           # figure after it - so a section written against one figure set and carried into a run

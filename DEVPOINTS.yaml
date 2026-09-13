@@ -436,6 +436,24 @@ points:
         # and `sch dev convert status --run RUNDIR` answers "is this plugin finished" in both
         # phases (ADR-0015 in the harness). `fills: []` because these VERIFY a run rather than
         # fill a field.
+        - name: looked_at
+          phase: test
+          fills: []
+          command: ["{python}", "tests/loop_stations.py", "--run", "{run}", "--station", "7"]
+          finished_by: >
+            `scprofile review --out RUNDIR --plugin <plugin> --shards N` prints the scan set -
+            every figure the paper numbers plus one instance of every other kind drawn - split
+            into disjoint groups, one per agent; open each figure, and record what you saw with
+            `scprofile review --out RUNDIR --plugin <plugin> --figure <path> --note "..."`,
+            adding `--defect` where the panel MUST CHANGE (harness ADR-0018): that is the
+            verdict the next stage reads. A sealed run is read through its writing replay (the
+            run's light half, copied writable under the same run key); record against the
+            replay. A look is bound to the image's digest, so scan the whole set on one build
+            before fixing anything
+          why: >
+            THE GOAL OF THE LOOP, AND IT COMES BEFORE THE AUDIT'S VERDICT AND THE PEN. Every
+            figure defect this tool has had was found by opening the image while the suite was
+            green. Nothing mechanises it; this stage counts it
         - name: audited
           phase: test
           fills: []
@@ -446,29 +464,17 @@ points:
             station prints what it repaired beside what remains (harness ADR-0018). What remains
             is a collision the repertoire does not answer: a class that is general belongs in
             the repertoire, in scprofile/figure.py, so no plugin meets it again; one that is
-            this panel's belongs in the plan entry or the plugin. Re-run to see it clear. The
-            unmeasured count is the eye's work, and the eye's own findings are read by this
-            stage too, once the scan set has been looked at
+            this panel's belongs in the plan entry or the plugin. AND THE EYE'S FINDINGS ARE
+            READ HERE: a look marked `--defect` is this stage's debt beside the machine's,
+            named with the looker's words, and a scan set nobody has looked at is not a clean
+            audit. Fix in the plan or the plugin, rerun, look again at what was redrawn. The
+            pen waits on this stage: the agenda's write task, `scprofile next` and `paper
+            --claim` refuse a figure with an open finding
           why: >
             what a machine can see wrong in the panels after the host mended what it could, and
             how many panels no machine looked at. A panel the wrapped tool draws in R passes
             through no audit and no repair; the station says how many, so a clean line about a
             fifth of the panels cannot read as a clean run
-        - name: looked_at
-          phase: test
-          fills: []
-          command: ["{python}", "tests/loop_stations.py", "--run", "{run}", "--station", "7"]
-          finished_by: >
-            `scprofile review --out RUNDIR --plugin <plugin> --shards N` prints the scan set -
-            every figure the paper numbers plus one instance of every other kind drawn - split
-            into disjoint groups, one per agent; open each figure, and record what you saw with
-            `scprofile review --out RUNDIR --plugin <plugin> --figure <path> --note "..."`. A
-            sealed run is read through its writing replay (the run's light half, copied writable
-            under the same run key); record against the replay. A look is bound to the image's
-            digest, so scan the whole set on one build before fixing anything
-          why: >
-            THE GOAL OF THE LOOP. Every figure defect this tool has had was found by opening the
-            image while the suite was green. Nothing mechanises it; this stage counts it
         - name: written
           phase: test
           fills: []
