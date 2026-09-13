@@ -400,40 +400,54 @@ def next_step(out, plugin=""):
             openf = {k: v for k, v in openf.items() if k in sel}
     except Exception:                                                     # noqa: BLE001
         openf = {}
+    # THE PEN WAITS FOR THE FIGURES, NOT FOR THE RUN (harness ADR-0019, found by the writer of
+    # blind 0006): a flagged figure cannot be cited; the rest can be written from. Only when
+    # every figure the paper lists carries a finding is there nothing to write.
+    note = ""
     if openf:
-        names = ", ".join(Path(k).name for k in sorted(openf)[:3])
-        return (f"{len(openf)} figure(s) carry an open finding ({names}): the pen waits. Fix "
-                f"them in the plan or the plugin, rerun, look again.",
-                f"scprofile review --out {out} --plugin {plugin or '<plugin>'}")
-    rows = status(out, plugin)
-    have_draft = bool(read_draft(out, plugin))
-    if not rows:
-        return ("Nothing has been written from these figures yet. Start by reading the brief.",
-                _cmd(out, plugin, "--brief"))
-    todo = [c for c, st, _n, _t in rows if st == UNREVIEWED]
-    if todo:
-        return (f"{len(todo)} claim(s) have never been put to a reviewer. Review them, and "
-                f"record what the review DID - `withdrawn` is the verdict that teaches.",
-                round_command(out, plugin, todo[0]))
-    stale = [c for c, st, _n, _t in rows if st == STALE]
-    if stale:
-        return (f"{len(stale)} claim(s) cite a figure that has been REDRAWN since the claim was "
-                f"made. The section describes pictures that no longer exist; defend them again.",
-                round_command(out, plugin, stale[0]))
-    if not have_draft:
-        return ("Every claim is defended and no section has been written. The ledger holds the "
-                "sentences and not the document they came from.",
-                _cmd(out, plugin, "--write section.md"))
-    if not (_report_dir(out, plugin) / page_name(plugin)).is_file():
-        return ("The section is written and every claim defended. Render it into the run.",
-                _cmd(out, plugin, "--render"))
-    withdrawn = [c for c, st, _n, _t in rows if st == WITHDRAWN]
-    if not withdrawn:
-        return ("Every claim survived unchanged, which is also what a loop looks like when "
-                "nobody pushed. Consider another round against a different standard.",
-                _cmd(out, plugin, "--brief"))
-    return ("The loop has run: claims written, reviewed, and the section rendered into the run.",
-            "")
+        listed = set(_figure_index(out, plugin) or {})
+        flagged = {k for k in openf if k in listed} if listed else set(openf)
+        clean = (listed - set(openf)) if listed else set()
+        names = ", ".join(Path(k).name for k in sorted(flagged or openf)[:3])
+        if not clean:
+            return (f"{len(openf)} figure(s) carry an open finding ({names}): the pen waits. Fix "
+                    f"them in the plan or the plugin, rerun, look again.",
+                    f"scprofile review --out {out} --plugin {plugin or '<plugin>'}")
+        note = (f"{len(flagged)} figure(s) carry an open finding and cannot be cited ({names}); "
+                f"the other {len(clean)} can. ")
+    def _rest():
+        rows = status(out, plugin)
+        have_draft = bool(read_draft(out, plugin))
+        if not rows:
+            return ("Nothing has been written from these figures yet. Start by reading the brief.",
+                    _cmd(out, plugin, "--brief"))
+        todo = [c for c, st, _n, _t in rows if st == UNREVIEWED]
+        if todo:
+            return (f"{len(todo)} claim(s) have never been put to a reviewer. Review them, and "
+                    f"record what the review DID - `withdrawn` is the verdict that teaches.",
+                    round_command(out, plugin, todo[0]))
+        stale = [c for c, st, _n, _t in rows if st == STALE]
+        if stale:
+            return (f"{len(stale)} claim(s) cite a figure that has been REDRAWN since the claim was "
+                    f"made. The section describes pictures that no longer exist; defend them again.",
+                    round_command(out, plugin, stale[0]))
+        if not have_draft:
+            return ("Every claim is defended and no section has been written. The ledger holds the "
+                    "sentences and not the document they came from.",
+                    _cmd(out, plugin, "--write section.md"))
+        if not (_report_dir(out, plugin) / page_name(plugin)).is_file():
+            return ("The section is written and every claim defended. Render it into the run.",
+                    _cmd(out, plugin, "--render"))
+        withdrawn = [c for c, st, _n, _t in rows if st == WITHDRAWN]
+        if not withdrawn:
+            return ("Every claim survived unchanged, which is also what a loop looks like when "
+                    "nobody pushed. Consider another round against a different standard.",
+                    _cmd(out, plugin, "--brief"))
+        return ("The loop has run: claims written, reviewed, and the section rendered into the run.",
+                "")
+
+    head, cmd = _rest()
+    return ((note + head) if note else head, cmd)
 
 
 def write_draft(out, text, *, author="", plugin=""):

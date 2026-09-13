@@ -283,8 +283,16 @@ def write_brief(run, plugin, spec=None, design=None):
             mark += f" **(open finding: {openf[path][0][:120]} - no claim may cite it)**"
         L.append(f"- Figure {n}: `{path}`{mark}")
     if openf:
-        L += ["", f"{len(openf)} figure(s) carry an open finding. The pen waits on them: fix in "
-                  f"the plan or the plugin, rerun, look again."]
+        # COUNTED ON THIS LIST (harness ADR-0019, found by the writer of blind 0006): the line
+        # printed the run's count while the marks above counted the list's, and the two did not
+        # agree. And the pen waits for the flagged figures, not for the run.
+        _here = sum(1 for path in idx if path in openf)
+        L += ["", (f"every one of the {len(idx)} figures on this list carries an open finding. "
+                   f"The pen waits: fix in the plan or the plugin, rerun, look again."
+                   if _here >= len(idx) else
+                   f"{_here} of the {len(idx)} figures on this list carry an open finding and no "
+                   f"claim may cite them; write from the rest. They wait for the worksheet, a "
+                   f"rerun and a fresh look.")]
     L += [""]
 
     cav = ((pay.get("kernels") or {}).get(plugin) or {}).get("caveats") or []

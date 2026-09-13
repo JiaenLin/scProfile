@@ -320,6 +320,19 @@ def tasks(run, plugin, spec=None, how=None):
         openf = {}
     if sel:
         openf = {k: v for k, v in openf.items() if k in sel}
+    # THE PEN WAITS FOR THE FIGURES, NOT FOR THE RUN (harness ADR-0019, found by the writer of
+    # blind 0006): this task read BLOCKED on 61 open findings and told the writer to answer the
+    # worksheet, rerun and look again first, while `--claim` and `--write` refuse per citation
+    # and accepted a section written from the 48 clean figures. The gates are the rule: a
+    # flagged figure cannot be cited, the rest can, and the task is blocked only while every
+    # figure the paper lists carries a finding.
+    try:
+        listed = set(C.figure_index(run, plugin, spec, pay.get("design") or {}) or {})
+    except Exception:                                                     # noqa: BLE001
+        listed = set()
+    flagged = {k for k in openf if k in listed} if listed else set(openf)
+    clean = (listed - set(openf)) if listed else set()
+    pen_waits = bool(openf) and not clean
     exists, authored = _authored(run, plugin)
     claims = list((run / "kernels" / plugin).glob("PAPER_CLAIMS*.jsonl"))
     # DEFENDED MEANS EVERY CLAIM HAS A VERDICT (harness ADR-0018, found by blind 0005's writer):
@@ -410,7 +423,7 @@ def tasks(run, plugin, spec=None, how=None):
           # showed as available on a run that did not exist yet - which is precisely the order
           # this list exists to enforce.
           "state": (DONE if authored
-                    else BLOCKED if openf
+                    else BLOCKED if pen_waits
                     else PENDING if (started and not out)
                     else BLOCKED),
           "why": (("the authored section is in the run beside the figures it cites")
@@ -420,6 +433,14 @@ def tasks(run, plugin, spec=None, how=None):
                    + (" ..." if len(openf) > 4 else "")
                    + ": fix them in the plan or the plugin, rerun, look again. The pen waits "
                      "for the figures (harness ADR-0018)")
+                  if pen_waits else
+                  (f"{len(flagged)} figure(s) of the paper's list carry an open finding and no "
+                   f"claim may cite them - "
+                   + ", ".join(Path(k).name for k in sorted(flagged)[:4])
+                   + (" ..." if len(flagged) > 4 else "")
+                   + f"; the other {len(clean)} can be written from. The flagged wait for the "
+                     f"worksheet, a rerun and a fresh look (harness ADR-0019); against "
+                     f"{B.SKILL}/SKILL.md")
                   if openf else
                   f"against {B.SKILL}/SKILL.md"
                   + (f" and the template this plugin declares, "
@@ -439,6 +460,12 @@ def tasks(run, plugin, spec=None, how=None):
                   f"why the plate stays) - then rerun through the maker's emitted job "
                   f"(`sch dev job --ref {run} --redraw ...`) and look again at what was "
                   f"redrawn or answered; the pen waits")
+                 if pen_waits else
+                 (f"write it from the figures without a finding - the brief marks the "
+                  f"{len(flagged)} with one, and no claim may cite those - then carry it in with "
+                  f"the next task; for the flagged, answer the audit's worksheet "
+                  f"(`scprofile review --out {run} --plugin {plugin} --worksheet`), rerun through "
+                  f"the maker's emitted job and look again")
                  if openf else
                  "write it, then carry it in with the next task. If any figure is still to be "
                  "added or removed, do THAT first: the paper numbers figures in order, so changing "

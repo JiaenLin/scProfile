@@ -142,6 +142,33 @@ with tempfile.TemporaryDirectory() as td:
     ck("and so is the eye-marked one, with the words",
        bool(line1) and "open finding" in line1[0] and "which arm" in line1[0], str(line1))
 
+    print("\nthe pen waits for the FIGURES, not for the run: a clean figure on the list can be written from")
+    # FOUND BY THE WRITER OF BLIND 0006: the agenda called the write task BLOCKED on 61 open
+    # findings and told the writer to answer the worksheet, rerun and look again first - while
+    # `--claim` and `--write` refuse per citation and accepted a section written from the 48
+    # clean figures. The gates are the rule: a flagged figure cannot be cited; the rest can. The
+    # task is blocked only while every figure the paper lists carries a finding.
+    C.figure_index = lambda run, plugin, spec=None, design=None: {F1: 1, F2: 2, F3: 3}
+    R.record(run, F3, NOTE_OK, reviewer="looker-1", plugin="p")     # looked at, and clean
+    R.record(run, F2, "two numbers collide at the top right, the rest of the panel reads",
+             reviewer="looker-1", plugin="p")                        # looked at; residue stays
+    tasks3 = {t["id"]: t for t in AG.tasks(run, "p", how=AG.LOCAL)}
+    ck("with a clean figure on the list the write task is not blocked",
+       tasks3["write"]["state"] != AG.BLOCKED, str(tasks3["write"]["state"]))
+    ck("its why names the flagged figures as ones no claim may cite",
+       "F1_a" in tasks3["write"]["why"] and "F2_b" in tasks3["write"]["why"]
+       and "cite" in tasks3["write"]["why"], tasks3["write"]["why"])
+    ck("and its do says to write from the rest, and what frees the flagged",
+       "write" in tasks3["write"]["do"] and "worksheet" in tasks3["write"]["do"], tasks3["write"]["do"])
+    head3, cmd3 = PA.next_step(run, "p")
+    ck("the next step is the writing step, saying which figures cannot be cited",
+       "cannot be cited" in head3 or "no claim may cite" in head3, f"{head3} | {cmd3}")
+    p3 = B.write_brief(run, "p", spec={"report": {"subject": "widgets"}}, design={})
+    txt3 = Path(p3).read_text(encoding="utf-8") if p3 else ""
+    ck("the brief's summary counts the figures on ITS list and says the rest can be written from",
+       "2 of the 3" in txt3 and "no claim may cite" in txt3, [l for l in txt3.splitlines() if "open finding" in l][-1:] )
+    C.figure_index = lambda run, plugin, spec=None, design=None: {F1: 1, F2: 2}
+
     print("\nthe next step never says 'write it' while the pen is blocked")
     # FOUND ON THE FIRST REPLAY (blind 0005): `scprofile next` printed "NEXT: Write the result",
     # a why saying seventy figures carried an open finding, and "do: write it". A blocked task's
