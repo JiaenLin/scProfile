@@ -384,6 +384,39 @@ ck("and every label stays inside the axes", all(axb.contains(b.x0, b.y0) and axb
    str([(t.get_text(), (round(b.x0), round(b.x1))) for t, b in boxes if not axb.contains(b.x1, b.y1)])[:300])
 plt.close(fig)
 
+print("\nN4: a label the declutter carried away from its point is tied to it by a leader")
+# THE THIRD LOOK (harness ADR-0020, step 2): nine points in one corner, the vertical solve
+# cleared every overlap within its cap and the ladder had nothing to answer - and two labels
+# stood well above any point, "floating, no dot or leader line visible at that height".
+_E = [(0, 8, 0.1), (1, 4, 0.347), (1, 5, 0.12), (1, 6, 0.033), (2, 0, 0.8), (3, 0, 0.014),
+      (3, 2, 0.786), (4, 0, 0.024), (4, 3, 0.526), (5, 0, 0.043), (5, 7, 1.157), (6, 5, 1.3),
+      (7, 0, 0.013), (7, 6, 1.177), (7, 8, 0.11), (8, 1, 0.947), (8, 2, 0.003)]
+corner = pd.DataFrame([{"source": POPS[i], "target": POPS[j], "prob": w, "pathway": f"P{k % 3}"}
+                       for k, (i, j, w) in enumerate(_E)])
+d = Draw()
+NP.role_scatter(d, corner, POPS, title="arm A", scale={"role": 6.0})
+fig = d.figs["N4_role"][0]
+pipeline(fig)
+ax = fig.get_axes()[0]
+_r = fig.canvas.get_renderer()
+_leaders = getattr(fig, "_scprofile_leaders", {})
+_far, _untied = [], []
+for _t in ax.texts:
+    if not hasattr(_t, "xy") or not str(_t.get_text()).strip():
+        continue
+    _px, _py = ax.transData.transform(_t.xy)
+    _b = _t.get_window_extent(_r)
+    _gap = (max(_b.x0 - _px, _px - _b.x1, 0) ** 2 + max(_b.y0 - _py, _py - _b.y1, 0) ** 2) ** 0.5
+    _gap *= 72.0 / fig.dpi
+    if _gap > getattr(F, "LEADER_GAP_PT", 8.0):
+        _far.append(_t.get_text())
+        if id(_t) not in _leaders:
+            _untied.append((_t.get_text(), round(_gap, 1)))
+ck("the solve carried some labels away from their points (the case under test)", bool(_far),
+   "nothing displaced: the fixture no longer reproduces the run")
+ck("and every label further than the gap has a leader to its point", not _untied, str(_untied))
+plt.close(fig)
+
 print("\nC4: role-shift labels that crowd one region keep a gap between them")
 F.save = _capturing_save
 _GEOM = {}

@@ -770,17 +770,61 @@ def _ladder(ax, texts, *, pad=3.0):
         t.set_position((ox, oy))
         t.set_ha("left")
         t.set_va("center")
-        ld = leaders.get(id(t))
-        if ld is None or ld.axes is not ax:
-            ld = ax.annotate("", xy=t.xy, xytext=(ox, oy), textcoords="offset points",
-                             annotation_clip=False, zorder=1,
-                             arrowprops=dict(arrowstyle="-", lw=0.45, color="#9A9A9A",
-                                             shrinkA=0.0, shrinkB=1.5))
-            leaders[id(t)] = ld
-        else:
-            ld.xyann = (ox, oy)
+        _leader(ax, t, ox, oy, leaders)
     fig.canvas.draw()
     return True
+
+
+def _leader(ax, t, ox, oy, leaders):
+    """The thin line from a label's point to the label, drawn once per label and re-aimed after."""
+    ld = leaders.get(id(t))
+    if ld is None or ld.axes is not ax:
+        ld = ax.annotate("", xy=t.xy, xytext=(ox, oy), textcoords="offset points",
+                         annotation_clip=False, zorder=1,
+                         arrowprops=dict(arrowstyle="-", lw=0.45, color="#9A9A9A",
+                                         shrinkA=0.0, shrinkB=1.5))
+        leaders[id(t)] = ld
+    else:
+        ld.xyann = (ox, oy)
+    return ld
+
+
+#: A label further than this from its point, in points, is no longer read as that point's.
+LEADER_GAP_PT = 8.0
+
+
+def _tie_displaced(ax, texts, *, gap_pt=LEADER_GAP_PT):
+    """Tie every label the declutter carried away from its point back to it with a leader.
+
+    THE VERTICAL SOLVE CAN SUCCEED AND STILL LOSE THE LABEL (harness ADR-0020, the second
+    look's N4): nine labels within a corner cleared each other inside the cap, with no overlap
+    left for the ladder to answer, and two of them stood a third of the clump's height above
+    any point - "floating, no dot or leader line visible at that height". A label the solve
+    has moved further than `gap_pt` from its point gets the ladder's leader, whatever moved it.
+    """
+    fig = ax.figure
+    r = fig.canvas.get_renderer()
+    leaders = getattr(fig, "_scprofile_leaders", None)
+    if leaders is None:
+        leaders = fig._scprofile_leaders = {}
+    tied = 0
+    for t in texts:
+        if not (hasattr(t, "xyann") and hasattr(t, "xy")) or not str(t.get_text()).strip():
+            continue
+        try:
+            px, py = ax.transData.transform(t.xy)
+            b = t.get_window_extent(r)
+        except Exception:                                                 # noqa: BLE001
+            continue
+        dx = max(b.x0 - px, px - b.x1, 0.0)
+        dy = max(b.y0 - py, py - b.y1, 0.0)
+        gap = (dx * dx + dy * dy) ** 0.5 * 72.0 / float(fig.dpi)
+        if id(t) in leaders:
+            _leader(ax, t, *t.xyann, leaders)
+        elif gap > gap_pt:
+            _leader(ax, t, *t.xyann, leaders)
+            tied += 1
+    return tied
 
 
 def resolve_overlaps(fig):
@@ -922,6 +966,11 @@ def _separate(ax, texts, *, iterations=80, pad=3.0, clip=True, max_shift=14.0):
     # its point by a thin leader line.
     try:
         _ladder(ax, texts, pad=pad)
+    except Exception:                                                     # noqa: BLE001
+        pass
+    # AND A LEADER FOR ANY LABEL THE SOLVE CARRIED AWAY, ladder or not: see `_tie_displaced`.
+    try:
+        _tie_displaced(ax, texts)
     except Exception:                                                     # noqa: BLE001
         pass
     return used
