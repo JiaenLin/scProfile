@@ -343,7 +343,7 @@ PLUGIN = {
         "channels": ["conda-forge", "bioconda"],
     },
 
-    "cost": "medium", "cores": 4,
+    "cost": "high", "cores": 4,  # measured in 20260913T170934Z__scprofile-7c188a4__04_profile__rerun
 
     # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
     # Fitted from ten per-sample instances.
