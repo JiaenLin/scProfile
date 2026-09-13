@@ -212,5 +212,32 @@ with tempfile.TemporaryDirectory() as td:
        recs and isinstance(recs[0][-1], dict) and recs[0][-1].get("measured") is False
        and recs[0][-1].get("drawn_by") == "tool", str(recs[0][-1] if recs else recs))
 
+print("\nthe eye station counts a look carried from the run beside on the same bytes")
+# FOUND ON THE RERUN OF BLIND 0006: the review read 37 of the scan set as "reviewed (carried)" -
+# looks taken on the old replay on identical bytes - and station 7 read them as unlooked (102 of
+# 139), because it counted only this run's own ledger. A carried look is a look; the maker's
+# `looked_at` stayed owing after the whole scan set had been seen.
+with tempfile.TemporaryDirectory() as td:
+    import hashlib
+    def _mk(key):
+        run = Path(td) / key
+        figdir = run / "kernels" / "k" / "figures"
+        figdir.mkdir(parents=True)
+        (figdir / "F1.png").write_bytes(b"\x89PNG same bytes")
+        (run / "report.json").write_text(json.dumps({"kernels": {"k": {"figures": [
+            {"id": "F1", "path": "kernels/k/figures/F1.png", "audit": []}]}}}))
+        (run / "kernels" / "k" / "FIGURES.txt").write_text("kernels/k/figures/F1.png\n")
+        return run
+    old_ = _mk("20260101T000000Z__scprofile-abc1234__stage")
+    new_ = _mk("20260102T000000Z__scprofile-abc1234__stage")
+    (old_ / "kernels" / "k" / "FIGURE_REVIEW.jsonl").write_text(json.dumps({
+        "figure": "kernels/k/figures/F1.png", "sha256": hashlib.sha256(b"\x89PNG same bytes").hexdigest(),
+        "note": "the bars are keyed and the axis reads in cells", "reviewer": "l",
+        "at": "2026-01-01T00:00:00Z"}) + "\n")
+    want, seen, done = L._scan(new_)
+    ck("the carried look counts as seen", seen == {"kernels/k/figures/F1.png"}, str((want, seen)))
+    state, detail, _n = L.station_eye([new_])
+    ck("and the eye station reads the scan set as looked at", "1/1 of the named scan set" in detail, detail)
+
 print("\n" + ("every figure is measured" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

@@ -380,6 +380,12 @@ def _scan(r):
     done = set()
     for led in [r / RV.LEDGER] + [r / "kernels" / p / RV.LEDGER for p in plugins_in(r)]:
         done |= {row["figure"] for row in _lines(led)}
+    # A CARRIED LOOK IS A LOOK (harness ADR-0019, found on the rerun of blind 0006): the review
+    # read 37 of the scan set as "reviewed (carried)" - taken on the run beside, on these same
+    # bytes - and this station read them as unlooked, so `looked_at` stayed owing after the
+    # whole scan set had been seen. The review's own status says which looks carry.
+    for p in plugins_in(r):
+        done |= {rel for rel, st, _w in RV.status(r, p) if st == RV.CARRIED_OK}
     return want, want & done, done
 
 
