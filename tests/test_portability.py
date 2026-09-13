@@ -191,36 +191,45 @@ ck("a custom set parses", cli._split("Doublet,Unknown") == ["Doublet", "Unknown"
 
 print("\na plugin with reference data refuses an organism it has none for")
 ks = discover()
-sc_ = ks["scenic"]
-ck("scenic declares its organisms", sc_.reference_organisms() == {"mouse", "human"},
-   str(sc_.reference_organisms()))
-for org in ("zebrafish", "drosophila", None):
+# A TREE CARRYING ONE KERNEL IS A TREE THIS SUITE RUNS ON (harness ADR-0021, blind 0008): the
+# cellchat-only export is what the cluster runs and what a cold author is handed, and this
+# block indexed three other kernels by name and died with KeyError before the author could
+# read a verdict. The checks below are about those kernels; without them they are skipped and
+# say so, and every check that is about the tree still runs.
+_need = [k for k in ("scenic", "velocity", "cellcycle") if k not in ks]
+if _need:
+    print(f"  skip  the organism checks need kernels this tree does not carry: {', '.join(_need)}")
+sc_ = ks.get("scenic")
+if not _need:
+    ck("scenic declares its organisms", sc_.reference_organisms() == {"mouse", "human"},
+       str(sc_.reference_organisms()))
+    for org in ("zebrafish", "drosophila", None):
+        try:
+            refs.require_supported(sc_, org)
+            ck(f"{org!r} is refused", False, "it was allowed to run with no reference data")
+        except refs.UnsupportedOrganism as e:
+            ck(f"{org!r} is refused", "declares none for" in str(e))
+            ck(f"and the refusal names what it does have ({org!r})", "mouse" in str(e))
     try:
-        refs.require_supported(sc_, org)
-        ck(f"{org!r} is refused", False, "it was allowed to run with no reference data")
-    except refs.UnsupportedOrganism as e:
-        ck(f"{org!r} is refused", "declares none for" in str(e))
-        ck(f"and the refusal names what it does have ({org!r})", "mouse" in str(e))
-try:
-    refs.require_supported(sc_, "MOUSE")
-    ck("a supported organism still runs, case-insensitively", True)
-except refs.UnsupportedOrganism:
-    ck("a supported organism still runs, case-insensitively", False)
-# THE EXAMPLE MOVED, AND THAT IS THE POINT OF THE GATE. This asked cellcycle, which needed no
-# references because its 97 Tirosh symbols sat in the file undeclared - so the plugin that most
-# needed the organism check was the one used to prove the check does not fire. It declares them
-# now, for human and mouse, and refuses anything else. `velocity` genuinely consults nothing.
-refs.require_supported(ks["velocity"], "zebrafish")
-ck("a plugin that needs no references is not refused", True)
-for _org in ("human", "mouse"):
-    refs.require_supported(ks["cellcycle"], _org)
-ck("and a panel declared for two species runs on both", True)
-try:
-    refs.require_supported(ks["cellcycle"], "zebrafish")
-    ck("a species the panel was never curated for is refused", False,
-       "it ran, and a low score from a panel that did not match reads as `not cycling`")
-except refs.UnsupportedOrganism as _e:
-    ck("a species the panel was never curated for is refused", "human, mouse" in str(_e))
+        refs.require_supported(sc_, "MOUSE")
+        ck("a supported organism still runs, case-insensitively", True)
+    except refs.UnsupportedOrganism:
+        ck("a supported organism still runs, case-insensitively", False)
+    # THE EXAMPLE MOVED, AND THAT IS THE POINT OF THE GATE. This asked cellcycle, which needed no
+    # references because its 97 Tirosh symbols sat in the file undeclared - so the plugin that most
+    # needed the organism check was the one used to prove the check does not fire. It declares them
+    # now, for human and mouse, and refuses anything else. `velocity` genuinely consults nothing.
+    refs.require_supported(ks["velocity"], "zebrafish")
+    ck("a plugin that needs no references is not refused", True)
+    for _org in ("human", "mouse"):
+        refs.require_supported(ks["cellcycle"], _org)
+    ck("and a panel declared for two species runs on both", True)
+    try:
+        refs.require_supported(ks["cellcycle"], "zebrafish")
+        ck("a species the panel was never curated for is refused", False,
+           "it ran, and a low score from a panel that did not match reads as `not cycling`")
+    except refs.UnsupportedOrganism as _e:
+        ck("a species the panel was never curated for is refused", "human, mouse" in str(_e))
 ck("the host asks reference_organisms, not references(organism)",
    "k.reference_organisms()" in src and "if k.references(organism[0]) else {}" not in src)
 
