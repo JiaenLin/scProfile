@@ -921,20 +921,28 @@ def fit_cores_model(points):
     CPU any instance showed; the mean is the median of CPU over wall per instance, which every
     instance carries even where /proc could not be read. None when nothing was measured.
     """
-    pk, mn = [], []
+    pk, mn, gv = [], [], []
     for m in points or []:
         m = m or {}
         if m.get("cores_peak") is not None:
             pk.append(float(m["cores_peak"]))
         if m.get("cpu_s") is not None and float(m.get("wall_s") or 0) > 0:
             mn.append(float(m["cpu_s"]) / float(m["wall_s"]))
+        if m.get("cores_given") is not None:
+            gv.append(int(m["cores_given"]))
     if not pk and not mn:
         return None
     mean = sorted(mn)[len(mn) // 2] if mn else None
     peak = max(pk) if pk else (max(mn) if mn else None)
+    given = max(gv) if gv else None
+    # A BURST FAR ABOVE THE SHARE IS THE PLUGIN'S, NOT A NUMBER TO DECLARE (measured on the first
+    # run that measured: one-second peaks of 49 to 61 on a share of 4, a mean of 2.4). The share
+    # means sustained use; a burst past twice it is threads or workers the plugin did not cap.
+    over = (given is not None and peak is not None and peak > 2.0 * max(given, 1))
     return {"peak": round(peak, 2) if peak is not None else None,
             "mean": round(mean, 2) if mean is not None else None,
-            "points": len(set(range(len(points or [])))) if points else 0}
+            "points": len(points or []),
+            "given": given, "over_share": bool(over)}
 
 
 def fit_cost_model(points):

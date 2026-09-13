@@ -3580,15 +3580,25 @@ def _cores_gate(run, declare=None):
               f"{', '.join(sorted(model))}", file=sys.stderr)
         return REFUSE
     ks = discover()
-    print(f"# cores measured in {Path(run).name}: the largest one-second reading of each "
-          f"instance's process tree, held against the declaration")
+    print(f"# cores measured in {Path(run).name}: each instance's process tree sampled every "
+          f"second - the sustained use (CPU over wall) is what a share means and what the "
+          f"declaration is held against; a one-second burst past twice the share is the "
+          f"plugin's, not a number to declare")
     rc = 0
     for name, m in sorted(model.items()):
         peak, mean, pts = m.get("peak"), m.get("mean"), m.get("points")
-        want = int(_math.ceil(float(peak if peak is not None else mean or 1)))
+        given, over = m.get("given"), bool(m.get("over_share"))
+        want = int(_math.ceil(float(mean if mean is not None else peak or 1)))
         declared = ks[name].executor.get("cores") if name in ks else m.get("declared")
-        print(f"# {name}: {pts} point(s), peak {peak} core(s), mean {mean}; to declare: "
-              f"\"cores\": {want},")
+        print(f"# {name}: {pts} point(s), sustained {mean} core(s), peak {peak}"
+              + (f" on a share of {given}" if given is not None else "")
+              + f"; to declare: \"cores\": {want},")
+        if over:
+            print(f"  OVER ITS SHARE: the plugin bursts to {peak} core(s) on a share of {given} - "
+                  f"threads or workers it did not cap to the share the host passed in in.json "
+                  f"(resources.cores). Not a number to declare; the plugin's own build owes the "
+                  f"cap, and a wave sized on this share is oversubscribed until it does.")
+            rc = REFUSE
         if declare == name:
             k = ks.get(name)
             if k is None:
@@ -3605,10 +3615,12 @@ def _cores_gate(run, declare=None):
             ok = declared is not None and int(declared) >= want
         except (TypeError, ValueError):
             ok = False
-        if ok:
-            print(f"  declared {declared}, at or above the measured {want}: answered")
+        if ok and not over:
+            print(f"  declared {declared}, at or above the sustained {want}: answered")
+        elif ok:
+            print(f"  declared {declared}, at or above the sustained {want}; owes on the burst")
         else:
-            print(f"  declared {declared}, below the measured {want}: OWES. The way out is "
+            print(f"  declared {declared}, below the sustained {want}: OWES. The way out is "
                   f"`capacity --out {run} --cores --declare {name}`")
             rc = REFUSE
     return rc

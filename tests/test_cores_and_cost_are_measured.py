@@ -71,6 +71,17 @@ ck("the bands are ordered like the scheduler's cost order",
 ck("trivial is a few seconds, high is many minutes", K.cost_band(5.0) == "trivial" and K.cost_band(10_000.0) == "high",
    f"{K.cost_band(5.0)} {K.cost_band(10_000.0)}")
 
+print("\na burst far above the share is the plugin exceeding its share, not a number to declare")
+# MEASURED ON THE FIRST RUN THAT MEASURED (PBS 711115): instances given 4 cores showed one-second
+# peaks of 49 to 61 with a mean of 2.4 - CellChat's own forks or threads for a moment, on a
+# node eighteen instances shared. A wave sized on 61 would run one instance at a time; the
+# sustained use is what the share means, and the burst is the plugin's to cap.
+m2 = K.fit_cores_model([{"n_cells": 10000, "wall_s": 60.0, "cpu_s": 150.0, "cores_peak": 49.3, "cores_given": 4}])
+ck("the model carries the share the instances were given and the burst", m2 and m2.get("given") == 4
+   and m2.get("over_share") is True, str(m2))
+m3 = K.fit_cores_model([{"n_cells": 10000, "wall_s": 60.0, "cpu_s": 150.0, "cores_peak": 4.4, "cores_given": 4}])
+ck("a peak near the share is not a burst", m3 and m3.get("over_share") is False, str(m3))
+
 print("\ncapacity --cores and --cost are gates with a way out, like --memory")
 PLUG = ('PLUGIN = {\n    "name": "k",\n    "cost": "low", "cores": 2,\n'
         '    "memory_gb_base": 1.0, "memory_gb_per_100k": 2.0,\n}\n')
@@ -95,8 +106,18 @@ with tempfile.TemporaryDirectory() as td:
         return rc, o.getvalue() + e.getvalue()
 
     rc, out = run_cli("capacity", "--out", str(run), "--cores")
-    ck("declared 2 against a measured peak of 3.6: the gate refuses", rc not in (0, None), f"rc={rc}\n{out[-400:]}")
-    ck("and says what to declare", "cores" in out and "4" in out, out[-400:])
+    ck("declared 2 against a sustained 2.9: the gate refuses", rc not in (0, None), f"rc={rc}\n{out[-400:]}")
+    ck("and says what to declare - the sustained use rounded up, 3", '"cores": 3' in out, out[-400:])
+    (run / "report.json").write_text(json.dumps({
+        "kernels": {"k": {}},
+        "cores_model": {"k": {"peak": 49.3, "mean": 2.5, "points": 4, "declared": 4, "given": 4,
+                              "over_share": True}},
+        "cost_model": {"k": {"s_per_100k": 600.0, "band": K.cost_band(600.0), "points": 4,
+                             "declared": "low"}}}))
+    rc, out = run_cli("capacity", "--out", str(run), "--cores")
+    ck("a burst of 49 on a share of 4: the gate owes for the plugin's share, not the declaration",
+       rc not in (0, None) and "share" in out.lower() and "burst" in out.lower(), f"rc={rc}\n{out[-500:]}")
+    ck("and never says to declare the burst", '"cores": 50' not in out and '"cores": 49' not in out, out[-400:])
     rc, out = run_cli("capacity", "--out", str(run), "--cost")
     ck("declared low against a measured band above it: the gate refuses", rc not in (0, None), f"rc={rc}\n{out[-400:]}")
     ck("and names the band", K.cost_band(600.0) in out, out[-400:])
