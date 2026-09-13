@@ -433,9 +433,12 @@ def tasks(run, plugin, spec=None, how=None):
           # A BLOCKED TASK'S `do` IS WHAT UNBLOCKS IT, not the task (harness ADR-0018): the
           # first replay printed "do: write it" under a why that said seventy figures carried
           # an open finding, and a cold agent reads the do.
-          "do": ((f"fix the {len(openf)} figure(s) named above in the plan or the plugin, rerun, "
-                  f"and look again at what was redrawn; the pen waits. `scprofile review --out "
-                  f"{run} --plugin {plugin}` lists them with their findings")
+          "do": ((f"answer the audit's worksheet for the {len(openf)} figure(s) named above - "
+                  f"`scprofile review --out {run} --plugin {plugin} --worksheet` names each "
+                  f"kind's owner and the two answers (edit and bump the version, or --answer "
+                  f"why the plate stays) - then rerun through the maker's emitted job "
+                  f"(`sch dev job --ref {run} --redraw ...`) and look again at what was "
+                  f"redrawn or answered; the pen waits")
                  if openf else
                  "write it, then carry it in with the next task. If any figure is still to be "
                  "added or removed, do THAT first: the paper numbers figures in order, so changing "

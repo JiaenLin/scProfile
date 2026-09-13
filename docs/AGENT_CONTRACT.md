@@ -86,6 +86,14 @@ Two ordering rules follow, both paid for:
   an open finding until it is redrawn or a later look on the same image says otherwise. The
   order the tool enforces is look at everything, fix what the looks and the audit name, rerun,
   look at what was redrawn, and only then write (harness ADR-0018).
+- **The fix is a worksheet, the rerun is a job, the second look is only what changed.**
+  `scprofile review --out <run> --plugin <p> --worksheet` prints every open finding by kind
+  with its owner - the host's own panel, the tool's plan entry, or the plugin's own code - and
+  the two answers: edit and bump the version, or `review --figure <f> --answer "why"
+  --reviewer <you>` for a plate the upstream draws as it should (a looker's fresh look then
+  settles it). The rerun is the maker's emitted job, `sch dev job --ref <run> --redraw ...`;
+  on its replay `review --shards N` lists only what was redrawn or answered. The whole
+  sequence, with the command each step prints, is the table in docs/TEST_LOOP.md (ADR-0019).
 
 **You should never have to remember what comes next.** Two commands answer it:
 

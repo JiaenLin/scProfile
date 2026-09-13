@@ -162,6 +162,12 @@ A note is refused if it is too short to be a look, or copied from another figure
 bound to the image's sha256, so a redrawn figure loses its review and comes back onto the list.
 `--defect` says the panel MUST CHANGE: the audit stage counts it, and no claim may cite that
 figure until it is redrawn or a later look says otherwise. The pen waits for the figures.
+What happens to a marked figure is not the writer's: the author answers the audit's worksheet
+(`scprofile review --worksheet`), the maker's emitted job reruns, and a looker looks again at
+what was redrawn or answered. When you are handed a figure the review status lists as
+"answered - needs a look", you are that looker: read the author's answer, open the image, and
+record a fresh look - `--defect` again if the answer does not hold. The sequence is the table
+in docs/TEST_LOOP.md.
 
 **If the run is on a cluster and you are not**, you cannot open anything until the images are
 on your side. The run writes the set as a transfer list — `kernels/<plugin>/FIGURES.txt`, one

@@ -169,6 +169,32 @@ done. A scan that covers three quarters of the kinds is a scan that says so.
 
 ---
 
+## The end-to-end workflow, as the tools print it
+
+Written once, here (harness ADR-0019); the contract, the skills and the maker point at this
+table. Every step is a command the step before it printed, and none is a person's.
+
+| step | who | the command that prints the next |
+|---|---|---|
+| 1 run | the job | the agenda's run task; the job writes AGENDA.md and seals |
+| 2 promised, measure | machine | `sch dev convert status --run`; `measure` applied by `--apply` |
+| 3 look | lookers | `scprofile review --shards N`; `--figure --note [--defect]` |
+| 4 audit | machine | the status: `audited` clean, or owing with "answer it: ..." |
+| 5 worksheet | the author | `scprofile review --worksheet`: edits pasted into the plan or the plugin, the version bumped; `--answer` for a plate that should stay |
+| 6 rerun | the job | `sch dev job --ref <this run> --redraw ...`, validated, submitted; the new run's replay beside the old |
+| 3' look again | lookers | `review --shards N` lists only what was redrawn or answered; unchanged looks carry |
+| 7 write | the writer | `paper --brief`, `--claim`, `--write` - refused on a plate with an open finding |
+| 8 review | a second agent | `paper --round --reviewer` on every claim |
+| 9 render, deliver | the writer | `paper --render`; `delivered` |
+| 10 seal the writing | the job | `submit_writing_seal.sh --prepare / --seal` |
+
+The loop is 3 → 4 → 5 → 6 → 3', repeated until 4 is clean; the pen (7) opens only then. A
+finding has one of three owners, and the worksheet names it: the host's own panel (fixed in
+`scprofile/`, nothing to paste), the tool's plate (the plan entry's arguments, size and legend),
+or the plugin's own drawing (its file and line). A plate the upstream draws as it should is
+answered, not changed, and a looker's fresh look on the same image settles it - the author's
+word alone does not.
+
 ## The round
 
 1. Run the driver. It names the first blocked station.

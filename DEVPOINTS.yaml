@@ -34,6 +34,16 @@ fixture:
 
 baseline_dir: tests/baselines
 
+# WHAT FOLLOWS A RUN OF THIS REPOSITORY (harness ADR-0019). Read by the maker's job emitter
+# (`sch dev job`) so a rerun of the loop renders its pages and reads its own status without
+# anybody retyping the commands; `{python}` and `{run}` are filled by the emitter.
+run:
+  after:
+    - ["{python}", "-m", "scprofile.cli", "report", "--out", "{run}"]
+    - ["{python}", "-m", "scprofile.cli", "status", "--out", "{run}"]
+    - ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--promised"]
+    - ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--memory"]
+
 # THE RULES OF THIS DEVELOPMENT ROUND. `sch dev rules --root . --since REF` checks them; without
 # this block it has nothing to check and says so rather than passing.
 #
