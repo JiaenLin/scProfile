@@ -898,6 +898,90 @@ UNDECLARED_GB_BASE = 4.0
 #: --memory --declare` and the gate that reads it back agree on one number (harness ADR-0018).
 MEMORY_HEADROOM = 1.10
 
+#: The cost bands, in seconds of wall time per 100,000 cells at the cores the instance was given,
+#: defined ONCE (harness ADR-0020, step 5): `cost` ordered waves for the whole life of the tool
+#: and meant whatever its author felt. Ordered from cheapest to dearest; the upper bound is
+#: inclusive; the last band is open.
+COST_BANDS = {"trivial": 30.0, "low": 120.0, "medium": 900.0, "high": float("inf")}
+
+
+def cost_band(s_per_100k):
+    """The band a measured wall time per 100,000 cells falls in."""
+    s = float(s_per_100k)
+    for band, top in COST_BANDS.items():
+        if s <= top:
+            return band
+    return list(COST_BANDS)[-1]
+
+
+def fit_cores_model(points):
+    """{peak, mean, points} from instances' measured dicts - the cores a plugin really uses.
+
+    THE PEAK IS WHAT A WAVE MUST RESERVE, the largest one-second reading of the process tree's
+    CPU any instance showed; the mean is the median of CPU over wall per instance, which every
+    instance carries even where /proc could not be read. None when nothing was measured.
+    """
+    pk, mn = [], []
+    for m in points or []:
+        m = m or {}
+        if m.get("cores_peak") is not None:
+            pk.append(float(m["cores_peak"]))
+        if m.get("cpu_s") is not None and float(m.get("wall_s") or 0) > 0:
+            mn.append(float(m["cpu_s"]) / float(m["wall_s"]))
+    if not pk and not mn:
+        return None
+    mean = sorted(mn)[len(mn) // 2] if mn else None
+    peak = max(pk) if pk else (max(mn) if mn else None)
+    return {"peak": round(peak, 2) if peak is not None else None,
+            "mean": round(mean, 2) if mean is not None else None,
+            "points": len(set(range(len(points or [])))) if points else 0}
+
+
+def fit_cost_model(points):
+    """{s_per_100k, band, points} - the median wall time per 100,000 cells and its band."""
+    rates = []
+    for m in points or []:
+        m = m or {}
+        n, w = float(m.get("n_cells") or 0), float(m.get("wall_s") or 0)
+        if n > 0 and w > 0:
+            rates.append(w / (n / 100_000.0))
+    if not rates:
+        return None
+    med = sorted(rates)[len(rates) // 2]
+    return {"s_per_100k": round(med, 1), "band": cost_band(med), "points": len(rates)}
+
+
+def write_declared_scalar(path, key, value, note=""):
+    """Write one scalar into a one-file plugin's declaration, on the line it already occupies -
+    even beside other keys - and confirm it. Returns (old, new) line text.
+
+    THE TOOL EDITS ITS OWN ARTEFACT (harness ADR-0020, step 5), as it writes the memory terms:
+    `"cost": "medium", "cores": 4,` share a line in every shipped plugin, so only the value is
+    replaced, in place, and a note is appended where the line carries none.
+    """
+    import re
+    from .declare import DeclarationError
+    p = Path(path)
+    if not p.is_file() or p.suffix != ".py":
+        raise DeclarationError(f"{p} is not a one-file plugin; declare {key} by hand in a "
+                               f"directory-shaped one")
+    lines = p.read_text(encoding="utf-8").splitlines(keepends=True)
+    pat = re.compile(r'("%s"\s*:\s*)("[^"]*"|[-+\d.eE]+)' % re.escape(key))
+    hits = [i for i, l in enumerate(lines) if pat.search(l)]
+    if len(hits) != 1:
+        raise DeclarationError(f"{p}: {len(hits)} line(s) declare {key!r}; nothing was changed")
+    i = hits[0]
+    old = lines[i]
+    rendered = f'"{value}"' if isinstance(value, str) else str(value)
+    new = pat.sub(lambda m: m.group(1) + rendered, old, count=1)
+    if note and "#" not in new:
+        new = new.rstrip("\n") + f"  # {note}\n"
+    lines[i] = new
+    p.write_text("".join(lines), encoding="utf-8")
+    if not pat.search(p.read_text(encoding="utf-8")):
+        raise DeclarationError(f"{p}: the write of {key!r} did not read back")
+    return old, new
+
 
 def write_memory_terms(path, base, rate, note=""):
     """Write both memory terms into a one-file plugin's declaration. Returns (old, new) text.

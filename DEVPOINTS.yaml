@@ -134,9 +134,9 @@ points:
     # here is printed CHECKED BY NOBODY on every status. Measured when this was written: `cores`
     # and `cost` had been required, present-checked and trusted by the scheduler for the whole
     # life of the tool, with the scaffold template itself saying "cores is a CLAIM: check it".
-    # They are left out of this map ON PURPOSE - the red line is the record - until
-    # `capacity --cores` exists and a test-phase stage reads it, which is the shape `measure`
-    # already has for memory (KNOWN_ISSUES.md).
+    # They were left out of this map ON PURPOSE - the red line was the record - until
+    # `capacity --cores` and `--cost` existed and a test-phase stage read each, the shape
+    # `measure` has for memory: the `cores` and `cost` stages below (harness ADR-0020, step 5).
     truth:
       wraps: input               # the upstream the conversion is driven by; never its output
       api: validator             # scprofile validate refuses an api the host does not implement
@@ -417,6 +417,38 @@ points:
             both terms, from a real run. A rate alone attributes the fixed cost to the cells and
             the job is sized to be killed on small objects. Every run already fits this and stores
             it in report.json; `capacity --memory` is what reads it back out
+        - name: cores
+          phase: test
+          fills: [cores]
+          # THE SAME SHAPE AS `measure` (harness ADR-0020, step 5): every instance measures its
+          # own process tree's CPU beside its memory, the run fits the peak, and the command
+          # holds the declaration against it; `apply:` writes it back.
+          command: ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--cores"]
+          apply: ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--cores",
+                  "--declare", "{name}"]
+          finished_by: >
+            `capacity --cores` prints the largest one-second reading of any instance's process
+            tree and exits 0 only when this plugin declares at least that many cores; until then
+            it owes, and the way out is the stage's `apply:` - `sch dev convert cores --run RUNDIR
+            --name <plugin> --apply` - which writes the measured number into the declaration's
+            own line and reads it back
+          why: >
+            `cores` sizes every wave the scheduler plans; a number nothing measured was trusted
+            for the whole life of the tool and printed CHECKED BY NOBODY on every status
+        - name: cost
+          phase: test
+          fills: [cost]
+          command: ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--cost"]
+          apply: ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--cost",
+                  "--declare", "{name}"]
+          finished_by: >
+            `capacity --cost` prints the median wall time per 100,000 cells over the run's
+            instances and the band it falls in - trivial, low, medium, high, defined once in
+            `kernels.COST_BANDS` - and exits 0 only when this plugin declares that band or a
+            dearer one; the way out is the stage's `apply:`
+          why: >
+            `cost` orders a wave, longest pole first; a word the author felt was trusted for the
+            whole life of the tool
         - name: promised
           phase: test
           # THE PROMISE IS THE PLAN (harness ADR-0016, step 3): `native.declared_from` reads an

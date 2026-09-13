@@ -229,7 +229,8 @@ from . import figure_context as _FC   # noqa: E402
 def _run(a):
     from . import compat, inputs, manifest, merge, provenance, refs, report, runner
     from .kernels import (UNDECLARED_GB_PER_100K, ResourcePool, _budget, concurrency,
-                          fingerprint_drift, fit_memory_model, tool_fingerprint,
+                          fingerprint_drift, fit_memory_model, fit_cores_model, fit_cost_model,
+                          tool_fingerprint,
                           demand, discover, guard_verdict, log_escape, schedule,
                           undeclared, unmet)
 
@@ -1159,6 +1160,21 @@ def _run(a):
               f"rather than each instance's own cost. A model fitted on it would be a "
               f"horizontal line through one number. Run one instance in a job to measure this "
               f"plugin's own demand.")
+    _cores_model, _cost_model = {}, {}
+    _meas_by = {}
+    for _pl in payloads:
+        _m = _pl.get("measured")
+        if isinstance(_m, dict) and _m.get("n_cells"):
+            _meas_by.setdefault(_pl["kernel"], []).append(_m)
+    for _n, _ms in sorted(_meas_by.items()):
+        _cm = fit_cores_model(_ms)
+        if _cm:
+            _cm["declared"] = ks[_n].executor.get("cores") if _n in ks else None
+            _cores_model[_n] = _cm
+        _co = fit_cost_model(_ms)
+        if _co:
+            _co["declared"] = ks[_n].executor.get("cost") if _n in ks else None
+            _cost_model[_n] = _co
     if memory_model:
         _floor_only = all(_m.get("basis") == ["the process's own floor"]
                           for _m in memory_model.values())
@@ -1264,6 +1280,10 @@ def _run(a):
                "design": {str(k): {str(f): str(v) for f, v in (r or {}).items()}
                           for k, r in (_dtab or {}).items()},
                "memory_model": memory_model,
+               # THE CORES AND THE COST, FITTED FROM THE SAME INSTANCES (harness ADR-0020,
+               # step 5): read back by `capacity --cores` and `--cost`, the way the memory
+               # model is by `--memory`.
+               "cores_model": _cores_model, "cost_model": _cost_model,
                "constraint_on_use": constraint, "constraint_source": csrc,
                "constraint_binds": _binds,
                "ran": ran, "skipped": skipped,
@@ -3532,6 +3552,124 @@ def _measured(run, declare=None):
     return rc
 
 
+def _cores_gate(run, declare=None):
+    """The cores a run measured, held against the plugin's declaration; `--declare` writes it.
+
+    A GATE WITH A WAY OUT, like `--memory` (harness ADR-0020, step 5): exits 0 only when the
+    plugin declares at least the measured peak, rounded up; `--declare <plugin>` writes that
+    number into the plugin's own line and reads it back.
+    """
+    import json as _json
+    import math as _math
+    from .kernels import discover, write_declared_scalar
+    from .declare import DeclarationError
+    rj = Path(run) / "report.json"
+    try:
+        doc = _json.loads(rj.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"scprofile: cannot read {rj}: {e}", file=sys.stderr)
+        return REFUSE
+    model = doc.get("cores_model") or {}
+    if not model:
+        print(f"{rj} records no cores model. A run measures each instance's own process tree's "
+              f"CPU beside its memory; this run recorded none - run it where /proc can be read, "
+              f"or with a tool that records wall and CPU time.")
+        return REFUSE
+    if declare and declare not in model:
+        print(f"scprofile: {declare!r} is not a plugin this run measured; it measured "
+              f"{', '.join(sorted(model))}", file=sys.stderr)
+        return REFUSE
+    ks = discover()
+    print(f"# cores measured in {Path(run).name}: the largest one-second reading of each "
+          f"instance's process tree, held against the declaration")
+    rc = 0
+    for name, m in sorted(model.items()):
+        peak, mean, pts = m.get("peak"), m.get("mean"), m.get("points")
+        want = int(_math.ceil(float(peak if peak is not None else mean or 1)))
+        declared = ks[name].executor.get("cores") if name in ks else m.get("declared")
+        print(f"# {name}: {pts} point(s), peak {peak} core(s), mean {mean}; to declare: "
+              f"\"cores\": {want},")
+        if declare == name:
+            k = ks.get(name)
+            if k is None:
+                print(f"scprofile: no plugin named {name!r} in this tree", file=sys.stderr)
+                return REFUSE
+            try:
+                write_declared_scalar(k.path, "cores", want, note=f"measured in {Path(run).name}")
+            except DeclarationError as e:
+                print(f"scprofile: {e}", file=sys.stderr)
+                return REFUSE
+            print(f"  declared \"cores\": {want} in {k.path}")
+            declared = want
+        try:
+            ok = declared is not None and int(declared) >= want
+        except (TypeError, ValueError):
+            ok = False
+        if ok:
+            print(f"  declared {declared}, at or above the measured {want}: answered")
+        else:
+            print(f"  declared {declared}, below the measured {want}: OWES. The way out is "
+                  f"`capacity --out {run} --cores --declare {name}`")
+            rc = REFUSE
+    return rc
+
+
+def _cost_gate(run, declare=None):
+    """The cost band a run measured, held against the plugin's declaration; `--declare` writes it.
+
+    Exits 0 when the plugin declares the measured band or a dearer one - a dearer declaration
+    only orders a wave more conservatively - and names the band otherwise.
+    """
+    import json as _json
+    from .kernels import COST_BANDS, Kernel, discover, write_declared_scalar
+    from .declare import DeclarationError
+    rj = Path(run) / "report.json"
+    try:
+        doc = _json.loads(rj.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"scprofile: cannot read {rj}: {e}", file=sys.stderr)
+        return REFUSE
+    model = doc.get("cost_model") or {}
+    if not model:
+        print(f"{rj} records no cost model: no instance recorded wall time over its cells.")
+        return REFUSE
+    if declare and declare not in model:
+        print(f"scprofile: {declare!r} is not a plugin this run measured; it measured "
+              f"{', '.join(sorted(model))}", file=sys.stderr)
+        return REFUSE
+    ks = discover()
+    bands = ", ".join(f"{b} <= {t:g} s" for b, t in COST_BANDS.items() if t != float("inf"))
+    print(f"# cost measured in {Path(run).name}: the median wall time per 100,000 cells at the "
+          f"cores each instance was given; bands {bands}, high above")
+    rc = 0
+    for name, m in sorted(model.items()):
+        band, rate, pts = m.get("band"), m.get("s_per_100k"), m.get("points")
+        declared = ks[name].executor.get("cost") if name in ks else m.get("declared")
+        print(f"# {name}: {pts} point(s), {rate} s per 100k cells -> {band}; to declare: "
+              f"\"cost\": \"{band}\",")
+        if declare == name:
+            k = ks.get(name)
+            if k is None:
+                print(f"scprofile: no plugin named {name!r} in this tree", file=sys.stderr)
+                return REFUSE
+            try:
+                write_declared_scalar(k.path, "cost", str(band), note=f"measured in {Path(run).name}")
+            except DeclarationError as e:
+                print(f"scprofile: {e}", file=sys.stderr)
+                return REFUSE
+            print(f"  declared \"cost\": \"{band}\" in {k.path}")
+            declared = band
+        order = Kernel.COST_ORDER
+        ok = (declared in order and band in order and order[declared] <= order[band])
+        if ok:
+            print(f"  declared {declared!r}, at or above the measured {band!r}: answered")
+        else:
+            print(f"  declared {declared!r}, below the measured {band!r}: OWES. The way out is "
+                  f"`capacity --out {run} --cost --declare {name}`")
+            rc = REFUSE
+    return rc
+
+
 def _promised(run):
     """Upstream plots a plugin DECLARES it draws and produced no file for, anywhere in the run.
 
@@ -3672,6 +3810,10 @@ def _capacity(a):
         return _promised(run)
     if getattr(a, "memory", False):
         return _measured(run, declare=getattr(a, "declare", None))
+    if getattr(a, "cores", False):
+        return _cores_gate(run, declare=getattr(a, "declare", None))
+    if getattr(a, "cost", False):
+        return _cost_gate(run, declare=getattr(a, "declare", None))
     now = _C.measure(run)
     _C.write(run)
     other = a.against
@@ -4061,10 +4203,18 @@ def main(argv=None):
                      help="instead: the memory model this run fitted, against what the plugin "
                           "declares. Exits 0 only when both terms are declared at or above the "
                           "fit; otherwise it names the way out")
+    cp_.add_argument("--cores", action="store_true",
+                     help="instead: the cores this run measured per plugin - the peak one-second "
+                          "reading of each instance's process tree - against what the plugin "
+                          "declares. Exits 0 only when the declaration is at or above it")
+    cp_.add_argument("--cost", action="store_true",
+                     help="instead: the cost band this run measured per plugin - the median wall "
+                          "time per 100,000 cells - against what the plugin declares. Exits 0 "
+                          "only when the declaration is that band or a dearer one")
     cp_.add_argument("--declare", metavar="PLUGIN", default=None,
-                     help="with --memory: write the fitted terms, with their headroom, into that "
-                          "plugin's own declaration and read them back. The measure stage's "
-                          "apply; nothing is pasted by hand")
+                     help="with --memory, --cores or --cost: write the measured value into that "
+                          "plugin's own declaration and read it back. The stage's apply; "
+                          "nothing is pasted by hand")
     cp_.add_argument("--promised", action="store_true",
                      help="instead: which upstream plots this run's plugins DECLARE they draw and "
                           "produced no file for, anywhere in the run")

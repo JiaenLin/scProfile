@@ -154,6 +154,51 @@ def _tree_gb(pid, proc="/proc", page=None):
     return total_kb / (1024.0 ** 2), ("pss" if pss_all else "rss")
 
 
+def _tree_cpu_s(pid, proc="/proc", tick=None):
+    """CPU seconds (user + system) of `pid` AND EVERY DESCENDANT, summed; None without /proc.
+
+    THE CORES A PLUGIN USES ARE A CLAIM UNTIL MEASURED (harness ADR-0020, step 5): `cores` was
+    declared, present-checked and sized waves for the whole life of the tool, and every status
+    printed it CHECKED BY NOBODY. The same walk of /proc that reads the tree's memory reads its
+    CPU time - fields 14 and 15 of `stat`, in clock ticks - and sampled each second the delta is
+    the cores the tree is using at that moment.
+    """
+    proc = Path(proc)
+    if not proc.is_dir():
+        return None
+    try:
+        tick = float(tick or os.sysconf("SC_CLK_TCK"))
+    except (AttributeError, ValueError, OSError):
+        tick = float(tick or 100.0)
+    parents, cpu = {}, {}
+    for d in proc.iterdir():
+        if not d.name.isdigit():
+            continue
+        try:
+            stat = (d / "stat").read_text()
+        except OSError:
+            continue
+        tail = stat[stat.rfind(")") + 2:].split()
+        if len(tail) < 13:
+            continue
+        try:
+            parents[int(d.name)] = int(tail[1])
+            cpu[int(d.name)] = (int(tail[11]) + int(tail[12])) / tick
+        except ValueError:
+            continue
+    root = int(pid)
+    if root not in parents:
+        return None
+    tree, grew = {root}, True
+    while grew:
+        grew = False
+        for child, parent in parents.items():
+            if parent in tree and child not in tree:
+                tree.add(child)
+                grew = True
+    return float(sum(cpu.get(m, 0.0) for m in tree))
+
+
 class _TreeSampler:
     """A daemon thread reading `_tree_gb` every `interval` seconds and keeping the peak.
 
@@ -167,6 +212,9 @@ class _TreeSampler:
         self.pid = int(pid or os.getpid())
         self.interval = float(interval)
         self.peak, self.basis, self.samples = None, "", 0
+        # THE CORES IN USE, SAMPLED WITH THE MEMORY (harness ADR-0020): the tree's CPU time
+        # read each second, its delta over the interval the cores the tree used then.
+        self.cores_peak, self.cpu_s, self._cpu_prev, self._t_prev = None, None, None, None
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._loop, daemon=True,
                                         name="scprofile-memory-sampler")
@@ -178,6 +226,17 @@ class _TreeSampler:
         self.samples += 1
         if self.peak is None or gb > self.peak:
             self.peak, self.basis = gb, basis
+        try:
+            import time as _time
+            cpu, now = _tree_cpu_s(self.pid), _time.monotonic()
+            if cpu is not None:
+                if self._cpu_prev is not None and now - self._t_prev >= 0.5:
+                    rate = (cpu - self._cpu_prev) / (now - self._t_prev)
+                    if self.cores_peak is None or rate > self.cores_peak:
+                        self.cores_peak = rate
+                self._cpu_prev, self._t_prev, self.cpu_s = cpu, now, cpu
+        except Exception:                                                 # noqa: BLE001
+            pass
         return True
 
     def _loop(self):
@@ -575,6 +634,15 @@ def main(argv):
     # floor below cannot.
     sampler = _TreeSampler().start()
     tree_peak, tree_basis, tree_n = None, "", 0
+    import time as _time_
+    _t0 = _time_.perf_counter()
+    try:
+        import resource as _res
+        _c0 = (_res.getrusage(_res.RUSAGE_SELF).ru_utime + _res.getrusage(_res.RUSAGE_SELF).ru_stime
+               + _res.getrusage(_res.RUSAGE_CHILDREN).ru_utime
+               + _res.getrusage(_res.RUSAGE_CHILDREN).ru_stime)
+    except Exception:                                                     # noqa: BLE001
+        _c0 = None
     try:
         if missing:
             ctx.status = "refused"
@@ -593,6 +661,16 @@ def main(argv):
                 ctx._dispose(log=log)
     finally:
         tree_peak, tree_basis, tree_n = sampler.stop()
+        _wall_s = _time_.perf_counter() - _t0
+        try:
+            import resource as _res
+            _cpu_s = (_res.getrusage(_res.RUSAGE_SELF).ru_utime + _res.getrusage(_res.RUSAGE_SELF).ru_stime
+                      + _res.getrusage(_res.RUSAGE_CHILDREN).ru_utime
+                      + _res.getrusage(_res.RUSAGE_CHILDREN).ru_stime) - (_c0 or 0.0)
+        except Exception:                                                 # noqa: BLE001
+            _cpu_s = None
+        if sampler.cpu_s is not None and (_cpu_s is None or sampler.cpu_s > _cpu_s):
+            _cpu_s = sampler.cpu_s                    # the tree's own count, where /proc reads
 
     # WHAT IT ACTUALLY COST, measured by the process that paid it. The allocator schedules on
     # memory and eight of nine plugins declare no rate, so it assumes one - and an assumption
@@ -648,6 +726,16 @@ def main(argv):
         # instead of silent.
         cg = _cgroup_peak_gb()
         ctx.measured = {"peak_rss_gb": round(peak_gb, 3), "n_cells": n,
+                        # THE CORES AND THE TIME, MEASURED (harness ADR-0020, step 5): wall
+                        # seconds, CPU seconds of self and every child, their ratio the mean
+                        # cores in use, and the sampler's peak where /proc could be read.
+                        "wall_s": round(float(_wall_s), 2),
+                        **({"cpu_s": round(float(_cpu_s), 2),
+                            "cores_mean": round(float(_cpu_s) / float(_wall_s), 2)}
+                           if _cpu_s is not None and _wall_s > 0 else {}),
+                        **({"cores_peak": round(float(sampler.cores_peak), 2)}
+                           if sampler.cores_peak is not None else {}),
+                        "cores_given": cores,
                         **({"cgroup_peak_gb": round(cg, 3)} if cg else {}),
                         # THE INSTANCE'S OWN TREE, where /proc could be read: the figure the
                         # fit uses (feedback.peak_measurement prefers it).
