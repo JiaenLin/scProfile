@@ -329,7 +329,7 @@ PLUGIN = {
 
     # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
     # Fitted from ten per-sample instances.
-    "memory_gb_base": 3.1, "memory_gb_per_100k": 5.7,
+    "memory_gb_base": 2.4, "memory_gb_per_100k": 14.3,  # measured in 20260913T042903Z__scprofile-c260046__04_profile__audit, +10%
 
     # WHAT ITS PAGE SHOULD CONTAIN. Three checks then two answers, and the order is the whole
     # point: every failure this method has returns a well-formed edge table, so the edge table on
