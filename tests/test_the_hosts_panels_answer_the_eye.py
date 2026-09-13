@@ -127,8 +127,12 @@ _pairs = [dd for c, dd in F.audit(fig) if c == "text_overlap"
           and sum(1 for n in POPS[:6] if n in dd) >= 2]
 ck("six labels on six points a few pixels apart no longer overlap each other", not _pairs,
    str(_pairs)[:300])
-ck("and none moved sideways - a label that drifts lands on a neighbour's point",
-   all(t.xyann[0] == 4 for t in ts), str([t.xyann for t in ts]))
+# A LABEL MOVES SIDEWAYS ONLY ON A LADDER, AND THEN IT CARRIES A LEADER LINE (harness ADR-0020):
+# the rule paid for in ADR-0019 was that a drifted label lands on a neighbour's point; a label
+# tied to its point by a line has not drifted.
+_leaders = getattr(fig, "_scprofile_leaders", {}) or {}
+ck("and none moved sideways without a leader line tying it to its point",
+   all(t.xyann[0] == 4 or id(t) in _leaders for t in ts), str([t.xyann for t in ts]))
 plt.close(fig)
 
 print("\nP1: the sentinel row is last, and its cells carry no data colour")
@@ -311,6 +315,88 @@ txt = texts_of(fig)
 ck("the panel says how much of the total the drawn bars carry", "%" in txt and "carry" in txt, txt[:300])
 ck("and how many pairs carry the rest", "the rest" in txt, txt[:300])
 plt.close(fig)
+
+def pipeline(fig, stamp="arm A   ·   2 samples pooled"):
+    """What the host does to a panel between the plugin's draw and the file: the column fit,
+    the stamp, the re-solve, the audit and the repairs - the geometry the eye sees."""
+    F.fit_column(fig)
+    t = fig.text(0.0, -0.006, stamp, ha="left", va="top", fontsize=5.2)
+    F.stamp_below(fig, t)
+    F.resolve_overlaps(fig)
+    _b, after, reps = F.audit_and_repair(fig)
+    fig.canvas.draw()
+    return after, reps
+
+
+def label_boxes(ax):
+    r = ax.figure.canvas.get_renderer()
+    return [(t, t.get_window_extent(r)) for t in ax.texts if str(t.get_text()).strip()]
+
+
+print("\nN3: the key for the crossed cells never sits on the cells")
+LONG = [f"Compartment/Lineage/Population {i}" for i in range(13)]
+d = Draw()
+e = edges_for(LONG, 0.4)
+NP.matrix(d, e, LONG, title="arm A")
+fig = d.figs["N3_matrix"][0]
+pipeline(fig)
+ax = fig.get_axes()[0]
+lg = ax.get_legend() or (fig.legends[0] if fig.legends else None)
+lb = lg.get_window_extent(fig.canvas.get_renderer()) if lg is not None else None
+ck("the matrix has its key", lg is not None)
+_r = fig.canvas.get_renderer()
+_others = [a.get_window_extent(_r) for a in fig.get_axes()] + \
+          [a.yaxis.label.get_window_extent(_r) for a in fig.get_axes()[1:]]
+ck("and the key's box overlaps neither the data area nor the colour bar and its title",
+   lb is not None and not any(lb.overlaps(b) for b in _others),
+   f"legend {lb} vs {[str(b) for b in _others if lb is not None and lb.overlaps(b)]}")
+plt.close(fig)
+
+print("\nN4: nine labels piled at the origin are laid out so every name can be read")
+d = Draw()
+NP.role_scatter(d, edges_for(POPS, strength=0.004), POPS, title="arm A", scale={"role": 6.0})
+fig = d.figs["N4_role"][0]
+after, reps = pipeline(fig)
+ax = fig.get_axes()[0]
+boxes = label_boxes(ax)
+pairs = [(a.get_text(), b.get_text()) for i, (a, ba) in enumerate(boxes)
+         for b, bb in boxes[i + 1:] if ba.overlaps(bb)]
+ck("nine labels within a corner of a shared scale no longer overlap one another", not pairs,
+   str(pairs)[:300])
+axb = ax.get_window_extent(fig.canvas.get_renderer())
+ck("and every label stays inside the axes", all(axb.contains(b.x0, b.y0) and axb.contains(b.x1, b.y1)
+                                                 for _t, b in boxes),
+   str([(t.get_text(), (round(b.x0), round(b.x1))) for t, b in boxes if not axb.contains(b.x1, b.y1)])[:300])
+plt.close(fig)
+
+print("\nC4: role-shift labels that crowd one region keep a gap between them")
+F.save = _capturing_save
+_GEOM = {}
+def _geom_save(fig, out_dir, name, **kw):
+    r = _orig_save(fig, out_dir, name, **kw)
+    if "C4_role" in name:
+        _GEOM["boxes"] = label_boxes(fig.get_axes()[0])
+    return r
+F.save = _geom_save
+try:
+    with tempfile.TemporaryDirectory() as td:
+        per = {"s1": edges_for(POPS, 0.02), "s2": edges_for(POPS, 0.021),
+               "s3": edges_for(POPS, 0.024), "s4": edges_for(POPS, 0.025)}
+        design = {"s1": {"age": "young"}, "s2": {"age": "young"}, "s3": {"age": "aged"}, "s4": {"age": "aged"}}
+        spec = ("age", "age", "young", "aged", {"age": "young"}, {"age": "aged"})
+        CP.draw_contrast(per, design, spec, Path(td), "p", weight="prob", group_col="pathway")
+finally:
+    F.save = _orig_save
+bx = _GEOM.get("boxes", [])
+gaps = []
+for i, (a, ba) in enumerate(bx):
+    for b, bb in bx[i + 1:]:
+        dx = max(ba.x0 - bb.x1, bb.x0 - ba.x1)
+        dy = max(ba.y0 - bb.y1, bb.y0 - ba.y1)
+        gaps.append((max(dx, dy), a.get_text(), b.get_text()))
+tight = [g for g in gaps if g[0] < 2.0]
+ck("the role-shift panel drew its labels", bool(bx), str(bx)[:100])
+ck("no two labels come within two pixels of each other", not tight, str(sorted(tight)[:4]))
 
 print("\n" + ("the host's panels answer the eye" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

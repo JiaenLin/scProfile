@@ -407,11 +407,11 @@ def matrix(ctx, edges, pops, *, fid="N3_matrix", title=None, note="", scale=None
                label="no edge returned for this pair")
     # THE CROSS IS DEFINED ON THE FIGURE (harness ADR-0019): the eye read a grey x on a whole
     # row and found nothing on the page saying what it meant.
-    if len(xs):
-        F.legend_outside(fig, ax, markerscale=1.0)
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
     cb.ax.tick_params(labelsize=6)
     cb.set_label("summed strength", fontsize=6)
+    if len(xs):
+        F.legend_outside(fig, ax, markerscale=1.0, above=cb.ax)
     if title:
         ax.set_title(title, fontsize=8)
 
@@ -614,14 +614,13 @@ def role_heatmap(ctx, edges, pops, group_col, *, fid="N6_role_heatmap", top=18, 
         ax.scatter(_xs, _ys, marker="x", s=8, linewidths=0.4, color="#B0B0B0", zorder=3,
                    label="no edge returned")
         # THE CROSS IS DEFINED ON THE FIGURE (harness ADR-0019), once, on the last panel.
-        if ax is axes[-1] or len(axes) == 1:
-            F.legend_outside(fig, ax, markerscale=1.0)
         ax.set_xticks(range(len(pops)), lab, rotation=90, fontsize=6)
         ax.set_title(what, fontsize=7)
     axes[0].set_yticks(range(len(groups)), [str(g) for g in groups], fontsize=6)
     cb = fig.colorbar(im, ax=axes, fraction=0.03, pad=0.02)
     cb.ax.tick_params(labelsize=6)
     cb.set_label("share of the row's own maximum", fontsize=6)
+    F.legend_outside(fig, axes[-1], markerscale=1.0, above=cb.ax)
     if title:
         fig.suptitle(title, fontsize=8)
 

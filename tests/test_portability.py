@@ -1585,8 +1585,8 @@ _after = _overlaps(_ax, _tx)
 ck("a clump of labels overlaps before decluttering", _before > 0, f"{_before} pairs")
 ck("and far fewer after", _after < _before, f"{_before} -> {_after} overlapping pairs")
 ck("it iterated rather than settling at once", _used > 1, str(_used))
-ck("labels keep their own x - only y moves, so none drifts onto a neighbour's point",
-   all(t.xyann[0] == 6 for t in _tx), str([t.xyann for t in _tx]))
+ck("labels keep their own x unless a ladder ties them to their point with a leader line",
+   all((t.xyann[0] == 6) or id(t) in (getattr(t.figure, '_scprofile_leaders', None) or {}) for t in _tx), str([t.xyann for t in _tx]))
 _plt.close(_f)
 
 _f2, _ax2 = _plt.subplots(figsize=(3, 3))

@@ -714,7 +714,7 @@ def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"),
     return entry
 
 
-def legend_outside(fig, ax, handles=None, labels=None, ncol=1, markerscale=2.5):
+def legend_outside(fig, ax, handles=None, labels=None, ncol=1, markerscale=2.5, above=None):
     """Legend to the right of the axes, never on top of the data.
 
     `markerscale` DEFAULTS TO 2.5 because a categorical key stands for dots drawn at s=2 or s=3,
@@ -725,9 +725,63 @@ def legend_outside(fig, ax, handles=None, labels=None, ncol=1, markerscale=2.5):
     """
     kw = dict(loc="center left", bbox_to_anchor=(1.02, 0.5), ncol=ncol,
               handletextpad=0.4, borderaxespad=0, markerscale=markerscale)
+    if above is not None:
+        # ABOVE A COLOUR BAR, NOT BESIDE THE AXES (harness ADR-0020, the second look's N3): a key
+        # to the right of a matrix landed on the colour bar that also lives there and read as a
+        # box drawn over the panel. The margin above the bar is free.
+        kw.update(loc="lower left", bbox_to_anchor=(0.0, 1.03), bbox_transform=above.transAxes)
     if handles is not None:
         return fig.legend(handles, labels, **kw)
     return ax.legend(**kw)
+
+def _ladder(ax, texts, *, pad=3.0):
+    """Lay a clump's labels out as a ladder with leader lines - only when the vertical solve left
+    an overlap or a label outside the axes, and only when the points really form a clump."""
+    fig = ax.figure
+    r = fig.canvas.get_renderer()
+    ann = [t for t in texts if hasattr(t, "xyann") and hasattr(t, "xy")]
+    if len(ann) < 4:
+        return False
+    boxes = [t.get_window_extent(r) for t in ann]
+    axb = ax.get_window_extent(r)
+    bad = any(boxes[i].overlaps(boxes[j]) for i in range(len(boxes)) for j in range(i + 1, len(boxes)))
+    out = any(not (axb.contains(b.x0, b.y0) and axb.contains(b.x1, b.y1)) for b in boxes)
+    leaders = getattr(fig, "_scprofile_leaders", None)
+    if leaders is None:
+        leaders = fig._scprofile_leaders = {}
+    if not (bad or out):
+        return False
+    pts = [ax.transData.transform(t.xy) for t in ann]
+    xs, ys = [q[0] for q in pts], [q[1] for q in pts]
+    if (max(xs) - min(xs)) > 0.35 * axb.width or (max(ys) - min(ys)) > 0.35 * axb.height:
+        return False                                  # not a clump: the ladder would mislead
+    h = max(b.height for b in boxes)
+    step = h + pad
+    order = sorted(range(len(ann)), key=lambda i: -ys[i])
+    span = step * (len(ann) - 1)
+    top = min(axb.y1 - h / 2.0 - pad, (max(ys) + min(ys)) / 2.0 + span / 2.0)
+    top = max(top, axb.y0 + span + h / 2.0 + pad)
+    x_lab = min(max(xs) + 12.0, axb.x1 - max(b.width for b in boxes) - pad)
+    for rank, i in enumerate(order):
+        t = ann[i]
+        y_lab = top - rank * step
+        ox = (x_lab - xs[i]) * 72.0 / fig.dpi
+        oy = (y_lab - ys[i]) * 72.0 / fig.dpi
+        t.set_position((ox, oy))
+        t.set_ha("left")
+        t.set_va("center")
+        ld = leaders.get(id(t))
+        if ld is None or ld.axes is not ax:
+            ld = ax.annotate("", xy=t.xy, xytext=(ox, oy), textcoords="offset points",
+                             annotation_clip=False, zorder=1,
+                             arrowprops=dict(arrowstyle="-", lw=0.45, color="#9A9A9A",
+                                             shrinkA=0.0, shrinkB=1.5))
+            leaders[id(t)] = ld
+        else:
+            ld.xyann = (ox, oy)
+    fig.canvas.draw()
+    return True
+
 
 def resolve_overlaps(fig):
     """Re-solve every declutter registered on `fig`, in the layout the figure will be SAVED in.
@@ -759,7 +813,7 @@ def resolve_overlaps(fig):
     return n
 
 
-def spread_labels(ax, texts, *, iterations=80, pad=1.2, clip=True, max_shift=14.0):
+def spread_labels(ax, texts, *, iterations=80, pad=3.0, clip=True, max_shift=14.0):
     """Nudge annotation labels apart, in DISPLAY space, until they stop overlapping.
 
     RADIAL OFFSET IS NOT ENOUGH WHERE IT MATTERS. Offsetting each label away from the centroid
@@ -792,8 +846,12 @@ def spread_labels(ax, texts, *, iterations=80, pad=1.2, clip=True, max_shift=14.
     return _separate(ax, texts, **opts)
 
 
-def _separate(ax, texts, *, iterations=80, pad=1.2, clip=True, max_shift=14.0):
-    """The separation itself. Shared by `spread_labels` and `resolve_overlaps`."""
+def _separate(ax, texts, *, iterations=80, pad=3.0, clip=True, max_shift=14.0):
+    """The separation itself. Shared by `spread_labels` and `resolve_overlaps`.
+
+    THE PAD IS THREE PIXELS (harness ADR-0020): at 1.2 the second look read role-shift labels
+    "crowding together, touching" - separated by the letter of the rule and not by the eye.
+    THE LADDER, when the vertical solve cannot clear a clump: see `_ladder`."""
     if not texts:
         return 0
     fig = ax.figure
@@ -821,7 +879,10 @@ def _separate(ax, texts, *, iterations=80, pad=1.2, clip=True, max_shift=14.0):
         for i in range(len(texts)):
             for j in range(i + 1, len(texts)):
                 bi, bj = boxes[i], boxes[j]
-                if not bi.overlaps(bj):
+                # TOUCHING IS OVERLAPPING (harness ADR-0020): two labels side by side with a
+                # pixel between them do not overlap and were left there; the eye read them as
+                # one. A box grown by half the pad on every side meets its neighbour first.
+                if not bi.padded(pad / 2.0).overlaps(bj.padded(pad / 2.0)):
                     continue
                 overlap = min(bi.y1, bj.y1) - max(bi.y0, bj.y0) + pad
                 if overlap <= 0:
@@ -853,6 +914,16 @@ def _separate(ax, texts, *, iterations=80, pad=1.2, clip=True, max_shift=14.0):
             ax.margins(y=max(ax.margins()[1], 0.12))
         except Exception:
             pass
+    # THE LADDER (harness ADR-0020, the second look's N4): nine labels on nine points within a
+    # corner of a shared scale were pushed apart vertically as far as the cap allowed and still
+    # ran into each other or out of the axes - a vertical nudge cannot clear a clump whose
+    # points share one small region. When overlaps or an escape remain, the set is laid out as
+    # a ladder to the right of the clump, evenly spaced and inside the axes, each label tied to
+    # its point by a thin leader line.
+    try:
+        _ladder(ax, texts, pad=pad)
+    except Exception:                                                     # noqa: BLE001
+        pass
     return used
 
 
@@ -887,7 +958,6 @@ _DECOR = ("tick", "title", "xlabel", "ylabel", "legend")
 
 #: Numeric tick text, including matplotlib's mathtext for a log axis.
 _NUMERIC = re.compile(r"^[-−+]?[\d.,]+%?$|^\$\\mathdefault\{10\^\{[-−]?\d+\}\}\$$")
-
 
 def _texts_of(fig, rend):
     """[(text, box, role)] - every text the audit polices, with WHAT each one is.
