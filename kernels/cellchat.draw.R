@@ -616,10 +616,10 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   fn = "showDatabaseCategory",
   device = "png",
   expr = quote({
- graphics::par(oma = c(0, 0, 3, 0))
- showDatabaseCategory(cc@DB)
- graphics::mtext("CellChat's reference database (not this dataset) - left to right: interaction type, heterodimer vs. other, evidence source",
- side = 3, outer = TRUE, cex = 0.75, font = 2, line = 0.5)
+ gg <- showDatabaseCategory(cc@DB)
+ print(gg)
+ grid::grid.text("CellChat's reference database (not this dataset) - left to right: interaction type, heterodimer vs. other, evidence source",
+ x = 0.5, y = 0.97, gp = grid::gpar(fontface = "bold", fontsize = 13))
  }),
   legend = "What is in the DATABASE, not what is in this object. The composition of the reference by interaction category - secreted signalling, extracellular-matrix receptor, and cell-cell contact. It describes the prior every inference on this page was drawn from, and it would look the same on any dataset.")
 .plan[["native_aggregate_circle"]] <- list(
@@ -785,7 +785,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   device = "ndev",
   at_most = 8,
   w = quote(1800),
-  h = quote(1300),
+  h = quote(1800),
   file = quote(paste0("chord_cell__", safe, "__", gsub("[^A-Za-z0-9]+", "_", names(object.list)[i]))),
   expr = quote(netVisual_chord_cell(object.list[[i]], signaling = pw, lab.cex = 0.45, small.gap = 1, big.gap = 8, title.name = paste(pw, names(object.list)[i]))),
   legend = "The {pw} pathway as a chord diagram, one per arm - one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning.")

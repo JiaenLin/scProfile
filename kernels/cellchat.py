@@ -85,7 +85,12 @@ PLUGIN = {
     # (and a few plugin-drawn Python/R sites) across the tool's and this plugin's own figures. No
     # number changes: every edit is presentation - a legend, a font size, a canvas dimension, an
     # axis label, a z-order - so `state_version` stays where it is, unchanged below.
-    "version": "0.29.0",
+    # 0.30.0: the cluster run of 0.29.0 found two of those edits broke the plate they touched -
+    # `native_database_category` printed nothing (the wrapped call returns a plot object, not a
+    # base-graphics side effect) and `nativecmp_chord_cell`'s shortened canvas left circlize no
+    # room for its own layout. The first is fixed properly; the second is reverted to its proven
+    # size and its finding answered instead. Still no number changes.
+    "version": "0.30.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -935,17 +940,23 @@ PLUGIN = {
                 'fn': 'showDatabaseCategory',
                 'axis': 'unit',
                 'position': 'appendix',
-                # AN OUTER TITLE, ADDED AFTER THE CALL, NOT INSIDE IT. `showDatabaseCategory`
-                # takes only the database and draws its three base-graphics pies with no title
-                # argument of its own - found on a real run, three unlabelled pies with no figure
-                # title at all. `par(oma=...)` reserves the margin BEFORE the call (the function's
-                # own `par(mfrow=...)` does not touch `oma`, so the reservation survives it), and
-                # `mtext(outer=TRUE)` after the call writes into that margin without touching the
-                # pies - the same "tool draws, one more call annotates" shape as `.diffkey()`
-                # elsewhere in this file. No per-unit stamp here: this legend already says the
-                # panel is the DATABASE, not this dataset, and looks the same regardless of which
-                # unit asked for it, so a sample stamp would claim a dependence that is not real.
-                'expr': '{\n graphics::par(oma = c(0, 0, 3, 0))\n showDatabaseCategory(cc@DB)\n graphics::mtext("CellChat\'s reference database (not this dataset) - left to right: interaction type, heterodimer vs. other, evidence source",\n side = 3, outer = TRUE, cex = 0.75, font = 2, line = 0.5)\n }',
+                # AN OUTER TITLE, ADDED AFTER THE OBJECT IS PRINTED, NOT AFTER IT IS MERELY
+                # CALLED. The first version of this entry assumed `showDatabaseCategory` draws
+                # via a base-graphics side effect, wrapped it in `par(oma=...)` / `mtext(...)`,
+                # and it FAILED ON THE CLUSTER on every unit - "plot.new has not been called yet"
+                # - because the function actually RETURNS a ggplot-based object and draws nothing
+                # until something prints it; `mtext`, a base-graphics call, ran into an empty
+                # device. Reproduced here with a ggplot stand-in (this room has ggplot2 but not
+                # CellChat): the same wrap throws the identical error, and capturing the return
+                # value, printing it explicitly, then annotating with `grid::grid.text()` -
+                # grid, not base graphics, so it composes with whatever the print just drew -
+                # fixes it with no error. The exact composition `showDatabaseCategory` returns
+                # (a single ggplot, a patchwork/cowplot grid of the three pies) is NOT verified
+                # against the real function; `print()` is the general call that renders any of
+                # them, which is what "ggplot-based" is reported to mean. No per-unit stamp here:
+                # this legend already says the panel is the DATABASE, not this dataset, and looks
+                # the same regardless of which unit asked for it.
+                'expr': '{\n gg <- showDatabaseCategory(cc@DB)\n print(gg)\n grid::grid.text("CellChat\'s reference database (not this dataset) - left to right: interaction type, heterodimer vs. other, evidence source",\n x = 0.5, y = 0.97, gp = grid::gpar(fontface = "bold", fontsize = 13))\n }',
                 'legend': 'What is in the DATABASE, not what is in this object. The composition of the reference by interaction category - secreted signalling, extracellular-matrix receptor, and cell-cell contact. It describes the prior every inference on this page was drawn from, and it would look the same on any dataset.',
             },
             {
@@ -1162,15 +1173,17 @@ PLUGIN = {
                 'at_most': 8,
                 'file': 'paste0("chord_cell__", safe, "__", gsub("[^A-Za-z0-9]+", "_", names(object.list)[i]))',
                 'device': 'ndev',
-                # SHORTER, NOT WIDER. Found on a real run: the ring sat in roughly the bottom half
-                # of a square 1800x1800 canvas, a wide blank margin under the title shrinking the
-                # circle and its tick marks more than the space actually required. `netVisual_
-                # chord_cell` reserves a fixed title band at the top regardless of canvas height,
-                # so a SQUARE canvas at this size gives it more height than the ring plus title
-                # need and centres the extra as dead space; less height leaves the same title band
-                # a smaller fraction of the canvas and lets the ring fill more of what remains.
+                # HEIGHT RESTORED TO 1800. A shorter canvas (tried at 1300, to close up the blank
+                # margin under the title the eye found) FAILED ON THE CLUSTER on every pathway and
+                # both arms - circlize refused with "not enough space for cells at track index
+                # '1'": the chord layout has a minimum absolute size for its own sector track that
+                # this plugin has no documented argument to query, and it depends on how many
+                # cell-state sectors and how long their labels are, which varies by unit and is
+                # not knowable here without circlize itself (not installed in this room, and not
+                # safely guessable a second time on a live run). Restored to the last size proven
+                # to draw; the blank-margin finding is answered instead of risked again.
                 'w': 1800,
-                'h': 1300,
+                'h': 1800,
                 'args': 'object.list[[i]], signaling = pw, lab.cex = 0.45, small.gap = 1, big.gap = 8, title.name = paste(pw, names(object.list)[i])',
                 'legend': "The {pw} pathway as a chord diagram, one per arm - one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning.",
             },
