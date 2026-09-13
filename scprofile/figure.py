@@ -767,6 +767,12 @@ def _separate(ax, texts, *, iterations=80, pad=1.2, clip=True, max_shift=14.0):
         # the whole panel, and the panel is the point.
         return 0
     used = 0
+    # THE CAP GROWS WITH THE CLUMP (harness ADR-0019, the eye on a role scatter and a role
+    # shift): nine labels on nine points in one corner of a shared scale cannot be separated
+    # within 14 points up or down, so they stayed on each other. The labels keep their own x -
+    # a label that drifts sideways lands on a neighbour's point, which is worse than an overlap
+    # - and spread into a column beside the clump, as far as the clump needs.
+    max_shift = max(float(max_shift), 4.0 * len(texts))
     for used in range(1, iterations + 1):
         try:
             boxes = [t.get_window_extent(r) for t in texts]
@@ -1320,6 +1326,13 @@ def audit_and_repair(fig, passes=REPAIR_PASSES):
         repairs.extend(did)
         try:
             fit_column(fig)
+        except Exception:                                                 # noqa: BLE001
+            pass
+        # AND THE REGISTERED LABEL SETS ARE RE-SOLVED (harness ADR-0019): a repair that moves
+        # one label off a tick can land it on a neighbour, and the plugins' own declutter is
+        # what puts a set right - it was run before this loop and never after a pass.
+        try:
+            resolve_overlaps(fig)
         except Exception:                                                 # noqa: BLE001
             pass
         found = audit_findings(fig)

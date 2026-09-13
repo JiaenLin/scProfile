@@ -488,6 +488,18 @@ def draw(per_sample, design, path, *, cells=None, width=None):
     # NO SUPTITLE. It wrapped and truncated at this width, and a figure that carries its own
     # explanation in raster text cannot be re-worded without redrawing it. The page states it
     # in the figcaption, where it is selectable, translatable and part of the prose budget.
+    # THE MARKER SIZE IS KEYED (harness ADR-0019): the difference column draws a marginal effect
+    # larger than a simple one and nothing on the figure said so.
+    try:
+        from matplotlib.lines import Line2D
+        fig.legend(handles=[Line2D([], [], marker="o", ms=6.0, color="#4E5B6E", mec="white",
+                                   mew=.6, lw=0, label="marginal effect (one factor, all arms)"),
+                            Line2D([], [], marker="o", ms=4.2, color="#4E5B6E", mec="white",
+                                   mew=.6, lw=0, label="simple effect (within one level)")],
+                   loc="lower right", bbox_to_anchor=(1.0, -0.02), fontsize=5.2, frameon=False,
+                   ncol=2, handletextpad=0.4)
+    except Exception:                                                     # noqa: BLE001
+        pass
     fig.tight_layout()
     try:
         F.fit_column(fig, target=width)

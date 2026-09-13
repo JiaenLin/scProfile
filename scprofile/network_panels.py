@@ -340,6 +340,15 @@ def chord(ctx, edges, pops, *, fid="N2_chord", keep=0.75, title=None, note=""):
         ax.set_title(title, fontsize=8)
 
     n_drawn, n_all = int(mask.sum()), int((w > 0).sum())
+    # THE WIDTH HAS A KEY ON THE FIGURE (harness ADR-0019): the caption said what a ribbon's
+    # width encodes and the picture did not, so lifted out of the page the ribbons were shapes.
+    try:
+        _wmax = float(w[mask].max()) if mask.any() else 0.0
+        ax.text(0.0, -1.30, f"ribbon width = pair strength; the widest here is {_wmax:.3g} "
+                            f"of a total of {float(grand):.3g}",
+                ha="center", va="top", fontsize=5.2, color="#5A5A5A")
+    except Exception:                                                     # noqa: BLE001
+        pass
     cap = (f"Inferred network as a chord diagram. Arc length is a population's total strength "
            f"in plus out - one tick is {_tick_val:.3g} - and a ribbon takes the SENDER's colour, "
            f"its width that pair's strength.",
@@ -394,7 +403,12 @@ def matrix(ctx, edges, pops, *, fid="N3_matrix", title=None, note="", scale=None
     ax.set_xlabel("receiver", fontsize=7)
     ax.set_ylabel("sender", fontsize=7)
     ys, xs = np.nonzero(zero)
-    ax.scatter(xs, ys, marker="x", s=14, linewidths=0.7, color="#9A9A9A", zorder=3)
+    ax.scatter(xs, ys, marker="x", s=14, linewidths=0.7, color="#9A9A9A", zorder=3,
+               label="no edge returned for this pair")
+    # THE CROSS IS DEFINED ON THE FIGURE (harness ADR-0019): the eye read a grey x on a whole
+    # row and found nothing on the page saying what it meant.
+    if len(xs):
+        F.legend_outside(fig, ax, markerscale=1.0)
     cb = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.03)
     cb.ax.tick_params(labelsize=6)
     cb.set_label("summed strength", fontsize=6)
@@ -597,7 +611,11 @@ def role_heatmap(ctx, edges, pops, group_col, *, fid="N6_role_heatmap", top=18, 
                            (axes[1], recv / rmax, recv <= 0, "as receiver")):
         im = ax.imshow(np.where(A, np.nan, M), cmap=_cm, vmin=0.0, vmax=1.0, aspect="auto")
         _ys, _xs = np.nonzero(A)
-        ax.scatter(_xs, _ys, marker="x", s=8, linewidths=0.4, color="#B0B0B0", zorder=3)
+        ax.scatter(_xs, _ys, marker="x", s=8, linewidths=0.4, color="#B0B0B0", zorder=3,
+                   label="no edge returned")
+        # THE CROSS IS DEFINED ON THE FIGURE (harness ADR-0019), once, on the last panel.
+        if ax is axes[-1] or len(axes) == 1:
+            F.legend_outside(fig, ax, markerscale=1.0)
         ax.set_xticks(range(len(pops)), lab, rotation=90, fontsize=6)
         ax.set_title(what, fontsize=7)
     axes[0].set_yticks(range(len(groups)), [str(g) for g in groups], fontsize=6)
@@ -773,6 +791,9 @@ def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, unit_member
     cyc = plt.rcParams["axes.prop_cycle"].by_key().get("color") or ["#4C72B0", "#DD8452"]
     col = {v: cyc[i % len(cyc)] for i, v in enumerate(order)}
     bar_c = [col.get(lev.get(u, ""), "#B0B0B0") for u in units]
+    # A BAR WITH NO LEVEL IS A DESIGN ARM POOLING SEVERAL (harness ADR-0019): it was grey and
+    # the legend named only the levels, so the eye asked what the grey bars were.
+    _pooled = any(not lev.get(u) for u in units)
 
     # THE SECOND SCALE, DRAWN ONLY WHERE THE SIZE IS KNOWN FOR EVERY UNIT. A per-observation
     # panel with gaps in it invites a comparison between a normalised bar and a raw one.
@@ -801,7 +822,10 @@ def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, unit_member
     axes[0].invert_yaxis()
     if order:
         from matplotlib.patches import Patch
-        axes[-1].legend(handles=[Patch(facecolor=col[v], label=f"{fac} = {v}") for v in order],
+        axes[-1].legend(handles=[Patch(facecolor=col[v], label=f"{fac} = {v}") for v in order]
+                                + ([Patch(facecolor="#B0B0B0",
+                                          label=f"pooled across {fac} (a design arm)")]
+                                   if _pooled else []),
                         fontsize=6, frameon=False, loc="lower right")
     fig.suptitle(title or f"How much network each unit carries", fontsize=8)
 
@@ -852,18 +876,25 @@ def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=Non
     units = _grp + [u for u in _all if u not in _grp]
     n_grp = len(_grp)
     labels = [l for l, _n in sorted((label_total or {}).items(), key=lambda kv: -kv[1])]
+    # A SENTINEL IS NOT A POPULATION (harness ADR-0019): ranked among the real ones by its cell
+    # count and coloured like them, the eye read it as the fourth-largest cell type. It goes
+    # last, under its own tint, and its cells carry no colour - the count is in the tick label.
+    _sent = {str(x) for x in (sentinels or ())}
+    labels = [l for l in labels if l not in _sent] + [l for l in labels if l in _sent]
     if len(units) < 2 or not labels:
         return False
 
     M = np.array([[float((label_by_unit.get(u) or {}).get(l, 0)) for u in units]
                   for l in labels])
     absent = M <= 0
+    _srow = np.array([l in _sent for l in labels])
+    absent = absent & ~_srow[:, None]
     thin = (M > 0) & (M < float(floor)) if floor else np.zeros_like(M, dtype=bool)
 
     short = F.short_labels(list(labels))
     fig, ax = plt.subplots(figsize=(F.DOUBLE, max(2.2, 0.22 * len(labels) + 1.3)),
                            layout="constrained")
-    shown = np.where(absent, np.nan, M)
+    shown = np.where(absent | _srow[:, None], np.nan, M)
     cmap = plt.get_cmap("viridis").copy()
     cmap.set_bad("white")
     lo = float(M[M > 0].min()) if (M > 0).any() else 1.0
@@ -888,8 +919,9 @@ def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=Non
     # population with an odd name. On the first real render `UNRESOLVED` and `EXCLUDED` sat in
     # the middle of the ordering between two genuine populations, ranked by cell count like
     # everything else. They are kept - they are cells and nothing here drops them - and marked.
-    _sent = {str(x) for x in (sentinels or ())}
-    _tick = [f"{short[l]}  (sentinel)" if l in _sent else short[l] for l in labels]
+    # `_sent` is computed above, before the rows are ordered.
+    _tick = [f"{short[l]}  (sentinel, {int((label_total or {}).get(l, 0)):,} cells, not a "
+             f"population)" if l in _sent else short[l] for l in labels]
     ax.set_yticks(range(len(labels)), _tick, fontsize=6)
     for i, l in enumerate(labels):
         if l in _sent:
