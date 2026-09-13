@@ -142,6 +142,18 @@ with tempfile.TemporaryDirectory() as td:
     ck("and so is the eye-marked one, with the words",
        bool(line1) and "open finding" in line1[0] and "which arm" in line1[0], str(line1))
 
+    print("\nthe next step never says 'write it' while the pen is blocked")
+    # FOUND ON THE FIRST REPLAY (blind 0005): `scprofile next` printed "NEXT: Write the result",
+    # a why saying seventy figures carried an open finding, and "do: write it". A blocked task's
+    # do is the wrong instruction; the next step is what unblocks it.
+    R.record(run, F2, NOTE_BAD + " here too", reviewer="looker-2", plugin="p", defect=True)
+    env = dict(os.environ, PYTHONPATH=str(ROOT))
+    pr = subprocess.run([sys.executable, "-m", "scprofile.cli", "next", "--out", str(run),
+                         "--plugin", "p"], capture_output=True, text=True, env=env, cwd=ROOT)
+    ck("the next line says BLOCKED", "BLOCKED" in pr.stdout, pr.stdout[-400:])
+    ck("and its do says what unblocks it, not 'write it'",
+       "look again" in pr.stdout and "do:  write it" not in pr.stdout, pr.stdout[-400:])
+
     print("\nwhen the findings clear, the pen opens")
     R.record(run, F1, NOTE_OK, reviewer="looker-3", plugin="p")
     run2 = make_run(Path(td) / "second", residue_on=())

@@ -115,7 +115,14 @@ def _read(p):
 
 
 def _field(text, key):
-    m = re.search(rf"^{re.escape(key)}\s*:\s*(.+)$", text, re.M)
+    """The value of `key` in a seal or marker file, written as `key: value` OR `key=value`.
+
+    THE SEAL'S OWN FIELDS ARE `key=value` (harness ADR-0018, found on a replay): the tool's
+    `run` writes `exit=0`, the cluster's job trap writes `exit=5`, and this read only the colon
+    form - so every seal described itself as "no exit recorded", on every run, since the seal
+    existed. Both forms are read; nothing that wrote a seal has to change.
+    """
+    m = re.search(rf"^{re.escape(key)}\s*[:=]\s*(.+)$", text, re.M)
     return m.group(1).strip() if m else ""
 
 

@@ -3044,7 +3044,10 @@ def _print_next(out, plugin=""):
                   f"run, and defended.")
             continue
         nxt = left[0]
-        print(f"\n  NEXT ({nm}): {nxt['title']}")
+        # A BLOCKED FIRST TASK IS SAID TO BE BLOCKED (harness ADR-0018): "NEXT: Write the
+        # result" over a why that named seventy open findings told a cold agent to write.
+        blocked = str(nxt.get("state")) == AG.BLOCKED
+        print(f"\n  NEXT ({nm}): {'BLOCKED at ' if blocked else ''}{nxt['title']}")
         print(f"      why: {nxt['why']}")
         for _h in nxt.get("how") or []:
             print(f"      {_h}")

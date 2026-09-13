@@ -108,6 +108,21 @@ print("\nA REMEMBERED JOB IS NOT A RUNNING JOB")
 # `qstat -x` answers for finished jobs too - that is what the flag is for - so reading any reply
 # as "still going" made a cancelled job report RUNNING. That is the worst answer this module can
 # give: a caller waiting on it waits for ever. Measured live before the fix, on job_state=F.
+# THE SEAL'S OWN FIELDS ARE `key=value` (harness ADR-0018, found on a replay): the tool's `run`
+# writes `exit=0`, the cluster's job trap writes `exit=5`, and this reader looked only for
+# `key: value` - so every seal read as "no exit recorded", on every run, since the seal existed.
+ck("a seal field written as key=value is read", WT._field("exit=5\njobid=123.sched\n", "exit") == "5",
+   repr(WT._field("exit=5\njobid=123.sched\n", "exit")))
+ck("and one written as key: value still is", WT._field("phase: run\nexit: 0\n", "exit") == "0")
+import tempfile as _tf2                                                          # noqa: E402
+from pathlib import Path as _P2                                                  # noqa: E402
+_d = _P2(_tf2.mkdtemp())
+(_d / "FAILED.txt").write_text("exit=5\njobid=123.sched\nrunkey=x\n", encoding="utf-8")
+(_d / "SEALED.txt").write_text("exit=0\nstatus=ok\ncommand=run\n", encoding="utf-8")
+_why = WT.describe(_d)
+ck("a job's FAILED.txt says the exit it recorded, not 'no exit recorded'",
+   "no exit recorded" not in _why and "5" in _why, _why)
+
 ck("the live set is stated positively, not as a blacklist", bool(WT.LIVE_STATES))
 for _s in ("R", "Q", "PENDING", "RUNNING"):
     ck(f"{_s} counts as still going", _s in WT.LIVE_STATES)

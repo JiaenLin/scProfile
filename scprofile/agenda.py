@@ -420,9 +420,16 @@ def tasks(run, plugin, spec=None, how=None):
           # figure after it - so a section written against one figure set and carried into a run
           # with another cites the wrong plates while reading perfectly. Fix the figures first,
           # re-run, and write against the set that will ship.
-          "do": "write it, then carry it in with the next task. If any figure is still to be "
-                "added or removed, do THAT first: the paper numbers figures in order, so changing "
-                "the set renumbers the citations of a section already written"},
+          # A BLOCKED TASK'S `do` IS WHAT UNBLOCKS IT, not the task (harness ADR-0018): the
+          # first replay printed "do: write it" under a why that said seventy figures carried
+          # an open finding, and a cold agent reads the do.
+          "do": ((f"fix the {len(openf)} figure(s) named above in the plan or the plugin, rerun, "
+                  f"and look again at what was redrawn; the pen waits. `scprofile review --out "
+                  f"{run} --plugin {plugin}` lists them with their findings")
+                 if openf else
+                 "write it, then carry it in with the next task. If any figure is still to be "
+                 "added or removed, do THAT first: the paper numbers figures in order, so changing "
+                 "the set renumbers the citations of a section already written")},
          {"id": "carry", "title": "Carry the written result into the run",
           "state": DONE if authored else BLOCKED,
           "why": "a section outside a run has no run key and its citations resolve to nothing; "
