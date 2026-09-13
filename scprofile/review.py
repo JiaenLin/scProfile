@@ -76,6 +76,11 @@ def ledger_path(out, plugin=""):
     return root / LEDGER
 
 
+#: The shape of a run key: a UTC stamp, the tool and its commit, then the stage and a slug -
+#: `20260913T133001Z__scprofile-b751000__04_profile__written`. A writing run is named like this.
+RUN_KEY_RE = re.compile(r"^\d{8}T\d{6}Z__[A-Za-z][\w]*-[0-9a-f]{7,}__")
+
+
 def sibling_runs(out):
     """Other RUN directories beside this one. A run is a directory carrying a `report.json`.
 
@@ -83,11 +88,46 @@ def sibling_runs(out):
     treating it as one carries looks between unrelated runs.
     """
     here = Path(out).resolve()
-    try:
-        return sorted(d for d in here.parent.iterdir()
-                      if d.is_dir() and d != here and (d / RUN_MARKER).is_file())
-    except OSError:
-        return []
+
+    def _stands_for(d):
+        """The run `d` is, or the one run a directory NAMED LIKE A RUN that is not one holds - a
+        writing run holding its replay (harness ADR-0020, step 4) - or None. Named like a run,
+        because a scratch folder holding one run is not a run's stand-in: read as one, it
+        carried looks between the unrelated runs of two tests."""
+        if (d / RUN_MARKER).is_file():
+            return d
+        if not RUN_KEY_RE.match(d.name):
+            return None
+        try:
+            kids = [k for k in d.iterdir() if k.is_dir() and (k / RUN_MARKER).is_file()]
+        except OSError:
+            return None
+        return kids[0] if len(kids) == 1 else None
+
+    def _beside(x, parent):
+        out_ = []
+        try:
+            entries = sorted(parent.iterdir())
+        except OSError:
+            return out_
+        for d in entries:
+            if not d.is_dir() or d == x or d == here:
+                continue
+            r = _stands_for(d)
+            if r is not None and r != here:
+                out_.append(r)
+        return out_
+
+    found = _beside(here, here.parent)
+    # A WRITING RUN STANDS FOR THE REPLAY IT HOLDS. The seal lays a run's replay under
+    # `<writing run>/replay/` beside nothing, so the looks that carry by content hash from the
+    # run beside were invisible there (blind 0006, both seals failed W3 on `looked_at`). When
+    # the parent is not a run and holds only this one, the parent's siblings are this run's -
+    # and no further: a lone run's grandparent is not a run root, and reading it would carry
+    # looks between unrelated runs.
+    if not found and _stands_for(here.parent) == here and here.parent.parent != here.parent:
+        found = _beside(here.parent, here.parent.parent)
+    return found
 
 
 def read_carried(out, plugin=""):

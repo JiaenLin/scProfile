@@ -212,6 +212,32 @@ with tempfile.TemporaryDirectory() as td:
     (b / F_TOOL).write_bytes(b"\x89PNG other bytes")
     ck("other bytes: the answer does not carry", F_TOOL not in R.answered(b, PLUG), str(R.answered(b, PLUG)))
 
+print("\na writing run stands for the replay it holds: looks carry into it and out of it")
+# FOUND BY THE WRITING SEALS OF BLIND 0006 (harness ADR-0020, step 4): the seal lays a run's
+# replay under `<writing run>/replay/`, beside nothing, so the 37 looks that carry by content
+# hash from the run beside were invisible there and the maker read `looked_at` owing on a run
+# every figure of which had been seen. A run's siblings are the runs under the nearest ancestor
+# that holds any, and a directory that is not a run but holds exactly one run stands for it.
+with tempfile.TemporaryDirectory() as td:
+    import shutil
+    a = make_run(td)                                                   # <root>/<key A>, a run
+    w = Path(td) / "20260102T000000Z__scprofile-abc1234__written"      # a writing run: not a run
+    w.mkdir()
+    shutil.copytree(a, w / "replay")                                   # ... holding one run
+    R.record(a, F_TOOL, NOTE_2, reviewer="looker-1", plugin=PLUG, defect=True)
+    R.answer(a, F_TOOL, ANSWER, by="author", plugin=PLUG)
+    ck("from inside the writing run, the run beside is a sibling",
+       [x.name for x in R.sibling_runs(w / "replay")] == [a.name], str(R.sibling_runs(w / "replay")))
+    ck("and the look carries in", {r: st for r, st, _w in R.status(w / "replay", PLUG)}.get(F_TOOL) in (R.CARRIED_OK, R.ANSWERED),
+       str({r: st for r, st, _w in R.status(w / "replay", PLUG)}.get(F_TOOL)))
+    ck("and the answer carries in", F_TOOL in R.answered(w / "replay", PLUG), str(R.answered(w / "replay", PLUG)))
+    R.record(w / "replay", F_PLUGIN, NOTE_1, reviewer="looker-2", plugin=PLUG)
+    ck("from the run beside, the writing run stands for its replay",
+       [x.name for x in R.sibling_runs(a)] == ["replay"] or any("replay" in str(x) for x in R.sibling_runs(a)),
+       str(R.sibling_runs(a)))
+    ck("and a look taken inside the writing run carries out",
+       {r: st for r, st, _w in R.status(a, PLUG)}.get(F_PLUGIN) == R.CARRIED_OK, str({r: st for r, st, _w in R.status(a, PLUG)}.get(F_PLUGIN)))
+
 print("\nthe stages say it: the audit's worksheet, and the answered figures the eye owes")
 dev = (ROOT / "DEVPOINTS.yaml").read_text(encoding="utf-8")
 aud = dev[dev.index("- name: audited"):dev.index("- name: written")]
