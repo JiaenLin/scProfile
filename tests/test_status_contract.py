@@ -73,6 +73,68 @@ with tempfile.TemporaryDirectory() as td:
        and json.loads(st.read_text())["refusal"]["fix"] and (out / "FAILED.txt").exists(), e.getvalue()[-300:])
     ck("no traceback", "Traceback" not in o.getvalue() + e.getvalue())
 
+print("\nthrough the CLI: a run in which no instance succeeded is failed, not ok")
+# PBS 711051 (harness blind 0006): every one of 18 instances failed in a second - no plugin
+# environment at the prefix it was given - and the run sealed SEALED, status ok, exit 0, headline
+# "kernels ran, results merged, report written", with a run card of zero instances. The report
+# named the absence ("NO OBJECT WRITTEN: no plugin ran") and the seal said the opposite; whichever
+# a reader opened was the answer. A run that ran nothing is not a run that ran.
+def _small_object(n=300, g=120, seed=0):
+    """The fixture's shape without scanpy: counts, a log-normalised X, two embeddings, a 2x2."""
+    import anndata as ad
+    import numpy as np
+    import pandas as pd
+    import scipy.sparse as sp
+    rng = np.random.default_rng(seed)
+    counts = rng.poisson(1.5, (n, g)).astype("float32")
+    X = np.log1p(counts / np.maximum(counts.sum(1, keepdims=True), 1) * 1e4)
+    A = ad.AnnData(X=sp.csr_matrix(X))
+    A.layers["counts"] = sp.csr_matrix(counts)
+    A.obs_names = [f"CELL{i:05d}" for i in range(n)]
+    A.var_names = [f"Gene{i}" for i in range(g)]
+    A.obs["cell_type"] = pd.Categorical(rng.choice(["Alpha", "Beta", "Gamma"], size=n))
+    A.obs["sample"] = pd.Categorical(rng.choice([f"S{i}" for i in range(1, 9)], size=n))
+    A.obs["group"] = pd.Categorical(np.where(A.obs["sample"].isin(["S1", "S2", "S3", "S4"]),
+                                             "control", "treated"))
+    A.obs["arm"] = pd.Categorical(np.where(A.obs["sample"].isin(["S1", "S2", "S5", "S6"]), "a", "b"))
+    u, sv, _vt = np.linalg.svd(X - X.mean(0), full_matrices=False)
+    A.obsm["X_scanvi"] = (u[:, :10] * sv[:10]).astype("float32")
+    A.obsm["X_umap"] = (u[:, :2] * sv[:2]).astype("float32")
+    A.uns["scintegrate"] = {"default_embedding": "X_scanvi",
+                            "constraint_on_use": "SYNTHETIC. No number here describes anything real."}
+    return A
+
+
+# Needs the array stack to write the object, so it is skipped where that is absent - and SAID
+# to be skipped, because a check that quietly does nothing reads as one that passed.
+try:
+    import anndata as _ad_probe                                                 # noqa: F401
+    import scipy.sparse as _sp_probe                                            # noqa: F401
+except ImportError as _e:                                                       # noqa: BLE001
+    print(f"  SKIP a run in which nothing ran: {_e} (this host has no array stack; the cluster runs it)")
+else:
+  with tempfile.TemporaryDirectory() as td:
+    fx = Path(td) / "fixture.h5ad"
+    _small_object().write_h5ad(fx)
+    out = Path(td) / "r"
+    o, e = io.StringIO(), io.StringIO()
+    with redirect_stdout(o), redirect_stderr(e):
+        try:
+            rc = cli.main(["run", "--h5ad", str(fx), "--out", str(out), "--kernel", "cellchat",
+                           "--prefix", str(Path(td) / "no_env_here"), "--no-cache"])
+        except SystemExit as ex:
+            rc = ex.code
+    st = out / "STATUS.json"
+    rec = json.loads(st.read_text()) if st.exists() else {}
+    ck("the run itself says no plugin ran", "no plugin ran" in o.getvalue() + e.getvalue(),
+       (o.getvalue() + e.getvalue())[-600:])
+    ck("exit is not 0", rc not in (0, None), f"rc={rc}")
+    ck("STATUS.json says failed and names what did not run",
+       rec.get("status") == "failed" and "ran" in str(rec.get("headline")).lower()
+       and "no plugin" in str(rec.get("headline")).lower(), str(rec.get("headline")))
+    ck("FAILED.txt, not SEALED.txt", (out / "FAILED.txt").exists() and not (out / "SEALED.txt").exists())
+    ck("no traceback", "Traceback" not in o.getvalue() + e.getvalue())
+
 print("\nevery shipped plugin declares state_version")
 for f in sorted((ROOT / "kernels").glob("*.py")):
     src = f.read_text(encoding="utf-8")

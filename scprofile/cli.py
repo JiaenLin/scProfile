@@ -1339,6 +1339,16 @@ def _run(a):
     # This is the one place that sees the finished output of a real run; a baseline recorded
     # only when someone remembers to type a command is a baseline nobody can be held to.
     _record_capacity(out)
+    # A RUN THAT RAN NOTHING IS NOT A RUN THAT RAN. PBS 711051 (harness blind 0006): every one
+    # of 18 instances failed in a second for want of an environment, the report named it ("NO
+    # OBJECT WRITTEN: no plugin ran"), and the seal said the opposite - SEALED, ok, exit 0,
+    # "kernels ran, results merged, report written" - so whichever file a reader opened was the
+    # answer. The report, the card and the capacity record above are still written, because they
+    # are how the failure is read; the verdict is the run's own and its seal says so.
+    if not ran:
+        print("scprofile: no plugin ran - every instance failed, refused or was skipped; "
+              "report.json records each and RUN_CARD.json carries no verdict", file=sys.stderr)
+        return 1
     return 0
 
 
