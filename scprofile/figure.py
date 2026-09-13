@@ -607,20 +607,38 @@ def check_written_width(path, want_in, *, log=None, dpi=None):
     return got, ok
 
 
-def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"), log=print):
+def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"), log=print,
+         stamp="", dpi=None, fit=True):
     """Write one figure in every requested format and return its manifest entry.
 
-    Returns {"path", "vector", "caption", "source"} - the shape `manifest.write_output` accepts
-    for a captioned figure. `source` is a path to the table the figure was drawn from; pass it,
-    because a figure whose numbers cannot be opened is a figure a reader has to take on trust.
+    Returns {"path", "vector", "caption", "source", "audit"[, "repairs"]} - the shape
+    `manifest.write_output` accepts for a captioned figure. `source` is a path to the table the
+    figure was drawn from; pass it, because a figure whose numbers cannot be opened is a figure
+    a reader has to take on trust.
+
+    THE ONE AUDITED SAVE (harness ADR-0019). The host's own panels - the arm networks through
+    `_Shim`, the contrast and interaction panels, the design panel - each ended in a plain
+    `savefig`: no column fit, no audit, no repair, a provenance stamp at a fixed y. A third of
+    the figures a run held were measured by nothing. `stamp` is the provenance line, placed from
+    the rendered box below everything else; `fit=False` is for a caller that fitted the column
+    itself to a width of its own.
     """
     d = Path(out_dir)
     d.mkdir(parents=True, exist_ok=True)
     # THE DECLARED WIDTH IS ENFORCED HERE, once, for every plugin - see `fit_column`.
-    try:
-        fit_column(fig)
-    except Exception:                                                     # noqa: BLE001
-        pass                       # a figure that will not measure is still a figure to write
+    if fit:
+        try:
+            fit_column(fig)
+        except Exception:                                                 # noqa: BLE001
+            pass                   # a figure that will not measure is still a figure to write
+    if stamp:
+        try:
+            t = fig.text(0.0, -0.006, str(stamp), ha="left", va="top", fontsize=5.2,
+                         color="#5A5A5A", transform=fig.transFigure)
+            t._scprofile_provenance = True
+            stamp_below(fig, t)
+        except Exception:                                                 # noqa: BLE001
+            pass                    # a stamp that will not draw must never lose the figure
     # THE SAME AUDIT AND THE SAME REPAIRS AS `emit_figure` (harness ADR-0018): two save paths,
     # one implementation, so a panel written here is measured and mended like every other.
     _audit, _repairs = [], []
@@ -630,14 +648,18 @@ def save(fig, out_dir, name, *, caption="", source=None, formats=("png", "pdf"),
     except Exception:                                                     # noqa: BLE001
         pass
     want_in = float(fig.get_size_inches()[0])
+    if dpi is None:
+        import matplotlib as _mpl
+        _d = _mpl.rcParams.get("savefig.dpi")
+        dpi = _d if isinstance(_d, (int, float)) else 200
     written = {}
     for ext in formats:
         f = d / f"{name}.{ext}"
-        fig.savefig(f, format=ext)
+        fig.savefig(f, format=ext, dpi=dpi, bbox_inches="tight")
         written[ext] = f
     # WHAT WAS WRITTEN, NOT WHAT WAS ASKED FOR. See `check_written_width`.
     if "png" in written:
-        check_written_width(written["png"], want_in, log=log)
+        check_written_width(written["png"], want_in, log=log, dpi=dpi)
     entry = {"path": str(written.get("png", list(written.values())[0])), "caption": caption}
     if "pdf" in written:
         entry["vector"] = str(written["pdf"])

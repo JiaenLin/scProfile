@@ -609,9 +609,11 @@ def _arm_appendix(name, content, plugin_arm_figs=()):
     # rendered `F | G | g1`, losing the one character that says which side is held fixed.
     # A label is cheap to carry and impossible to recover.
     by_contrast, by_arm, by_native = {}, {}, {}
-    for fid, path, cap, label in content["contrast"]:
+    for it in content["contrast"]:
+        fid, path, cap, label = it[:4]
         by_contrast.setdefault(label, []).append((fid, path, cap))
-    for fid, path, cap, label in content["arm"]:
+    for it in content["arm"]:
+        fid, path, cap, label = it[:4]
         by_arm.setdefault(label, []).append((fid, path, cap))
     for it in content.get("native") or ():
         by_native.setdefault(it[3], []).append(it)
@@ -1314,8 +1316,35 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi):
                                             if (lo and hi) else None))
         out.append((f"NC_{label}_{stem}", str(f),
                     (lead, rest + (f" {_sfx}" if _sfx else "")), str(label),
-                    str(f.relative_to(Path(out_dir)))))
+                    str(f.relative_to(Path(out_dir))),
+                    # WHO DREW IT AND THAT NOTHING MEASURED IT (harness ADR-0019): the
+                    # companion's own account, carried into panels.json so the loop's station
+                    # counts these plates as recorded rather than as nothing's.
+                    {"measured": False, "drawn_by": str(_leg.get("drawn_by") or "")}))
     return out
+
+
+#: THE DESIGN PANEL'S RECORD, drawn inside a block that returns HTML (harness ADR-0019): keyed
+#: by (out_dir, plugin) and taken by the page builder when it writes panels.json.
+_DESIGN_PLACED = {}
+
+
+def _panel_record(t, *, out_dir):
+    """One panels.json record from a placed tuple: id, path, caption, label - and, from a
+    trailing dict, what was measured (`audit`, `repairs`) or that nothing was (`measured`,
+    `drawn_by`) (harness ADR-0019). A tuple with nothing to say says nothing."""
+    rec = {"id": t[0], "path": str(Path(t[1]).relative_to(Path(out_dir))),
+           "caption": t[2], "label": t[3] if len(t) > 3 else ""}
+    extra = t[-1] if len(t) > 4 and isinstance(t[-1], dict) else {}
+    if extra.get("audit") is not None:
+        rec["audit"] = [dict(a) for a in extra["audit"] if isinstance(a, dict)]
+    if extra.get("repairs"):
+        rec["repairs"] = [dict(r) for r in extra["repairs"] if isinstance(r, dict)]
+    if extra.get("measured") is not None:
+        rec["measured"] = bool(extra["measured"])
+    if extra.get("drawn_by"):
+        rec["drawn_by"] = str(extra["drawn_by"])
+    return rec
 
 
 _FIG_CTX_CACHE = {}
@@ -1447,8 +1476,11 @@ def _units_by_arm(units, design, declared, *, out_dir=None, name=""):
             rel = f"kernels/{name}/figures/{name}_across_design.png"
             dest = Path(out_dir) / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            n_cmp = design_panel.draw(per_sample, design, dest)
+            n_cmp, _drec = design_panel.draw(per_sample, design, dest)
             if n_cmp:
+                _DESIGN_PLACED.setdefault((str(out_dir), name), []).append(
+                    ("across_design", dest, "Each measure per arm, across the design",
+                     "cohort", _drec))
                 dupes = sorted({a for f in _alias for a in (_alias.get(f) or [])})
                 return ("<h2>Across the design</h2><figure>"
                         f'<img src="../{rel}" alt="{_e(name)} across the design">'
@@ -1693,8 +1725,11 @@ def _by_arm_block(by_arm, *, aware, out_dir=None, name="", design=None):
             rel = f"kernels/{name}/figures/{name}_across_design.png"
             dest = Path(out_dir) / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            n_cmp = design_panel.draw(per_sample, design, dest)
+            n_cmp, _drec = design_panel.draw(per_sample, design, dest)
             if n_cmp:
+                _DESIGN_PLACED.setdefault((str(out_dir), name), []).append(
+                    ("across_design", dest, "Each measure per arm, across the design",
+                     "cohort", _drec))
                 return ("<h2>Across the design</h2><figure>"
                         f'<img src="../{rel}" alt="{_e(name)} across the design">'
                         f"<figcaption>Each measure per arm, across the design: {n_cmp} "
@@ -2344,13 +2379,13 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # them - the nine a reader meets first. A page's contents are a fact about the run and
     # belong beside it.
     def _rec(t):
-        return {"id": t[0], "path": str(Path(t[1]).relative_to(Path(out_dir))),
-                "caption": t[2], "label": t[3] if len(t) > 3 else ""}
+        return _panel_record(t, out_dir=out_dir)
 
     _placed = {"cohort": [_rec(t) for t in (locals().get("_inline") or [])
                           + ((locals().get("_arms") or {}).get("interaction") or [])
                           + ((locals().get("_arms") or {}).get("cohort") or [])
-                          + (locals().get("_presence_placed") or [])],
+                          + (locals().get("_presence_placed") or [])
+                          + _DESIGN_PLACED.pop((str(out_dir), name), [])],
                # THE TOOL'S OWN COMPARISON PANELS, recorded separately because a writing brief
                # must be able to tell them from the host's. They are on the arms page rather
                # than the first page, and a brief that only read `cohort` could not cite one.

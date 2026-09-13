@@ -254,22 +254,17 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
     slug = "".join(ch if ch.isalnum() else "_" for ch in label).strip("_")
 
     def _save(fig, fid, caption):
-        # THE STAMP, HERE TOO. `panels.R10` says a panel names on its face what it was drawn
-        # from, and the per-arm panels have done so since the stamp was added - but the CONTRAST
-        # panels save through this function rather than through the shim that stamps, so four
-        # host kinds shipped with nothing on them. Found by opening one and noticing the foot of
-        # the figure was empty where every neighbouring panel had a line.
-        try:
-            fig.text(0.0, -0.006,
-                     f"{label}   ·   {len(lo_m)} vs {len(hi_m)} samples, cells pooled per arm",
-                     ha="left", va="top", fontsize=5.2, color="#5A5A5A",
-                     transform=fig.transFigure)
-        except Exception:                                                 # noqa: BLE001
-            pass
-        p = Path(out_dir) / f"{prefix}_{fid}__{slug}.png"
-        fig.savefig(p, dpi=200, bbox_inches="tight")
-        plt.close(fig)
-        out.append((f"{fid}__{slug}", p, caption, label))
+        # THE STAMP, HERE TOO, and THE AUDIT (harness ADR-0019): the contrast panels saved with
+        # a plain `savefig` and were measured by nothing. One audited save for every host
+        # panel; the record beside the path carries what it measured and what it mended.
+        from . import figure as _F
+        entry = _F.save(fig, Path(out_dir), f"{prefix}_{fid}__{slug}", caption=caption,
+                        formats=("png",), dpi=200, log=lambda *a, **k: None,
+                        stamp=f"{label}   ·   {len(lo_m)} vs {len(hi_m)} samples, cells "
+                              f"pooled per arm")
+        p = Path(entry["path"])
+        out.append((f"{fid}__{slug}", p, caption, label,
+                    {"audit": entry.get("audit", []), "repairs": entry.get("repairs", [])}))
 
     arm_n = f"{lo_lv} (n={len(lo_m)}) vs {hi_lv} (n={len(hi_m)})"
     # WHAT THIS PARTICULAR CONTRAST CANNOT SEPARATE, on every panel it produces.
@@ -488,22 +483,25 @@ class _Shim:
 
     def emit_figure(self, fid, fig, caption="", source=None):
         from pathlib import Path
-        import matplotlib.pyplot as plt
+        # ONE AUDITED SAVE (harness ADR-0019): the arm networks the host draws through this
+        # shim were measured by nothing and stamped at a fixed y. `figure.save` fits the
+        # column, places the stamp from the rendered box, repairs what it can and records the
+        # rest; the record rides beside the path for `panels.json` and the loop's station.
         d = Path(self._out)
         d.mkdir(parents=True, exist_ok=True)
-        path = d / f"{self._prefix}_{fid}__{self._slug}.png"
+        stamp = ""
         if self._label:
             n = len(self._members)
             what = (f"design arm — {n} samples pooled" if n > 1
                     else "design arm — 1 sample" if n == 1 else "design arm")
-            try:
-                fig.text(0.0, -0.006, f"{self._label}   ·   {what}", ha="left", va="top",
-                         fontsize=5.2, color="#5A5A5A", transform=fig.transFigure)
-            except Exception:                                             # noqa: BLE001
-                pass
-        fig.savefig(path, dpi=200, bbox_inches="tight")
-        plt.close(fig)
-        self._collect.append((f"{fid}__{self._slug}", path, caption, self._label))
+            stamp = f"{self._label}   ·   {what}"
+        entry = self.figure.save(fig, d, f"{self._prefix}_{fid}__{self._slug}",
+                                 caption=caption, formats=("png",), dpi=200, stamp=stamp,
+                                 log=lambda *a, **k: None)
+        path = Path(entry["path"])
+        self._collect.append((f"{fid}__{self._slug}", path, caption, self._label,
+                              {"audit": entry.get("audit", []),
+                               "repairs": entry.get("repairs", [])}))
 
 
 def arms_in(design, pairs):
@@ -848,15 +846,14 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     ax.set_ylabel(f"{_u}   ({a0}→{a1})   |   {fb} = {b1}", fontsize=7)
     ax.tick_params(labelsize=6)
     ax.set_title(f"{fa} × {fb}", fontsize=8)
-    fig.text(0.0, -0.006,
-             f"{fa} x {fb} interaction   ·   4 arms, cells pooled within each",
-             ha="left", va="top", fontsize=5.2, color="#5A5A5A", transform=fig.transFigure)
-
     Path(out_dir).mkdir(parents=True, exist_ok=True)
     slug = f"{fa}__x__{fb}"
-    path = Path(out_dir) / f"{prefix}_C5_interaction__{slug}.png"
-    fig.savefig(path, dpi=200, bbox_inches="tight")
-    plt.close(fig)
+    # ONE AUDITED SAVE (harness ADR-0019), the stamp placed from the rendered box.
+    from . import figure as _F
+    _entry = _F.save(fig, Path(out_dir), f"{prefix}_C5_interaction__{slug}", formats=("png",),
+                     dpi=200, log=lambda *a, **k: None,
+                     stamp=f"{fa} x {fb} interaction   ·   4 arms, cells pooled within each")
+    path = Path(_entry["path"])
 
     # THE LEAD IS BUDGETED. The visible caption is capped at 45 words and the host spends about
     # eight of them, so a lead written as three explanatory sentences fails the page it is on.
@@ -892,7 +889,8 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     # from every interaction panel already written, and renaming files to tidy a label orphans
     # a run's whole figure set.
     from .design_panel import contrast_label as _label
-    return [(f"C5_interaction__{slug}", path, cap, _label(fa, None, other=fb))]
+    return [(f"C5_interaction__{slug}", path, cap, _label(fa, None, other=fb),
+             {"audit": _entry.get("audit", []), "repairs": _entry.get("repairs", [])})]
 
 
 def _unit_for(um, members):

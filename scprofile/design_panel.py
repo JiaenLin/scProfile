@@ -494,9 +494,14 @@ def draw(per_sample, design, path, *, cells=None, width=None):
     except Exception:                                                     # noqa: BLE001
         pass
     _dpi = matplotlib.rcParams.get("savefig.dpi")
-    fig.savefig(path, dpi=_dpi if isinstance(_dpi, (int, float)) else 400)
-    plt.close(fig)
-    return len(con)
+    # ONE AUDITED SAVE (harness ADR-0019): the design panel was measured by nothing. The
+    # column was fitted above to this panel's own width, so the save does not fit it again.
+    # Returns the count AND the record, so the reporter can place what was measured.
+    from pathlib import Path
+    _entry = F.save(fig, Path(path).parent, Path(path).stem, caption="the design panel",
+                    formats=("png",), dpi=_dpi if isinstance(_dpi, (int, float)) else 400,
+                    fit=False, log=lambda *a, **k: None)
+    return len(con), {"audit": _entry.get("audit", []), "repairs": _entry.get("repairs", [])}
 
 
 def contrast_label(factor, stratum=None, other=None):

@@ -184,6 +184,13 @@ def station_drawing(runs):
             drew_nothing = (f" — NOTE: this is not the newest run. "
                             f"{len(skipped)} newer run(s) drew no panels at all, starting with "
                             f"{skipped[0]}, so they prove nothing about the defects below")
+        # AND THE PANELS THE REPORTER PLACED (harness ADR-0019): the host's own panels and the
+        # compare phase's plates are recorded in report/panels.json with what was measured or
+        # that nothing was, so a third of the figures no longer read as nothing's.
+        for _pl in (_load(r / "report" / "panels.json") or {}).values():
+            if isinstance(_pl, dict):
+                for _lst in _pl.values():
+                    figs += [x for x in (_lst or []) if isinstance(x, dict) and x.get("path")]
         audited = [f for f in figs if "audit" in f]
         if not audited:
             return BLOCKED, (f"{r.name}: no panel carries a drawing audit — this run predates "
