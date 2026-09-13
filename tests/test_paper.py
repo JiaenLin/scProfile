@@ -39,6 +39,18 @@ figs.mkdir(parents=True)
 A, B = "kernels/k/figures/a.png", "kernels/k/figures/b.png"
 GOOD = "The share of one pathway rises in one arm and falls in the other, by about nine points"
 
+print("a citation that is not a run-relative path is refused with the form named")
+# HARNESS ADR-0020, blind 0007: the brief and the page number the figures 1-90 and the writer
+# cited "15,16,17"; the refusal said only "no such figure in this run: 15, 16, 17", and the
+# writer found the form in the flag's help. A refusal names the form.
+_m = ""
+try:
+    PA.claim(root, GOOD, ["15", "16"], author="w", plugin="k")
+except PA.Refused as e:
+    _m = str(e)
+ck("the refusal names the run-relative path as the form, and the list that holds them",
+   "no such figure in this run" in _m and "run-relative" in _m and "FIGURES.txt" in _m, _m)
+
 print("one brief: `paper --brief` prints the brief the reporter writes, never a second one")
 # HARNESS ADR-0017. `paper.brief` composed a brief of its own beside `scprofile write`'s
 # WRITING_BRIEF.md, and the two named different figure sets and different next commands; an

@@ -168,7 +168,13 @@ def claim(out, text, cites, *, author="", plugin=""):
                       "it is not a test of the figure set.")
     missing = [c for c in cites if not (root / c).is_file()]
     if missing:
-        raise Refused(f"no such figure in this run: {', '.join(missing)}")
+        # THE REFUSAL NAMES THE FORM (harness ADR-0020, blind 0007): the brief and the page
+        # number the figures, a writer cited "15,16,17", and this said only that no such
+        # figure exists. A figure is cited by its run-relative path.
+        raise Refused(f"no such figure in this run: {', '.join(missing)}. A figure is cited by "
+                      f"its run-relative path (kernels/<plugin>/figures/<file>.png), as "
+                      f"kernels/<plugin>/FIGURES.txt and the brief list them - not by the "
+                      f"number the page gives it.")
     # A CLAIM CANNOT REST ON A PLATE THE RUN'S OWN RECORD CALLS WRONG (harness ADR-0018).
     # Blind 0004 wrote claims on two-panel heatmaps its own lookers had condemned an hour
     # earlier, and the reviewer withdrew them for the lookers' reason. The eye comes first.
