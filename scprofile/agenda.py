@@ -271,6 +271,24 @@ def _authored(run, plugin):
     return True, bool(head) and not head.startswith(C.COMPOSED_MARK)
 
 
+def _refreshed(brief, run, plugin, spec, B):
+    """True when a brief is on disk - rewritten from the run first, so what the reader is sent
+    to is current.
+
+    THE AGENDA SENDS THE READER TO THE FILE (harness ADR-0020, blind 0007): its first step
+    names the brief on disk, and that brief was written at report time; on the second rerun it
+    read 6 of 90 figures flagged while the ledger held 31. `paper --brief` rewrites the brief
+    before printing it for the same reason; the agenda leaves a fresh one where it points.
+    """
+    if not brief.is_file():
+        return False
+    try:
+        B.write_brief(run, plugin, spec=spec)
+    except Exception:                                                     # noqa: BLE001
+        pass
+    return brief.is_file()
+
+
 def tasks(run, plugin, spec=None, how=None):
     """[{id, title, state, why, do}] - the whole cycle, in order, with the state of each.
 
@@ -373,7 +391,8 @@ def tasks(run, plugin, spec=None, how=None):
                 f"at least {ACCOUNT_WORDS} words, one line per finding. `scprofile capacity "
                 f"--out {run}` prints the numbers behind them."},
          {"id": "brief", "title": "Read the writing brief",
-          "state": DONE if brief.is_file() else (PENDING if started else BLOCKED),
+          "state": DONE if _refreshed(brief, run, plugin, spec, B) else (PENDING if started
+                                                                        else BLOCKED),
           "why": "the evidence this result is written from, with every number's file named",
           "do": f"scprofile write --out {run} --plugin {plugin}"},
          {"id": "look",

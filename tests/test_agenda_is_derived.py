@@ -229,4 +229,41 @@ if FAILURES:
     for f in FAILURES:
         print("  -", f)
     sys.exit(1)
+# THE BRIEF IS REFRESHED WHEN THE AGENDA NAMES IT (harness ADR-0020, blind 0007, the writer's
+# first defect): the agenda's first step is "read the writing brief" and names the file; the
+# file on disk was written at report time and read 6 of 90 figures flagged when the run's own
+# ledger held 31. `paper --brief` already rewrites it before printing; the agenda, which sends
+# the reader to the file, must leave a fresh one there.
+from scprofile import brief as _BR
+with tempfile.TemporaryDirectory() as td:
+    run = Path(td) / "runY"
+    (run / "kernels" / "p" / "figures").mkdir(parents=True)
+    (run / "report.json").write_text('{"kernels": {"p": {}}}', encoding="utf-8")
+    _f = run / "kernels" / "p" / "WRITING_BRIEF.md"
+    _f.write_text("# Writing brief - p\nstale\n", encoding="utf-8")
+    _calls = []
+    def _fresh(run_, plugin, spec=None, design=None):
+        _calls.append(plugin)
+        f = Path(run_) / "kernels" / plugin / "WRITING_BRIEF.md"
+        f.write_text("# Writing brief - p\nfresh\n", encoding="utf-8")
+        return f
+    _orig = _BR.write_brief
+    _BR.write_brief = _fresh
+    try:
+        st = {t["id"]: t["state"] for t in AG.tasks(run, "p", how=AG.PBS)}
+    finally:
+        _BR.write_brief = _orig
+    check(st.get("brief") == AG.DONE, "a brief on disk does not read as done: %r" % st.get("brief"))
+    check(_calls == ["p"] and "fresh" in _f.read_text(encoding="utf-8"),
+          "the agenda names the brief without refreshing it: calls=%r, on disk %r"
+          % (_calls, _f.read_text(encoding="utf-8")[:40]))
+
+# A SUITE THAT PRINTS ok WHATEVER ITS CHECKS FOUND IS NOT A SUITE: this one collected FAILURES
+# and never read them (found when a new check passed on the first run against the defect it
+# was written for).
+if FAILURES:
+    print("FAIL")
+    for f in FAILURES:
+        print("  -", f)
+    sys.exit(1)
 print("ok - state is derived from artifacts, blocked tasks are blocked, composed is not written")
