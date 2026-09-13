@@ -260,6 +260,20 @@ def station_drawing(runs):
                  f"A class that is general belongs in the repertoire (scprofile/figure.py); "
                  f"one that is this panel's belongs in the plan or the plugin"
                  + (f". AND THE EYE'S: {eye_named}" if eye else ""))
+        # THE EYE BEFORE THE PEN, HERE TOO (harness ADR-0019, found on the rerun of blind 0006):
+        # the branch for open findings sat before the branch for an unlooked scan set, so a rerun
+        # carrying 17 findings on unchanged images and 0 of 93 looks was told to answer the
+        # worksheet before anyone had looked at what the author redrew. While the scan set has a
+        # figure without a look, the next step is the look; the worksheet is for what survives it.
+        if want - seen:
+            plugs = plugins_in(r)
+            return BLOCKED, (f"{r.name}: no drawing issue remains after {mended}{eyes}; {looked} — "
+                             f"the audit is not clean until the eye has"
+                             + um + drew_nothing), \
+                (f"look at the scan set first: scprofile review --out {r} --plugin "
+                 f"{plugs[0] if plugs else '<plugin>'} --shards N, and record each look "
+                 f"(--defect where the panel must change)"
+                 + (f"; the findings that carry over wait for it: {eye_named}" if eye else ""))
         if eye:
             plugs = plugins_in(r)
             return BLOCKED, (f"{r.name}: no drawing issue remains after {mended}{eyes}; "
@@ -267,14 +281,6 @@ def station_drawing(runs):
                 (f"ANSWER THE WORKSHEET, one kind at a time - scprofile review --out {r} "
                  f"--plugin {plugs[0] if plugs else '<plugin>'} --worksheet - then rerun and "
                  f"look again at what was redrawn or answered: {eye_named}")
-        if want - seen:
-            plugs = plugins_in(r)
-            return BLOCKED, (f"{r.name}: no drawing issue remains after {mended}; {looked} — "
-                             f"the audit is not clean until the eye has"
-                             + um + drew_nothing), \
-                (f"look at the scan set first: scprofile review --out {r} --plugin "
-                 f"{plugs[0] if plugs else '<plugin>'} --shards N, and record each look "
-                 f"(--defect where the panel must change)")
         # A CLEAN RUN IS NOT A CLEAN BUILD. The same commit drew the same panels from the same
         # data twice and produced five text collisions once and none the next time - neither run
         # adopted anything, so both drew afresh. A mechanical defect that comes and goes is

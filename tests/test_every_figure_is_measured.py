@@ -151,5 +151,33 @@ with tempfile.TemporaryDirectory() as td:
     ck("and nothing is recorded by nothing", "0 recorded by nothing" in detail, detail)
     ck("the host's repairs are counted", "the host repaired 1 on 1 panel(s)" in detail, detail)
 
+print("\nthe eye before the pen: a rerun with carried findings and an unlooked scan set is looked at first")
+# FOUND ON THE RERUN OF BLIND 0006: the station read "17 eye finding(s) ... the eye has looked at
+# 0 of 93" and told the agent to ANSWER THE WORKSHEET - the branch for open findings came before
+# the branch for an unlooked scan set, so the pen was named before the eye had looked at what
+# the author redrew. The loop's order is the eye first: while the scan set has figures without a
+# look, the next step is the look; the worksheet is for what survives it.
+with tempfile.TemporaryDirectory() as td:
+    run = Path(td) / "20260101T000000Z__scprofile-abc1234__stage"
+    figdir = run / "kernels" / "k" / "figures"
+    figdir.mkdir(parents=True)
+    for f in ("F1", "F2_redrawn"):
+        (figdir / f"{f}.png").write_bytes(b"\x89PNG" + f.encode())
+    (run / "report.json").write_text(json.dumps({"kernels": {"k": {"figures": [
+        {"id": "F1", "path": "kernels/k/figures/F1.png", "audit": []},
+        {"id": "F2_redrawn", "path": "kernels/k/figures/F2_redrawn.png", "audit": []}]}}}))
+    (run / "kernels" / "k" / "FIGURES.txt").write_text("kernels/k/figures/F1.png\nkernels/k/figures/F2_redrawn.png\n")
+    import hashlib
+    led = run / "kernels" / "k" / "FIGURE_REVIEW.jsonl"
+    led.write_text(json.dumps({"figure": "kernels/k/figures/F1.png",
+                               "sha256": hashlib.sha256(b"\x89PNGF1").hexdigest(),
+                               "note": "the key names no unit and the bars cannot be read",
+                               "reviewer": "l", "at": "2026-01-01T00:00:00Z", "defect": True}) + "\n")
+    state, detail, nxt = L.station_drawing([run])
+    ck("the station names the carried finding and the unlooked figure",
+       "1 eye finding(s)" in detail and "looked at 1 of 2" in detail, detail)
+    ck("and the next step is the look, not the worksheet", nxt.startswith("look at the scan set first"),
+       nxt[:160])
+
 print("\n" + ("every figure is measured" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
