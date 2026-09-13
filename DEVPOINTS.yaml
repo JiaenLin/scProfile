@@ -449,7 +449,9 @@ points:
             verdict the next stage reads. A sealed run is read through its writing replay (the
             run's light half, copied writable under the same run key); record against the
             replay. A look is bound to the image's digest, so scan the whole set on one build
-            before fixing anything
+            before fixing anything. After a rerun the review command lists only what was
+            redrawn, and any figure the author ANSWERED rather than changed: a fresh look on the
+            same image settles an answer, the author's word alone does not (harness ADR-0019)
           why: >
             THE GOAL OF THE LOOP, AND IT COMES BEFORE THE AUDIT'S VERDICT AND THE PEN. Every
             figure defect this tool has had was found by opening the image while the suite was
@@ -458,6 +460,11 @@ points:
           phase: test
           fills: []
           command: ["{python}", "tests/loop_stations.py", "--run", "{run}", "--station", "6b"]
+          # THE WORKSHEET THAT ANSWERS IT (harness ADR-0019): what only the author can answer,
+          # printed from the run - the maker runs it on `--worksheet` and names it for the
+          # owing stage.
+          worksheet: ["{python}", "-m", "scprofile.cli", "review", "--out", "{run}", "--plugin",
+                      "{name}", "--worksheet"]
           finished_by: >
             the host repairs what its repertoire answers where the panel is written - a tick
             over a tick, an axis over an axis, a label over a legend, its own stamp - and the
@@ -467,9 +474,16 @@ points:
             this panel's belongs in the plan entry or the plugin. AND THE EYE'S FINDINGS ARE
             READ HERE: a look marked `--defect` is this stage's debt beside the machine's,
             named with the looker's words, and a scan set nobody has looked at is not a clean
-            audit. Fix in the plan or the plugin, rerun, look again at what was redrawn. The
-            pen waits on this stage: the agenda's write task, `scprofile next` and `paper
-            --claim` refuse a figure with an open finding
+            audit. THE LOOP (harness ADR-0019): `scprofile review --out RUNDIR --plugin
+            <plugin> --worksheet` groups the open findings by kind and names each kind's owner
+            - the host's own panel (the host fixes it), the tool's plate (the plan entry's
+            arguments, size, legend) or the plugin's own drawing (its file and line); answer
+            each kind once - edit and bump `version`, or `review --figure F --answer "why"
+            --reviewer <you>` for a plate the upstream draws as it should; then the rerun is the
+            maker's emitted job (`sch dev job --ref RUNDIR --redraw ...`); then look again, only at
+            what was redrawn or answered - looks on unchanged images carry. The
+            pen waits on this stage: the agenda's write task, `scprofile next`, `paper --claim`
+            and `paper --write` refuse a figure with an open finding
           why: >
             what a machine can see wrong in the panels after the host mended what it could, and
             how many panels no machine looked at. A panel the wrapped tool draws in R passes

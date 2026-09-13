@@ -116,6 +116,14 @@ REVIEWED, STALE, UNREVIEWED = "reviewed", "stale", "unreviewed"
 #: review is bound to the bytes, and these are the same bytes - but it is named differently so a
 #: reader can tell a look taken here from one carried in.
 CARRIED_OK = "reviewed (carried)"
+#: A figure the eye marked, the author answered, and a looker has not looked at again.
+ANSWERED = "answered - needs a look"
+
+#: The host's own composed panels, by the ids the reporter gives them (harness ADR-0019): the
+#: network kinds, the contrast kinds, the presence and totals panels, the design grid. A finding
+#: on one of these is the host's debt, fixed in the module named, with nothing to paste.
+_HOST_PANELS = {"N": "network_panels", "C": "compare_panel", "P": "network_panels",
+                "across_design": "design_panel"}
 
 
 def digest(path):
@@ -154,7 +162,30 @@ def read_ledger(out, plugin=""):
             rec = json.loads(line)
         except ValueError:
             continue
-        if isinstance(rec, dict) and rec.get("figure"):
+        if isinstance(rec, dict) and rec.get("figure") and not rec.get("answer"):
+            seen[str(rec["figure"])] = rec
+    return seen
+
+
+def read_answers(out, plugin=""):
+    """{relpath: latest answer record} - what the author said about a figure that should stay.
+
+    KEPT APART FROM THE LOOKS (harness ADR-0019): an answer is not a look, and the latest look
+    per figure must stay the eye's. An answer record carries `answer`, `by`, `sha256`, `at`.
+    """
+    f = ledger_path(out, plugin)
+    seen = {}
+    if not f.exists():
+        return seen
+    for line in f.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(rec, dict) and rec.get("figure") and rec.get("answer"):
             seen[str(rec["figure"])] = rec
     return seen
 
@@ -195,6 +226,59 @@ def record(out, figure, note, *, reviewer="", plugin="", defect=False):
     ledger_path(root, plugin).parent.mkdir(parents=True, exist_ok=True)
     _append_line(ledger_path(root, plugin), json.dumps(rec))
     return rec
+
+
+def answer(out, figure, why, *, by="", plugin=""):
+    """Record why a figure the eye marked should stay as it is. Returns the record.
+
+    THE ANSWER PATH (harness ADR-0019). A colour key that reads min and max by the upstream's
+    design, a ribbon with no numeric width in any version of the tool: the loop's rule is that
+    every finding becomes a change, and the only way to make one not happen is a later look on
+    the same bytes - which the author is not entitled to give. So the author answers, the
+    finding stays open, and the review's outstanding list sends the figure back to a LOOKER,
+    whose fresh look on the same bytes settles it. Refuses an answer with no reason or no name.
+    """
+    root = Path(out)
+    rel = str(figure)
+    path = root / rel
+    if not path.is_file():
+        raise Refused(f"no such figure in this run: {rel}")
+    text = " ".join(str(why or "").split())
+    if len(text.split()) < MIN_NOTE_WORDS * 2:
+        raise Refused(f"an answer of {len(text.split())} word(s) is not a reason. Say why this "
+                      f"panel stays as it is - what the upstream draws by design, where the "
+                      f"numbers are - in at least {MIN_NOTE_WORDS * 2} words.")
+    who = str(by or "").strip()
+    if not who:
+        raise Refused("an answer needs a name: --reviewer <who answered>. A looker reads it "
+                      "and must know whose it is.")
+    rec = {"figure": rel, "sha256": digest(path), "answer": text, "by": who,
+           "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    ledger_path(root, plugin).parent.mkdir(parents=True, exist_ok=True)
+    _append_line(ledger_path(root, plugin), json.dumps(rec))
+    return rec
+
+
+def answered(out, plugin=""):
+    """{relpath: answer record} - figures whose OPEN defect carries a later answer, same bytes."""
+    root = Path(out)
+    ans = read_answers(out, plugin)
+    if not ans:
+        return {}
+    looks = read_ledger(out, plugin)
+    open_ = {rel for rel, _n, _w, _r in defects(out, plugin)}
+    out_ = {}
+    for rel, rec in ans.items():
+        if rel not in open_:
+            continue                       # settled by a look, or never marked
+        now = digest(root / rel)
+        if now and rec.get("sha256") and now != rec["sha256"]:
+            continue                       # the answer was about other bytes
+        look = looks.get(rel) or {}
+        if str(look.get("at") or "") > str(rec.get("at") or ""):
+            continue                       # a looker marked it again after the answer
+        out_[rel] = rec
+    return out_
 
 
 #: How long to wait for another writer's append, and when to treat its lock as abandoned.
@@ -264,8 +348,16 @@ def status(out, plugin=""):
     """[(relpath, state, why)] for every figure, sorted. `state` is one of the three above."""
     led = read_ledger(out, plugin)
     carried = read_carried(out, plugin)
+    ans = answered(out, plugin)
     rows = []
     for rel in figures(out):
+        if rel in ans:
+            # ANSWERED, NOT SETTLED (harness ADR-0019): the author said why it stays; a looker
+            # decides. Outstanding, so the shards carry it to one.
+            rows.append((rel, ANSWERED, f"answered by {ans[rel].get('by')}: "
+                                        f"{str(ans[rel].get('answer'))[:110]} - a looker's "
+                                        f"fresh look on the same image settles it"))
+            continue
         rec = led.get(rel)
         if rec is None:
             # NOT IN THIS RUN'S LEDGER, BUT PERHAPS THE SAME IMAGE. A run that reused its fitted
@@ -341,10 +433,118 @@ def open_findings(out, plugin=""):
                 if isinstance(a, dict):
                     found.setdefault(rel, []).append(
                         f"machine: {a.get('code')}: {a.get('detail')}")
+    ans = answered(out, plugin)
     for rel, note, who, run_name in defects(out, plugin):
         found.setdefault(rel, []).append(
-            f"eye ({who or 'unnamed'}{', on ' + run_name if run_name else ''}): {note}")
+            f"eye ({who or 'unnamed'}{', on ' + run_name if run_name else ''}): {note}"
+            + (f"; answered by {ans[rel].get('by')}: {ans[rel].get('answer')}" if rel in ans
+               else ""))
     return found
+
+
+def _plugin_file(plugin):
+    """The plugin's own file in this tree, or None."""
+    try:
+        from .kernels import discover
+        k = discover().get(plugin)
+        return Path(k.path) if k is not None and Path(k.path).is_file() else None
+    except Exception:                                                     # noqa: BLE001
+        return None
+
+
+def worksheet(out, plugin, plugin_file=None):
+    """The audit's worksheet: every open finding, by kind, with an owner and the two answers.
+
+    A FINDING IS NOT YET WORK (harness ADR-0019). Seventy findings on 46 kinds had three owners
+    and the ledger named none: the HOST's own composed panels (mechanism - nothing to paste),
+    the TOOL's plates drawn with a plan entry's arguments, size and legend (the plan, the
+    author's), and the PLUGIN's own drawing (its file, the author's). This groups the open
+    findings by kind, names the owner, prints the plan entry as declared or the code site,
+    quotes the eye, shows an answer already given, and states the two answers: edit the entry
+    or the code and bump the version; or `--answer` why the plate stays, for a looker to settle.
+    It ends with the prediction the rerun is submitted with.
+    """
+    import json as _json
+    from collections import Counter
+    from . import declare as _DC
+    from . import native as _NAT
+    root = Path(out)
+    of = open_findings(out, plugin)
+    ans = read_answers(out, plugin)
+    try:
+        doc = _json.loads((root / RUN_MARKER).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        doc = {}
+    spec = (((doc.get("kernels") or {}).get(plugin) or {}).get("spec")) or {}
+    entries = {str(e.get("id") or ""): e for e in _DC.report_figures(spec)}
+    pf = Path(plugin_file) if plugin_file else _plugin_file(plugin)
+    src = (pf.read_text(encoding="utf-8", errors="replace").splitlines()
+           if pf and pf.is_file() else [])
+
+    def sites(fid):
+        return [i + 1 for i, l in enumerate(src) if f"'{fid}'" in l or f'"{fid}"' in l]
+
+    by_kind = {}
+    for rel, ws in sorted(of.items()):
+        by_kind.setdefault(kind_of(rel), []).append((rel, ws))
+    L = [f"# THE AUDIT'S WORKSHEET - {plugin} on {root.name}: {len(of)} open finding(s) on "
+         f"{len(by_kind)} kind(s); answer each kind ONCE, the instances follow", ""]
+    owners = Counter()
+    for kind in sorted(by_kind):
+        items = by_kind[kind]
+        base = Path(items[0][0]).name
+        stem = base.rsplit(".", 1)[0]
+        host_key = ""
+        if stem.startswith(f"{plugin}_"):
+            tail = stem[len(plugin) + 1:]
+            host_key = ("across_design" if tail.startswith("across_design")
+                        else tail[:1] if tail[:1] in ("N", "C", "P") and tail[1:2].isdigit()
+                        else "")
+        fid = _NAT.entry_for(spec, base)
+        e = entries.get(fid) or {}
+        if host_key:
+            owner = "HOST"
+            where = (f"the host's own panel (scprofile/{_HOST_PANELS[host_key]}.py): mechanism "
+                     f"- nothing to paste, the host fixes it and every plugin gets the fix")
+        elif e and str(e.get("drawn_by") or "tool") == "tool":
+            owner = "TOOL"
+            where = ("the tool's plate; the plan entry is where it is adjusted (arguments, "
+                     "size, legend), as declared:\n     "
+                     + ", ".join(f"{k}: {str(v)[:60]!r}" for k, v in e.items()
+                                 if k in ("id", "fn", "args", "w", "h", "legend", "axis",
+                                          "position", "kind")))
+        elif e:
+            owner = "PLUGIN"
+            where = (f"the plugin's own drawing; the plan entry {fid!r} and the code at "
+                     + (", ".join(f"{pf.name}:{n}" for n in sites(fid)[:4]) if pf and sites(fid)
+                        else "(the plugin's file is not in this tree)"))
+        else:
+            owner = "PLUGIN"
+            where = ("not on the plan: the plugin's own drawing - declare it as an entry, then "
+                     "adjust it")
+        owners[owner] += 1
+        L += [f"## {kind}   [{owner}]   {len(items)} instance(s) carry a finding",
+              f"   {where}"]
+        for rel, ws in items:
+            L.append(f"   - {rel}")
+            for w in ws:
+                L.append(f"       {w[:300]}")
+            if rel in ans:
+                L.append(f"       answered by {ans[rel].get('by')}: "
+                         f"{str(ans[rel].get('answer'))[:200]}")
+        if owner != "HOST":
+            L += ["   ANSWER, one of:",
+                  "     edit the entry or the code, bump `version` (the reuse key), run the "
+                  "build gates (scprofile validate; the maker's status), then the rerun;",
+                  f"     or, if this is the upstream's own drawing and right as it is: scprofile "
+                  f"review --out {root} --plugin {plugin} --figure <path> --answer \"why\" "
+                  f"--reviewer <you>   - a looker's fresh look then settles it"]
+        L.append("")
+    L += [f"# owners: {', '.join(f'{k} {n}' for k, n in sorted(owners.items())) or 'none'}", "",
+          "# PREDICTION for the rerun, to submit the job with: every kind edited redraws and is "
+          "looked at again; the looks on unchanged images carry; the answered figures come back "
+          "to a looker; `audited` names only what survives a fresh look."]
+    return "\n".join(L)
 
 
 def outstanding(out, plugin=""):

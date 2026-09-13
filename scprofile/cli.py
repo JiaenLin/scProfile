@@ -3088,6 +3088,18 @@ def _review(a):
     if not out.is_dir():
         print(f"scprofile: no such run directory: {out}", file=sys.stderr)
         return REFUSE
+    if getattr(a, "worksheet", False):
+        print(RV.worksheet(out, a.plugin or ""))
+        return 0
+    if a.figure and getattr(a, "answer", ""):
+        try:
+            rec = RV.answer(out, a.figure, a.answer, by=a.reviewer, plugin=a.plugin)
+        except RV.Refused as e:
+            print(f"scprofile: REFUSED - {e}", file=sys.stderr)
+            return REFUSE
+        print(f"answered: {rec['figure']}  ({rec['sha256'][:12]}) by {rec['by']} - the finding "
+              f"stays open until a looker's fresh look on this image")
+        return 0
     if a.figure or a.note:
         if not (a.figure and a.note):
             print("scprofile: --figure and --note go together", file=sys.stderr)
@@ -3195,7 +3207,7 @@ def _review(a):
               f"redrawn since:")
         for r, st, w in todo:
             print(f"    {st:10s} {r}")
-            if st == RV.STALE:
+            if st in (RV.STALE, RV.ANSWERED):
                 print(f"               {w}")
         print("\n  Open each one. Then record what you saw:")
         print(f"    scprofile review --out {out} --figure <path> --note \"...\"")
@@ -4151,6 +4163,13 @@ def main(argv=None):
     rv.add_argument("--note", help="what you saw. Refused if empty, too short, or copied "
                                    "from another figure's note")
     rv.add_argument("--reviewer", default="", help="who looked")
+    rv.add_argument("--answer", metavar="WHY", default="",
+                    help="with --figure and --reviewer: why this figure the eye marked should "
+                         "STAY as it is (the upstream's own drawing, the numbers elsewhere). "
+                         "The finding stays open until a looker's fresh look on the same image")
+    rv.add_argument("--worksheet", action="store_true",
+                    help="print the audit's worksheet: every open finding by kind, its owner, "
+                         "the plan entry or code site, the eye's words, and the two answers")
     rv.add_argument("--defect", action="store_true",
                     help="with --figure and --note: this look says the panel MUST CHANGE. The "
                          "audit stage counts it, the agenda's write task waits on it, and a "

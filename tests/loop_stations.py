@@ -232,12 +232,15 @@ def station_drawing(runs):
         # same. Coverage is station 7's count; the verdict is this station's.
         from scprofile import review as RV
         want, seen, _done = _scan(r)
-        eye = []
+        eye, n_ans = [], 0
         for _p in plugins_in(r):
             eye += [(rel, note, who) for rel, note, who, _run in RV.defects(r, _p)]
+            n_ans += len(RV.answered(r, _p))
         looked = (f"the eye has looked at {len(seen)} of {len(want)}" if want
                   else "the eye has nothing to look at")
         eyes = (f"; {len(eye)} eye finding(s) on {len({x[0] for x in eye})} panel(s)"
+                + (f", {n_ans} of them answered by the author and awaiting a looker's fresh "
+                   f"look" if n_ans else "")
                 if eye else "")
         eye_named = "; ".join(f"{rel.rsplit('/', 1)[-1]} ({who or 'unnamed'}): {note[:90]}"
                               for rel, note, who in eye[:4])
@@ -258,10 +261,12 @@ def station_drawing(runs):
                  f"one that is this panel's belongs in the plan or the plugin"
                  + (f". AND THE EYE'S: {eye_named}" if eye else ""))
         if eye:
+            plugs = plugins_in(r)
             return BLOCKED, (f"{r.name}: no drawing issue remains after {mended}{eyes}; "
                              + looked + um + drew_nothing), \
-                (f"FIX THESE, the eye's findings, in the plan or the plugin, then rerun and "
-                 f"look again: {eye_named}")
+                (f"ANSWER THE WORKSHEET, one kind at a time - scprofile review --out {r} "
+                 f"--plugin {plugs[0] if plugs else '<plugin>'} --worksheet - then rerun and "
+                 f"look again at what was redrawn or answered: {eye_named}")
         if want - seen:
             plugs = plugins_in(r)
             return BLOCKED, (f"{r.name}: no drawing issue remains after {mended}; {looked} — "
