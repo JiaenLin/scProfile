@@ -52,7 +52,7 @@ Found on the first run of the loop under this project's own rules. Until 2026-09
 way to run it: DEVELOPMENT.md says the loop is not optional, the site rule is that every tool
 invocation goes through the scheduler, and no job existed that did both.
 
-## The composed section routes a total-strength sentence to the count figure (open)
+## The composed section routes a total-strength sentence to the count figure (closed 2026-09-13, harness ADR-0020 step 3)
 
 Found by the reviewer of harness blind 0006 (2026-09-13). The composed `PAPER.<plugin>.md`
 attributes the range of total interaction STRENGTH ratios ("1.02-fold to 3.22-fold") to Fig. 1,
@@ -61,6 +61,6 @@ quantity - while the strength figure is Fig. 2. The route for the `how_much_tota
 (`figs_for(label, ("how_much_total", ...))` in `compose.py`) takes the first figure declared to
 answer it, and both the count and the weight plates answer it. A writer who trusted the composed
 citation had a claim withdrawn for exactly this. Same class as the note in `compose.py` about a
-total citing the per-pair network. Not yet fixed: the route needs to know which quantity a
-sentence is about, or the plan needs to declare the answer per quantity.
+total citing the per-pair network. Fixed: a sentence about a quantity cites the plate whose stem names that quantity first, and a
+stem naming `count` last where the quantity is not a count (`compose._figs_for`, `prefer`/`avoid`).
 

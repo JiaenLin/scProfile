@@ -92,3 +92,42 @@ if FAILURES:
     raise SystemExit(1)
 print("ok: a composed claim cites the plate that shows what it says - the totals for a total, "
       "the per-element plates for an element detected in one arm")
+
+
+# THE PLATE OF THE QUANTITY THE SENTENCE IS ABOUT (harness ADR-0020, step 3; found by the
+# reviewer of blind 0006): one function draws a count plate and a strength plate, the route for
+# `how_much_total` names the function, and the composed sentence about total STRENGTH cited the
+# count plate first - so a writer's claim copied from it was withdrawn for the figure. A sentence
+# about a quantity cites the plate that shows that quantity first.
+SPEC2 = {
+    "native_plots": {"drawBars": {"use": "figures/cmp_bars_<measure>.png per arm pair"}},
+    "report": {"unit_network": {"weight_name": "interaction strength"},
+               "provides_evidence": {"how_much_total": ["native:drawBars"]}},
+}
+with tempfile.TemporaryDirectory() as td:
+    run = Path(td) / "run"
+    (run / "kernels" / PLUGIN / "tables").mkdir(parents=True)
+    (run / "report").mkdir(parents=True)
+    (run / "kernels" / PLUGIN / "tables" / f"{PLUGIN}_two_scale.csv").write_text(
+        "\n".join(rows) + "\n", encoding="utf-8")
+    native = []
+    for name in ("cmp_bars_count", "cmp_bars_weight"):
+        rel = f"kernels/{PLUGIN}/compare/time/figures/{name}.png"
+        (run / rel).parent.mkdir(parents=True, exist_ok=True)
+        (run / rel).write_bytes(b"\x89PNG")
+        native.append({"id": name, "path": rel, "caption": name, "label": "time"})
+    (run / "report" / "panels.json").write_text(json.dumps(
+        {PLUGIN: {"native": native, "cohort": [], "contrast": [], "arm": []}}))
+    (run / "report.json").write_text(json.dumps(
+        {"design": {}, "kernels": {PLUGIN: {"spec": SPEC2}}}))
+    made2 = {s: cites for s, cites in C.claims(run, PLUGIN, SPEC2, {})}
+    total2 = next((c for s, c in made2.items() if "times the total" in s), None)
+    check(total2 is not None and len(total2) >= 2,
+          f"the total sentence should cite both plates of the function: {total2}")
+    check(total2 is not None and total2 and "weight" in total2[0],
+          f"a sentence about total strength cites the strength plate first: {total2}")
+
+if FAILURES:
+    print("FAILED:", *FAILURES, sep="\n  ")
+    raise SystemExit(1)
+print("ok - a composed claim cites what shows it, the plate of its quantity first")

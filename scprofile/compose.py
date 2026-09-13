@@ -32,6 +32,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import re
 from pathlib import Path
 
 #: THE FIRST LINE OF A COMPOSED SECTION. An authored section must never be
@@ -264,7 +265,7 @@ def _stems():
     return out
 
 
-def _figs_for(by, routes, label, needs, host=(), scope="all"):
+def _figs_for(by, routes, label, needs, host=(), scope="all", prefer=(), avoid=()):
     """The plates this contrast drew for these needs, in route order, each once.
 
     NATIVE FIRST, HOST AS THE FALLBACK WITHIN A NEED - the same rule `paper.panel` applies, so
@@ -316,6 +317,14 @@ def _figs_for(by, routes, label, needs, host=(), scope="all"):
                              else (not f.get("label") or str(f.get("label")) == label))]
                 if hits:
                     got.append(hits[0])
+        # THE PLATE OF THE QUANTITY THE SENTENCE IS ABOUT, FIRST (harness ADR-0020, step 3): one
+        # function draws a count plate and a strength plate, and a sentence about total strength
+        # cited the count plate first - a writer's claim copied from it was withdrawn for the
+        # figure. A stem naming an avoided word goes last, one naming a preferred word first;
+        # the order is otherwise the route's.
+        if prefer or avoid:
+            got = sorted(got, key=lambda rel: (any(a in Path(rel).stem.lower() for a in avoid),
+                                               not any(w in Path(rel).stem.lower() for w in prefer)))
         out += got
     seen, uniq = set(), []
     for x in out:
@@ -1114,8 +1123,15 @@ def claims(run, plugin, spec=None, design=None):
     W = _weight_name(spec)
     by, routes, host = _native_index(run, plugin, spec)
 
-    def figs_for(label, needs):
-        return _figs_for(by, routes, label, needs, host)
+    def figs_for(label, needs, prefer=(), avoid=()):
+        return _figs_for(by, routes, label, needs, host, prefer=prefer, avoid=avoid)
+
+    # THE WORDS OF THE QUANTITY, for the sentences about it: the plugin's own name for what it
+    # measures, plus `weight` where that is not a count - and `count` avoided then.
+    _wl = W.lower()
+    _prefer = tuple(w for w in re.findall(r"[a-z]+", _wl) if len(w) > 3) + (
+        ("weight",) if "count" not in _wl else ())
+    _avoid = ("count",) if "count" not in _wl else ()
 
     made = []
     for label in _order(f, design, _controls(run)):
@@ -1125,7 +1141,8 @@ def claims(run, plugin, spec=None, design=None):
         # appears, and was narrowed thirteen times over; the plate that shows the totals is the
         # `how_much_total` route's. The network and the ranking follow, as the reading of it.
         if d["ratio"]:
-            cites = figs_for(label, ("how_much_total", "who_changed", "what_carries_it"))
+            cites = figs_for(label, ("how_much_total", "who_changed", "what_carries_it"),
+                             prefer=_prefer, avoid=_avoid)
             if cites:
                 made.append((
                     f"In the contrast {label}, the {d['against']} arm carries "
