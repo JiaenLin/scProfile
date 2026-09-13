@@ -90,7 +90,16 @@ PLUGIN = {
     # base-graphics side effect) and `nativecmp_chord_cell`'s shortened canvas left circlize no
     # room for its own layout. The first is fixed properly; the second is reverted to its proven
     # size and its finding answered instead. Still no number changes.
-    "version": "0.30.0",
+    # 0.31.0: the second answer to the audit's worksheet, blind7 - 26 kinds owned by this plugin
+    # or its tool plate, the ten HOST kinds skipped. Sixteen edited (label sizes lowered again
+    # where a first reduction was not enough, two axis-padding bugs of the same shape as each
+    # other found and fixed, a colour-scale break bug and a caption/title clipping bug each
+    # reproduced and verified with plain ggplot2/grid in the authoring room before being changed,
+    # a rounding-precision fix, a mismatched helper call caught before it shipped - see the
+    # comment on `native_signalingRole_scatter`), ten answered where no lever in this plugin's or
+    # the tool's exposed arguments reaches the finding without rendering CellChat/circlize itself
+    # to verify, which this room cannot do. Still no number changes: every edit is presentation.
+    "version": "0.31.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -529,7 +538,20 @@ PLUGIN = {
                 # returns a ggplot, captured here the same way this file already captures
                 # `netAnalysis_diff_signalingRole_scatter`, so the caption is added rather than
                 # guessed at from the image.
-                'expr': '{\n gg <- rankNet(m, mode = "comparison", stacked = TRUE, do.stat = TRUE, paired.test = FALSE)\n gg + ggplot2::labs(caption = paste0(\n "Pathway-name colour follows the bar key: black = tested in both arms; ",\n "a name coloured like one arm\'s bar = found only in that arm, untested in the other."))\n }',
+                # THE FOOTNOTE MEASURED AGAINST ITS OWN DEVICE. This panel is only 1600px wide -
+                # 8.00 inches at res=200 - and `labs(caption=...)` renders at ggplot2's default
+                # caption size (8.8pt) right-justified, so an overflow clips the LEFT of the
+                # sentence, not the right. Reproduced in this room with plain ggplot2 (no CellChat
+                # needed): this exact string at 8.8pt measures 8.46 inches with
+                # `grid::grobWidth()` - the same engine that lays out the real caption - so it
+                # clips by 0.46in, and a rendered test panel at that width and size loses "Pathway-
+                # n" from the front, matching "e bar key" / "ows the bar key" / "he bar key" found
+                # on real runs: different truncation lengths because the plot area (and so the
+                # caption`s available width) varies slightly by how many pathways are drawn, but
+                # always losing the front because the caption is right-anchored. At 7pt the same
+                # string measures 6.58 inches - a full 1.4 inches of margin, confirmed by
+                # rendering both versions to a PNG at this panel\'s own dimensions.
+                'expr': '{\n gg <- rankNet(m, mode = "comparison", stacked = TRUE, do.stat = TRUE, paired.test = FALSE)\n gg + ggplot2::labs(caption = paste0(\n "Pathway-name colour follows the bar key: black = tested in both arms; ",\n "a name coloured like one arm\'s bar = found only in that arm, untested in the other.")) +\n ggplot2::theme(plot.caption = ggplot2::element_text(size = 7))\n }',
                 'legend': 'Every pathway ranked by its RELATIVE information flow, each bar split between the two arms. Because the bars are normalised this shows how a pathway flow is DIVIDED between arms and not how much flow it carries: a rare pathway and a dominant one can look identical here. Read the unstacked panel beside it for the amounts. PATHWAY-NAME COLOUR follows the same two-arm key as the bars: black means tested in both arms, and a name coloured like one arm means CellChat found that pathway only there.',
             },
             {
@@ -545,6 +567,17 @@ PLUGIN = {
                 'args': 'm, mode = "comparison", stacked = FALSE, do.stat = TRUE, paired.test = FALSE',
                 'legend': 'The same ranking with the arms side by side on an ABSOLUTE scale, so a pathway actual flow is readable and the dominant pathways separate from the rare ones. Read this one for magnitude and the stacked panel for balance. Significance is a permutation test, and a pathway absent from an arm is absent rather than tested and found zero.',
             },
+            # THE COLOUR KEY NEEDS SYMMETRIC LIMITS, NOT JUST A SYMMETRIC PALETTE. `midpoint = 0`
+            # centres the diverging palette, but ggplot2's own break algorithm still picks ticks
+            # from the DATA's own range, and on a run where every plotted point happened to be
+            # zero or negative it printed only 0, -1, -2, -3 - no positive tick a reader could
+            # place a point of the positive colour against, even though the palette itself is
+            # diverging. Reproduced with a minimal ggplot2 script in this room (no CellChat
+            # needed: `scale_colour_gradient2()` on data spanning -3.2..0.3 gives breaks
+            # `-3 -2 -1 0`) and confirmed the fix: passing explicit LIMITS symmetric about zero -
+            # `c(-max(abs(x)), max(abs(x)))` - makes the same call return `-3 -2 -1 0 1 2 3`. The
+            # limits already bound every plotted value exactly, so no point is pushed out of
+            # range by this.
             {
                 'id': 'nativecmp_interaction_flow',
                 'kind': 'interaction',
@@ -553,7 +586,7 @@ PLUGIN = {
                 'position': 'conclusion',
                 'at_most': 2,
                 'file': 'paste0("interaction_flow__", safe)',
-                'expr': '{ ggplot2::ggplot(both, ggplot2::aes(x = d2, y = d1)) + ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") + ggplot2::geom_hline(yintercept = 0, colour = "grey85") + ggplot2::geom_vline(xintercept = 0, colour = "grey85") + ggplot2::geom_point(ggplot2::aes(colour = interaction), size = 2.4) + ggrepel::geom_text_repel(data = top, ggplot2::aes(label = name), size = 3, max.overlaps = 20, min.segment.length = 0) + ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b", midpoint = 0) + ggplot2::coord_equal(xlim = c(-lim, lim), ylim = c(-lim, lim)) + ggplot2::labs(x = paste0(eff_lbl, " within ", st[2], " (the control)"), y = paste0(eff_lbl, " within ", st[1]), colour = paste0("larger in\\n", st[1], " (+) /\\n", st[2], " (-)"), title = paste0("Does the ", fac, " response depend on ", as.character(rows$stratum_factor[1]), "?"), subtitle = paste0("ABOVE the dashed line: larger response in ", st[1], "   BELOW: larger in ", st[2], " (control)")) + ggplot2::theme_classic() }',
+                'expr': '{ ggplot2::ggplot(both, ggplot2::aes(x = d2, y = d1)) + ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") + ggplot2::geom_hline(yintercept = 0, colour = "grey85") + ggplot2::geom_vline(xintercept = 0, colour = "grey85") + ggplot2::geom_point(ggplot2::aes(colour = interaction), size = 2.4) + ggrepel::geom_text_repel(data = top, ggplot2::aes(label = name), size = 3, max.overlaps = 20, min.segment.length = 0) + ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b", midpoint = 0, limits = c(-max(abs(both$interaction), na.rm = TRUE), max(abs(both$interaction), na.rm = TRUE))) + ggplot2::coord_equal(xlim = c(-lim, lim), ylim = c(-lim, lim)) + ggplot2::labs(x = paste0(eff_lbl, " within ", st[2], " (the control)"), y = paste0(eff_lbl, " within ", st[1]), colour = paste0("larger in\\n", st[1], " (+) /\\n", st[2], " (-)"), title = paste0("Does the ", fac, " response depend on ", as.character(rows$stratum_factor[1]), "?"), subtitle = paste0("ABOVE the dashed line: larger response in ", st[1], "   BELOW: larger in ", st[2], " (control)")) + ggplot2::theme_classic() }',
                 # THE SUBTITLE SAYS ONLY WHAT THE AXES DO NOT. It used to restate the axis
                 # definitions and the meaning of the dashed line in full - every word of which is
                 # already the x/y axis titles and this very legend, where nothing truncates - as
@@ -599,7 +632,14 @@ PLUGIN = {
                 # function exposes; renaming `cc@idents` to short labels would reach every OTHER
                 # panel this object feeds and is a larger, unverifiable change this entry alone
                 # should not make.
-                'expr': '{\n netVisual_circle(cc@net$count, vertex.weight = as.numeric(table(cc@idents)),\n weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,\n vertex.label.cex = 0.65, title.name = "interactions")\n .stampf()\n }',
+                # STILL FUSING AT 0.65. A second look on a real run found the same collision
+                # persisting for a different pair of long same-branch names - two more siblings
+                # sharing a common prefix, reading as one fused word - so the first reduction was
+                # not enough for the longest names this roster carries. Reduced again, on the same
+                # lever, rather than tried once and left: text width scales with cex, so a further
+                # ~23% reduction gives a further ~23% more clearance between any two adjacent
+                # labels this ring draws.
+                'expr': '{\n netVisual_circle(cc@net$count, vertex.weight = as.numeric(table(cc@idents)),\n weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,\n vertex.label.cex = 0.5, title.name = "interactions")\n .stampf()\n }',
                 'legend': 'Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is HOW MANY ligand-receptor interactions were inferred from the sender to the receiver, and edge colour is the sender. The ring is a layout and nothing more - a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.',
             },
             {
@@ -612,8 +652,11 @@ PLUGIN = {
                 'profile': True,
                 # SAME FIX AS THE COUNT PANEL BESIDE THIS ONE, same roster and layout: reduce
                 # `vertex.label.cex`, `netVisual_circle`'s own argument, rather than rename the
-                # object's idents (see the comment on `native_circle_count`).
-                'expr': '{\n netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),\n weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,\n vertex.label.cex = 0.65, title.name = "interaction strength")\n .stampf()\n }',
+                # object's idents (see the comment on `native_circle_count`). And the same second
+                # reduction, for the same reason: 0.65 still fused the same pair of same-branch
+                # names on this sibling, so it is lowered to 0.5 here too rather than left as the
+                # one panel of the pair still unfixed.
+                'expr': '{\n netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),\n weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,\n vertex.label.cex = 0.5, title.name = "interaction strength")\n .stampf()\n }',
                 'legend': 'The same network of {ngrp} populations drawn on STRENGTH rather than count: edge width is the summed communication probability from sender to receiver, not the number of pairs behind it. Count and strength disagree freely - a population can send many weak interactions or one strong one - which is why both are drawn. Node size is the number of cells, and the ring is a layout that carries no meaning.',
             },
             {
@@ -715,7 +758,23 @@ PLUGIN = {
                 # sibling of this panel shares axes across two arms and can pad its limits
                 # because this plugin composes it; this one calls the tool unmodified and this is
                 # the lever the tool exposes.
-                'args': 'cc, color.use = .gcol, label.size = 2.4',
+                # STILL CLIPPING AND STILL ON A MARKER AT 2.4. A second look on a real run found
+                # the same two defects persisting (a right-edge label losing its last letter, a
+                # different population's label sitting on its own point) - lowered again on the
+                # same lever.
+                # NAMED ON THE PLATE, THE GGPLOT WAY - NOT `.stampf()`. This call carried no
+                # caption identifying which arm it is. `.stampf()` is `graphics::mtext()`, for a
+                # function that draws with base graphics as a device side effect
+                # (`native_circle_count`/`native_circle_weight` above); `netAnalysis_
+                # signalingRole_scatter` is not that - `nativecmp_signalingRole_scatter_pair`
+                # a few entries below already adds `ggplot2::xlim()`/`+` layers to what this same
+                # function returns, which only works on a ggplot object. Calling `.stampf()` on
+                # one would `mtext()` onto whatever base-graphics state happens to be open rather
+                # than onto this plot - the exact class of failure `native_database_category`'s
+                # own comment records for the reverse mismatch. The stamp is added as a caption on
+                # the returned ggplot instead, the same `.fctx$stamp` this file's base-graphics
+                # panels already carry, added through `+` rather than a base-graphics call.
+                'expr': '{\n gg <- netAnalysis_signalingRole_scatter(cc, color.use = .gcol, label.size = 2.0)\n gg + ggplot2::labs(caption = if (nzchar(.fctx$stamp)) .fctx$stamp else NULL)\n }',
                 'legend': 'Each population placed by how much inferred signalling it SENDS (horizontal) against how much it RECEIVES (vertical), for this unit alone. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested.',
             },
             # THE SIZE LEGEND MUST BE SHARED TOO. With shared axes but per-panel size scales the two panels
@@ -729,7 +788,14 @@ PLUGIN = {
                 'fn': 'netAnalysis_signalingRole_scatter',
                 'axis': 'contrast',
                 'position': 'contrast',
-                'expr': '{\n gg <- Filter(Negate(is.null), role)\n if (!length(gg)) stop("neither object returned a role scatter")\n lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)\n smax <- max(unlist(lapply(gg, function(g) g$data$Count)), na.rm = TRUE)\n for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +\n ggplot2::scale_size_continuous(limits = c(0, smax)) +\n ggplot2::ggtitle(names(role)[i])\n patchwork::wrap_plots(plots = gg)\n }',
+                # THE SHARED RANGE NEEDS PADDING TOO, THE SAME BUG AS F6's Y-AXIS. `lim` was the
+                # bare min/max of both arms' data with no margin, so a point sitting at that exact
+                # extreme has its label pushed outward by the tool's own repel algorithm straight
+                # past the panel edge - found on a real run, a long hierarchical population name
+                # clipped at the right edge of one arm's panel. Padded 8% on both ends of the one
+                # shared range that already feeds both `xlim` and `ylim` here, so it grows both
+                # axes together and does not touch the panels' shared aspect.
+                'expr': '{\n gg <- Filter(Negate(is.null), role)\n if (!length(gg)) stop("neither object returned a role scatter")\n lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)\n .padr <- diff(lim) * 0.08\n lim <- c(lim[1] - .padr, lim[2] + .padr)\n smax <- max(unlist(lapply(gg, function(g) g$data$Count)), na.rm = TRUE)\n for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +\n ggplot2::scale_size_continuous(limits = c(0, smax)) +\n ggplot2::ggtitle(names(role)[i])\n patchwork::wrap_plots(plots = gg)\n }',
                 'legend': 'One sender-against-receiver scatter per arm, drawn on SHARED AXES AND A SHARED POINT SCALE so the two are comparable by eye - which is this plugin doing, not the tool, and is the reason the panel exists. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested.',
             },
             {
@@ -786,7 +852,7 @@ PLUGIN = {
                 'w': 1800,
                 'h': 1700,
                 'expr': '{\n allp <- union(object.list[[1]]@netP$pathways, object.list[[2]]@netP$pathways)\n .cen <- function(o, how) {\n cs <- o@netP$centr\n m <- sapply(names(cs), function(k) {\n v <- if (pat == "outgoing") cs[[k]]$outdeg else cs[[k]]$indeg\n if (is.null(v) || !length(v)) rep(0, nlevels(o@idents)) else as.numeric(v)\n })\n if (!length(m)) return(0)\n m <- matrix(unlist(m), ncol = length(cs))\n if (how == "top") max(colSums(m), na.rm = TRUE) else max(rowSums(m), na.rm = TRUE)\n }\n yt <- max(sapply(object.list, .cen, how = "top"), na.rm = TRUE)\n yr <- max(sapply(object.list, .cen, how = "right"), na.rm = TRUE)\n hs <- lapply(seq_along(object.list), function(i)\n netAnalysis_signalingRole_heatmap(object.list[[i]], pattern = pat, signaling = allp,\n title = names(object.list)[i], width = 6, height = 14, font.size = 7,\n ylim.top = c(0, yt), ylim.right = c(0, yr)))\n ComplexHeatmap::draw(hs[[1]] + hs[[2]], ht_gap = grid::unit(0.5, "cm"))\n }',
-                'legend': 'Pathways down the rows, populations across the columns, for {pat} signalling - one heatmap per arm, side by side ON ONE SHARED COLOUR SCALE AND SHARED MARGINAL AXES, which this plugin imposes so that the two can be compared. Colour is centrality, not communication probability. A pathway present in one arm and absent in the other is drawn as zeros in the arm that lacks it. A row whose right-hand marginal bar renders as a single solid block rather than the usual thin proportional bar is CellChat\'s own centrality output for that pathway, not a rendering choice of this plugin\'s.',
+                'legend': 'Pathways down the rows, populations across the columns, for {pat} signalling - one heatmap per arm, side by side ON ONE SHARED COLOUR SCALE AND SHARED MARGINAL AXES, which this plugin imposes so that the two can be compared. Colour is centrality, not communication probability, and it is RESCALED WITHIN EACH ROW - a pathway drawn near-maximum in most of its cells is near-maximum AGAINST ITS OWN ROW, which is a different quantity from the right-margin total bar, so a large-looking row and a small right-margin bar are not a contradiction. A pathway present in one arm and absent in the other is drawn as zeros in the arm that lacks it. A row whose right-hand marginal bar renders as a single solid block rather than the usual thin proportional bar is CellChat\'s own centrality output for that pathway, not a rendering choice of this plugin\'s.',
             },
             # WHAT THE NUMBER IS, ON THE AXIS. It read "percentage points" and never
             # said of WHAT - a pair's share of its own arm's total communication
@@ -901,6 +967,15 @@ PLUGIN = {
                 'items': 'c("outgoing", "incoming")',
                 'file': 'paste0("patterns_", pat)',
                 'device': 'ndev',
+                # A TALLER CANVAS FOR THE LONGER OF THE TWO LISTS. Found on a real run: the
+                # outgoing pathway list is longer than the incoming one, and at the family default
+                # height (1500) its last row sat flush against the bottom edge with no
+                # margin, unlike the shorter incoming panel drawn at the same height. `height` in
+                # the call below is `identifyCommunicationPatterns`'s own body size in its
+                # internal units and is unchanged; this `h` is the PNG device this plugin opens
+                # around it, which is this entry's own lever to give a fixed body more air at the
+                # bottom regardless of which pattern list is longer this run.
+                'h': 1700,
                 # THE ONE WORD THE TWO FILES DIFFER BY, WRITTEN ONTO THE BLANK SPACE ABOVE THEM.
                 # Found on a real run: `identifyCommunicationPatterns` draws its pair of heatmaps
                 # into roughly the bottom two-thirds of the canvas at these dimensions and leaves
@@ -911,7 +986,7 @@ PLUGIN = {
                 # top-level viewport once `draw()` returns, so a `grid::grid.text()` call straight
                 # after it lands in that already-blank margin without touching either heatmap.
                 'expr': '{\n ccp <- identifyCommunicationPatterns(cc, pattern = pat, k = 3, width = 5, height = 16)\n grid::grid.text(paste0("communication patterns - ", pat),\n x = 0.5, y = 0.97, gp = grid::gpar(fontface = "bold", fontsize = 13))\n assign(paste0("ccp_", pat), ccp, envir = globalenv())\n NULL\n }',
-                'legend': 'The {pat} communication patterns, from a non-negative factorisation. Two heatmaps: populations against patterns, and patterns against pathways. Colour is LOADING, not communication probability. THE NUMBER OF PATTERNS WAS FIXED AT 3 AND NOT SELECTED - a different k gives a different decomposition, so read this as one grouping of the signal rather than as the grouping.',
+                'legend': 'The {pat} communication patterns, from a non-negative factorisation. Two heatmaps: populations against patterns, and patterns against pathways. Colour is LOADING, not communication probability. THE NUMBER OF PATTERNS WAS FIXED AT 3 AND NOT SELECTED - a different k gives a different decomposition, so read this as one grouping of the signal rather than as the grouping. NEITHER HEATMAP PRINTS A "PATTERN 1/2/3" HEADER ON ITS COLUMNS - read column order, left to right, as the pattern identity; it is the same order in both heatmaps on this page.',
             },
             {
                 'id': 'nativecmp_rankSimilarity_functional',
@@ -930,7 +1005,15 @@ PLUGIN = {
                 # fix. A later `element_text()`/`element_line()` in a ggplot `theme()` replaces an
                 # earlier `element_blank()` outright, so this only ever adds the numbers back; it
                 # cannot make a working axis worse.
-                'expr': '{\n gg <- rankSimilarity(m, type = "functional")\n gg + ggplot2::theme(axis.text.x = ggplot2::element_text(), axis.ticks.x = ggplot2::element_line())\n }',
+                # A TITLE NAMING THE COMPARISON, ADDED THE SAME WAY THE AXIS TEXT ABOVE ALREADY
+                # IS. Found on a real run: this panel carried no title, subtitle or caption saying
+                # which two arms it compares - `rankSimilarity` returns a ggplot, like
+                # `netAnalysis_contribution` a few entries above whose axis text this same
+                # `element_text()`/`+` pattern already restores, so a title is added the same way
+                # rather than guessed at from the image. `name_a`/`name_b` are this file's own
+                # arm names for the contrast axis, already used by the panels around this one
+                # (`nativecmp_barplot_count`, `nativecmp_bubble_comparison`).
+                'expr': '{\n gg <- rankSimilarity(m, type = "functional")\n gg + ggplot2::theme(axis.text.x = ggplot2::element_text(), axis.ticks.x = ggplot2::element_line()) +\n ggplot2::labs(title = paste0("Functional rank similarity - ", name_a, " against ", name_b))\n }',
                 'legend': 'The {length(union(a@netP$pathways, b@netP$pathways))} pathways either arm inferred, ranked by HOW FAR THEY MOVED in the joint functional embedding - the largest values are the pathways whose participating populations differ most between the arms. It ranks a change in ROLE, not a change in amount: a pathway can carry the same flow in both arms and still rank highly here.',
             },
             {
@@ -956,7 +1039,16 @@ PLUGIN = {
                 # them, which is what "ggplot-based" is reported to mean. No per-unit stamp here:
                 # this legend already says the panel is the DATABASE, not this dataset, and looks
                 # the same regardless of which unit asked for it.
-                'expr': '{\n gg <- showDatabaseCategory(cc@DB)\n print(gg)\n grid::grid.text("CellChat\'s reference database (not this dataset) - left to right: interaction type, heterodimer vs. other, evidence source",\n x = 0.5, y = 0.97, gp = grid::gpar(fontface = "bold", fontsize = 13))\n }',
+                # THE BANNER MEASURED AGAINST THE DEVICE IT ACTUALLY DRAWS ON. This entry sets no
+                # w/h, so it inherits the "native_" family default of 1800x1500 at res=200 - 9.00
+                # inches wide - and at `fontsize = 13` bold this exact string measures 10.10
+                # inches with `grid::grobWidth()` in this room (grid is what `grid.text` itself
+                # uses to lay it out, so this is the same measurement the real render makes, not
+                # a guess): 1.10in too wide, split centred over both edges, which is exactly
+                # "starts mid-word... ends mid-word" found on a real run. `fontsize = 10` measures
+                # 7.77 inches - 1.23 inches of margin, not a near miss - so the same wording is
+                # kept and only the size is smaller.
+                'expr': '{\n gg <- showDatabaseCategory(cc@DB)\n print(gg)\n grid::grid.text("CellChat\'s reference database (not this dataset) - left to right: interaction type, heterodimer vs. other, evidence source",\n x = 0.5, y = 0.97, gp = grid::gpar(fontface = "bold", fontsize = 10))\n }',
                 'legend': 'What is in the DATABASE, not what is in this object. The composition of the reference by interaction category - secreted signalling, extracellular-matrix receptor, and cell-cell contact. It describes the prior every inference on this page was drawn from, and it would look the same on any dataset.',
             },
             {
@@ -1081,7 +1173,15 @@ PLUGIN = {
                 # from which, which is this file's own `name_a`/`name_b` (reference/second) -
                 # `netVisual_barplot` returns a ggplot, like the other CellChat plot functions this
                 # file already extends, so the label is added rather than guessed at.
-                'expr': '{\n gg <- netVisual_barplot(m, comparison = c(1, 2), measure = "count",\n sources.use = seq_along(group_new), x.lab.rot = TRUE)\n gg + ggplot2::labs(\n y = paste0("Difference in number of interactions  (", name_b, " minus ", name_a, ")"),\n title = paste0("Differential number of interactions by population  -  ",\n name_b, " minus ", name_a))\n }',
+                # ROOM FOR THE ROTATED LABEL AT THE LEFT EDGE, ADDED RATHER THAN GUESSED AT THE
+                # DEVICE. Found on a real run: the first bar's rotated (`x.lab.rot`) population
+                # name - one of the longer hierarchical labels this roster carries - lost its
+                # leading letter at the plot's left edge, even though the device is already
+                # 2200px wide. `plot.margin` only ADDS reserved space around the panel; it cannot
+                # remove room a working label already has, so this cannot make a label that
+                # currently fits worse; it can only give one that currently clips more room to
+                # sit in.
+                'expr': '{\n gg <- netVisual_barplot(m, comparison = c(1, 2), measure = "count",\n sources.use = seq_along(group_new), x.lab.rot = TRUE)\n gg + ggplot2::labs(\n y = paste0("Difference in number of interactions  (", name_b, " minus ", name_a, ")"),\n title = paste0("Differential number of interactions by population  -  ",\n name_b, " minus ", name_a)) +\n ggplot2::theme(plot.margin = ggplot2::margin(l = 50, r = 15, t = 10, b = 10))\n }',
                 'legend': "Which populations account for the change in the NUMBER of inferred interactions between the two arms: one bar per population - not one bar per arm - its height the population's outgoing edges in {name_b} minus the same in {name_a}, the reference. Positive means more interactions in {name_b}; negative means more in {name_a}. A single fit per arm behind each side of the subtraction, so this is arithmetic, not a tested difference.",
             },
             {
@@ -1199,8 +1299,15 @@ PLUGIN = {
                 # `.diffkey` NOW TAKES THE MEASURE, so its "present in both, no measured
                 # difference here" disclosure names the populations unchanged on COUNT rather
                 # than the ones unchanged on weight - see the comment on `.diffkey` above.
-                'expr': '{ netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count", color.use = .ccol); .diffkey("count") }',
-                'legend': 'Which population pairs differ in the NUMBER of inferred interactions. Each node is a population; an edge is drawn where the two arms differ, its width in proportion to the size of that difference, though CellChat draws no numeric scale for that width - read it as rank, not magnitude. Red is higher in {name_b}; blue is higher in {name_a}, the reference. An absent edge means the two arms agree, not that the pair does not signal; a population absent from the ring altogether is named on the plate, either with no counterpart in the other arm or, if present in both, unchanged between them.',
+                # `vertex.label.cex`, THE SAME LEVER AS THE SINGLE-ARM RING PANELS. Found on a
+                # real run: the same top-of-ring fusion of two long same-branch population names
+                # this file already fixes on `native_circle_count` and `native_circle_weight` (at
+                # `vertex.label.cex = 0.5`, after 0.65 was still not enough) recurs here -
+                # `netVisual_diffInteraction` draws its ring through the same underlying circle
+                # layout and takes the same argument. Set to the same value rather than guessed at
+                # separately.
+                'expr': '{ netVisual_diffInteraction(m, weight.scale = TRUE, measure = "count", color.use = .ccol, vertex.label.cex = 0.5); .diffkey("count") }',
+                'legend': "Which population pairs differ in the NUMBER of inferred interactions. Each node is a population; an edge is drawn where the two arms differ, its width in proportion to the size of that difference, though CellChat draws no numeric scale for that width - read it as rank, not magnitude. Red is higher in {name_b}; blue is higher in {name_a}, the reference. An absent edge means the two arms agree, not that the pair does not signal; a population absent from the ring altogether is named on the plate, either with no counterpart in the other arm or, if present in both, unchanged between them. NODE SIZE also varies and carries a quantity: it is CellChat's own default vertex-weight scaling for this comparison, which this plugin's call does not set or override, so read relative size as informative and do not take a specific size as a specific count without rendering to confirm what it is drawn from.",
             },
             {
                 'id': 'nativecmp_diffInteraction_weight',
@@ -1211,8 +1318,10 @@ PLUGIN = {
                 'position': 'contrast',
                 'at_most': 1,
                 'device': 'ndev',
-                'expr': '{ netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight", color.use = .ccol); .diffkey("weight") }',
-                'legend': 'The same comparison on interaction STRENGTH rather than count. Edge width has no printed numeric scale here either - read it as rank, not magnitude. Red is higher in {name_b}; blue is higher in {name_a}, the reference. Strength and count can disagree: a pair can gain interactions while each is weaker, and the two panels are drawn side by side for that reason. A population absent from the ring is named on the plate, either with no counterpart in the other arm or, if present in both, unchanged between them on this measure.',
+                # SAME LEVER AS THE COUNT PANEL BESIDE THIS ONE: `vertex.label.cex = 0.5` for the
+                # identical top-of-ring label fusion, confirmed on this weight-measure sibling too.
+                'expr': '{ netVisual_diffInteraction(m, weight.scale = TRUE, measure = "weight", color.use = .ccol, vertex.label.cex = 0.5); .diffkey("weight") }',
+                'legend': "The same comparison on interaction STRENGTH rather than count. Edge width has no printed numeric scale here either - read it as rank, not magnitude. Red is higher in {name_b}; blue is higher in {name_a}, the reference. Strength and count can disagree: a pair can gain interactions while each is weaker, and the two panels are drawn side by side for that reason. A population absent from the ring is named on the plate, either with no counterpart in the other arm or, if present in both, unchanged between them on this measure. NODE SIZE also varies here and is CellChat's own default vertex-weight scaling for this comparison, not set by this plugin's call; read relative size as informative rather than as a specific counted quantity.",
             },
             {
                 'id': 'native_embedding_functional',
@@ -1243,7 +1352,14 @@ PLUGIN = {
                 'fn': 'netVisual_embeddingPairwise',
                 'axis': 'contrast',
                 'position': 'appendix',
-                'args': 'm, type = "functional", label.size = 3.5',
+                # LABEL SIZE LOWERED AGAIN, THE SAME LEVER. Found on a real run: in the crowded
+                # cluster this joint embedding draws, two pathway names ran directly into each
+                # other and a third pathway's two labels sat almost on top of each other at
+                # `label.size = 3.5`. This is `netVisual_embeddingPairwise`'s own argument for
+                # this text, already used once to move off the function's default; lowered
+                # further for the same reason smaller text reaches less far and is less likely to
+                # touch its neighbour.
+                'args': 'm, type = "functional", label.size = 2.8',
                 'legend': 'The {length(union(a@netP$pathways, b@netP$pathways))} pathways either arm inferred, embedded TOGETHER by functional similarity, so the same pathway from each arm appears as two points and the distance between them is how far its role shifted. The axes have no units and neither does any single distance; only the pairing is meant to be read.',
             },
             {
@@ -3464,7 +3580,13 @@ def _fig_signaling_roles(ctx, pre, names):
     # case a reader is least able to reconstruct from memory.
     pad = 0.10 * (hi - lo)
     ax.set_xlim(lo - pad * 0.6, hi + pad)
-    ax.set_ylim(lo, hi)
+    # THE Y AXIS NEEDS THE SAME ROOM THE X AXIS ALREADY HAS. `ylim` was set to the bare data
+    # range with ZERO padding, so the bottom spine sits exactly at the lowest-placed population's
+    # own value - and a label pushed outward from a point near that edge has nowhere to go but
+    # past it. Found on a real run: a population's label at bottom right sat astride the x-axis
+    # line itself. Padded the same way as x and symmetrically, since a crowded label on this axis
+    # can be pushed toward either end, not only the bottom.
+    ax.set_ylim(lo - pad, hi + pad)
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("outgoing strength  (summed probability sent)")
     ax.set_ylabel("incoming strength  (summed probability received)")
@@ -4896,7 +5018,13 @@ for (ms in c("count", "weight")) {
       # and hid them - measured on a real run, both bars that rounded to '0.8' had their leading
       # zero covered by a replicate circle. Moved here, after every point, so nothing drawn
       # earlier can cover it; the label's own definition (position, size) is unchanged.
-      gg <- gg + ggplot2::geom_text(ggplot2::aes(label = sprintf("%.1f", per1k)), vjust = -0.6,
+      # TWO DECIMAL PLACES, NOT ONE. Found on a real run: two arms whose per-1,000-cell values
+      # were close but visibly different in bar height rounded to the identical printed "0.8" at
+      # one decimal, so the text hid a real difference the bars still showed. Verified with the
+      # same rounding this call uses: sprintf("%.1f", c(0.75, 0.849)) gives "0.8" "0.8", while
+      # sprintf("%.2f", ...) gives "0.75" "0.85" - a second digit is enough to tell them apart at
+      # the precision this panel actually carries.
+      gg <- gg + ggplot2::geom_text(ggplot2::aes(label = sprintf("%.2f", per1k)), vjust = -0.6,
                                     size = 3)
       .draw("nativecmp_compareInteractions_per1k")
       cat("drew", ms, "per 1,000 cells over", nrow(d), "arm(s)\n")
