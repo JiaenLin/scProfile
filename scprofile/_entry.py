@@ -84,6 +84,133 @@ def _mem_total_gb():
     return None
 
 
+def _tree_gb(pid, proc="/proc", page=None):
+    """(GB, basis) - the memory of `pid` AND EVERY DESCENDANT, summed; (None, "") without /proc.
+
+    THE FLOOR UNDERCOUNTS CONCURRENT WORKERS AND THE CGROUP COUNTER IS THE WHOLE JOB'S (harness
+    ADR-0018). RUSAGE_CHILDREN is the largest single reaped child, so eight concurrent workers
+    are counted as one; the scheduler's counter is exact for the job, so eighteen instances in
+    one job all report the same figure and nothing can be fitted. The instance's own process
+    tree - self and every descendant, read from /proc - is attributable AND includes the
+    workers, the two properties each of the others lacks.
+
+    PSS where the kernel offers `smaps_rollup` (a page shared by forked workers is divided among
+    them rather than counted once per worker), the resident set from `statm` otherwise; the
+    basis says which. The three arguments exist so this can be tested against a reconstructed
+    /proc, as `_cgroup_peak_gb` is.
+    """
+    proc = Path(proc)
+    if not proc.is_dir():
+        return None, ""
+    try:
+        page = int(page or os.sysconf("SC_PAGE_SIZE"))
+    except (AttributeError, ValueError, OSError):
+        page = int(page or 4096)
+    parents = {}
+    for d in proc.iterdir():
+        if not d.name.isdigit():
+            continue
+        try:
+            stat = (d / "stat").read_text()
+        except OSError:
+            continue
+        # `pid (comm) state ppid ...` - comm may hold spaces and parentheses, so the fields are
+        # read after the LAST ')'.
+        tail = stat[stat.rfind(")") + 2:].split()
+        if len(tail) < 2:
+            continue
+        try:
+            parents[int(d.name)] = int(tail[1])
+        except ValueError:
+            continue
+    root = int(pid)
+    if root not in parents:
+        return None, ""
+    tree, grew = {root}, True
+    while grew:
+        grew = False
+        for child, parent in parents.items():
+            if parent in tree and child not in tree:
+                tree.add(child)
+                grew = True
+    total_kb, pss_all = 0.0, True
+    for member in tree:
+        d = proc / str(member)
+        kb = None
+        try:
+            for line in (d / "smaps_rollup").read_text().splitlines():
+                if line.startswith("Pss:"):
+                    kb = float(line.split()[1])
+                    break
+        except (OSError, ValueError, IndexError):
+            kb = None
+        if kb is None:
+            pss_all = False
+            try:
+                kb = float((d / "statm").read_text().split()[1]) * page / 1024.0
+            except (OSError, ValueError, IndexError):
+                continue
+        total_kb += kb
+    return total_kb / (1024.0 ** 2), ("pss" if pss_all else "rss")
+
+
+class _TreeSampler:
+    """A daemon thread reading `_tree_gb` every `interval` seconds and keeping the peak.
+
+    Started before the plugin runs and stopped on every exit path; where there is no /proc it
+    takes no readings and the instance's record carries only the floor, named as before. One
+    walk of /proc per second is the whole cost.
+    """
+
+    def __init__(self, pid=None, interval=1.0):
+        import threading
+        self.pid = int(pid or os.getpid())
+        self.interval = float(interval)
+        self.peak, self.basis, self.samples = None, "", 0
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True,
+                                        name="scprofile-memory-sampler")
+
+    def _sample(self):
+        gb, basis = _tree_gb(self.pid)
+        if gb is None:
+            return False
+        self.samples += 1
+        if self.peak is None or gb > self.peak:
+            self.peak, self.basis = gb, basis
+        return True
+
+    def _loop(self):
+        while not self._stop.wait(self.interval):
+            try:
+                if not self._sample():
+                    return
+            except Exception:                                             # noqa: BLE001
+                return                       # a sampler must never take the instance with it
+
+    def start(self):
+        try:
+            if self._sample():
+                self._thread.start()
+        except Exception:                                                 # noqa: BLE001
+            pass
+        return self
+
+    def stop(self):
+        """(peak GB, basis, samples) - with one last reading, so a short instance has one."""
+        self._stop.set()
+        try:
+            self._sample()
+        except Exception:                                                 # noqa: BLE001
+            pass
+        try:
+            if self._thread.is_alive():
+                self._thread.join(timeout=2.0)
+        except Exception:                                                 # noqa: BLE001
+            pass
+        return self.peak, self.basis, self.samples
+
+
 def _cgroup_peak_gb(root=None, procfile=None, total=None):
     """The peak of THIS PROCESS'S OWN cgroup, or None. Never the root cgroup's.
 
@@ -443,20 +570,29 @@ def main(argv):
     # once per plugin means doing it differently once per plugin.
     missing = [c for c in ((spec.get("inject") or {}).get("required") or [])
                if not _has(ctx, c, inp)]
-    if missing:
-        ctx.status = "refused"
-        ctx.headline = f"missing required capability: {', '.join(missing)}"
-        for c in missing:
-            ctx.absent.append({"what": c,
-                               "why": declare.CAPABILITIES.get(c, {}).get("why", "not available")})
-        log(f"  NOT CALLED: {ctx.headline}")
-    else:
-        try:
-            mod.run(ctx)
-        finally:
-            # ON EVERY EXIT PATH, including a raise. A plugin that raised did not reach the
-            # `finally` somebody wrote inside it in a hurry.
-            ctx._dispose(log=log)
+    # THE INSTANCE'S OWN PROCESS TREE, SAMPLED WHILE THE PLUGIN RUNS (harness ADR-0018). See
+    # `_tree_gb`: attributable in a shared job, and it counts the concurrent workers the
+    # floor below cannot.
+    sampler = _TreeSampler().start()
+    tree_peak, tree_basis, tree_n = None, "", 0
+    try:
+        if missing:
+            ctx.status = "refused"
+            ctx.headline = f"missing required capability: {', '.join(missing)}"
+            for c in missing:
+                ctx.absent.append({"what": c,
+                                   "why": declare.CAPABILITIES.get(c, {}).get("why",
+                                                                               "not available")})
+            log(f"  NOT CALLED: {ctx.headline}")
+        else:
+            try:
+                mod.run(ctx)
+            finally:
+                # ON EVERY EXIT PATH, including a raise. A plugin that raised did not reach the
+                # `finally` somebody wrote inside it in a hurry.
+                ctx._dispose(log=log)
+    finally:
+        tree_peak, tree_basis, tree_n = sampler.stop()
 
     # WHAT IT ACTUALLY COST, measured by the process that paid it. The allocator schedules on
     # memory and eight of nine plugins declare no rate, so it assumes one - and an assumption
@@ -513,12 +649,21 @@ def main(argv):
         cg = _cgroup_peak_gb()
         ctx.measured = {"peak_rss_gb": round(peak_gb, 3), "n_cells": n,
                         **({"cgroup_peak_gb": round(cg, 3)} if cg else {}),
+                        # THE INSTANCE'S OWN TREE, where /proc could be read: the figure the
+                        # fit uses (feedback.peak_measurement prefers it).
+                        **({"tree_peak_gb": round(float(tree_peak), 3),
+                            "tree_basis": str(tree_basis), "samples": int(tree_n)}
+                           if tree_peak else {}),
                         # NAMED, because it is a floor and not a peak: RUSAGE_CHILDREN is the
                         # largest single reaped child, so concurrent workers are undercounted.
                         "rss_covers": "parent + largest reaped child (a floor, not the peak); "
-                                      "cgroup_peak_gb, where present, is what the scheduler "
-                                      "bills for the WHOLE job"}
-        log(f"  peak memory {peak_gb:.2f} GB over {n:,} cells")
+                                      "tree_peak_gb, where present, is this instance's own "
+                                      "process tree sampled every second and is what the fit "
+                                      "reads; cgroup_peak_gb, where present, is what the "
+                                      "scheduler bills for the WHOLE job"}
+        log(f"  peak memory {peak_gb:.2f} GB over {n:,} cells"
+            + (f"; this instance's process tree peaked at {tree_peak:.2f} GB ({tree_basis}, "
+               f"{tree_n} sample(s))" if tree_peak else ""))
 
     manifest.write_output(
         out, kernel=Path(plugin_path).stem,

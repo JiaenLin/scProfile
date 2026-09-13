@@ -574,6 +574,13 @@ def peak_measurement(measured):
     in general. Taking the larger is wrong only in the direction that costs queue time.
     """
     m = measured or {}
+    # THE INSTANCE'S OWN TREE FIRST (harness ADR-0018): sampled from /proc while the plugin
+    # ran, it is attributable in a shared job AND counts the concurrent workers - the two
+    # properties the floor and the job's counter each lack. Where a run recorded it, neither
+    # of the others is a better estimate of what this instance cost.
+    tree = m.get("tree_peak_gb")
+    if isinstance(tree, (int, float)) and float(tree) > 0:
+        return (float(tree), f"the instance's own process tree ({m.get('tree_basis') or 'rss'})")
     rss = m.get("peak_rss_gb")
     cg = m.get("cgroup_peak_gb")
     vals = [(float(v), k) for k, v in (("the process's own floor", rss),

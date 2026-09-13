@@ -388,14 +388,21 @@ points:
           # A COMMAND, LIKE `tests` AND `fixture` ALREADY ARE. The harness must not know what a
           # run directory of this tool looks like. `{run}` is filled from `--run`.
           command: ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--memory"]
+          # HOW THE FILL IS APPLIED, declared beside how it is verified (harness ADR-0018). The
+          # maker runs `apply:` on `sch dev convert measure --run RUNDIR --name X --apply` and
+          # never on a status; it learns nothing of what the command writes.
+          apply: ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--memory",
+                  "--declare", "{name}"]
           finished_by: >
-            a run whose instances each ran in their own process records a peak per instance, and
-            `capacity --memory` fits the two terms from those and prints them to paste. A run
-            whose instances shared one job records no per-instance peak and this stage OWES on it
-            for good - that is a property of the job's shape, not of the plugin. Answer it from a
-            run made with one instance per process, or leave both terms undeclared: the allocator
-            then applies its conservative default and says so, which is the tool's rule for an
-            absent declaration and not a defect of this plugin (harness ADR-0017)
+            every run measures each instance's own process tree in the job it shares - self and
+            every worker, sampled each second - and fits the two terms from those points, so no
+            run of a special shape is needed. `capacity --memory` prints the fit and exits 0 only
+            when this plugin declares both terms at or above it; until then it owes, and the way
+            out is the stage's `apply:`, which writes the fit plus its headroom into the
+            declaration and reads it back: `sch dev convert measure --run RUNDIR --name <plugin>
+            --apply`. Nothing is pasted by hand. Where /proc cannot be read the instance carries
+            only its floor, named as such, and the allocator's conservative default applies to an
+            absent declaration and prints that it is guessing (harness ADR-0018)
           why: >
             both terms, from a real run. A rate alone attributes the fixed cost to the cells and
             the job is sized to be killed on small objects. Every run already fits this and stores

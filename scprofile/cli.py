@@ -3390,16 +3390,24 @@ def _record_capacity(out):
     except Exception as e:                                                # noqa: BLE001
         print(f"  capacity not recorded: {e}")
 
-def _measured(run):
-    """The fitted memory model a run recorded, as the lines to paste into a declaration.
+def _measured(run, declare=None):
+    """The fitted memory model a run recorded, held against the plugin's declaration.
 
     WRITTEN AND NEVER READ. `_run` fits both terms from its own instances, prints them once, and
     stores them under `memory_model` in report.json - and nothing could show them again. So the
     only way to get a plugin's measured memory into its declaration was to be watching the console
     of the run that produced it. Six of nine shipped plugins declare a rate and no baseline, and
     this is a large part of why: the number existed, in a file, unreadable.
+
+    A GATE WITH A WAY OUT (harness ADR-0018). Printing "ready to paste" and exiting 0 left the
+    declaration to somebody's hand, and the stage read answered about a declaration nothing had
+    compared. This exits 0 only when the plugin declares BOTH terms at or above the fit -
+    under-declaration is the direction that kills a job - and `--declare <plugin>` writes the fit
+    plus its headroom into the plugin's own file and reads it back.
     """
     import json as _json
+    from .kernels import MEMORY_HEADROOM, FileKernel, discover, write_memory_terms
+    from .declare import DeclarationError
     rj = Path(run) / "report.json"
     try:
         doc = _json.loads(rj.read_text(encoding="utf-8"))
@@ -3408,25 +3416,76 @@ def _measured(run):
         return REFUSE
     model = doc.get("memory_model") or {}
     if not model:
-        print(f"{rj} records no memory model. A run fits one from its own instances, so either "
-              f"this run measured nothing or every instance shared a job - in which case the "
-              f"figures are the job's and not each plugin's. Run one instance in a job.")
+        print(f"{rj} records no memory model. A run fits one from its own instances' process "
+              f"trees, so either this run measured nothing - no /proc to read - or every "
+              f"instance reported one job-wide figure. Run it where /proc can be read.")
         return REFUSE
-    print(f"# measured in {Path(run).name}, fitted as baseline + per-cell. Paste into the")
-    print(f"# plugin's declaration; a rate without a baseline under-requests on small objects.")
+    if declare and declare not in model:
+        print(f"scprofile: {declare!r} is not a plugin this run fitted; it fitted "
+              f"{', '.join(sorted(model))}", file=sys.stderr)
+        return REFUSE
+    ks = discover()
+    pct = int(round((MEMORY_HEADROOM - 1.0) * 100))
+    print(f"# measured in {Path(run).name}, fitted as baseline + per-cell, held against the "
+          f"declaration")
+    rc = 0
     for name, m in sorted(model.items()):
         base, rate, pts = m.get("base_gb"), m.get("gb_per_100k"), m.get("points")
         basis = ", ".join(m.get("basis") or ()) or "unrecorded"
-        if base is None:
-            print(f"\n# {name}: {pts} point(s) at one size, so the baseline could not be "
-                  f"separated and the")
-            print(f"#   whole peak is charged to the rate. Measure at a second size before "
-                  f"declaring this.")
-            print(f'#   "memory_gb_per_100k": {rate:.1f},')
+        if rate is None:
+            print(f"\n# {name}: nothing usable was fitted")
+            rc = REFUSE
             continue
-        print(f"\n# {name}: {pts} point(s), fitted on {basis}")
-        print(f'    "memory_gb_base": {base:.1f}, "memory_gb_per_100k": {rate:.1f},')
-    return 0
+        want_rate = round(float(rate) * MEMORY_HEADROOM, 1)
+        if base is None:
+            # one point, or all at one size: the split is unknown and the whole peak is
+            # charged to the rate, which is the direction that over-charges rather than
+            # under-requests. Said, so nobody reads it as a measured baseline of zero.
+            print(f"\n# {name}: {pts} point(s) at one size, so the baseline could not be "
+                  f"separated and the whole peak is charged to the rate. Measure at a second "
+                  f"size before declaring a baseline.")
+            want_base = None
+        else:
+            want_base = round(float(base) * MEMORY_HEADROOM, 1)
+            print(f"\n# {name}: {pts} point(s), fitted on {basis}: "
+                  f"{float(base):.1f} GB + {float(rate):.1f} GB per 100k cells")
+        print(f"#   to declare, with {pct}% headroom:")
+        print(f'    "memory_gb_base": {want_base if want_base is not None else 0.0:.1f}, '
+              f'"memory_gb_per_100k": {want_rate:.1f},')
+        k = ks.get(name)
+        if declare == name:
+            if k is None:
+                print(f"scprofile: no plugin named {name!r} in this tree", file=sys.stderr)
+                rc = REFUSE
+                continue
+            try:
+                write_memory_terms(k.path, want_base if want_base is not None else 0.0,
+                                   want_rate, note=f"measured in {Path(run).name}, +{pct}%")
+            except DeclarationError as e:
+                print(f"scprofile: REFUSED - {e}", file=sys.stderr)
+                rc = REFUSE
+                continue
+            k = FileKernel(Path(k.path))
+            print(f"  declared in {k.path}: {k.executor.get('memory_gb_base')} + "
+                  f"{k.executor.get('memory_gb_per_100k')}")
+        if k is None:
+            print(f"  {name} is not in this tree, so nothing declares it here")
+            rc = REFUSE
+            continue
+        db, dr = k.executor.get("memory_gb_base"), k.executor.get("memory_gb_per_100k")
+        lag = []
+        if base is not None and (db is None or float(db) < float(base) - 1e-9):
+            lag.append(f"base declared {db} against {float(base):.1f} fitted")
+        if dr is None or float(dr) < float(rate) - 1e-9:
+            lag.append(f"rate declared {dr} against {float(rate):.1f} fitted")
+        if lag:
+            print(f"  THE DECLARATION LAGS THE MEASUREMENT: {'; '.join(lag)}. Under-declaration "
+                  f"is the direction that kills a job. Apply it:\n"
+                  f"    scprofile capacity --out {run} --memory --declare {name}")
+            rc = REFUSE
+        else:
+            print(f"  declared {db} + {dr}, at or above the fit: answered")
+    return rc
 
 
 def _promised(run):
@@ -3568,7 +3627,7 @@ def _capacity(a):
     if getattr(a, "promised", False):
         return _promised(run)
     if getattr(a, "memory", False):
-        return _measured(run)
+        return _measured(run, declare=getattr(a, "declare", None))
     now = _C.measure(run)
     _C.write(run)
     other = a.against
@@ -3955,8 +4014,13 @@ def main(argv=None):
                      help="another run to hold it against. Without this, the newest run beside "
                           "it that has a recorded capacity.")
     cp_.add_argument("--memory", action="store_true",
-                     help="instead: print the memory model this run fitted, ready to paste into "
-                          "the plugin's declaration")
+                     help="instead: the memory model this run fitted, against what the plugin "
+                          "declares. Exits 0 only when both terms are declared at or above the "
+                          "fit; otherwise it names the way out")
+    cp_.add_argument("--declare", metavar="PLUGIN", default=None,
+                     help="with --memory: write the fitted terms, with their headroom, into that "
+                          "plugin's own declaration and read them back. The measure stage's "
+                          "apply; nothing is pasted by hand")
     cp_.add_argument("--promised", action="store_true",
                      help="instead: which upstream plots this run's plugins DECLARE they draw and "
                           "produced no file for, anywhere in the run")

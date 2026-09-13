@@ -28,9 +28,11 @@ the conversion's INPUT and cannot be its output.
 **`cores` and `cost` are checked by nothing, anywhere.** The ladder's declaration tier asserts they
 are PRESENT; no mechanism asks whether they are true. A kernel can declare `cores: 4` and
 `cost: medium` and be scheduled on that forever. `memory_gb_base` and `memory_gb_per_100k` are not
-in that position: `capacity --memory` fits both terms from a real run and the `measure` stage
-gates on them, which is the shape this would take — a `--cores` mode reading each instance's
-recorded core share and wall time out of `report.json`, and a test-phase stage over it.
+in that position: every run measures each instance's own process tree, `capacity --memory` fits
+both terms and exits 0 only when the declaration is at or above the fit, and `--declare` writes
+the fit into the plugin (the `measure` stage's `apply:`, harness ADR-0018). That is the shape this
+would take — a `--cores` mode reading each instance's recorded core share and wall time out of
+`report.json`, a test-phase stage over it, and an `apply:` that writes what it measured.
 
 Found by auditing the maker's coverage rather than its completeness: `build: 7 of 7 complete` was
 being printed over eight required keys no stage mentioned.

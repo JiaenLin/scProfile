@@ -405,5 +405,59 @@ _d6 = [x for x in FB.figure_drift(_kern2, _pay3) if x.layer == FB.DECLARATION]
 ck("the drawn families and the side-effect file are not charged, the family that drew nothing is",
    len(_d6) == 1 and "native_lonely" in _d6[0].why, "; ".join(x.why[:80] for x in _d6))
 
+
+print("\nthe instance's own process tree is measured, in the job it shares (harness ADR-0018)")
+# THE FLOOR UNDERCOUNTS CONCURRENT WORKERS AND THE CGROUP COUNTER IS THE WHOLE JOB'S, so on a run
+# whose instances shared one job every point carried the same figure and nothing could be fitted.
+# A sampler summing the instance's OWN process tree - self and every descendant, PSS where the
+# kernel offers it - is attributable and includes the workers, which is what both lacked.
+def _fake_proc(spec, page=4096):
+    """A reconstructed /proc: {pid: (ppid, rss_pages, pss_kb or None)}."""
+    d = _P(_tf.mkdtemp()) / "proc"
+    for pid, (ppid, pages, pss) in spec.items():
+        (d / str(pid)).mkdir(parents=True)
+        (d / str(pid) / "stat").write_text(f"{pid} (worker one) S {ppid} 1 1 0 -1 0 0\n")
+        (d / str(pid) / "statm").write_text(f"{pages + 10} {pages} 0 0 0 0 0\n")
+        if pss is not None:
+            (d / str(pid) / "smaps_rollup").write_text(
+                f"00400000-7fff Rss: 1 kB\nRss:  {pages * 4} kB\nPss:  {pss} kB\n"
+                f"Shared_Clean: 0 kB\n")
+    return d
+
+_tree_spec = {1: (0, 10, None),                       # init: not ours
+              100: (1, 262144, 1048576),              # us: 1 GiB rss, 1 GiB pss
+              101: (100, 262144, 524288),             # a worker: 1 GiB rss, 0.5 GiB pss
+              102: (101, 262144, 524288),             # its child: the same
+              200: (1, 262144 * 8, 8 * 1048576)}      # a sibling instance: 8 GiB, not ours
+_gb, _basis = _E._tree_gb(100, proc=_fake_proc(_tree_spec), page=4096)
+ck("the tree is self plus every descendant, and nothing else",
+   _gb is not None and abs(_gb - 2.0) < 1e-6,
+   f"{_gb} GB (expected 2.0: 1 + 0.5 + 0.5 PSS; the sibling's 8 excluded)")
+ck("and PSS is what was summed when every process offered it", _basis == "pss", str(_basis))
+_no_pss = {k: (a, b, None) for k, (a, b, _c) in _tree_spec.items()}
+_gb2, _basis2 = _E._tree_gb(100, proc=_fake_proc(_no_pss), page=4096)
+ck("without smaps_rollup the resident set is summed and the basis says so",
+   _gb2 is not None and abs(_gb2 - 3.0) < 1e-6 and _basis2 == "rss", f"{_gb2} {_basis2}")
+_gb3, _basis3 = _E._tree_gb(100, proc=_P(_tf.mkdtemp()) / "absent", page=4096)
+ck("and where there is no /proc at all nothing is invented", _gb3 is None, str(_gb3))
+
+_three = {"n_cells": 11985, "peak_rss_gb": 4.1, "cgroup_peak_gb": 45.0, "tree_peak_gb": 7.2,
+          "tree_basis": "pss"}
+ck("the tree peak is preferred over both the floor and the job's counter",
+   FB.peak_measurement(_three)[0] == 7.2, str(FB.peak_measurement(_three)))
+ck("and named as the instance's own", "tree" in FB.peak_measurement(_three)[1],
+   FB.peak_measurement(_three)[1])
+_d_tree = FB.memory_drift(_K(), {"measured": _three}, concurrent=10)
+ck("a tree measurement is charged to the declaration even when ten instances share the job",
+   len(_d_tree) == 1 and _d_tree[0].layer == FB.DECLARATION,
+   str([(d.layer, d.why[:60]) for d in _d_tree]))
+_src_entry = (_Path(__file__).resolve().parents[1] / "scprofile" / "_entry.py").read_text()
+ck("the sampler is started before the plugin runs and stopped on every exit path",
+   "_TreeSampler" in _src_entry and "sampler.stop()" in _src_entry
+   and _src_entry.index("sampler = _TreeSampler") < _src_entry.index("mod.run(ctx)"),
+   "a peak measured after the plugin returned is the peak of nothing")
+ck("and what it measured travels with the instance",
+   '"tree_peak_gb"' in _src_entry and '"tree_basis"' in _src_entry)
+
 print("\n" + ("the loop holds" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)

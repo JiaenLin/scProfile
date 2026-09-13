@@ -893,6 +893,70 @@ UNDECLARED_GB_PER_100K = 24.0
 #: fills the node.
 UNDECLARED_GB_BASE = 4.0
 
+#: What a measured fit is declared WITH: the fit plus a tenth. A declaration at the fit is a job
+#: sized to die on the next cohort's largest object; the headroom is named here so `capacity
+#: --memory --declare` and the gate that reads it back agree on one number (harness ADR-0018).
+MEMORY_HEADROOM = 1.10
+
+
+def write_memory_terms(path, base, rate, note=""):
+    """Write both memory terms into a one-file plugin's declaration. Returns (old, new) text.
+
+    THE TOOL EDITS ITS OWN ARTEFACT, as `scaffold --force` already regenerates the companion, so
+    a measured cost never again reaches a declaration by somebody pasting it (harness ADR-0018).
+    Anchored on the `"cores":` line every shipped plugin carries: an existing line carrying
+    either memory key is replaced in place; absent, one line is inserted after the cores line.
+    Refuses - and leaves the file as it was - a directory-shaped plugin, a file with no anchor,
+    a memory term sharing a line with other keys, and a write the reload does not confirm.
+    """
+    import re
+    from .declare import DeclarationError
+    p = Path(path)
+    if not p.is_file() or p.suffix != ".py":
+        raise DeclarationError(f"{p} is not a one-file plugin; declare the memory terms by hand "
+                               f"in a directory-shaped one")
+    text = p.read_text(encoding="utf-8")
+    lines = text.splitlines(keepends=True)
+    body = (f'"memory_gb_base": {float(base):.1f}, "memory_gb_per_100k": {float(rate):.1f},'
+            + (f"  # {note}" if note else ""))
+    key = re.compile(r'"memory_gb_(base|per_100k)"\s*:\s*[-+\d.eE]+\s*,?')
+    idx = [i for i, l in enumerate(lines) if key.search(l)]
+    if idx:
+        for i in idx:
+            rest = re.sub(r"#.*$", "", key.sub("", lines[i])).strip()
+            if rest and rest != ",":
+                raise DeclarationError(f"{p}: line {i + 1} carries a memory term beside other "
+                                       f"keys; nothing was changed")
+        indent = re.match(r"\s*", lines[idx[0]]).group(0)
+        keep = []
+        for i, l in enumerate(lines):
+            if i == idx[0]:
+                keep.append(indent + body + "\n")
+            elif i in idx:
+                continue
+            else:
+                keep.append(l)
+        lines = keep
+    else:
+        anchor = [i for i, l in enumerate(lines) if re.search(r'"cores"\s*:\s*\d+', l)]
+        if not anchor:
+            raise DeclarationError(f"{p}: no `\"cores\":` line to anchor the memory terms on; "
+                                   f"nothing was changed")
+        i = anchor[0]
+        indent = re.match(r"\s*", lines[i]).group(0)
+        lines.insert(i + 1, indent + body + "\n")
+    new_text = "".join(lines)
+    p.write_text(new_text, encoding="utf-8")
+    got = FileKernel(p).executor
+    ok = (abs(float(got.get("memory_gb_base") or -1) - round(float(base), 1)) < 1e-9
+          and abs(float(got.get("memory_gb_per_100k") or -1) - round(float(rate), 1)) < 1e-9)
+    if not ok:
+        p.write_text(text, encoding="utf-8")
+        raise DeclarationError(f"{p}: the terms did not read back from the declaration "
+                               f"({got.get('memory_gb_base')}, "
+                               f"{got.get('memory_gb_per_100k')}); the file is restored")
+    return text, new_text
+
 
 def demand(inst, kernel, n_cells):
     """What ONE instance needs, in every dimension the pool admits on.
