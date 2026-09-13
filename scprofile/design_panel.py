@@ -389,6 +389,7 @@ def draw(per_sample, design, path, *, cells=None, width=None):
     fig, axes = plt.subplots(len(measures), ncol, squeeze=False,
                              figsize=(width, max(1.95, 0.30 * _rows_per + 0.9) * len(measures)
                                       + 0.85))
+    footnotes = []
     for i, m in enumerate(measures):
         row_vals = [v[m] for v in per_sample.values() if m in v]
         lo, hi = (min(row_vals), max(row_vals)) if row_vals else (0, 1)
@@ -432,14 +433,13 @@ def draw(per_sample, design, path, *, cells=None, width=None):
                 if alias.get(f):
                     # THE ASTERISK HAS ITS FOOTNOTE ON THE PANEL (harness ADR-0020): the header
                     # carried the mark and the caption the reason, and the eye read a panel that
-                    # explained nothing. One line per aliased factor, at the foot of the grid.
+                    # explained nothing. One line per aliased factor, at the foot of the grid -
+                    # placed after the key is drawn, below it (see `footnotes` below).
                     _fn = (f"* {f} is aliased with {', '.join(str(a) for a in alias[f])}: every "
                            f"sample that differs in one differs in the other, so a difference "
                            f"here is equally either's")
-                    if _fn not in [t.get_text() for t in fig.texts]:
-                        fig.text(0.0, -0.01 - 0.028 * sum(1 for t in fig.texts
-                                                            if t.get_text().startswith("* ")),
-                                 _fn, ha="left", va="top", fontsize=5.6, color="#555")
+                    if _fn not in footnotes:
+                        footnotes.append(_fn)
             if j == 0:
                 ax.set_ylabel(m, fontsize=7.5)
             else:
@@ -511,6 +511,13 @@ def draw(per_sample, design, path, *, cells=None, width=None):
                    ncol=2, handletextpad=0.4)
     except Exception:                                                     # noqa: BLE001
         pass
+    # THE FOOTNOTES GO UNDER THE KEY, FROM THE LOWEST RENDERED ARTIST. A fixed y below the box
+    # was where the key already sat, and on twelve samples and three measures the second rerun's
+    # audit found the two through each other by two thirds - the host's own collision, the same
+    # one `stamp_below` was written for. Each line is placed below everything drawn before it.
+    for _fn in footnotes:
+        _t = fig.text(0.0, -0.01, _fn, ha="left", va="top", fontsize=5.6, color="#555")
+        F.stamp_below(fig, _t)
     fig.tight_layout()
     try:
         F.fit_column(fig, target=width)

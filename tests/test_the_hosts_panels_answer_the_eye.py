@@ -306,6 +306,21 @@ try:
 finally:
     F.save = _orig_save
 
+print("\nacross the design: the footnote sits clear of the marker key")
+# THE SECOND RERUN'S ONE MACHINE RESIDUE (harness ADR-0020, step 2): the footnote the first
+# look asked for was placed at a fixed y below the box, where the marker key already sat, and
+# on a cohort of twelve samples and three measures the two overlapped by two thirds. The
+# panel's own audit says so; the eye should never have to.
+with tempfile.TemporaryDirectory() as td:
+    per_sample = {f"s{i}": {"cells": 100.0 + i, "edges": 10.0 + i, "populations": 5.0 + i % 3}
+                  for i in range(1, 13)}
+    dsg = {f"s{i}": {"age": "young" if i <= 6 else "aged", "diet": "a" if i % 2 else "b",
+                     "chemistry": "v2" if i <= 6 else "v3", "batch": "A"} for i in range(1, 13)}
+    n, rec = DP.draw(per_sample, dsg, Path(td) / "p_across_design.png")
+    over = [f for f in rec.get("audit", []) if f.get("code") == "text_overlap"]
+    ck("the panel drew with the aliased factor", n > 0, str(n))
+    ck("and nothing on it overlaps the footnote or the key", not over, str(over)[:300])
+
 print("\nN7: bars that carry less than the whole say how much, and how many carry the rest")
 d = Draw()
 big = edges_pairs(POPS, pathways=("P1",) * 6 + ("P2",))          # one dominant pathway, many pairs
