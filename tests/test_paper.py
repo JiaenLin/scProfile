@@ -169,6 +169,36 @@ PA.review(root2, r2["id"], PA.STANDING, "put to a reviewer and it held up", revi
 ck("all-standing is flagged rather than reported as success",
    "EVERY CLAIM SURVIVED UNCHANGED" in PA.summarise(root2))
 
+print("\nand a narrowed claim is a claim that changed (harness ADR-0020, blind 0007)")
+# The reviewer narrowed ten of eleven claims and the next step read "Every claim survived
+# unchanged, which is also what a loop looks like when nobody pushed": the line counted only
+# the withdrawn. A narrowing is the loop pushing.
+root3 = Path(tempfile.mkdtemp())
+f3 = root3 / "figures"
+f3.mkdir(parents=True)
+(f3 / "x.png").write_text("X")
+r3 = PA.claim(root3, GOOD, ["figures/x.png"])
+PA.review(root3, r3["id"], PA.NARROWED, "holds for the one arm the figure shows, not both",
+          reviewer="r")
+PA.write_draft(root3, "a section of at least a few words " * 8, author="w")
+_pg = PA._report_dir(root3) / PA.page_name()
+_pg.parent.mkdir(parents=True, exist_ok=True)
+_pg.write_text("<html>rendered</html>")
+_head, _cmd = PA.next_step(root3)
+ck("a narrowed claim is not reported as having survived unchanged",
+   "unchanged" not in _head.lower() and "narrowed" in _head.lower(), _head)
+
+print("\nand a page rendered before the section or a verdict is not the rendered result")
+# The rerun's page was rendered at seal time; the writer carried a section in and the reviewer
+# recorded eleven verdicts an hour later, and the next step said nothing was outstanding. The
+# page on disk was of a section that no longer existed.
+import os, time
+_old = time.time() - 3600
+os.utime(_pg, (_old, _old))
+_head, _cmd = PA.next_step(root3)
+ck("a page older than the section it renders is asked to be rendered again",
+   "--render" in _cmd and "render" in _head.lower(), f"{_head!r} / {_cmd!r}")
+
 print("\nthe limits are stated in the tool, not only in the docs")
 ck("the narrow list is non-empty and specific", len(PA.NARROW) >= 6)
 ck("every gap is a sentence, not a word", all(len(g.split()) >= 8 for g in PA.NARROW))

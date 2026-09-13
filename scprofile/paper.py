@@ -441,16 +441,33 @@ def next_step(out, plugin=""):
             return ("Every claim is defended and no section has been written. The ledger holds the "
                     "sentences and not the document they came from.",
                     _cmd(out, plugin, "--write section.md"))
-        if not (_report_dir(out, plugin) / page_name(plugin)).is_file():
+        page = _report_dir(out, plugin) / page_name(plugin)
+        if not page.is_file():
             return ("The section is written and every claim defended. Render it into the run.",
                     _cmd(out, plugin, "--render"))
+        # A PAGE OLDER THAN WHAT IT RENDERS IS NOT THE RENDERED RESULT (harness ADR-0020, blind
+        # 0007): the rerun's page was rendered at seal time, the writer carried a section in and
+        # the reviewer recorded eleven verdicts an hour later, and this said nothing was
+        # outstanding. The page renders the section and the ledger; either newer means render.
+        try:
+            newest = max(q.stat().st_mtime for q in (_root(out, plugin) / draft_name(plugin),
+                                                      _root(out, plugin) / ledger_name(plugin))
+                         if q.is_file())
+            if page.stat().st_mtime < newest:
+                return ("The section or a verdict is newer than the rendered page. Render it "
+                        "into the run again.", _cmd(out, plugin, "--render"))
+        except (OSError, ValueError):
+            pass
+        # A NARROWED CLAIM IS A CLAIM THAT CHANGED (blind 0007): ten of eleven narrowed read as
+        # "survived unchanged" because only the withdrawn were counted.
         withdrawn = [c for c, st, _n, _t in rows if st == WITHDRAWN]
-        if not withdrawn:
+        narrowed = [c for c, st, _n, _t in rows if st == NARROWED]
+        if not withdrawn and not narrowed:
             return ("Every claim survived unchanged, which is also what a loop looks like when "
                     "nobody pushed. Consider another round against a different standard.",
                     _cmd(out, plugin, "--brief"))
-        return ("The loop has run: claims written, reviewed, and the section rendered into the run.",
-                "")
+        return (f"The loop has run: claims written, reviewed ({len(narrowed)} narrowed, "
+                f"{len(withdrawn)} withdrawn), and the section rendered into the run.", "")
 
     head, cmd = _rest()
     return ((note + head) if note else head, cmd)
