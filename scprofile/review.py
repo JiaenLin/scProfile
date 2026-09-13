@@ -173,20 +173,43 @@ def read_answers(out, plugin=""):
     KEPT APART FROM THE LOOKS (harness ADR-0019): an answer is not a look, and the latest look
     per figure must stay the eye's. An answer record carries `answer`, `by`, `sha256`, `at`.
     """
-    f = ledger_path(out, plugin)
-    seen = {}
-    if not f.exists():
-        return seen
-    for line in f.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            rec = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(rec, dict) and rec.get("figure") and rec.get("answer"):
-            seen[str(rec["figure"])] = rec
+    def _own(run):
+        f = ledger_path(run, plugin)
+        got = {}
+        if not f.exists():
+            return got
+        for line in f.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(rec, dict) and rec.get("figure") and rec.get("answer"):
+                got[str(rec["figure"])] = rec
+        return got
+
+    seen = _own(out)
+    # AND THE SIBLINGS', BY THE IMAGE'S BYTES (harness ADR-0019, found on the rerun of blind
+    # 0006): the looks and the findings carried from the run beside this one by sha256 and not
+    # one of the author's 21 answers did, so the answered plates were not outstanding for a fresh
+    # look and the worksheet would have asked the same kinds again. An answer is bound to the
+    # bytes like a look is: on the same bytes it carries, with the run it was given on named.
+    by_sha = {}
+    for run in sibling_runs(out):
+        for _rel, rec in _own(run).items():
+            sha = str(rec.get("sha256") or "")
+            if sha:
+                by_sha.setdefault(sha, dict(rec, run=run.name))
+    if by_sha:
+        root = Path(out)
+        for rel in figures(out):
+            if rel in seen or (plugin and not rel.startswith(f"kernels/{plugin}/")):
+                continue
+            now = digest(root / rel)
+            if now and now in by_sha:
+                seen[rel] = dict(by_sha[now], figure=rel)
     return seen
 
 

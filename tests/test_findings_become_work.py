@@ -191,6 +191,27 @@ with tempfile.TemporaryDirectory() as td:
        ws[:600])
     ck("the eye's words are printed whole", LONG in ws, ws[ws.find("eye (looker-2)"):][:500])
 
+print("\nan answer carries to a sibling run on the same bytes, the way a look does")
+# FOUND ON THE RERUN OF BLIND 0006: the author's 21 answers lived in the old replay's ledger; the
+# rerun beside it carried the LOOKS by sha256 (32 of the scan set) and the findings (19) but not
+# one answer, so the answered plates were not outstanding for a looker's fresh look and the
+# worksheet would have asked the author the same ten kinds again. An answer is bound to the
+# image's bytes like a look is; on the same bytes it carries, on other bytes it does not.
+with tempfile.TemporaryDirectory() as td:
+    import shutil
+    a = make_run(td)
+    b = Path(td) / "20260102T000000Z__scprofile-abc1234__stage"   # a sibling: same parent, same bytes
+    shutil.copytree(a, b)
+    R.record(a, F_TOOL, NOTE_2, reviewer="looker-1", plugin=PLUG, defect=True)
+    R.answer(a, F_TOOL, ANSWER, by="author", plugin=PLUG)
+    ck("the sibling carries the answer", F_TOOL in R.answered(b, PLUG), str(R.answered(b, PLUG)))
+    ck("and lists the figure as needing a look", dict(R.outstanding(b, PLUG)).get(F_TOOL) == R.ANSWERED,
+       str(dict(R.outstanding(b, PLUG)).get(F_TOOL)))
+    ws = R.worksheet(b, PLUG)
+    ck("the worksheet on the sibling shows the answer", "answered by author" in ws, ws[:400])
+    (b / F_TOOL).write_bytes(b"\x89PNG other bytes")
+    ck("other bytes: the answer does not carry", F_TOOL not in R.answered(b, PLUG), str(R.answered(b, PLUG)))
+
 print("\nthe stages say it: the audit's worksheet, and the answered figures the eye owes")
 dev = (ROOT / "DEVPOINTS.yaml").read_text(encoding="utf-8")
 aud = dev[dev.index("- name: audited"):dev.index("- name: written")]
