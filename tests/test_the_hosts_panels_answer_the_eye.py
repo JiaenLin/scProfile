@@ -417,6 +417,30 @@ ck("the solve carried some labels away from their points (the case under test)",
 ck("and every label further than the gap has a leader to its point", not _untied, str(_untied))
 plt.close(fig)
 
+print("\nC4: the caption says where arrows may cross, so the finding can be stated")
+# THE ONE FINDING LEFT AFTER THE DISCLOSURES (harness ADR-0023): three populations shifting
+# through one small region, their arrows crossing in near colours - the data's crossing, which
+# every look named as such. A host panel is stated against the caption the page prints under
+# it, so the caption carries the sentence.
+_C4 = {}
+def _c4_save(fig, out_dir, name, **kw):
+    if "C4_role" in name:
+        _C4["caption"] = str(kw.get("caption") or "")
+    return _orig_save(fig, out_dir, name, **kw)
+F.save = _c4_save
+try:
+    with tempfile.TemporaryDirectory() as td:
+        per = {"s1": edges_for(POPS, 0.02), "s2": edges_for(POPS, 0.021),
+               "s3": edges_for(POPS, 0.024), "s4": edges_for(POPS, 0.025)}
+        design = {"s1": {"age": "young"}, "s2": {"age": "young"}, "s3": {"age": "aged"}, "s4": {"age": "aged"}}
+        spec = ("age", "age", "young", "aged", {"age": "young"}, {"age": "aged"})
+        CP.draw_contrast(per, design, spec, Path(td), "p", weight="prob", group_col="pathway")
+finally:
+    F.save = _orig_save
+ck("the role-shift caption states that arrows may cross where shifts share a region",
+   "arrows may cross" in _C4.get("caption", "").lower() and "table" in _C4.get("caption", "").lower(),
+   _C4.get("caption", "")[:300])
+
 print("\nC4: role-shift labels that crowd one region keep a gap between them")
 F.save = _capturing_save
 _GEOM = {}

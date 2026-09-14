@@ -458,6 +458,12 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                + (f"Axes are therefore each population's SHARE of its arm, and an arrow is a "
                   f"change in the BALANCE between populations rather than in the arm's total. "
                   if rel else "")
+               # WHERE THE DATA CROSS, THE ARROWS CROSS (harness ADR-0023): several populations
+               # shifting through one small region draw arrows through each other in near
+               # colours; the panel keeps each label legible and the table names each shift.
+               + "Arrows may cross where several populations shift through one region; each "
+                 "label stays beside its own arrowhead, and the table beside the panel names "
+                 "every shift. "
                + f"The small marker is {lo_lv}, the arrowhead {hi_lv}. Above the dashed line a "
                f"population receives more than it sends. Arms are pooled groups. An arrow is "
                f"the difference of two point estimates and carries no interval - its length is "
