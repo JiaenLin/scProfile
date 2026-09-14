@@ -225,7 +225,11 @@ def review(out, cid, verdict, why, *, reviewer="", replaces="", plugin=""):
         raise Refused(f"the reviewer {who!r} is the claim's author. A claim is defended against "
                       f"a second reader - another agent, given the figures and told to refute "
                       f"it - or it is not defended.")
+    # WHAT THE ROUND SAW: the cited figures' hashes now, so a later redraw is measured from
+    # this round and not from the claim (harness ADR-0022).
+    seen = {f: _digest(Path(out) / f) for f in (claims[cid].get("cites") or {})}
     return _append(out, {"kind": "review", "id": cid, "verdict": verdict, "why": text,
+                         "cites": seen,
                          "reviewer": str(reviewer or ""), "replaces": str(replaces or ""),
                          "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, plugin)
 
@@ -240,14 +244,29 @@ def status(out, plugin=""):
     claims, rounds = {}, {}
     for r in read_ledger(out, plugin):
         if r.get("kind") == "claim":
-            claims[r["id"]] = r
+            # THE LATEST RECORD BY TIME, NOT THE LAST IN THE FILE (harness ADR-0022, found by
+            # the reviewer of the carried run): a written layer laid over a run that composed
+            # its claims afresh appends the older record below the newer, and file order made
+            # the older one win, with its hashes of figures since redrawn - STALE forever.
+            if str(r.get("at") or "") >= str((claims.get(r["id"]) or {}).get("at") or ""):
+                claims[r["id"]] = r
         elif r.get("kind") == "review":
             rounds.setdefault(r["id"], []).append(r)
     rows = []
     for cid, c in claims.items():
-        rs = rounds.get(cid) or []
-        moved = [f for f, sha in (c.get("cites") or {}).items()
-                 if sha and _digest(root / f) != sha]
+        rs = sorted(rounds.get(cid) or [], key=lambda r: str(r.get("at") or ""))
+        # STALE IS A FIGURE CHANGED SINCE THE LATEST ROUND THAT SAW IT (the same reviewer): read
+        # from the claim record alone, a redrawn figure kept a claim STALE however many rounds
+        # defended it, and the printed remedy did nothing. A round records the figures as it
+        # saw them; a round from before that was recorded is held to the claim's own hashes.
+        # THE MOST RECENT RECORD THAT SAW THE FIGURES, claim or round, is the reference: a claim
+        # composed afresh after a round carries newer hashes than the round did.
+        # Within one second the ledger's order decides: a round written after the claim it
+        # defends, and after an earlier round, is the later record.
+        ordered = sorted(enumerate([c] + rs), key=lambda ir: (str(ir[1].get("at") or ""), ir[0]),
+                         reverse=True)
+        seen = next((r["cites"] for _i, r in ordered if r.get("cites")), {})
+        moved = [f for f, sha in seen.items() if sha and _digest(root / f) != sha]
         if moved:
             state = STALE
         elif not rs:

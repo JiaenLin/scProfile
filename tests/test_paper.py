@@ -8,6 +8,7 @@ satisfied by reading it.
 Run: python tests/test_paper.py
 """
 import sys
+import json
 import tempfile
 from pathlib import Path
 
@@ -158,6 +159,29 @@ print("\nTHE PROPERTY THAT MAKES IT A GATE: a redraw invalidates the claim")
 ck("redrawing a cited figure takes the claim to STALE", PA.status(root)[0][1] == PA.STALE)
 ck("even though it had a verdict", PA.status(root)[0][2] == 2)
 ck("and it is outstanding again", [c for c, _ in PA.outstanding(root)] == [cid])
+# A ROUND ON THE REDRAWN FIGURE DEFENDS THE CLAIM AGAIN (harness ADR-0022; found by the reviewer
+# of the carried run): staleness was read from the hashes the claim record carried, so a claim
+# whose figure was redrawn stayed STALE however many rounds defended it, and `next` printed the
+# same remedy before and after. A round records the figures as it saw them; staleness is a
+# figure changed since the latest round.
+PA.review(root, cid, PA.STANDING, "opened the redrawn figure and the claim still reads off it",
+          reviewer="r")
+ck("a round after the redraw takes the claim out of STALE", PA.status(root)[0][1] == PA.STANDING,
+   str(PA.status(root)[0]))
+(figs / A.split("/")[-1]).write_text("A CHANGED AGAIN")
+ck("and a redraw after that round makes it STALE again", PA.status(root)[0][1] == PA.STALE)
+# THE LATEST CLAIM RECORD WINS, NOT THE LAST IN THE FILE (the same reviewer): a run that
+# composes its claims afresh writes a record with current hashes at the top of its ledger, and
+# a written layer laid over it appends the older record for the same id below; read in file
+# order, the older one won and the claim was STALE forever.
+import time as _t
+_t.sleep(1.1)
+fresh = PA.claim(root, GOOD, [A, B], author="t")
+older = dict(fresh, at="2000-01-01T00:00:00Z", cites={A: "0" * 64, B: "0" * 64})
+with open(root / PA.ledger_name(), "a", encoding="utf-8") as fh:
+    fh.write(json.dumps(older) + "\n")
+ck("the latest claim record by time decides, whatever the file order",
+   PA.status(root)[0][1] != PA.STALE, str(PA.status(root)[0]))
 
 print("\nand a loop that only ever confirms is named as one")
 root2 = Path(tempfile.mkdtemp())
