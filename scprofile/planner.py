@@ -802,24 +802,6 @@ def _stems():
 _P_STEM = _stems()
 
 
-def gap_text(sections):
-    """The specified-versus-delivered table, as text."""
-    L = ["WHAT THE RUN DELIVERS AGAINST WHAT THE DESIGN SPECIFIES", ""]
-    tot_h = tot_m = 0
-    for i, s in enumerate(sections, 1):
-        h, m = len(s.get("have") or []), len(s.get("missing") or [])
-        tot_h += h
-        tot_m += m
-        head = s["kind"].upper() + (f"  {s['factor']}" if s.get("factor") else "")
-        if s.get("stratum"):
-            head += "  [" + ", ".join(f"{k} = {v}" for k, v in s["stratum"].items()) + "]"
-        L.append(f"{i}. {head}   {h} of {h + m} specified panel(s) present")
-        for p in (s.get("missing") or []):
-            L.append(f"     MISSING  {p['kind']}: {p['establishes']}")
-    L += ["", f"{tot_h} of {tot_h + tot_m} specified panels delivered."]
-    return "\n".join(L)
-
-
 #: How many figures a run will draw, from the design and the declaration ALONE.
 #:
 #: WHY THIS IS HERE AND NOT IN A REPORT. `result_spec` above says what a result should CONTAIN and
