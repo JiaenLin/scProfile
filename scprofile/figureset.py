@@ -128,13 +128,28 @@ def _what(stem, plugin, suffixes):
     return _clean(s.replace("__", "_")) or "panel"
 
 
-def _panel_legend(caption, label=""):
+_COLOUR_KEY = re.compile(r"\s*Population colours are the run's own map \(key [0-9a-f]+\); the same "
+                         r"label is the same colour in every panel of this run\.")
+
+
+def _panel_legend(caption, label="", kind=None):
+    """The plate's caption as a legend clause: no unit tag, no provenance, no record-keeping.
+
+    The report's caption carries the colour map's digest and "this run", which is the record's
+    business; the legend says it in the register, and only on a plate that colours by
+    population - on a plate coloured by a scale the sentence was false (harness ADR-0024).
+    """
+    from . import figure_context as _FCx
     t = " ".join(str(caption or "").split())
     t = _UNIT_TAG.sub("", t)
     if label and t.startswith(f"{label}: "):
         t = t[len(label) + 2:]
     t = _PROVENANCE.sub("", t)
     t = _ALONE.sub("", t)
+    if kind and str(kind) not in _FCx.POPULATION_COLOURED:
+        t = _COLOUR_KEY.sub("", t)
+    else:
+        t = _COLOUR_KEY.sub(" Populations keep one colour across every panel.", t)
     return t.strip()
 
 
@@ -220,8 +235,8 @@ def plates(run, plugin, spec, design, pay):
                     subject, suffixes = "", ["cohort"]
                 _add({"axis": axis, "subject": subject, "id": fid.split("__")[0],
                       "what": _what(stem, plugin, suffixes), "source": rel,
-                      "caption": _panel_legend(cap, label), "drawn_by": "host", "function": "",
-                      "order": (0, rank, stem)})
+                      "caption": _panel_legend(cap, label, kind), "drawn_by": "host",
+                      "function": "", "order": (0, rank, stem)})
                 continue
             # A PLATE OF A COMPARISON PHASE: the entry that claims it says who drew it.
             fn, eid = _NAT.who_drew(spec, declared, rel)
@@ -241,7 +256,7 @@ def plates(run, plugin, spec, design, pay):
                 suffixes = [tail] if tail else []
             _add({"axis": axis, "subject": subject, "id": eid or stem,
                   "what": _what(stem, plugin, suffixes), "source": rel,
-                  "caption": _panel_legend(cap, label),
+                  "caption": _panel_legend(cap, label, e.get("kind")),
                   "drawn_by": str(e.get("drawn_by") or ("tool" if fn else "plugin")),
                   "function": fn or "",
                   "order": (1, order_of.get(eid, len(entries)), stem)})
@@ -262,7 +277,7 @@ def plates(run, plugin, spec, design, pay):
         e = by_id.get(eid) or {}
         _add({"axis": axis, "subject": unit, "id": eid or str(f.get("id") or stem),
               "what": _what(stem, plugin, []), "source": rel,
-              "caption": _panel_legend(f.get("caption")),
+              "caption": _panel_legend(f.get("caption"), kind=e.get("kind")),
               "drawn_by": str(f.get("drawn_by") or e.get("drawn_by") or ("tool" if fn else "plugin")),
               "function": fn or "", "order": (1, order_of.get(eid, len(entries)), stem)})
     return out, contrast_labels

@@ -328,6 +328,20 @@ try:
        str([l[:120] for f, l in zip(figs, legs) if f["axis"] == "group"][:2]))
     ck("no legend says 'this run' or names a run key",
        not any("this run" in l.lower() or re.search(r"\d{8}T\d{6}Z", l) for l in legs))
+    # THE REPORT'S COLOUR-KEY SENTENCE (found on the second run's page): the report stamps
+    # "Population colours are the run's own map (key ...); ... every panel of this run" on a
+    # caption, which is the record's business; a legend says it in the register, and only on
+    # a plate that colours by population.
+    legacy = ("Senders down the rows. Population colours are the run's own map (key 2380b7e8d228); "
+              "the same label is the same colour in every panel of this run.")
+    ck("a legend drops the colour-key sentence on a plate that colours by a scale",
+       FS._panel_legend(legacy, kind="diff_matrix") == "Senders down the rows.",
+       FS._panel_legend(legacy, kind="diff_matrix"))
+    ck("and says it in the register on a plate that colours by population",
+       FS._panel_legend(legacy, kind="circle") == "Senders down the rows. Populations keep one colour across every panel.",
+       FS._panel_legend(legacy, kind="circle"))
+    ck("a plate of no known kind keeps the sentence, in the register",
+       "this run" not in FS._panel_legend(legacy) and "one colour" in FS._panel_legend(legacy))
     con_t = [f["title"] for f in figs if f["axis"] == "contrast" and f["subject"] == "dose_within_late"]
     ck("a contrast's title names the levels, the factor in brackets and the stratum",
        con_t and con_t[0] == "Widget signalling: high versus low (dose) within late.", str(con_t[:1]))
