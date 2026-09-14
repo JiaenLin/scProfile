@@ -404,14 +404,20 @@ def stated_answers(out, plugin=""):
     # changed but the pixels. The disclosure is about the entry's drawing by the upstream's
     # design; it holds for every rendering while the legend carries the words, and that is
     # checked against the declaration in this tree, not the image.
+    words_by_kind = {}
     for rel in figures(out):
         if rel in out_ or (plugin and not rel.startswith(f"kernels/{plugin}/")):
             continue
-        rec = by_kind.get(kind_of(rel))
+        kind = kind_of(rel)
+        rec = by_kind.get(kind)
         if rec is None:
             continue
-        _fid, words = declared_text(plugin, rel)
-        if words and _norm(rec.get("answer")) in _norm(words):
+        # ONE READ OF THE DECLARATION PER KIND: read per figure, the worksheet took two minutes
+        # on 945 figures, loading the plugin's file for each.
+        if kind not in words_by_kind:
+            words_by_kind[kind] = _norm(declared_text(plugin, rel)[1])
+        words = words_by_kind[kind]
+        if words and _norm(rec.get("answer")) in words:
             out_[rel] = dict(rec, figure=rel, carried_by="entry")
     return out_
 

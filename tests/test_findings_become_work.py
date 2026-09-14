@@ -242,6 +242,20 @@ with tempfile.TemporaryDirectory() as td:
                              "    ]}}\n\ndef run(ctx):\n    pass\n")
         ck("and reopens when the legend no longer carries the words",
            F_TOOL in R.open_findings(b, PLUG), str(R.open_findings(b, PLUG)))
+        # ONE READ OF THE DECLARATION PER KIND, NOT PER FIGURE (found on the carried run: the
+        # worksheet took two minutes on 945 figures, loading the plugin's file for each).
+        for i in range(60):
+            q = b / f"kernels/p/U{i}/figures/native_ring.png"
+            q.parent.mkdir(parents=True, exist_ok=True)
+            q.write_bytes(b"\x89PNG-render-%d" % i)
+        _calls = []
+        _orig_dt = R.declared_text
+        R.declared_text = lambda plugin, rel, plugin_file=None: (_calls.append(rel) or _orig_dt(plugin, rel, plugin_file))
+        try:
+            R.stated_answers(b, PLUG)
+        finally:
+            R.declared_text = _orig_dt
+        ck("the declaration is read once per kind, not once per figure", len(_calls) <= 2, str(len(_calls)))
     finally:
         R._plugin_file = _orig_pf
 
