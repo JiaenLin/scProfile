@@ -175,7 +175,7 @@ with tempfile.TemporaryDirectory() as td:
     except R.Refused as e:
         refused = str(e)
     ck("a statement the declaration does not carry is refused, naming the entry",
-       "native_ring" in refused and "declar" in refused.lower(), refused[:200])
+       "native_ring" in refused and "legend" in refused.lower(), refused[:200])
     ck("and nothing was recorded", F_TOOL in dict((r, 1) for r, *_ in R.defects(run, PLUG))
        and F_TOOL not in R.read_answers(run, PLUG))
     plug_file.write_text("PLUGIN = {\n    'report': {'figures': [\n"
@@ -183,6 +183,20 @@ with tempfile.TemporaryDirectory() as td:
                          + STATED.replace("'", "\\'") + "'},\n    ]}}\n\ndef run(ctx):\n    pass\n")
     rec = R.answer(run, F_TOOL, STATED, by="author", plugin=PLUG, stated=True, plugin_file=plug_file)
     ck("with the statement in the declaration the answer records as stated", rec.get("stated") is True)
+    # IN THE LEGEND, NOT ANYWHERE IN THE ENTRY (found by the cold author of this pass): the
+    # check read every string of the entry, so a sentence in `args` would have closed a finding
+    # the page never shows. The legend is what the page prints under the figure.
+    plug_hidden = Path(td) / "q.py"
+    plug_hidden.write_text("PLUGIN = {\n    'report': {'figures': [\n"
+                           "        {'id': 'native_ring', 'fn': 'drawRing', 'legend': 'the ring', "
+                           "'args': 'obj, note = \\'" + STATED.replace("'", "") + "\\''},\n"
+                           "    ]}}\n\ndef run(ctx):\n    pass\n")
+    hidden = ""
+    try:
+        R.answer(run, F_TOOL, STATED, by="author", plugin=PLUG, stated=True, plugin_file=plug_hidden)
+    except R.Refused as e:
+        hidden = str(e)
+    ck("a sentence anywhere but the legend does not count", "legend" in hidden, hidden[:160])
     ck("the finding is closed", F_TOOL not in R.open_findings(run, PLUG), str(R.open_findings(run, PLUG)))
     st = {r: s_ for r, s_, _w in R.status(run, PLUG)}
     ck("and the figure reads reviewed, not awaiting a look", st.get(F_TOOL) == R.REVIEWED, str(st.get(F_TOOL)))

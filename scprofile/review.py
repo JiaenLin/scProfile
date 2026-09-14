@@ -310,16 +310,9 @@ def declared_text(plugin, rel, plugin_file=None):
         return "", ""
     if entry is None:
         return fid, ""
-
-    def _strings(o):
-        if isinstance(o, str):
-            return [o]
-        if isinstance(o, dict):
-            return [x for v in o.values() for x in _strings(v)]
-        if isinstance(o, (list, tuple)):
-            return [x for v in o for x in _strings(v)]
-        return []
-    return fid, " ".join(_strings(entry))
+    # THE LEGEND, NOT ANYWHERE IN THE ENTRY (found by the cold author of ADR-0022's pass): the
+    # page prints the legend under the figure; a sentence in `args` closes nothing a reader sees.
+    return fid, " ".join(str(entry.get(k) or "") for k in ("legend", "caption"))
 
 
 def _norm(text):
@@ -364,9 +357,9 @@ def answer(out, figure, why, *, by="", plugin="", stated=False, plugin_file=None
         fid, words = declared_text(plugin, rel, plugin_file)
         if _norm(text) not in _norm(words):
             raise Refused(f"the plan entry {fid or '?'!r} that captions {rel} does not state "
-                          f"this. A stated answer closes the finding only when the plugin's own "
-                          f"declaration carries the words: put this sentence in the entry's "
-                          f"legend in the plugin's file, then answer again.")
+                          f"this in its legend. A stated answer closes the finding only when "
+                          f"the words are where the page prints them: put this sentence in the "
+                          f"entry's legend in the plugin's file, then answer again.")
         rec["stated"] = True
     ledger_path(root, plugin).parent.mkdir(parents=True, exist_ok=True)
     _append_line(ledger_path(root, plugin), json.dumps(rec))
