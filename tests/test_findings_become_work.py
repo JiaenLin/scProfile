@@ -154,6 +154,48 @@ with tempfile.TemporaryDirectory() as td:
     ck("the status names the answered figure as needing a look",
        "answered" in pr.stdout and "N2_chord" in pr.stdout, pr.stdout[-500:])
 
+print("\na stated answer closes the finding when the plugin's own declaration says it (ADR-0022)")
+# THE UPSTREAM'S OWN DRAWING, DISCLOSED (harness ADR-0022): thirteen of sixteen surviving kinds
+# named a legend the upstream does not draw or a label the plugin cannot reach through its
+# plan, and their only exit was a looker's fresh look, which kept finding what is there. The
+# author answers `--stated`; the statement must appear in the plan entry that captions the
+# figure; the finding closes without a fresh look because the check is mechanical.
+STATED = ("the colour key reads only min and max by the upstream's own design; the values are "
+          "in the table beside the figure")
+with tempfile.TemporaryDirectory() as td:
+    run = make_run(td)
+    R.record(run, F_TOOL, NOTE_2, reviewer="looker-1", plugin=PLUG, defect=True)
+    plug_file = Path(td) / "p.py"
+    plug_file.write_text("PLUGIN = {\n    'report': {'figures': [\n"
+                         "        {'id': 'native_ring', 'fn': 'drawRing', 'legend': 'the ring'},\n"
+                         "    ]}}\n\ndef run(ctx):\n    pass\n")
+    refused = ""
+    try:
+        R.answer(run, F_TOOL, STATED, by="author", plugin=PLUG, stated=True, plugin_file=plug_file)
+    except R.Refused as e:
+        refused = str(e)
+    ck("a statement the declaration does not carry is refused, naming the entry",
+       "native_ring" in refused and "declar" in refused.lower(), refused[:200])
+    ck("and nothing was recorded", F_TOOL in dict((r, 1) for r, *_ in R.defects(run, PLUG))
+       and F_TOOL not in R.read_answers(run, PLUG))
+    plug_file.write_text("PLUGIN = {\n    'report': {'figures': [\n"
+                         "        {'id': 'native_ring', 'fn': 'drawRing', 'legend': 'the ring. "
+                         + STATED.replace("'", "\\'") + "'},\n    ]}}\n\ndef run(ctx):\n    pass\n")
+    rec = R.answer(run, F_TOOL, STATED, by="author", plugin=PLUG, stated=True, plugin_file=plug_file)
+    ck("with the statement in the declaration the answer records as stated", rec.get("stated") is True)
+    ck("the finding is closed", F_TOOL not in R.open_findings(run, PLUG), str(R.open_findings(run, PLUG)))
+    st = {r: s_ for r, s_, _w in R.status(run, PLUG)}
+    ck("and the figure reads reviewed, not awaiting a look", st.get(F_TOOL) == R.REVIEWED, str(st.get(F_TOOL)))
+    ck("and it is not outstanding", F_TOOL not in dict(R.outstanding(run, PLUG)))
+    ws = R.worksheet(run, PLUG, plugin_file=plug_file)
+    ck("and the worksheet drops the kind", "native_ring" not in ws, ws[:300])
+    (run / F_TOOL).write_bytes(b"\x89PNG-redrawn")
+    st2 = {r: s_ for r, s_, _w in R.status(run, PLUG)}
+    ck("a redraw reopens it as it reopens every look", st2.get(F_TOOL) != R.REVIEWED, str(st2.get(F_TOOL)))
+    R.record(run, F_TOOL, NOTE_2, reviewer="looker-1", plugin=PLUG, defect=True)
+    ck("the worksheet names the stated answer as the third way",
+       "--stated" in R.worksheet(run, PLUG, plugin_file=plug_file), "no --stated in the worksheet")
+
 print("\none plan entry is one kind on the worksheet, and the eye's words are printed whole")
 # FOUND BY THE COLD AUTHOR OF BLIND 0006: a per-item entry - `items` drawing patterns_incoming
 # and patterns_outgoing from ONE declaration - surfaced as two headings, so a reader answering

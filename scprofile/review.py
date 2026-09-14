@@ -291,8 +291,51 @@ def record(out, figure, note, *, reviewer="", plugin="", defect=False):
     return rec
 
 
-def answer(out, figure, why, *, by="", plugin=""):
+def declared_text(plugin, rel, plugin_file=None):
+    """(entry id, the words) the plugin's OWN declaration carries for the plan entry that claims
+    `rel`, read from the plugin's file in this tree - not from the run, which froze the
+    declaration when it ran. ("", "") when the file or the entry cannot be found."""
+    pf = Path(plugin_file) if plugin_file else _plugin_file(plugin)
+    if not pf or not pf.is_file():
+        return "", ""
+    try:
+        from ._entry import load as _load
+        from . import declare as _DC
+        from . import native as _NAT
+        spec = dict(getattr(_load(str(pf)), "PLUGIN", {}) or {})
+        fid = str(_NAT.entry_for(spec, Path(rel).name) or "")
+        entry = next((e for e in _DC.report_figures(spec) if str(e.get("id") or "") == fid),
+                     None)
+    except Exception:                                                     # noqa: BLE001
+        return "", ""
+    if entry is None:
+        return fid, ""
+
+    def _strings(o):
+        if isinstance(o, str):
+            return [o]
+        if isinstance(o, dict):
+            return [x for v in o.values() for x in _strings(v)]
+        if isinstance(o, (list, tuple)):
+            return [x for v in o for x in _strings(v)]
+        return []
+    return fid, " ".join(_strings(entry))
+
+
+def _norm(text):
+    return " ".join(str(text or "").split()).lower()
+
+
+def answer(out, figure, why, *, by="", plugin="", stated=False, plugin_file=None):
     """Record why a figure the eye marked should stay as it is. Returns the record.
+
+    STATED, AND CLOSED (harness ADR-0022): thirteen of sixteen surviving kinds named the
+    upstream's own drawing - a legend it does not draw, labels the plugin cannot reach through
+    its plan - and their only exit was a looker's fresh look, which kept finding what is there.
+    With `stated=True` the answer is a disclosure: the words must appear in the plan entry that
+    captions the figure, in the plugin's own file, and then the finding closes without a fresh
+    look, because the check is mechanical - the words are there or they are not. A redraw
+    reopens it as it reopens every look.
 
     THE ANSWER PATH (harness ADR-0019). A colour key that reads min and max by the upstream's
     design, a ribbon with no numeric width in any version of the tool: the loop's rule is that
@@ -317,9 +360,36 @@ def answer(out, figure, why, *, by="", plugin=""):
                       "and must know whose it is.")
     rec = {"figure": rel, "sha256": digest(path), "answer": text, "by": who,
            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    if stated:
+        fid, words = declared_text(plugin, rel, plugin_file)
+        if _norm(text) not in _norm(words):
+            raise Refused(f"the plan entry {fid or '?'!r} that captions {rel} does not state "
+                          f"this. A stated answer closes the finding only when the plugin's own "
+                          f"declaration carries the words: put this sentence in the entry's "
+                          f"legend in the plugin's file, then answer again.")
+        rec["stated"] = True
     ledger_path(root, plugin).parent.mkdir(parents=True, exist_ok=True)
     _append_line(ledger_path(root, plugin), json.dumps(rec))
     return rec
+
+
+def stated_answers(out, plugin=""):
+    """{relpath: answer record} - stated answers on the figure's current bytes that no later
+    look has re-marked. These CLOSE the finding (see `answer`)."""
+    root = Path(out)
+    looks = read_ledger(out, plugin)
+    out_ = {}
+    for rel, rec in read_answers(out, plugin).items():
+        if rec.get("stated") is not True:
+            continue
+        now = digest(root / rel)
+        if now and rec.get("sha256") and now != rec["sha256"]:
+            continue
+        look = looks.get(rel) or {}
+        if look.get("defect") is True and str(look.get("at") or "") > str(rec.get("at") or ""):
+            continue                       # the eye marked it again after the disclosure
+        out_[rel] = rec
+    return out_
 
 
 def answered(out, plugin=""):
@@ -412,8 +482,13 @@ def status(out, plugin=""):
     led = read_ledger(out, plugin)
     carried = read_carried(out, plugin)
     ans = answered(out, plugin)
+    closed = stated_answers(out, plugin)
     rows = []
     for rel in figures(out):
+        if rel in closed:
+            rows.append((rel, REVIEWED, f"stated by {closed[rel].get('by')}: "
+                                        f"{str(closed[rel].get('answer'))[:110]}"))
+            continue
         if rel in ans:
             # ANSWERED, NOT SETTLED (harness ADR-0019): the author said why it stays; a looker
             # decides. Outstanding, so the shards carry it to one.
@@ -470,6 +545,10 @@ def defects(out, plugin=""):
             continue                          # stale: the look was of an image that is gone
         if rec.get("defect") is True:
             out_.append((rel, str(rec.get("note", "")), str(rec.get("reviewer", "")), run_name))
+    # A STATED ANSWER CLOSES THE FINDING (harness ADR-0022): the declaration carries the words.
+    closed = stated_answers(out, plugin)
+    if closed:
+        out_ = [x for x in out_ if x[0] not in closed]
     return out_
 
 
@@ -610,7 +689,12 @@ def worksheet(out, plugin, plugin_file=None):
                   "build gates (scprofile validate; the maker's status), then the rerun;",
                   f"     or, if this is the upstream's own drawing and right as it is: scprofile "
                   f"review --out {root} --plugin {plugin} --figure <path> --answer \"why\" "
-                  f"--reviewer <you>   - a looker's fresh look then settles it"]
+                  f"--reviewer <you>   - a looker's fresh look then settles it;",
+                  f"     or, if this is the upstream's own drawing and the finding is real but "
+                  f"not the plugin's to cure: put one sentence saying so in the entry's legend, "
+                  f"bump `version`, then scprofile review --out {root} --plugin {plugin} "
+                  f"--figure <path> --answer \"that sentence\" --reviewer <you> --stated   - "
+                  f"the finding closes when the declaration carries the words"]
         L.append("")
     L += [f"# owners: {', '.join(f'{k} {n}' for k, n in sorted(owners.items())) or 'none'}", "",
           "# PREDICTION for the rerun, to submit the job with: every kind edited redraws and is "

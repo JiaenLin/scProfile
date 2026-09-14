@@ -3123,12 +3123,17 @@ def _review(a):
         return 0
     if a.figure and getattr(a, "answer", ""):
         try:
-            rec = RV.answer(out, a.figure, a.answer, by=a.reviewer, plugin=a.plugin)
+            rec = RV.answer(out, a.figure, a.answer, by=a.reviewer, plugin=a.plugin,
+                            stated=bool(getattr(a, "stated", False)))
         except RV.Refused as e:
             print(f"scprofile: REFUSED - {e}", file=sys.stderr)
             return REFUSE
-        print(f"answered: {rec['figure']}  ({rec['sha256'][:12]}) by {rec['by']} - the finding "
-              f"stays open until a looker's fresh look on this image")
+        if rec.get("stated"):
+            print(f"stated: {rec['figure']}  ({rec['sha256'][:12]}) by {rec['by']} - the "
+                  f"declaration carries the words; the finding is closed until a redraw")
+        else:
+            print(f"answered: {rec['figure']}  ({rec['sha256'][:12]}) by {rec['by']} - the "
+                  f"finding stays open until a looker's fresh look on this image")
         return 0
     if a.figure or a.note:
         if not (a.figure and a.note):
@@ -4342,6 +4347,10 @@ def main(argv=None):
                     help="with --figure and --reviewer: why this figure the eye marked should "
                          "STAY as it is (the upstream's own drawing, the numbers elsewhere). "
                          "The finding stays open until a looker's fresh look on the same image")
+    rv.add_argument("--stated", action="store_true",
+                    help="with --answer: the finding is real and the upstream's own; the answer "
+                         "must appear in the plan entry's legend in the plugin's file, and the "
+                         "finding then closes without a fresh look (until a redraw)")
     rv.add_argument("--worksheet", action="store_true",
                     help="print the audit's worksheet: every open finding by kind, its owner, "
                          "the plan entry or code site, the eye's words, and the two answers")
