@@ -53,6 +53,8 @@ with tempfile.TemporaryDirectory() as td:
     ck("utime and stime of 100, 101 and 102 summed, at 100 ticks a second, and 200 left out",
        s is not None and abs(s - (1000 + 200 + 3000 + 500 + 600) / 100.0) < 1e-6, str(s))
     ck("no /proc: None", E._tree_cpu_s(100, proc=str(Path(td) / "nowhere")) is None)
+    ck("and the tree's process count is read by the same walk",
+       E._tree_procs(100, proc=str(proc)) == 3, str(E._tree_procs(100, proc=str(proc))))
 
 print("\nthe run fits a cores model and a cost band from its instances")
 pts = [{"n_cells": 10000, "wall_s": 60.0, "cpu_s": 210.0, "cores_peak": 3.9},
@@ -81,6 +83,20 @@ ck("the model carries the share the instances were given and the burst", m2 and 
    and m2.get("over_share") is True, str(m2))
 m3 = K.fit_cores_model([{"n_cells": 10000, "wall_s": 60.0, "cpu_s": 150.0, "cores_peak": 4.4, "cores_given": 4}])
 ck("a peak near the share is not a burst", m3 and m3.get("over_share") is False, str(m3))
+# A TREE OF PROCESSES EACH HONOURING THE SHARE IS NOT A BURST (harness ADR-0022, measured on
+# the run at the declared 2): the instance's python, its R and the sampler each capped at 2
+# summed to a one-second peak of 5.9, and "twice the share" read it as threads uncapped. The
+# sampler counts the tree's processes; the threshold is the share times that count, or twice
+# the share where the count is unknown - the old rule, kept for old runs.
+m4 = K.fit_cores_model([{"n_cells": 10000, "wall_s": 60.0, "cpu_s": 70.0, "cores_peak": 5.9,
+                         "cores_given": 2, "procs_peak": 3}])
+ck("a peak under share x processes is not a burst", m4 and m4.get("over_share") is False, str(m4))
+m5 = K.fit_cores_model([{"n_cells": 10000, "wall_s": 60.0, "cpu_s": 70.0, "cores_peak": 5.9,
+                         "cores_given": 2}])
+ck("without a process count the old rule stands", m5 and m5.get("over_share") is True, str(m5))
+m6 = K.fit_cores_model([{"n_cells": 10000, "wall_s": 60.0, "cpu_s": 150.0, "cores_peak": 49.3,
+                         "cores_given": 4, "procs_peak": 3}])
+ck("and sixty on a share of four is still a burst", m6 and m6.get("over_share") is True, str(m6))
 
 print("\ncapacity --cores and --cost are gates with a way out, like --memory")
 PLUG = ('PLUGIN = {\n    "name": "k",\n    "cost": "low", "cores": 2,\n'

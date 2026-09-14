@@ -163,6 +163,26 @@ def _tree_cpu_s(pid, proc="/proc", tick=None):
     CPU time - fields 14 and 15 of `stat`, in clock ticks - and sampled each second the delta is
     the cores the tree is using at that moment.
     """
+    walked = _tree_walk(pid, proc, tick)
+    if walked is None:
+        return None
+    tree, cpu = walked
+    return float(sum(cpu.get(m, 0.0) for m in tree))
+
+
+def _tree_procs(pid, proc="/proc"):
+    """How many processes the tree of `pid` holds right now; None without /proc.
+
+    THE BURST IS READ AGAINST THE TREE'S SIZE (harness ADR-0022): a python, its R and the
+    sampler each honouring a share of 2 sum to a one-second peak of 6, which "twice the
+    share" read as threads uncapped. The count is sampled with the CPU, by the same walk.
+    """
+    walked = _tree_walk(pid, proc)
+    return None if walked is None else len(walked[0])
+
+
+def _tree_walk(pid, proc="/proc", tick=None):
+    """({pid of the tree}, {pid: cpu seconds}) for `pid` and every descendant; None without /proc."""
     proc = Path(proc)
     if not proc.is_dir():
         return None
@@ -196,7 +216,7 @@ def _tree_cpu_s(pid, proc="/proc", tick=None):
             if parent in tree and child not in tree:
                 tree.add(child)
                 grew = True
-    return float(sum(cpu.get(m, 0.0) for m in tree))
+    return tree, cpu
 
 
 class _TreeSampler:
@@ -215,6 +235,7 @@ class _TreeSampler:
         # THE CORES IN USE, SAMPLED WITH THE MEMORY (harness ADR-0020): the tree's CPU time
         # read each second, its delta over the interval the cores the tree used then.
         self.cores_peak, self.cpu_s, self._cpu_prev, self._t_prev = None, None, None, None
+        self.procs_peak = None
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._loop, daemon=True,
                                         name="scprofile-memory-sampler")
@@ -229,6 +250,9 @@ class _TreeSampler:
         try:
             import time as _time
             cpu, now = _tree_cpu_s(self.pid), _time.monotonic()
+            n_procs = _tree_procs(self.pid)
+            if n_procs is not None and (self.procs_peak is None or n_procs > self.procs_peak):
+                self.procs_peak = n_procs
             if cpu is not None:
                 if self._cpu_prev is not None and now - self._t_prev >= 0.5:
                     rate = (cpu - self._cpu_prev) / (now - self._t_prev)
@@ -737,6 +761,8 @@ def main(argv):
                            if _cpu_s is not None and _wall_s > 0 else {}),
                         **({"cores_peak": round(float(sampler.cores_peak), 2)}
                            if sampler.cores_peak is not None else {}),
+                        **({"procs_peak": int(sampler.procs_peak)}
+                           if getattr(sampler, "procs_peak", None) is not None else {}),
                         "cores_given": cores,
                         **({"cgroup_peak_gb": round(cg, 3)} if cg else {}),
                         # THE INSTANCE'S OWN TREE, where /proc could be read: the figure the

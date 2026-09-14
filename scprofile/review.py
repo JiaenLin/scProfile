@@ -136,12 +136,15 @@ def read_carried(out, plugin=""):
     Read from each run's OWN ledger. A review is bound to a figure's bytes, so an unchanged image
     carries; nothing else does, and nothing is written outside the run being reviewed.
     """
+    # THE LATEST LOOK PER IMAGE, WHICHEVER SIBLING TOOK IT (harness ADR-0022): the first
+    # sibling's record won before, so an older run's defect look outranked the plain look a
+    # later run's looker had settled it with, and eighteen settled figures were sent back.
     seen = {}
     for run in sibling_runs(out):
         for rel, rec in read_ledger(run, plugin).items():
             sha = str(rec.get("sha256") or "")
-            if sha:
-                seen.setdefault(sha, dict(rec, run=run.name))
+            if sha and str(rec.get("at") or "") >= str((seen.get(sha) or {}).get("at") or ""):
+                seen[sha] = dict(rec, run=run.name)
     return seen
 
 #: A note below this many words is not a look, it is a keystroke.
@@ -372,6 +375,20 @@ def stated_answers(out, plugin=""):
     root = Path(out)
     looks = read_ledger(out, plugin)
     out_ = {}
+    # EVERY STATED RECORD THIS RUN OR ITS SIBLINGS HOLD, BY ENTRY - not by bytes, which is how
+    # answers otherwise carry; the by-entry carry below re-checks each against the declaration.
+    by_kind = {}
+    for run in [root] + list(sibling_runs(out)):
+        f = ledger_path(run, plugin)
+        if not f.exists():
+            continue
+        for line in f.read_text(encoding="utf-8").splitlines():
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(rec, dict) and rec.get("stated") is True and rec.get("figure"):
+                by_kind[kind_of(str(rec["figure"]))] = rec
     for rel, rec in read_answers(out, plugin).items():
         if rec.get("stated") is not True:
             continue
@@ -382,6 +399,20 @@ def stated_answers(out, plugin=""):
         if look.get("defect") is True and str(look.get("at") or "") > str(rec.get("at") or ""):
             continue                       # the eye marked it again after the disclosure
         out_[rel] = rec
+    # AND BY THE ENTRY, TO ANY RENDERING (harness ADR-0022): seventeen plates of one scan set
+    # render differently on every run, so a disclosure bound to bytes reopened with nothing
+    # changed but the pixels. The disclosure is about the entry's drawing by the upstream's
+    # design; it holds for every rendering while the legend carries the words, and that is
+    # checked against the declaration in this tree, not the image.
+    for rel in figures(out):
+        if rel in out_ or (plugin and not rel.startswith(f"kernels/{plugin}/")):
+            continue
+        rec = by_kind.get(kind_of(rel))
+        if rec is None:
+            continue
+        _fid, words = declared_text(plugin, rel)
+        if words and _norm(rec.get("answer")) in _norm(words):
+            out_[rel] = dict(rec, figure=rel, carried_by="entry")
     return out_
 
 
@@ -392,6 +423,7 @@ def answered(out, plugin=""):
     if not ans:
         return {}
     looks = read_ledger(out, plugin)
+    carried = read_carried(out, plugin)
     open_ = {rel for rel, _n, _w, _r in defects(out, plugin)}
     out_ = {}
     for rel, rec in ans.items():
@@ -400,7 +432,10 @@ def answered(out, plugin=""):
         now = digest(root / rel)
         if now and rec.get("sha256") and now != rec["sha256"]:
             continue                       # the answer was about other bytes
-        look = looks.get(rel) or {}
+        # THE LOOK THAT SETTLED IT CARRIES WITH IT (harness ADR-0022): held against this run's
+        # own ledger alone, a figure a looker had settled on the run before read "needs a look"
+        # again on identical bytes - eighteen of them on one rerun.
+        look = looks.get(rel) or (carried.get(now) if now else None) or {}
         if str(look.get("at") or "") > str(rec.get("at") or ""):
             continue                       # a looker marked it again after the answer
         out_[rel] = rec

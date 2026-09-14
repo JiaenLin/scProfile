@@ -210,6 +210,41 @@ with tempfile.TemporaryDirectory() as td:
     ck("the worksheet names the stated answer as the third way",
        "--stated" in R.worksheet(run, PLUG, plugin_file=plug_file), "no --stated in the worksheet")
 
+print("\na stated answer carries by plan entry, to any rendering, while the legend holds the words")
+# THE RENDERING IS NOT THE ENTRY (harness ADR-0022, found on the rerun that carried the stated
+# legends): seventeen plates of the scan set render differently on every run - repelled labels,
+# a layout with a random start - so a look never carries to them, and a stated answer bound to
+# bytes reopened on six of them with nothing changed but the pixels. The disclosure is about
+# the entry's drawing by the upstream's design, and holds for every rendering of it while the
+# legend carries the words; it is checked against the declaration, not the image.
+with tempfile.TemporaryDirectory() as td:
+    stage = Path(td) / "04_stage"
+    a, b = stage / "runA", stage / "runB"
+    for r_ in (a, b):
+        (r_ / F_TOOL).parent.mkdir(parents=True, exist_ok=True)
+        (r_ / "report.json").write_text(json.dumps({"kernels": {PLUG: {"spec": SPEC, "figures": []}}}))
+    (a / F_TOOL).write_bytes(b"\x89PNG-render-1")
+    (b / F_TOOL).write_bytes(b"\x89PNG-render-2")
+    plug_file = Path(td) / "p.py"
+    plug_file.write_text("PLUGIN = {\n    'report': {'figures': [\n"
+                         "        {'id': 'native_ring', 'fn': 'drawRing', 'legend': 'the ring. "
+                         + STATED.replace("'", "\\'") + "'},\n    ]}}\n\ndef run(ctx):\n    pass\n")
+    R.record(a, F_TOOL, NOTE_2, reviewer="looker-1", plugin=PLUG, defect=True)
+    R.answer(a, F_TOOL, STATED, by="author", plugin=PLUG, stated=True, plugin_file=plug_file)
+    R.record(b, F_TOOL, NOTE_2, reviewer="looker-2", plugin=PLUG, defect=True)
+    _orig_pf = R._plugin_file
+    R._plugin_file = lambda plugin: plug_file
+    try:
+        ck("on another rendering of the same entry the stated answer closes the finding",
+           F_TOOL not in R.open_findings(b, PLUG), str(R.open_findings(b, PLUG)))
+        plug_file.write_text("PLUGIN = {\n    'report': {'figures': [\n"
+                             "        {'id': 'native_ring', 'fn': 'drawRing', 'legend': 'the ring'},\n"
+                             "    ]}}\n\ndef run(ctx):\n    pass\n")
+        ck("and reopens when the legend no longer carries the words",
+           F_TOOL in R.open_findings(b, PLUG), str(R.open_findings(b, PLUG)))
+    finally:
+        R._plugin_file = _orig_pf
+
 print("\none plan entry is one kind on the worksheet, and the eye's words are printed whole")
 # FOUND BY THE COLD AUTHOR OF BLIND 0006: a per-item entry - `items` drawing patterns_incoming
 # and patterns_outgoing from ONE declaration - surfaced as two headings, so a reader answering
@@ -267,6 +302,25 @@ with tempfile.TemporaryDirectory() as td:
     ck("the worksheet on the sibling shows the answer", "answered by author" in ws, ws[:400])
     (b / F_TOOL).write_bytes(b"\x89PNG other bytes")
     ck("other bytes: the answer does not carry", F_TOOL not in R.answered(b, PLUG), str(R.answered(b, PLUG)))
+    # THE LATEST LOOK ON THE SAME BYTES CARRIES, WHICHEVER SIBLING TOOK IT (harness ADR-0022,
+    # found on the rerun that carried the stated legends): a looker on a later run settled an
+    # answered figure with a plain look; the next run, same bytes, read it "answered - needs a
+    # look" again, because the carry kept the FIRST sibling's record per image - the older
+    # defect look - and not the latest. Eighteen figures were sent back to a looker who had
+    # already settled them.
+    (b / F_TOOL).write_bytes(b"\x89PNG" + F_TOOL.encode())
+    c = Path(td) / "20260103T000000Z__scprofile-abc1234__stage"   # a third sibling, later
+    (c / F_TOOL).parent.mkdir(parents=True, exist_ok=True)
+    (c / F_TOOL).write_bytes(b"\x89PNG" + F_TOOL.encode())
+    (c / "report.json").write_text("{}", encoding="utf-8")
+    import time as _t
+    _t.sleep(1.1)
+    R.record(c, F_TOOL, "the key reads min and max and the caption says where the values are",
+             reviewer="looker-3", plugin=PLUG)
+    ck("the latest look on the same bytes carries, from whichever sibling took it",
+       F_TOOL not in R.answered(b, PLUG) and
+       {r: s_ for r, s_, _w in R.status(b, PLUG)}.get(F_TOOL) == R.CARRIED_OK,
+       str({r: s_ for r, s_, _w in R.status(b, PLUG)}.get(F_TOOL)))
 
 print("\na writing run stands for the replay it holds: looks carry into it and out of it")
 # FOUND BY THE WRITING SEALS OF BLIND 0006 (harness ADR-0020, step 4): the seal lays a run's
