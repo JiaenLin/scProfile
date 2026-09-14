@@ -1876,46 +1876,50 @@ cat("database:", nrow(d), "interactions,",
     "genes\n")
 '''
 
-#: THE HOST'S SHARE, CAPPED ONCE AND SUBSTITUTED INTO EVERY SCRIPT THAT NEEDS IT. The maker's
-#: `cores` gate measured this plugin sustained at 2.67 cores on a share of 4, with one-second
-#: bursts to 58.7 - a HOST MACHINE'S worth of threads, not this instance's share. Nothing here
-#: had ever told CellChat's own dependencies what the share was: `identifyCommunicationPatterns`
-#: runs NMF through `foreach`/`doParallel` (both already declared dependencies of this plugin),
-#: `presto` and CellChat's own permutation step can run through `future`/`future.apply` (also
-#: already declared), and the linear algebra underneath `Matrix`/`RcppArmadillo` runs on whatever
-#: BLAS/OpenMP this environment was built against - EVERY ONE of which defaults to
-#: `parallel::detectCores()`, the whole box, when nothing tells it otherwise.
+#: THE HOST'S SHARE - WHAT R CAN HONESTLY CAP ITSELF, ONCE, SUBSTITUTED INTO EVERY SCRIPT THAT
+#: NEEDS IT. THE THREAD CAP (BLAS/OpenMP) IS NOT HERE ANY MORE. It was, briefly, as
+#: `Sys.setenv(OMP_NUM_THREADS = ...)` and the rerun's own `cores` gate still measured a
+#: 61.68-core peak with it in place: OpenBLAS/MKL/OpenMP each read their thread-count variable
+#: once, WHEN THE LIBRARY LOADS, at the very start of the R process - before a single line of a
+#: launched script has run. `Sys.setenv()` from inside that same process is always too late to
+#: reach it. The cap that actually works is in the ENVIRONMENT THE PROCESS IS STARTED WITH, which
+#: only the Python side that launches `Rscript` can set - see `_cap_env()` below, called before
+#: every `ctx.rscript(...)`.
 #:
-#: WRITTEN ONCE, NOT PASTED THREE TIMES. This block used to be typed separately into `_R_RUN`,
-#: `_R_COMPARE` and `_R_COHORT` - the same nine lines three times over - which is exactly the
-#: escaped mechanism the maker's own repetition rule exists to catch: general mechanism inside a
-#: plugin belongs in one place, generated or written once, never copied. Each of those three
-#: scripts sets its OWN `.cores_raw` from its own argv position (a different index in each,
-#: because each script's own argument list is a different length) immediately before splicing
-#: this text in with a plain string `.replace()` - not Python's `%`/`.format()`, both of which
-#: would misread the `%in%`/`{...}` that are ordinary R syntax throughout these scripts.
+#: `future::plan()` DID NOT NEED TO CHANGE, AND CHANGING IT BROKE EVERY LARGER UNIT. Setting it
+#: to `multisession` was meant to bound something CellChat might parallelise; instead it switched
+#: CellChat itself from its default SEQUENTIAL plan to worker processes, and `computeCommunProb`
+#: then shipped the whole object to each worker - measured on the rerun, 12 of 18 instances
+#: refused past `future`'s own 500 MiB global-export limit, the six smallest fit under it and the
+#: twelve larger did not, and every one of the finished instances carried a new "UNRELIABLE
+#: VALUE" warning about the random number stream that was not there before. Before this plugin
+#: touched the plan, every one of the 18 ran. The plan is now set BACK to sequential, explicitly,
+#: rather than left to whatever a future call elsewhere in the session may have set - "restored"
+#: and "asserted" read the same on the page and are not the same claim.
+#:
+#: WHAT IS LEFT IS HONESTLY R's TO SET: `options(mc.cores=)` for anything built on
+#: `parallel::mclapply`, and `data.table::setDTthreads()` for `presto`'s own dependency. The
+#: `doParallel::registerDoParallel()` call is dropped outright - nothing in this plugin's own
+#: code or its declared dependencies' documented behaviour was ever shown to read a registered
+#: `foreach` backend, and a lever nothing reads is not a cap, it is a line that only argues it is.
+#:
+#: WRITTEN ONCE, NOT PASTED THREE TIMES. This still used to be typed separately into `_R_RUN`,
+#: `_R_COMPARE` and `_R_COHORT`, which is the escaped mechanism the maker's own repetition rule
+#: exists to catch. Each of those three scripts sets its OWN `.cores_raw` from its own argv
+#: position (a different index in each, because each script's own argument list is a different
+#: length) immediately before splicing this text in with a plain string `.replace()` - not
+#: Python's `%`/`.format()`, both of which would misread the `%in%`/`{...}` that are ordinary R
+#: syntax throughout these scripts.
 _R_CAP = r'''
 .ncores <- {
   .n <- suppressWarnings(as.integer(.cores_raw))
   if (is.na(.n) || .n < 1L) 1L else .n
 }
-# THE THREE CATEGORIES THE GATE NAMED, ALL THREE CAPPED. Environment variables reach OpenBLAS,
-# MKL and Apple's Accelerate/vecLib, each of which reads its own variable rather than a common
-# one, and OpenMP directly (`OMP_NUM_THREADS`/`OMP_THREAD_LIMIT`); `options(mc.cores=)` bounds
-# `parallel::mclapply`-style calls; `future::plan()` bounds anything built on `future`/
-# `future.apply`; `doParallel::registerDoParallel()` bounds `foreach`-based code such as NMF's own
-# multi-run parallelism inside `identifyCommunicationPatterns`; `data.table::setDTthreads()` bounds
-# `presto`'s own dependency. Every one is wrapped in `tryCatch` so an environment missing one of
-# these already-declared packages degrades to "not capped by that lever" rather than failing the
-# whole run - the same "degrade, do not die" rule this file already applies to `ggrepel`.
-Sys.setenv(OMP_NUM_THREADS = as.character(.ncores), OMP_THREAD_LIMIT = as.character(.ncores),
-           OPENBLAS_NUM_THREADS = as.character(.ncores), MKL_NUM_THREADS = as.character(.ncores),
-           VECLIB_MAXIMUM_THREADS = as.character(.ncores))
 options(mc.cores = .ncores)
-suppressMessages(try(future::plan(future::multisession, workers = .ncores), silent = TRUE))
-suppressMessages(try(doParallel::registerDoParallel(cores = .ncores), silent = TRUE))
 suppressMessages(try(data.table::setDTthreads(.ncores), silent = TRUE))
-cat("cores: capped to", .ncores, "(resources.cores from the host's in.json)\n")
+suppressMessages(try(future::plan(future::sequential), silent = TRUE))
+cat("cores: mc.cores/data.table capped to", .ncores,
+    "(resources.cores from the host's in.json); future::plan is sequential\n")
 '''
 
 #: STEP TWO: the scoring. Every argument that changes the meaning of the answer is passed on the
@@ -4231,12 +4235,38 @@ def _fig_similarity(ctx, pre):
     return True
 
 
+def _cap_env(ctx):
+    """Cap the R subprocess's BLAS/OpenMP threads to this instance's share, in ITS ENVIRONMENT.
+
+    `ctx.rscript` (scprofile/plugin.py) launches `Rscript` with `subprocess.run([rs, script,
+    ...])` and no `env=` of its own, so the child inherits whatever THIS PROCESS's environment
+    already is when that call is made - the only place a thread cap can land. `Sys.setenv()`
+    from inside the launched script was tried first and measured not to work: the maker's
+    `cores` gate still found a 61.68-core peak with it in place, because OpenBLAS/MKL/OpenMP
+    each read their own thread-count variable once, when the library LOADS - at the very start
+    of the R process, before the script that calls `Sys.setenv()` has run a single line. Setting
+    it here, in Python, before `ctx.rscript` is ever called, means the child process is STARTED
+    with the cap already in its environment rather than told about it too late.
+
+    Called once at the top of every entry point that launches R (`run`, `compare`, `selftest`)
+    rather than once per `ctx.rscript` call, because it is the same instance's same share every
+    time and `os.environ` is process-global - setting it more than once would be free but is not
+    needed. Idempotent: always sets to THIS instance's own `ctx.cores`, never accumulates.
+    """
+    import os
+    n = str(max(1, int(getattr(ctx, "cores", None) or 1)))
+    for var in ("OMP_NUM_THREADS", "OMP_THREAD_LIMIT", "OPENBLAS_NUM_THREADS",
+                "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+        os.environ[var] = n
+
 
 def run(ctx):
     import numpy as np
     import pandas as pd
     from scipy import io as sio
     from scipy import sparse
+
+    _cap_env(ctx)
 
     C = ctx.config
     db = _DB.get(ctx.organism)
@@ -4706,6 +4736,8 @@ def selftest(ctx):
     from pathlib import Path
 
     assert shutil.which("Rscript"), "no Rscript on PATH - this plugin's environment did not provide R"
+
+    _cap_env(ctx)
 
     # THE ACCOUNTING IS THE HOST'S: `native.account` reads the plan's `fn`s and `report.skips`
     # against the package's exports, and `sch dev convert account` prints it as a worksheet.
@@ -5769,6 +5801,7 @@ def compare(ctx):
     Runs on the two units' SAVED objects, so it costs no inference. Every figure here is
     CellChat's, drawn by CellChat; none is a reimplementation.
     """
+    _cap_env(ctx)
     names = ctx.names
     if len(names) > 2:
         # EVERY ARM AT ONCE. The host hands this the design's crossed arms when there are more
