@@ -503,8 +503,24 @@ def tasks(run, plugin, spec=None, how=None):
                   f"author, puts each to a round") if undefended else
                   "a claim is bound to the figures it cites, so a redraw makes it stale and the "
                   "ledger refuses a citation the run does not contain"),
-          "do": f'scprofile paper --out {run} --plugin {plugin} --claim "..." --cites <figs>'}]
+          # THE COMMAND IS THE ONE THE `why` ASKS FOR (harness ADR-0023, found by the reviewer
+          # of the final run): with nine claims awaiting a verdict this printed the command
+          # that registers a claim, while the `paper` listing beneath printed the round.
+          "do": (_round_do(run, plugin, undefended) if undefended else
+                 f'scprofile paper --out {run} --plugin {plugin} --claim "..." --cites <figs>')}]
     return t
+
+
+def _round_do(run, plugin, undefended):
+    """The round command for the first undefended claim, as `paper` prints it."""
+    from . import paper as _PA
+    first = undefended[0]
+    cid = first[0] if isinstance(first, (tuple, list)) else first
+    try:
+        return _PA.round_command(run, plugin, cid)
+    except Exception:                                                     # noqa: BLE001
+        return (f"scprofile paper --out {run} --plugin {plugin} --round {cid} --verdict "
+                f"standing|narrowed|withdrawn --why '...' --reviewer <not the author>")
 
 
 def outstanding(run, plugin, spec=None, how=None):

@@ -258,6 +258,23 @@ with tempfile.TemporaryDirectory() as td:
           "the agenda names the brief without refreshing it: calls=%r, on disk %r"
           % (_calls, _f.read_text(encoding="utf-8")[:40]))
 
+# THE DEFEND TASK NAMES THE ROUND, NOT A NEW CLAIM (harness ADR-0023, found by the reviewer of
+# the final run): with nine claims awaiting a verdict, the task's `do:` printed the command that
+# registers a claim; the `paper` listing beneath printed the round. The task prints what its
+# `why` asks for.
+from scprofile import paper as _PA
+with tempfile.TemporaryDirectory() as td:
+    run = Path(td) / "runZ"
+    (run / "kernels" / "p" / "figures").mkdir(parents=True)
+    (run / "report.json").write_text('{"kernels": {"p": {}}}', encoding="utf-8")
+    (run / "kernels" / "p" / "figures" / "a.png").write_bytes(b"PNG-A")
+    (run / "kernels" / "p" / "WRITING_BRIEF.md").write_text("# brief\n", encoding="utf-8")
+    _PA.claim(run, "the share of one pathway rises in one arm and falls in the other by nine points",
+              ["kernels/p/figures/a.png"], author="w", plugin="p")
+    _defend = {t["id"]: t for t in AG.tasks(run, "p", how=AG.PBS)}["defend"]
+    check("--round" in _defend["do"] and "--claim" not in _defend["do"],
+          "the defend task with an undefended claim prints: %r" % _defend["do"])
+
 # A SUITE THAT PRINTS ok WHATEVER ITS CHECKS FOUND IS NOT A SUITE: this one collected FAILURES
 # and never read them (found when a new check passed on the first run against the defect it
 # was written for).
