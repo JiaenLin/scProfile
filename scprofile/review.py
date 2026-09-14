@@ -729,6 +729,21 @@ def worksheet(out, plugin, plugin_file=None):
                   f"--figure <path> --answer \"that sentence\" --reviewer <you> --stated   - "
                   f"the finding closes when the declaration carries the words"]
         L.append("")
+    # DISCLOSED, AND THE EYE SAYS MORE (harness ADR-0022, found by a looker): a stated answer
+    # closes its kind for every rendering, so a later look that finds more than the legend
+    # states reaches no count. Printed apart, uncounted, so the author reads it.
+    closed = stated_answers(out, plugin)
+    led = read_ledger(out, plugin)
+    more = [(rel, led[rel]) for rel in sorted(closed)
+            if led.get(rel, {}).get("defect") is True
+            and str(led[rel].get("at") or "") > str(closed[rel].get("at") or "")]
+    if more:
+        L += [f"# DISCLOSED, AND THE EYE SAYS MORE: {len(more)} look(s) marked a defect on a "
+              f"rendering after its entry was stated - closed by the disclosure, printed so the "
+              f"words are not lost:"]
+        for rel, rec in more:
+            L += [f"   - {rel}", f"       eye ({rec.get('reviewer') or 'unnamed'}): {rec.get('note')}"]
+        L.append("")
     L += [f"# owners: {', '.join(f'{k} {n}' for k, n in sorted(owners.items())) or 'none'}", "",
           "# PREDICTION for the rerun, to submit the job with: every kind edited redraws and is "
           "looked at again; the looks on unchanged images carry; the answered figures come back "

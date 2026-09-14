@@ -231,6 +231,8 @@ with tempfile.TemporaryDirectory() as td:
                          + STATED.replace("'", "\\'") + "'},\n    ]}}\n\ndef run(ctx):\n    pass\n")
     R.record(a, F_TOOL, NOTE_2, reviewer="looker-1", plugin=PLUG, defect=True)
     R.answer(a, F_TOOL, STATED, by="author", plugin=PLUG, stated=True, plugin_file=plug_file)
+    import time as _t
+    _t.sleep(1.1)                      # the look on the new rendering comes after the disclosure
     R.record(b, F_TOOL, NOTE_2, reviewer="looker-2", plugin=PLUG, defect=True)
     _orig_pf = R._plugin_file
     R._plugin_file = lambda plugin: plug_file
@@ -249,6 +251,13 @@ with tempfile.TemporaryDirectory() as td:
            str(st9.get("kernels/p/U9/figures/native_ring.png")))
         ck("and it is outstanding for a look",
            "kernels/p/U9/figures/native_ring.png" in dict(R.outstanding(b, PLUG)))
+        # THE EYE'S LATER WORDS ARE NOT LOST (found by the looker of the carried run): a
+        # disclosure closes the kind, so a look that finds MORE than the legend states on a
+        # later rendering reaches no worksheet. The worksheet prints them, apart, uncounted.
+        ws_b = R.worksheet(b, PLUG, plugin_file=plug_file)
+        ck("the worksheet prints a disclosed kind the eye marked again, apart from the count",
+           "DISCLOSED, AND THE EYE SAYS MORE" in ws_b and NOTE_2 in ws_b
+           and "0 open finding(s)" in ws_b, ws_b[:400])
         plug_file.write_text("PLUGIN = {\n    'report': {'figures': [\n"
                              "        {'id': 'native_ring', 'fn': 'drawRing', 'legend': 'the ring'},\n"
                              "    ]}}\n\ndef run(ctx):\n    pass\n")
