@@ -659,10 +659,6 @@ def render(out, *, run_key="", title="", plugin=""):
     heading, because a reader of a result should meet the result first.
     """
     root = Path(out)
-    body = read_draft(out, plugin)
-    rows = status(out, plugin)
-    if not body and not rows:
-        return None
     from .report import _page, _e                                     # noqa: PLC0415
     from . import compose as _CO                                      # noqa: PLC0415
     from . import figureset as _FS                                    # noqa: PLC0415
@@ -674,6 +670,17 @@ def render(out, *, run_key="", title="", plugin=""):
         design = pay.get("design") or {}
     except (OSError, ValueError):
         pass
+    # A COMPOSED SECTION IS REBUILT WITH THE PAGE; an authored one is never touched. The section
+    # the run composed under older code carried the older headings beside a page whose brief
+    # and figures had moved on.
+    try:
+        ensure_section(out, plugin=plugin, spec=spec, design=design, run_key=run_key)
+    except Exception:                                                     # noqa: BLE001
+        pass
+    body = read_draft(out, plugin)
+    rows = status(out, plugin)
+    if not body and not rows:
+        return None
     subject = str(((spec or {}).get("report") or {}).get("subject") or "").strip()
     if not title:
         title = (subject[:1].upper() + subject[1:]) if subject else "Results"
@@ -1049,7 +1056,9 @@ def panel(out, *, run_key="", plugin=""):
 
     for c in cmps:
         label = c.get("label") or c.get("question") or ""
-        H.append(f'<h2>{_e(str(c.get("kind", "")).upper())} &mdash; {_e(label)}</h2>')
+        # THE REGISTER'S HEADING, the same one the composed section and the brief carry.
+        from . import compose as _COh                                     # noqa: PLC0415
+        H.append(f'<h2>{_e(_COh._effect_heading(label, str(c.get("kind", ""))))}</h2>')
         H.append(f'<p class="sub">{_e(str(c.get("question") or ""))}</p>')
         for need, route in sorted(routes.items()):
             # EVERY ROUTE THAT RESOLVES, NOT ONLY THE FIRST. Two of the tool's own functions

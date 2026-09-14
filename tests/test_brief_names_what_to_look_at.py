@@ -162,10 +162,14 @@ with tempfile.TemporaryDirectory() as d:
     txt = Path(p).read_text(encoding="utf-8") if p else ""
     rows = [l.split("|")[1].strip() for l in txt.splitlines()
             if l.startswith("| ") and l.split("|")[1].strip() in ("age", "diet")]
-    heads = [l.split()[1] for l in txt.splitlines()
-             if l.strip().startswith("SIMPLE") and l.split()[1] in ("age", "diet")]
+    heads = [l.strip().split("Effect of ", 1)[1].split()[0] for l in txt.splitlines()
+             if l.strip().startswith("Effect of ") and l.strip().split()[2].rstrip(",") in ("age", "diet")]
     check(rows == heads and rows, "the brief's contrasts table and its verbatim headings list the "
                                   "contrasts in different orders: %r vs %r" % (rows, heads))
+    # THE HEADINGS A JOURNAL PRINTS (harness ADR-0024): the brief told the writer to use
+    # `SIMPLE age | diet = chow` verbatim, and the writer did - the heading a manuscript refuses.
+    check(not [l for l in txt.splitlines() if l.strip().startswith(("SIMPLE", "MARGINAL", "INTERACTION"))],
+          "the brief's verbatim headings carry the design's own tags")
 _DP.comparisons = _orig_cm
 
 if FAILURES:
