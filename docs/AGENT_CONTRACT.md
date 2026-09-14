@@ -77,7 +77,16 @@ Two ordering rules follow, both paid for:
 
 - **Settle the figure set before writing the section.** The paper numbers figures in order, so
   adding or removing one renumbers every citation after it — and a section written against the
-  old set cites the wrong plates while reading perfectly.
+  old set cites the wrong plates while reading perfectly. The set is under `report/figures/`:
+  every plate as `<axis>/<subject>/<NN>_<what>.png`, laid into lettered figures (`figure_03.png`,
+  panels a–f) in the order of the argument — the cohort, the arms, the contrasts, the
+  interaction, then the supplementary S1, S2, … — with the index `report/figures/<plugin>_figures.json`
+  naming every panel's source. The brief lists each plate as a sentence cites it: `Figure 3b`.
+  Cite the panel (`Fig. 3b`), not the file.
+- **Write it as a journal prints it.** Headings `Effect of <factor> within <stratum>`; no run
+  key, no "this run", no tool naming itself; `paper --write` refuses a section that does any of
+  these, quoting the line. The page carries a Methods section composed from the declarations and
+  the run's own settings, and the legends composed from the plan; write neither.
 - **Fix the figures before looking at them.** A review is bound to the image, so redrawing
   destroys it. A sweep taken before a fix round is a sweep thrown away.
 - **Mark what must change, and the pen waits on it.** `scprofile review ... --defect` records a
