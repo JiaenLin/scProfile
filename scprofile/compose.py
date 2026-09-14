@@ -694,8 +694,9 @@ def _effect_heading(label, kind=""):
     m = _re.match(r"^\s*(\S+)\s*\|\s*(\S+)\s*=\s*(.+?)\s*$", str(label))
     if m:
         return f"Effect of {m.group(1)} within {m.group(3)}"
-    if str(kind).lower() == "interaction" or " x " in str(label):
-        return "Interaction of " + " and ".join(x.strip() for x in str(label).split(" x "))
+    if str(kind).lower() == "interaction" or " x " in str(label) or " \u00d7 " in str(label):
+        parts = _re.split(r"\s+(?:x|\u00d7)\s+", str(label))
+        return "Interaction of " + " and ".join(x.strip() for x in parts if x.strip())
     return f"Effect of {label}"
 
 

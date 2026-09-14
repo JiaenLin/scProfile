@@ -73,6 +73,10 @@ if C._effect_heading("dose") != "Effect of dose":
                     f"{C._effect_heading('dose')!r}")
 if C._effect_heading("dose | time = late") == C._effect_heading("dose | time = early"):
     FAILURES.append("two conditional contrasts of one factor carry the same heading")
+_cross = "dose " + chr(215) + " time"
+if C._effect_heading(_cross, "interaction") != "Interaction of dose and time":
+    FAILURES.append("the interaction's heading keeps the design's cross sign: %r"
+                    % (C._effect_heading(_cross, "interaction"),))
 if "|" in C._effect_heading("dose | time = late") or "SIMPLE" in sec:
     FAILURES.append("a heading carries the raw label's pipe or the design's own tag")
 if "the largest difference in" not in sec:
