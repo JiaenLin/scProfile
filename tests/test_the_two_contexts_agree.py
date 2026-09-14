@@ -53,7 +53,13 @@ def attrs_of(cls):
 GOVERNING = {"figure_context", "figure_position", "figure_ceiling",
              # the generated drawing protocol and plan, which the host launches R with
              # (harness ADR-0016 step 4); a comparison draws MORE through it than a unit does
-             "r_companion"}
+             "r_companion",
+             # THE SHARE THE PHASE RUNS UNDER (harness ADR-0021, blind 0008): the host caps the
+             # environment of both launches to it, records it on the compare launch, and gave
+             # it to Context alone - a plugin that capped its own R workers to `ctx.cores` died
+             # on every contrast with AttributeError, and the run sealed with seven compares
+             # missing. The third divergence of this pair.
+             "cores"}
 
 c, cc = attrs_of("Context"), attrs_of("CompareContext")
 check(GOVERNING <= c, f"Context is missing {sorted(GOVERNING - c)}")

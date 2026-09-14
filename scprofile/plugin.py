@@ -1292,10 +1292,16 @@ class CompareContext(FigureContextReader):
 
     def __init__(self, *, pair, units, out, config=None, members=None, unit_values=None,
                  interactions=None, figure_context=None, figure_position=None,
-                 figure_ceiling=None, r_companion="", log=print):
+                 figure_ceiling=None, r_companion="", cores=1, log=print):
         #: THE GENERATED DRAWING PROTOCOL AND PLAN, the same text the per-unit context carries:
         #: a comparison draws MORE through it than a unit does.
         self.r_companion = str(r_companion or "")
+        #: THE SHARE THIS LAUNCH RUNS UNDER (harness ADR-0021, blind 0008) - the same `cores` the
+        #: per-unit Context carries. The host caps both launches' environments to it and records
+        #: it on the compare launch, and gave it to Context alone: a plugin that capped its own R
+        #: to `ctx.cores` died on every contrast with AttributeError. The third divergence of
+        #: this pair; `tests/test_the_two_contexts_agree.py` names it now.
+        self.cores = int(cores or 1)
         #: The host's figure context - the run's stable label->colour map and the stamp. Read it
         #: through the same accessors the per-unit Context exposes; a comparison needs it MORE, not
         #: less, because a differential names two arms and a direction that appear nowhere else.

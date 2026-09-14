@@ -433,6 +433,8 @@ def _compare(plugin_path, spec_path):
         interactions=spec.get("interactions") or [],
         figure_context=spec.get("figure_context") or {},
         r_companion=_companion_text(plugin_path),
+        # THE SHARE, as the per-unit side reads it from `resources.cores` (harness ADR-0021).
+        cores=int((spec.get("resources") or {}).get("cores", 1) or 1),
         # THE SAME TWO THE PER-UNIT CONTEXT GETS, resolved by the same reader the plan uses.
         # `_compare_spec` carries the plugin's declaration in `spec`; without these the compare
         # phase wrote no ceiling rows and a family declared at 8 drew 77 in one contrast.

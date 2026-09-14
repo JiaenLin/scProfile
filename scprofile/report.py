@@ -1023,6 +1023,10 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             "units": {lo: str((base / d_lo) if not Path(d_lo).is_absolute() else Path(d_lo)),
                       hi: str((base / d_hi) if not Path(d_hi).is_absolute() else Path(d_hi))},
             "out_dir": str(kdir / _RS.COMPARE_DIRNAME / str(label)),
+            # THE SHARE THIS LAUNCH RUNS UNDER, on the spec as on the per-unit in.json (harness
+            # ADR-0021): the environment was capped to it and the launch record carried it, and
+            # the plugin's own context could not read it.
+            "resources": {"cores": int(cores or 1)},
             # THE SAME BLOCK THE PER-UNIT SIDE GETS. Wiring the colour map and the stamp into the
             # per-unit script alone left three mutually inconsistent palettes in one run - the
             # per-unit natives, the comparison bars, and the host's own F-series - which is the
@@ -1191,6 +1195,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             "members": _mem,
             "unit_values": _vals,
             "out_dir": str(cdir),
+            "resources": {"cores": int(cores or 1)},
             # THE SAME BLOCK THE PER-UNIT SIDE GETS. Wiring the colour map and the stamp into the
             # per-unit script alone left three mutually inconsistent palettes in one run - the
             # per-unit natives, the comparison bars, and the host's own F-series - which is the
