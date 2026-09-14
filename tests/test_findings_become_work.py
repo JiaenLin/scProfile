@@ -210,6 +210,33 @@ with tempfile.TemporaryDirectory() as td:
     ck("the worksheet names the stated answer as the third way",
        "--stated" in R.worksheet(run, PLUG, plugin_file=plug_file), "no --stated in the worksheet")
 
+print("\na host panel is stated against the caption the page prints under it")
+# THE HOST'S OWN PANELS HAVE NO PLAN ENTRY (harness ADR-0023): the one finding left after the
+# disclosures was on the host's role-shift panel - the data's crossing arrows - and the stated
+# path read only the plugin's declaration, so the host had no way to say so. A host panel's
+# caption is written by the host and placed on the page (report/panels.json); the stated check
+# reads it there.
+with tempfile.TemporaryDirectory() as td:
+    run = make_run(td)
+    R.record(run, F_HOST, NOTE_3, reviewer="looker-2", plugin=PLUG, defect=True)
+    HOST_STATED = ("arrows may cross where several populations shift through one region; the "
+                   "table beside the panel names each shift")
+    refused = ""
+    try:
+        R.answer(run, F_HOST, HOST_STATED, by="host", plugin=PLUG, stated=True)
+    except R.Refused as e:
+        refused = str(e)
+    ck("a host panel whose caption does not state it is refused", bool(refused), refused[:120])
+    pj = run / "report" / "panels.json"
+    doc = json.loads(pj.read_text())
+    doc[PLUG]["cohort"][0]["caption"] = "ribbons and arrows. " + HOST_STATED
+    pj.write_text(json.dumps(doc))
+    rec = R.answer(run, F_HOST, HOST_STATED, by="host", plugin=PLUG, stated=True)
+    ck("with the sentence in the page's caption the host's disclosure records",
+       rec.get("stated") is True)
+    ck("and the host panel's finding is closed", F_HOST not in R.open_findings(run, PLUG),
+       str(R.open_findings(run, PLUG)))
+
 print("\na stated answer carries by plan entry, to any rendering, while the legend holds the words")
 # THE RENDERING IS NOT THE ENTRY (harness ADR-0022, found on the rerun that carried the stated
 # legends): seventeen plates of the scan set render differently on every run - repelled labels,
@@ -271,7 +298,7 @@ with tempfile.TemporaryDirectory() as td:
             q.write_bytes(b"\x89PNG-render-%d" % i)
         _calls = []
         _orig_dt = R.declared_text
-        R.declared_text = lambda plugin, rel, plugin_file=None: (_calls.append(rel) or _orig_dt(plugin, rel, plugin_file))
+        R.declared_text = lambda plugin, rel, plugin_file=None, out=None: (_calls.append(rel) or _orig_dt(plugin, rel, plugin_file, out=out))
         try:
             R.stated_answers(b, PLUG)
         finally:

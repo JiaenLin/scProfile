@@ -294,13 +294,31 @@ def record(out, figure, note, *, reviewer="", plugin="", defect=False):
     return rec
 
 
-def declared_text(plugin, rel, plugin_file=None):
+def _page_caption(out, rel):
+    """The caption the run's page prints under `rel` (report/panels.json), or ""."""
+    try:
+        doc = json.loads((Path(out) / "report" / "panels.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    for _plug, groups in (doc or {}).items():
+        for _g, entries in (groups or {}).items():
+            for e in entries or []:
+                if isinstance(e, dict) and str(e.get("path") or "") == rel:
+                    return str(e.get("caption") or "")
+    return ""
+
+
+def declared_text(plugin, rel, plugin_file=None, out=None):
     """(entry id, the words) the plugin's OWN declaration carries for the plan entry that claims
     `rel`, read from the plugin's file in this tree - not from the run, which froze the
-    declaration when it ran. ("", "") when the file or the entry cannot be found."""
+    declaration when it ran. ("", "") when the file or the entry cannot be found.
+
+    A HOST PANEL HAS NO PLAN ENTRY (harness ADR-0023): its caption is the host's, written at
+    run time and placed on the page; with `out` given, a figure no entry claims is read there.
+    """
     pf = Path(plugin_file) if plugin_file else _plugin_file(plugin)
     if not pf or not pf.is_file():
-        return "", ""
+        return ("", _page_caption(out, rel)) if out else ("", "")
     try:
         from ._entry import load as _load
         from . import declare as _DC
@@ -312,7 +330,7 @@ def declared_text(plugin, rel, plugin_file=None):
     except Exception:                                                     # noqa: BLE001
         return "", ""
     if entry is None:
-        return fid, ""
+        return fid, (_page_caption(out, rel) if out and not fid else "")
     # THE LEGEND, NOT ANYWHERE IN THE ENTRY (found by the cold author of ADR-0022's pass): the
     # page prints the legend under the figure; a sentence in `args` closes nothing a reader sees.
     return fid, " ".join(str(entry.get(k) or "") for k in ("legend", "caption"))
@@ -357,12 +375,16 @@ def answer(out, figure, why, *, by="", plugin="", stated=False, plugin_file=None
     rec = {"figure": rel, "sha256": digest(path), "answer": text, "by": who,
            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
     if stated:
-        fid, words = declared_text(plugin, rel, plugin_file)
+        fid, words = declared_text(plugin, rel, plugin_file, out=root)
         if _norm(text) not in _norm(words):
-            raise Refused(f"the plan entry {fid or '?'!r} that captions {rel} does not state "
-                          f"this in its legend. A stated answer closes the finding only when "
-                          f"the words are where the page prints them: put this sentence in the "
-                          f"entry's legend in the plugin's file, then answer again.")
+            raise Refused((f"the plan entry {fid!r} that captions {rel} does not state this in "
+                           f"its legend. A stated answer closes the finding only when the words "
+                           f"are where the page prints them: put this sentence in the entry's "
+                           f"legend in the plugin's file, then answer again.") if fid else
+                          (f"the caption the page prints under {rel} does not state this. No "
+                           f"plan entry claims it - a host panel - so the words must be in the "
+                           f"caption the host writes for it (report/panels.json), then answer "
+                           f"again."))
         rec["stated"] = True
     ledger_path(root, plugin).parent.mkdir(parents=True, exist_ok=True)
     _append_line(ledger_path(root, plugin), json.dumps(rec))
@@ -415,7 +437,7 @@ def stated_answers(out, plugin=""):
         # ONE READ OF THE DECLARATION PER KIND: read per figure, the worksheet took two minutes
         # on 945 figures, loading the plugin's file for each.
         if kind not in words_by_kind:
-            words_by_kind[kind] = _norm(declared_text(plugin, rel)[1])
+            words_by_kind[kind] = _norm(declared_text(plugin, rel, out=root)[1])
         words = words_by_kind[kind]
         if words and _norm(rec.get("answer")) in words:
             out_[rel] = dict(rec, figure=rel, carried_by="entry")
