@@ -1060,7 +1060,8 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
                                   "why": "no interpreter resolved and nothing drawn before"})
             continue
         _launches.append(_rec_)
-        drawn += _native_panels(cdir / "figures", str(label), declared, out_dir, lo, hi)
+        drawn += _native_panels(cdir / "figures", str(label), declared, out_dir, lo, hi,
+                                spec=spec)
 
     # ---------------------------------------------------------------------------------------
     # AND ONCE OVER EVERY ARM THE DESIGN CROSSES, not only two at a time.
@@ -1220,7 +1221,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         # already follow, and the consumers match an unlabelled panel against any contrast.
         if _rec_ is not None:
             _launches.append(_rec_)
-            drawn += _native_panels(cdir / "figures", "", declared, out_dir, "", "")
+            drawn += _native_panels(cdir / "figures", "", declared, out_dir, "", "", spec=spec)
     else:
         _unlaunchable.append({"pair": _COHORT_COMPARE, "why": _across_gate})
     # ---------------------------------------------------------------------------------------
@@ -1265,7 +1266,20 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
 _COHORT_COMPARE = "_across_arms"
 
 
-def _native_panels(figdir, label, declared, out_dir, lo, hi):
+def _kind_of(spec, filename):
+    """The plan entry's kind for a file, or None for a plate no entry claims."""
+    from . import native as _NATk
+    from . import declare as _DCk
+    if not spec:
+        return None
+    fid = _NATk.entry_for(spec, filename)
+    if not fid:
+        return None
+    e = next((x for x in _DCk.report_figures(spec) if str(x.get("id") or "") == fid), {})
+    return str(e.get("kind")) if e.get("kind") else None
+
+
+def _native_panels(figdir, label, declared, out_dir, lo, hi, spec=None):
     """[(fid, path, (lead, rest), label, rel)] for the files one compare phase wrote.
 
     THE CAPTION NAMES THE UPSTREAM FUNCTION, read from the plugin's own `native_plots`
@@ -1348,7 +1362,8 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi):
         from . import figure_context as _FCx
         _sfx = _FCx.caption_suffix(_fig_ctx(out_dir, label,
                                             contrast={"reference": lo, "against": hi}
-                                            if (lo and hi) else None))
+                                            if (lo and hi) else None),
+                                   kind=_kind_of(spec, f.name))
         out.append((f"NC_{label}_{stem}", str(f),
                     (lead, rest + (f" {_sfx}" if _sfx else "")), str(label),
                     str(f.relative_to(Path(out_dir))),
@@ -2008,7 +2023,7 @@ def _overview_block(payload, *, plugin=None, by_arm=None):
                 "through the per-unit measures it declared.</p>")
     return out
 
-def _native_unit_panels(out_dir, name, declared, axis):
+def _native_unit_panels(out_dir, name, declared, axis, spec=None):
     """[{id, unit, path, caption}] for the per-unit figures the WRAPPED TOOL wrote.
 
     THESE WERE DRAWN AND PLACED NOWHERE. A plugin's own panels arrive through its payload, but the
@@ -2033,7 +2048,7 @@ def _native_unit_panels(out_dir, name, declared, axis):
             continue
         legends = _CAP.read(d)
         from . import figure_context as _FCx
-        _ctx_sfx = _FCx.caption_suffix(_fig_ctx(out_dir, unit))
+        _ctx = _fig_ctx(out_dir, unit)
         for f in sorted(d.glob("*.png")):
             fn = _NAT.function_for(declared, f.name)
             if not fn:
@@ -2047,6 +2062,7 @@ def _native_unit_panels(out_dir, name, declared, axis):
             body = (leg.get("caption")
                     or f"NO LEGEND WAS WRITTEN for this panel; what it shows is not recorded.")
             prov = _CAP.provenance(leg.get("drawn_by") or "tool", fn)
+            _ctx_sfx = _FCx.caption_suffix(_ctx, kind=_kind_of(spec, f.name))
             out.append({
                 "id": f.stem, "unit": str(unit),
                 "path": str(f.relative_to(Path(out_dir))),
@@ -2249,7 +2265,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # `_native_unit_panels`; the manifest's own record of them is filtered out just above.
     _native_units = _native_unit_panels(out_dir, name,
                                         _decl_native,
-                                        (payload_all or {}).get("unit_axis") or {})
+                                        (payload_all or {}).get("unit_axis") or {},
+                                        spec=p.get("spec") or {})
     figs_all += _native_units
     # AN ARM IS NOT AN ANIMAL, AND THEY WERE ROUTED TO THE SAME PAGE. Both carry a `unit`, so a
     # single truthiness test sent a plugin's four pooled-arm panels into an appendix titled "per

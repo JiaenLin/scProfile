@@ -55,6 +55,50 @@ ck("colours are hex triples", all(len(v) == 7 and v[0] == "#" for v in a.values(
 big = FC.colour_map([f"pop{i}" for i in range(200)])
 ck("200 labels get 200 distinct colours", len(set(big.values())) == 200,
    f"only {len(set(big.values()))} distinct")
+# DISTINCT IS NOT SEPARABLE (harness ADR-0024, found by a looker on the first run with the set):
+# fourteen labels drew three in one blue and three in one magenta, hues 0.6 degrees apart, and
+# the map called them distinct. A hue gap a reader can see is the floor, up to the point where
+# the circle is full.
+
+
+def _hue(hexstr):
+    import colorsys
+    r, g, b = (int(hexstr[i:i + 2], 16) / 255.0 for i in (1, 3, 5))
+    return colorsys.rgb_to_hls(r, g, b)[0] * 360.0
+
+
+def _min_gap(m):
+    hs = sorted(_hue(v) for v in m.values())
+    gaps = [(hs[i + 1] - hs[i]) for i in range(len(hs) - 1)] + [360.0 - hs[-1] + hs[0]]
+    return min(gaps)
+
+
+fourteen = FC.colour_map([f"Kind {c}/Type {i}" for i, c in enumerate("ABCDEFGHIJKLMN")])
+ck("fourteen labels are at least 18 degrees of hue apart", _min_gap(fourteen) >= 17.5,
+   f"min gap {_min_gap(fourteen):.1f}")
+twenty = FC.colour_map([f"Label {i}" for i in range(20)])
+# THE FLOOR THE MECHANISM KEEPS WHEN THE CIRCLE IS CROWDED: half the even share (180 / n degrees),
+# from the widest-arc fallback; the greedy packing usually does better.
+ck("twenty are at least nine degrees apart", _min_gap(twenty) >= 9.0, f"min gap {_min_gap(twenty):.1f}")
+forty = FC.colour_map([f"Label {i}" for i in range(40)])
+ck("forty at least four and a half", _min_gap(forty) >= 4.5, f"min gap {_min_gap(forty):.1f}")
+
+print("\nthe colour-key sentence goes only on a plate that colours by population")
+# THE DEFECT (harness ADR-0024, two lookers on the first run with the set): every plate's caption
+# ended "Population colours are the run's own map ... the same label is the same colour in every
+# panel", including a pathway scatter on a diverging red-blue scale, where the sentence was not
+# boilerplate but false. The kind says what a plate colours by; the host applies it.
+ctx = FC.build(labels=["A", "B"], unit="u1", unit_kind="sample", members=["u1"], n_cells=10)
+ck("a circle carries the colour key", "colour" in FC.caption_suffix(ctx, kind="circle").lower())
+ck("a role scatter carries it", "colour" in FC.caption_suffix(ctx, kind="role_scatter").lower())
+ck("a matrix on a colour scale does not", "colour" not in FC.caption_suffix(ctx, kind="matrix").lower(),
+   FC.caption_suffix(ctx, kind="matrix"))
+ck("nor an interaction plate", "colour" not in FC.caption_suffix(ctx, kind="interaction").lower())
+ck("a plate of no known kind keeps it, as before", "colour" in FC.caption_suffix(ctx).lower())
+ck("the stamp stays whatever the kind", "u1" in FC.caption_suffix(ctx, kind="matrix"))
+ck("the set of kinds coloured by population is the panel registry's",
+   set(FC.POPULATION_COLOURED) >= {"circle", "chord", "role_scatter", "role_shift"}
+   and "matrix" not in FC.POPULATION_COLOURED)
 
 print("\nthe stamp names the unit, its size, and the DIRECTION of a difference")
 s1 = FC.stamp(unit="arm_one", unit_kind="design arm", members=["A", "B", "C"], n_cells=30830)

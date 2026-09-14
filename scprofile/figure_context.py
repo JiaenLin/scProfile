@@ -60,7 +60,12 @@ HUE_STEPS = 3600
 #: is moved to the nearest free slot, which is deterministic and touches only the colliding pair -
 #: so set-independence is exact everywhere except inside a collision, and a collision is visible
 #: because `colour_map` is a function anyone can call twice.
-MIN_HUE_GAP = 6
+#:
+#: A GAP A READER CAN SEE (harness ADR-0024): at 6 of 3600 steps - 0.6 degrees - fourteen labels
+#: drew three populations in one blue and three in one magenta and the map called every colour
+#: distinct. Eighteen degrees is the floor, which twenty labels fit inside; past that the circle
+#: is shared evenly and the map says nothing it cannot keep.
+MIN_HUE_GAP = 180
 
 #: Saturation and lightness are held constant so hue alone carries identity - a panel that also
 #: encodes magnitude in colour must use a different channel, and this leaves it free.
@@ -82,20 +87,34 @@ def colour_map(labels):
     only that one. Everything else is invariant.
     """
     names = sorted({str(x) for x in (labels or []) if str(x).strip()})
+    gap = min(MIN_HUE_GAP, HUE_STEPS // (len(names) + 1))
+
+    def _far(a, b):
+        d = abs(a - b) % HUE_STEPS
+        return min(d, HUE_STEPS - d) >= gap          # around the circle, not along a line
+
     taken, slots = set(), {}
     for name in names:
         h = int(hashlib.sha1(name.encode("utf-8")).hexdigest()[:8], 16) % HUE_STEPS
         # NEAREST FREE SLOT, searched outward, so the shift is the smallest one that separates
         # them and does not cascade down the rest of the set.
-        if any(abs(h - t) % HUE_STEPS < MIN_HUE_GAP for t in taken):
+        if not all(_far(h, t) for t in taken):
             for d in range(1, HUE_STEPS):
                 for cand in ((h + d) % HUE_STEPS, (h - d) % HUE_STEPS):
-                    if not any(abs(cand - t) % HUE_STEPS < MIN_HUE_GAP for t in taken):
+                    if all(_far(cand, t) for t in taken):
                         h = cand
                         break
                 else:
                     continue
                 break
+            else:
+                # NO SLOT AT THE GAP: the middle of the widest empty arc, so the label is still
+                # as far from its neighbours as the circle allows and never on top of one.
+                srt = sorted(taken)
+                arcs = [((srt[i + 1] - srt[i]) % HUE_STEPS, srt[i]) for i in range(len(srt) - 1)]
+                arcs.append(((srt[0] - srt[-1]) % HUE_STEPS, srt[-1]))
+                width, start = max(arcs)
+                h = (start + width // 2) % HUE_STEPS
         taken.add(h)
         slots[name] = h
     out = {}
@@ -155,8 +174,18 @@ def absence(all_labels, drawn_labels):
                      + ". These are absent from this panel; the panel says nothing about them.")}
 
 
-def caption_suffix(ctx):
+#: THE KINDS OF PANEL THAT COLOUR BY POPULATION, in the registry's vocabulary: a ring or a chord
+#: of populations, a population placed by its roles or moved between two arms. Every other kind
+#: colours by a scale or by arm, and the sentence about the run's colour map is false on it - as
+#: two lookers found on a per-programme scatter drawn on a diverging scale (harness ADR-0024).
+POPULATION_COLOURED = ("circle", "chord", "role_scatter", "role_shift", "unit_presence")
+
+
+def caption_suffix(ctx, kind=None):
     """The sentence the REPORT adds to every caption, whatever the plugin drew.
+
+    `kind` is the plate's kind on the plan; the colour-key sentence is added only for a kind
+    that colours by population, and for a plate of no known kind as it always was.
 
     THE PANEL AND ITS CAPTION MUST NOT BE ABLE TO DISAGREE, and the caption is the half the host
     controls. A wrapped tool's own plotting function will not stamp our unit name into its title
@@ -179,7 +208,7 @@ def caption_suffix(ctx):
     if note:
         bits.append(note)
     key = str(ctx.get("colour_key") or "").strip()
-    if key:
+    if key and (kind is None or str(kind) in POPULATION_COLOURED):
         # A COLOUR MAP IS A PROPERTY OF THE RUN, and two runs with different maps must not be laid
         # side by side. Printing the digest is what lets a reader notice, rather than trusting that
         # two figures from two runs share a palette because they look like they might.
