@@ -727,14 +727,16 @@ def render(out, *, run_key="", title="", plugin=""):
     # THE FIGURES, LETTERED, WITH THE LEGEND A JOURNAL PRINTS. The composites and their legends
     # come from the figure set - the same index the prose cites through, so "Fig. 3b" in a
     # sentence and the panel lettered b under Figure 3 are one object by construction.
-    fset = _FS.read(out, plugin)
-    if not (fset and fset.get("figures")):
-        # A RUN REPORTED BEFORE THE SET EXISTED, or a writing replay of one: build it now, from
-        # the run's own records, so the page never renders without its figures.
-        try:
-            fset = _FS.build(out, plugin, spec, design, pay, log=lambda *a, **k: None)
-        except Exception:                                                 # noqa: BLE001
-            fset = _FS.index_or_assemble(out, plugin, spec, design, pay)
+    # THE SET IS REBUILT WHEN THE PAGE IS, from the run's own records: it is derived, a minute's
+    # work, and a page rendered by newer code over a set laid out by older code would number
+    # its figures one way and letter its panels another. The brief follows it, so the list a
+    # writer works from and the page agree on every letter.
+    try:
+        fset = _FS.build(out, plugin, spec, design, pay, log=lambda *a, **k: None)
+        from . import brief as _BR                                        # noqa: PLC0415
+        _BR.write_brief(out, plugin, spec=spec, design=design)
+    except Exception:                                                     # noqa: BLE001
+        fset = _FS.index_or_assemble(out, plugin, spec, design, pay)
     figs = [f for f in (fset.get("figures") or []) if (root / f["path"]).is_file()]
     if figs:
         out_html.append(

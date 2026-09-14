@@ -317,7 +317,12 @@ def title_for(axis, subject, spec, design, pay, contrast_labels):
     S = S[:1].upper() + S[1:]
     pay = pay or {}
     if axis == "cohort":
-        return f"{S} across the design.", ""
+        ua = pay.get("unit_axis") or {}
+        ns = sum(1 for v in ua.values() if v == "sample")
+        ng = sum(1 for v in ua.values() if v == "group")
+        n = (f"n = {ns} sample" + ("s" if ns != 1 else "") + (f" in {ng} arms" if ng else "")
+             if ns else "")
+        return f"{S} across the design.", n
     if axis == "group":
         return f"{S} in the {_arm_phrase(subject, design, pay)} arm.", _n_phrase(subject, pay)
     if axis == "sample":
@@ -332,7 +337,7 @@ def title_for(axis, subject, spec, design, pay, contrast_labels):
             if lab == label:
                 within = ", ".join(f"{v}" for k, v in sorted(lo_f.items()) if k != fac)
                 n_lo, n_hi = len(_CP._members(design, lo_f)), len(_CP._members(design, hi_f))
-                return (f"{S}: {hi} versus {lo} {fac}" + (f" within {within}" if within else "")
+                return (f"{S}: {hi} versus {lo} ({fac})" + (f" within {within}" if within else "")
                         + ".", f"n = {n_hi} versus {n_lo} samples")
         return f"{S}: {label}.", ""
     if axis == "interaction":
@@ -358,6 +363,21 @@ def legend_for(fig):
     return " ".join(parts)
 
 
+def _chunks(n, cap=MAX_PANELS):
+    """[sizes] - n plates into the fewest figures of at most `cap` panels, as equal as can be.
+
+    GREEDY WAS SIX AND ONE: seven plates of one direction of the interaction became a figure of
+    six panels and a figure of a single panel on the first run with the set. The fewest figures
+    is still the rule; their sizes differ by at most one.
+    """
+    n = max(0, int(n))
+    if n == 0:
+        return []
+    k = int(math.ceil(n / float(cap)))
+    base, extra = divmod(n, k)
+    return [base + 1 if i < extra else base for i in range(k)]
+
+
 def assemble(run, plugin, spec, design, pay):
     """The index of the set, computed and not written: {plugin, figures: [...]}.
 
@@ -380,8 +400,10 @@ def assemble(run, plugin, spec, design, pay):
             main = [p for p in items if axis not in SUPPLEMENTARY and p.get("position") != "appendix"]
             extra = [p for p in items if p not in main]
             for supp, group in ((False, main), (True, extra)):
-                for k in range(0, len(group), MAX_PANELS):
-                    chunks.append((supp, group[k:k + MAX_PANELS], title, n, axis, subject, base))
+                at = 0
+                for size in _chunks(len(group)):
+                    chunks.append((supp, group[at:at + size], title, n, axis, subject, base))
+                    at += size
     # THE MAIN FIGURES ARE NUMBERED FIRST, in the order of the argument; the supplementary
     # figures after them, in the same order.
     for want in (False, True):

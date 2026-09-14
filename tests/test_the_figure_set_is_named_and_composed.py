@@ -150,7 +150,10 @@ def make_run(root):
         contrast.append({"id": f"C1_diff_count__{_raw(lab)}", "path": rel, "label": lab,
                          "caption": f"Change in significant interactions, {lab}."})
     for direction in ("dose_response_by_time", "time_response_by_dose"):
-        for stem in ("nativecmp_inter_count", "nativecmp_inter_weight"):
+        for stem in (("nativecmp_inter_count", "nativecmp_inter_weight")
+                     + (("nativecmp_inter_flow", "nativecmp_inter_flow_log", "nativecmp_inter_lr",
+                         "nativecmp_inter_lr_scatter", "nativecmp_inter_prob")
+                        if direction == "dose_response_by_time" else ())):
             rel = f"kernels/{PLUGIN}/compare/_across_arms/figures/{stem}__{direction}.png"
             _png(run / rel)
             native.append({"id": f"NC_{stem}__{direction}", "path": rel, "label": "",
@@ -295,6 +298,15 @@ try:
        all((run / f["path"]).is_file() and f["path"].startswith("report/figures/") for f in figs))
     ck("a composite is not a panel of itself",
        not any(p["path"] == f["path"] for f in figs for p in f["panels"]))
+    # BALANCED, NOT GREEDY (found on the first run with the set): seven plates of one direction
+    # of the interaction became a figure of six and a figure of one.
+    sizes = [len(f["panels"]) for f in figs if f["axis"] == "interaction"
+             and f["subject"] == "dose_response_by_time"]
+    ck("a subject's plates are laid into figures of nearly equal size",
+       max(sizes) - min(sizes) <= 1 if sizes else True, str(sizes))
+    ck("the balance keeps the ceiling", all(s <= FS.MAX_PANELS for s in sizes))
+    ck("a seven-plate subject becomes four and three", FS._chunks(7) == [4, 3] and FS._chunks(13) == [5, 4, 4]
+       and FS._chunks(6) == [6] and FS._chunks(1) == [1] and FS._chunks(12) == [6, 6], str(FS._chunks(7)))
 
     print("\nthe legend has a title sentence and one clause per panel")
     legs = [FS.legend_for(f) for f in figs]
@@ -316,6 +328,12 @@ try:
        str([l[:120] for f, l in zip(figs, legs) if f["axis"] == "group"][:2]))
     ck("no legend says 'this run' or names a run key",
        not any("this run" in l.lower() or re.search(r"\d{8}T\d{6}Z", l) for l in legs))
+    con_t = [f["title"] for f in figs if f["axis"] == "contrast" and f["subject"] == "dose_within_late"]
+    ck("a contrast's title names the levels, the factor in brackets and the stratum",
+       con_t and con_t[0] == "Widget signalling: high versus low (dose) within late.", str(con_t[:1]))
+    coh = [f for f in figs if f["axis"] == "cohort"]
+    ck("the cohort's legend says how many samples in how many arms",
+       coh and "n = 6 samples in 4 arms" in FS.legend_for(coh[0]), FS.legend_for(coh[0])[:120] if coh else "")
 
     print("\nthe prose cites figure and panel, through the same index")
     fi = C.figure_index(run, PLUGIN, SPEC, DESIGN)
@@ -344,6 +362,9 @@ try:
        not [l for l in text.splitlines() if l.startswith("#") and ("|" in l or "SIMPLE" in l)],
        str([l for l in text.splitlines() if l.startswith("#") and "|" in l][:2]))
     ck("the composed section does not say 'this run'", "this run" not in text.lower())
+    ck("the interaction of two factors is headed once, as one pair",
+       "## Interaction of dose and time" in text and "; time and dose" not in text,
+       str([l for l in text.splitlines() if l.startswith("## Interaction")]))
 
     print("\nthe page prints the figures, lettered, with their legends and nothing of the run")
     P.ensure_section(run, plugin=PLUGIN, spec=SPEC, design=DESIGN, run_key="testrun")

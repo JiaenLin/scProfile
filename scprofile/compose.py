@@ -1052,11 +1052,18 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         _pairs = [(fac, next((str(c.get("other")) for c in simple
                               if str(c.get("factor")) == fac and c.get("other")), ""))
                   for fac, _ls in sorted(inter)]
-        _named = "; ".join(f"**{a}** on **{b}**" for a, b in _pairs if b)
-        if len(_pairs) == 1 and _pairs[0][1]:
-            _head = f"Interaction of {_pairs[0][0]} and {_pairs[0][1]}"
-        elif _named:
-            _head = "Interaction of the factors: " + "; ".join(f"{a} and {b}" for a, b in _pairs if b)
+        # ONE PAIR, NAMED ONCE: the response of A by B and of B by A are one interaction, and a
+        # 2x2 lists both, so the heading read "age and diet; diet and age" on the first run.
+        _seen, _uniq = set(), []
+        for a, b in _pairs:
+            key = frozenset((a, b)) if b else frozenset((a,))
+            if b and key not in _seen:
+                _seen.add(key)
+                _uniq.append((a, b))
+        if len(_uniq) == 1:
+            _head = f"Interaction of {_uniq[0][0]} and {_uniq[0][1]}"
+        elif _uniq:
+            _head = "Interaction of the factors: " + "; ".join(f"{a} and {b}" for a, b in _uniq)
         else:
             _head = "Interaction of the factors"
         L += [f"## {_head}", ""]
