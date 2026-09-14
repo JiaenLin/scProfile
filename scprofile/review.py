@@ -516,13 +516,12 @@ def status(out, plugin=""):
     led = read_ledger(out, plugin)
     carried = read_carried(out, plugin)
     ans = answered(out, plugin)
-    closed = stated_answers(out, plugin)
+    # A DISCLOSURE CLOSES THE FINDING; IT IS NOT A LOOK (harness ADR-0022): the status once
+    # read a stated figure as reviewed whether or not any eye had opened that rendering, and
+    # station 7 disagreed by forty figures. A figure's state here is the eye's: its look, the
+    # carried look on its bytes, or nothing yet.
     rows = []
     for rel in figures(out):
-        if rel in closed:
-            rows.append((rel, REVIEWED, f"stated by {closed[rel].get('by')}: "
-                                        f"{str(closed[rel].get('answer'))[:110]}"))
-            continue
         if rel in ans:
             # ANSWERED, NOT SETTLED (harness ADR-0019): the author said why it stays; a looker
             # decides. Outstanding, so the shards carry it to one.

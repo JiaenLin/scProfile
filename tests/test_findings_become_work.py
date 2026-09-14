@@ -237,6 +237,18 @@ with tempfile.TemporaryDirectory() as td:
     try:
         ck("on another rendering of the same entry the stated answer closes the finding",
            F_TOOL not in R.open_findings(b, PLUG), str(R.open_findings(b, PLUG)))
+        # A DISCLOSURE CLOSES THE FINDING; IT IS NOT A LOOK (found on the carried run: the status
+        # read forty figures nobody had opened as reviewed because their entry was stated, and
+        # station 7 - the eye on every figure - disagreed). A rendering no eye has opened is
+        # outstanding for a look whatever its entry discloses.
+        (b / "kernels/p/U9/figures/native_ring.png").parent.mkdir(parents=True, exist_ok=True)
+        (b / "kernels/p/U9/figures/native_ring.png").write_bytes(b"\x89PNG-render-9")
+        st9 = {r: s_ for r, s_, _w in R.status(b, PLUG)}
+        ck("a rendering with no look reads unreviewed even when its entry is stated",
+           st9.get("kernels/p/U9/figures/native_ring.png") == R.UNREVIEWED,
+           str(st9.get("kernels/p/U9/figures/native_ring.png")))
+        ck("and it is outstanding for a look",
+           "kernels/p/U9/figures/native_ring.png" in dict(R.outstanding(b, PLUG)))
         plug_file.write_text("PLUGIN = {\n    'report': {'figures': [\n"
                              "        {'id': 'native_ring', 'fn': 'drawRing', 'legend': 'the ring'},\n"
                              "    ]}}\n\ndef run(ctx):\n    pass\n")
