@@ -963,14 +963,16 @@ if _have('de'):
        "corrected WITHIN" in _KSRC["de.py"] and "_bh_across_families" in _KSRC["de.py"],
        "Apply multiple-testing correction jointly across the whole comparison family, not "
        "separately per cell type, when the cell types are tested in one design")
-_bhsrc = ""
+if _have('de'):
+    _bhsrc = ""
 if _have('de'):
     for _node in __import__("ast").parse(_KSRC["de.py"]).body:
         if getattr(_node, "name", "") == "_bh_across_families":
             _bhsrc = __import__("ast").get_source_segment(_KSRC["de.py"], _node) or ""
-ck("the joint correction is applied to raw p-values, never to an adjusted column",
-   'res["pvalue"]' in _bhsrc and '"padj"' not in _bhsrc,
-   "correcting an adjusted column twice is a smaller number with no interpretation")
+if _have('de'):
+    ck("the joint correction is applied to raw p-values, never to an adjusted column",
+       'res["pvalue"]' in _bhsrc and '"padj"' not in _bhsrc,
+       "correcting an adjusted column twice is a smaller number with no interpretation")
 ck("a PARTIAL run wrote a page and is NOT exempt",
    bool(_FB.metric_drift(_kk, {"status": "partial", "units": [{"metrics": {}}]})))
 
@@ -1270,44 +1272,53 @@ ck("a factor with one level here is NOT", _IN2.estimable(_one, ["a", "b", "a:b"]
 ck("a full 3x2 is estimable, so the test is not just a 2x2 rule",
    _IN2.estimable(_pd2.DataFrame({"a": list("yyoomm"), "b": list("chchch")}),
                   ["a", "b", "a:b"]) is True)
-ck("the interaction gets the same rank test the main effects get",
-   "matrix_rank" not in _desrc and "ctx.estimable" in _desrc,
-   "an interaction appended without being asked is the Singular matrix this prevents")
-ck("and the main-effect check goes through the same host function, not a second copy",
-   "ctx.drop_inestimable" in _desrc, "two copies is how a check gets applied to some terms only")
-ck("the run asks before it adds", "_interaction_estimable(ctx, sub_obs" in _desrc)
+if _have('de'):
+    ck("the interaction gets the same rank test the main effects get",
+       "matrix_rank" not in _desrc and "ctx.estimable" in _desrc,
+       "an interaction appended without being asked is the Singular matrix this prevents")
+if _have('de'):
+    ck("and the main-effect check goes through the same host function, not a second copy",
+       "ctx.drop_inestimable" in _desrc, "two copies is how a check gets applied to some terms only")
+if _have('de'):
+    ck("the run asks before it adds", "_interaction_estimable(ctx, sub_obs" in _desrc)
 # AN INTERACTION IN THE MODEL AND NOT IN THE OUTPUT. The results loop iterates the MAIN EFFECTS,
 # so `age:diet` entered the design, moved every coefficient in it, and produced no row. The
 # study's primary readout was fitted and never reported, and the caveat said it had been ADDED -
 # true, and read as though it had been tested. Measured on the real table of run 693758: terms
 # were `age` and `diet`, and nothing else.
-ck("an interaction that is added is also CONTRASTED",
-   "if pop in interacted:" in _desrc and "DeseqStats(dds, contrast=vec" in _desrc,
-   "adding a term to the formula is not testing it")
-ck("the contrast column is taken from the design matrix the fit built",
-   'dds.obsm.get("design_matrix")' in _desrc,
-   "reconstructing what formulaic would have named it guesses at another library's internals")
+if _have('de'):
+    ck("an interaction that is added is also CONTRASTED",
+       "if pop in interacted:" in _desrc and "DeseqStats(dds, contrast=vec" in _desrc,
+       "adding a term to the formula is not testing it")
+if _have('de'):
+    ck("the contrast column is taken from the design matrix the fit built",
+       'dds.obsm.get("design_matrix")' in _desrc,
+       "reconstructing what formulaic would have named it guesses at another library's internals")
 # THE PER-TERM LOOP STILL CONTAINS ITS OWN ACCOUNTING. Inserting the interaction block one
 # indent level too far left ENDED that loop, and everything after it - the gene accounting and
 # the hits rows - fell inside `if pop in interacted:`, running once per population with the last
 # term's data. The table looked right and the figure lost two of its three terms, which is the
 # order these are checked in and the reason a table is not a report.
 _determ = None
-for _nd in _ast.walk(_ast.parse(_desrc)):
-    if isinstance(_nd, _ast.For) and getattr(getattr(_nd, "target", None), "id", "") == "term":
-        _determ = _ast.unparse(_ast.Module(_nd.body, []))
+if _have('de'):
+    for _nd in _ast.walk(_ast.parse(_desrc)):
+        if isinstance(_nd, _ast.For) and getattr(getattr(_nd, "target", None), "id", "") == "term":
+            _determ = _ast.unparse(_ast.Module(_nd.body, []))
 ck("the per-term loop still contains the gene accounting",
    _determ is not None and "acct_rows.append" in _determ,
    "an insert at the wrong indent ends the loop and the accounting falls out of it")
 ck("and the hits rows every figure is built from",
    _determ is not None and "hit_rows.append" in _determ)
-ck("the interaction is accounted for too, or it is in the table and in no figure",
-   "\"term\": f\"{a_}:{b_}\"" in _desrc and _desrc.count("hit_rows.append") >= 5)
-ck("an interaction spread over several columns is NAMED, not silently skipped",
-   "not_interacted.setdefault" in _desrc,
-   "a factor with three levels spreads its interaction over columns an F-test would combine")
-ck("and a population that cannot fit it is NAMED, not silently main-effects-only",
-   "not_interacted" in _desrc and "WAS NOT TESTED" in _desrc.upper())
+if _have('de'):
+    ck("the interaction is accounted for too, or it is in the table and in no figure",
+       "\"term\": f\"{a_}:{b_}\"" in _desrc and _desrc.count("hit_rows.append") >= 5)
+if _have('de'):
+    ck("an interaction spread over several columns is NAMED, not silently skipped",
+       "not_interacted.setdefault" in _desrc,
+       "a factor with three levels spreads its interaction over columns an F-test would combine")
+if _have('de'):
+    ck("and a population that cannot fit it is NAMED, not silently main-effects-only",
+       "not_interacted" in _desrc and "WAS NOT TESTED" in _desrc.upper())
 
 from scprofile import sources as _SRC                                           # noqa: E402
 _srcsrc = pathlib.Path(_SRC.__file__).read_text()
@@ -1438,11 +1449,13 @@ _plt.close(_fig)
 # (a shared limit is applied to every axis of the grid), not by one spelling of it.
 if _have('de'):
     _ma = _KSRC["de.py"].split("def _fig_ma", 1)[-1].split("\ndef ", 1)[0]
-ck("the fold-change grid applies one limit to every panel",
-   ("set_ylim" in _ma and "for " in _ma),
-   "no per-axis limit is applied inside the grid loop")
-ck("the limits are the UNION of the panels, so nothing is clipped out of view",
-   "get_ylim()" in _ma, "the shared limit is not derived from the panels' own autoscale")
+if _have('de'):
+    ck("the fold-change grid applies one limit to every panel",
+       ("set_ylim" in _ma and "for " in _ma),
+       "no per-axis limit is applied inside the grid loop")
+if _have('de'):
+    ck("the limits are the UNION of the panels, so nothing is clipped out of view",
+       "get_ylim()" in _ma, "the shared limit is not derived from the panels' own autoscale")
 if _have('de'):
     ck("and the caption says the scale is shared",
        "ONE SCALE ACROSS EVERY PANEL" in _KSRC["de.py"],
@@ -1502,8 +1515,10 @@ ck("and it is satisfied by SAYING so, not by removing them",
    "a criterion that demands none would require hiding real signal")
 if _have('decoupler'):
     _dsrc = _KSRC["decoupler.py"]
-ck("the plugin counts its unmapped regulators", "_ACCESSION_PATTERN" in _dsrc)
-ck("and says they are KEPT", "They are KEPT" in _dsrc)
+if _have('decoupler'):
+    ck("the plugin counts its unmapped regulators", "_ACCESSION_PATTERN" in _dsrc)
+if _have('decoupler'):
+    ck("and says they are KEPT", "They are KEPT" in _dsrc)
 ck("the pattern matches an accession and not a gene symbol",
    bool(re.match(_ST.ACCESSION.pattern.strip("\\b"), "A0A079HLR9"))
    and not _ST.ACCESSION.fullmatch("Gata4"),
