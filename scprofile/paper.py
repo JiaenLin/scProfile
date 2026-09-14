@@ -320,6 +320,13 @@ def summarise(out, plugin=""):
 DRAFT = "PAPER.md"
 
 
+def _payload_of(out):
+    try:
+        return json.loads((Path(out) / "report.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
 def _plugin_spec_of(pay, plugin=""):
     """The declaration of the plugin being written about, out of report.json."""
     ks = (pay.get("kernels") or {})
@@ -543,7 +550,18 @@ def write_draft(out, text, *, author="", plugin=""):
     # the write task blocked and `--claim` refused a marked plate, and this accepted a section
     # resting on the same plates. One rule for the section, the claims, the agenda and `next`:
     # a figure the run's own record calls wrong is cited by nothing until it is redrawn.
-    cited = sorted({int(n) for n in re.findall(r"\bFig(?:ure|s|\.)?\s*(\d+)", body)})
+    # BY PANEL WHERE A PANEL IS NAMED (harness ADR-0024): `Fig. 4b` cites one plate, `Fig. 4`
+    # every plate of the figure. The check keyed on the number and the writer of the second run
+    # wrote around four whole figures for one flagged panel in each.
+    cited_panels = {}
+    for m in re.finditer(r"\bFig(?:ure|s|\.)?\s*(\d+)([a-z](?:\s*[,\u2013-]\s*[a-z])*)?", body):
+        n = int(m.group(1))
+        letters = re.findall(r"[a-z]", m.group(2) or "")
+        if "\u2013" in (m.group(2) or "") or "-" in (m.group(2) or ""):
+            if len(letters) >= 2:
+                letters = [chr(c) for c in range(ord(letters[0]), ord(letters[-1]) + 1)]
+        cited_panels.setdefault(n, set()).update(letters or {"*"})
+    cited = sorted(cited_panels)
     # THE REGISTER (harness ADR-0024): a manuscript names no run, no run key and no tool of
     # its own making. Refused with the sentence, so the writer sees what to change.
     bad_register = register_findings(body)
@@ -557,11 +575,21 @@ def write_draft(out, text, *, author="", plugin=""):
             openf = _RV.open_findings(out, plugin)
         except Exception:                                                 # noqa: BLE001
             openf = {}
-        # A FIGURE IS A SET OF PANELS NOW: every plate under a cited number is checked.
+        # A FIGURE IS A SET OF PANELS NOW: the plates cited by letter, or every plate of a
+        # figure cited whole.
+        from . import compose as _Cp
+        try:
+            _pay = _payload_of(out)
+            panels = _Cp.figure_panels(out, plugin, _plugin_spec_of(_pay, plugin),
+                                       (_pay or {}).get("design") or {})
+        except Exception:                                                 # noqa: BLE001
+            panels = {}
         by_num = {}
         for path, n in (_figure_index(out, plugin) or {}).items():
-            by_num.setdefault(n, []).append(path)
-        bad = [(n, path) for n in cited for path in by_num.get(n, []) if openf.get(path)]
+            by_num.setdefault(n, []).append((panels.get(path, (False, n, ""))[2], path))
+        bad = [(n, path) for n in cited for letter, path in by_num.get(n, [])
+               if ("*" in cited_panels[n] or not letter or letter in cited_panels[n])
+               and openf.get(path)]
         if bad:
             n, path = bad[0]
             raise Refused(f"the section cites Figure {n} ({path}), which carries an open "

@@ -402,6 +402,34 @@ try:
     except P.Refused as err:
         ck("a draft in register is carried in", False, str(err)[:120])
 
+    print("\na citation is checked by panel, not by the whole figure")
+    # THE WRITER OF THE SECOND RUN wrote around four whole figures because one panel of each
+    # carried a finding and the check keyed on the number: `Fig. 4b` was refused for `Fig. 4a`.
+    from scprofile import review as RV
+    tgt = main[1]                       # the first arm's figure: panels a.. from the plan
+    flagged, clean = tgt["panels"][0]["source"], tgt["panels"][1]["source"]
+    RV.record(run, flagged, "the ring's colours collide and the legend cannot key them apart",
+              reviewer="eye", plugin=PLUGIN, defect=True)
+    n = tgt["n"]
+    try:
+        P.write_draft(run, f"## Effect of dose\n\nSignal rose (Fig. {n}b). " + words, author="w",
+                      plugin=PLUGIN)
+        ck("a clean panel of a figure with a flagged sibling can be cited", True)
+    except P.Refused as err:
+        ck("a clean panel of a figure with a flagged sibling can be cited", False, str(err)[:160])
+    try:
+        P.write_draft(run, f"## Effect of dose\n\nSignal rose (Fig. {n}a). " + words, author="w",
+                      plugin=PLUGIN)
+        ck("the flagged panel itself is refused", False, "accepted")
+    except P.Refused as err:
+        ck("the flagged panel itself is refused", "open" in str(err), str(err)[:120])
+    try:
+        P.write_draft(run, f"## Effect of dose\n\nSignal rose (Fig. {n}). " + words, author="w",
+                      plugin=PLUGIN)
+        ck("the whole figure, cited without a panel, is refused while any panel is flagged", False, "accepted")
+    except P.Refused as err:
+        ck("the whole figure, cited without a panel, is refused while any panel is flagged", "open" in str(err))
+
     print("\nbuilding twice leaves one set")
     idx2 = FS.build(run, PLUGIN, SPEC, DESIGN, pay)
     files = sorted(str(p.relative_to(run)) for p in (run / "report" / "figures").rglob("*.png"))
