@@ -670,6 +670,19 @@ from scprofile import kernels as _KN                                            
 from scprofile.kernels import producer_edges as _pe                             # noqa: E402
 
 _K = discover()
+# A TREE CARRYING ONE KERNEL IS A TREE THIS SUITE RUNS ON (harness ADR-0021, ADR-0023): the
+# cellchat-only export is what the cluster runs and what a cold author is handed; a check
+# about another kernel is skipped there and says so, and every check about the tree still runs.
+_SKIPPED = set()
+
+
+def _have(*names):
+    missing = [n for n in names if n not in _K]
+    for n in missing:
+        if n not in _SKIPPED:
+            _SKIPPED.add(n)
+            print(f"  skip  checks about the {n} kernel: not in this tree")
+    return not missing
 
 print("\na requirement is stated once, and no decision reads a flag nobody sets")
 _dead = _FB.dead_predicates(_K)
@@ -796,8 +809,9 @@ ck("and the config resolver actually delivers it rather than dropping it",
 ck("every name the payload reads is bound before the design branch",
    _clisrc.index("_dtab = None") < _clisrc.index('"design": {str(k)'),
    "a run without a design must not die at the last step")
-ck("a genuine typo in --params is still refused",
-   _refused(lambda: _DECL.resolve_config(_K["de"].spec, {"nonsense": 1}, "de")))
+if _have('de'):
+    ck("a genuine typo in --params is still refused",
+       _refused(lambda: _DECL.resolve_config(_K["de"].spec, {"nonsense": 1}, "de")))
 ck("and main effects where nothing is crossed",
    all(_PL.decisions_for(k, {"has_design": True, "crossed_pairs": [],
                              "testable": ["f1"]}).get("contrast", {}).get("kind")
@@ -937,19 +951,23 @@ ck("a metric nobody declared is a finding",
                                        "units": [{"metrics": {"invented": 1.0}}]})))
 ck("a refusal produced nothing by design and is exempt",
    not _FB.metric_drift(_kk, {"status": "refused", "units": []}))
-ck("a metric recorded by a plugin that declares none is STILL a finding",
-   bool(_FB.metric_drift(_K["de"], {"status": "ok", "metrics": {"stray": 1.0}})),
-   "returning early on an empty declaration lets a plugin record what nothing renders")
-ck("and a plugin that records none and declares none is clean",
-   not _FB.metric_drift(_K["de"], {"status": "ok"}))
-ck("a count reported across independently corrected families names the scope",
-   "corrected WITHIN" in _KSRC["de.py"] and "_bh_across_families" in _KSRC["de.py"],
-   "Apply multiple-testing correction jointly across the whole comparison family, not "
-   "separately per cell type, when the cell types are tested in one design")
+if _have('de'):
+    ck("a metric recorded by a plugin that declares none is STILL a finding",
+       bool(_FB.metric_drift(_K["de"], {"status": "ok", "metrics": {"stray": 1.0}})),
+       "returning early on an empty declaration lets a plugin record what nothing renders")
+if _have('de'):
+    ck("and a plugin that records none and declares none is clean",
+       not _FB.metric_drift(_K["de"], {"status": "ok"}))
+if _have('de'):
+    ck("a count reported across independently corrected families names the scope",
+       "corrected WITHIN" in _KSRC["de.py"] and "_bh_across_families" in _KSRC["de.py"],
+       "Apply multiple-testing correction jointly across the whole comparison family, not "
+       "separately per cell type, when the cell types are tested in one design")
 _bhsrc = ""
-for _node in __import__("ast").parse(_KSRC["de.py"]).body:
-    if getattr(_node, "name", "") == "_bh_across_families":
-        _bhsrc = __import__("ast").get_source_segment(_KSRC["de.py"], _node) or ""
+if _have('de'):
+    for _node in __import__("ast").parse(_KSRC["de.py"]).body:
+        if getattr(_node, "name", "") == "_bh_across_families":
+            _bhsrc = __import__("ast").get_source_segment(_KSRC["de.py"], _node) or ""
 ck("the joint correction is applied to raw p-values, never to an adjusted column",
    'res["pvalue"]' in _bhsrc and '"padj"' not in _bhsrc,
    "correcting an adjusted column twice is a smaller number with no interpretation")
@@ -1071,9 +1089,10 @@ ck("a plugin claiming design_aware with nothing to split is NAMED on its page",
    "produced no per-cell column" in _RP._by_arm_block({}, aware=True))
 ck("a plugin making no such claim gets no empty section",
    _RP._by_arm_block({}, aware=False) == "")
-ck("the declaration REFUSES design_aware with no per-cell column",
-   any(lvl == "ERROR" and "design_aware" in msg for lvl, msg in _DECL.check(
-       {**_K["cellcycle"].spec, "design_aware": True, "produces": ["tables/x.csv"]})))
+if _have('cellcycle'):
+    ck("the declaration REFUSES design_aware with no per-cell column",
+       any(lvl == "ERROR" and "design_aware" in msg for lvl, msg in _DECL.check(
+           {**_K["cellcycle"].spec, "design_aware": True, "produces": ["tables/x.csv"]})))
 ck("the section is placed before the per-population panels",
    inspect.getsource(_RP.write_kernel).index("_by_arm_block")
    < inspect.getsource(_RP.write_kernel).index("_figure_section"))
@@ -1236,7 +1255,8 @@ ck("the check covers the test fixtures too, which is where it was found",
 print("\nthe first real run of the contrast, and what it found")
 import numpy as _np2, pandas as _pd2                                            # noqa: E402
 
-_desrc = _KSRC["de.py"]
+if _have('de'):
+    _desrc = _KSRC["de.py"]
 # THE RANK TEST IS NO LONGER IN THE PLUGIN, so this no longer has to AST-extract a function
 # and exec it in a bare namespace to reach it - which was itself the tell. A fact about a DESIGN
 # that can only be tested by dissecting one plugin is a fact the next plugin will not have.
@@ -1381,10 +1401,12 @@ _losrc = _insp2.getsource(_FIG2.legend_outside)
 ck("legend_outside takes a markerscale", "markerscale=2.5" in _losrc.split("\n")[0])
 ck("and says why the default is wrong for a size key",
    "SIZE key is the opposite case" in _losrc or "A SIZE key" in _losrc)
-ck("the size key passes 1.0", "markerscale=1.0" in _KSRC["liana.py"])
-ck("and derives its handles FROM the artist, not from a second formula",
-   'legend_elements(prop="sizes"' in _KSRC["liana.py"],
-   "two formulas for one mapping drift the moment either is touched")
+if _have('liana'):
+    ck("the size key passes 1.0", "markerscale=1.0" in _KSRC["liana.py"])
+if _have('liana'):
+    ck("and derives its handles FROM the artist, not from a second formula",
+       'legend_elements(prop="sizes"' in _KSRC["liana.py"],
+       "two formulas for one mapping drift the moment either is touched")
 
 print("\na panel grid shares one scale")
 # MEASURED AS BEHAVIOUR, NOT AS SOURCE TEXT. This pinned four literal lines of the plugin -
@@ -1414,15 +1436,17 @@ ck("symmetric about zero, so up and down are the same distance",
 _plt.close(_fig)
 # And the PLUGIN must still do it - asserted on the drawing function's source by INTENT
 # (a shared limit is applied to every axis of the grid), not by one spelling of it.
-_ma = _KSRC["de.py"].split("def _fig_ma", 1)[-1].split("\ndef ", 1)[0]
+if _have('de'):
+    _ma = _KSRC["de.py"].split("def _fig_ma", 1)[-1].split("\ndef ", 1)[0]
 ck("the fold-change grid applies one limit to every panel",
    ("set_ylim" in _ma and "for " in _ma),
    "no per-axis limit is applied inside the grid loop")
 ck("the limits are the UNION of the panels, so nothing is clipped out of view",
    "get_ylim()" in _ma, "the shared limit is not derived from the panels' own autoscale")
-ck("and the caption says the scale is shared",
-   "ONE SCALE ACROSS EVERY PANEL" in _KSRC["de.py"],
-   "a reader cannot see that axes are shared without being told")
+if _have('de'):
+    ck("and the caption says the scale is shared",
+       "ONE SCALE ACROSS EVERY PANEL" in _KSRC["de.py"],
+       "a reader cannot see that axes are shared without being told")
 
 print("\na headline carries what its own diagnostics refute")
 from scprofile.plugin import Context as _Ctx2                                   # noqa: E402
@@ -1456,14 +1480,17 @@ ck("proved: a contradiction raised before the headline still reaches it",
    " ".join(list(_fc._contradictions) + [_fc.headline]).startswith("NO FATE WAS RESOLVED:"))
 ck("and into the caveats too, so it survives into report.json",
    "self.caveat(text)" in inspect.getsource(_Ctx2.contradiction))
-ck("cellcycle tests whether its call tracks depth rather than cycling",
-   "_depth_rho" in _KSRC["cellcycle.py"] and "ctx.contradiction(" in _KSRC["cellcycle.py"])
-ck("and the panel that measures it returns the number instead of discarding it",
-   "_drawn[fn.__name__] = fn(*args)" in _KSRC["cellcycle.py"],
-   "the loop called each figure for its side effect and dropped what it returned")
-ck("pseudotime tests its fate entropy against the ceiling for k states",
-   "NO FATE WAS RESOLVED" in _KSRC["pseudotime.py"]
-   and "0.95 * _ceiling" in _KSRC["pseudotime.py"])
+if _have('cellcycle'):
+    ck("cellcycle tests whether its call tracks depth rather than cycling",
+       "_depth_rho" in _KSRC["cellcycle.py"] and "ctx.contradiction(" in _KSRC["cellcycle.py"])
+if _have('cellcycle'):
+    ck("and the panel that measures it returns the number instead of discarding it",
+       "_drawn[fn.__name__] = fn(*args)" in _KSRC["cellcycle.py"],
+       "the loop called each figure for its side effect and dropped what it returned")
+if _have('pseudotime'):
+    ck("pseudotime tests its fate entropy against the ceiling for k states",
+       "NO FATE WAS RESOLVED" in _KSRC["pseudotime.py"]
+       and "0.95 * _ceiling" in _KSRC["pseudotime.py"])
 
 print("\nan unmapped identifier is named, not dropped")
 from scprofile import standard as _ST                                           # noqa: E402
@@ -1473,7 +1500,8 @@ ck("the criterion reads the LABELS a figure is drawn with, not the words under i
 ck("and it is satisfied by SAYING so, not by removing them",
    "not acc or said" in inspect.getsource(_ST),
    "a criterion that demands none would require hiding real signal")
-_dsrc = _KSRC["decoupler.py"]
+if _have('decoupler'):
+    _dsrc = _KSRC["decoupler.py"]
 ck("the plugin counts its unmapped regulators", "_ACCESSION_PATTERN" in _dsrc)
 ck("and says they are KEPT", "They are KEPT" in _dsrc)
 ck("the pattern matches an accession and not a gene symbol",
