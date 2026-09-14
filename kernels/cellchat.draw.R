@@ -428,7 +428,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
  ggplot2::ggtitle(names(role)[i])
  patchwork::wrap_plots(plots = gg)
  }),
-  legend = "One sender-against-receiver scatter per arm, drawn on SHARED AXES AND A SHARED POINT SCALE so the two are comparable by eye - which is this plugin doing, not the tool, and is the reason the panel exists. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested.")
+  legend = "One sender-against-receiver scatter per arm, drawn on SHARED AXES AND A SHARED POINT SCALE so the two are comparable by eye - which is this plugin doing, not the tool, and is the reason the panel exists. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point's label is placed and its leader line drawn or withheld by this call's own internal ggrepel step, and each point's colour comes from the run's own colour map or, absent one, the tool's own palette - neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is an argument this call exposes, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue.")
 .plan[["native_signalingRole_heatmap_out"]] <- list(
   id = "native_signalingRole_heatmap_out",
   axis = "unit",
@@ -910,13 +910,13 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   fn = "netAnalysis_diff_signalingRole_scatter",
   device = "png",
   expr = quote({
- gg <- tryCatch(netAnalysis_diff_signalingRole_scatter(m), error = function(e) NULL)
+ gg <- tryCatch(netAnalysis_diff_signalingRole_scatter(m, color.use = .ccol), error = function(e) NULL)
  if (is.null(gg)) stop("netAnalysis_diff_signalingRole_scatter returned nothing")
  gg + ggplot2::labs(
  x = paste0("Change in outgoing strength  (", name_b, " minus ", name_a, ")"),
  y = paste0("Change in incoming strength  (", name_b, " minus ", name_a, ")"))
  }),
-  legend = "Each population placed by how much its OUTGOING signalling changed between the arms against how much its INCOMING changed. The origin is a population that did not shift. It is a difference of two inferences, so a point far from the origin means the two fits disagree there - not that anything was measured to change.")
+  legend = "Each population placed by how much its OUTGOING signalling changed between the arms against how much its INCOMING changed. The origin is a population that did not shift. It is a difference of two inferences, so a point far from the origin means the two fits disagree there - not that anything was measured to change. Drawn with the run's own colour map, the same one every other panel of this contrast uses, so one label keeps one colour across the run's panels.")
 .plan[["nativecmp_signalingChanges"]] <- list(
   id = "nativecmp_signalingChanges",
   axis = "contrast",

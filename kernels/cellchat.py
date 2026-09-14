@@ -129,7 +129,7 @@ PLUGIN = {
     # no number changes: every edit is presentation, and the cores cap changes how much of the
     # host's share is spent, not what the inference computes - `seed.use = 1L` and every other
     # inference argument are untouched.
-    "version": "0.33.0",
+    "version": "0.34.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -886,8 +886,23 @@ PLUGIN = {
                 # clipped at the right edge of one arm's panel. Padded 8% on both ends of the one
                 # shared range that already feeds both `xlim` and `ylim` here, so it grows both
                 # axes together and does not touch the panels' shared aspect.
+                # A FOURTH LOOK, SAME TWO MECHANISMS, NO NEW LEVER. Found on four contrasts this
+                # round: labels centred between two touching dots with no leader saying which is
+                # which, and two populations in a near-identical hue. `role` already builds each
+                # panel with `label.size = 2.4` (lowered once already) and `color.use =
+                # .cols_for(...)` (the run's own map, or the tool's own palette when the host gave
+                # none) - both of `netAnalysis_signalingRole_scatter`'s exposed levers for this.
+                # Its own source shows the label is drawn by one hardcoded call,
+                # `ggrepel::geom_text_repel(..., segment.size = 0.2, segment.alpha = 0.5)`, with no
+                # `min.segment.length` or `box.padding` exposed for this call to raise or lower -
+                # ggrepel's own default hides a leader short enough that two adjacent points need
+                # only a small push apart, which is exactly what a touching pair produces. The
+                # colour drawn is likewise whichever the map (or the tool's own palette) assigns
+                # per population name, not a choice this call makes to keep two neighbours apart in
+                # hue. Both are the tool's own placement, stated in the legend below rather than
+                # chased through a fifth device size or a sixth label size.
                 'expr': '{\n gg <- Filter(Negate(is.null), role)\n if (!length(gg)) stop("neither object returned a role scatter")\n lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)\n .padr <- diff(lim) * 0.08\n lim <- c(lim[1] - .padr, lim[2] + .padr)\n smax <- max(unlist(lapply(gg, function(g) g$data$Count)), na.rm = TRUE)\n for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +\n ggplot2::scale_size_continuous(limits = c(0, smax)) +\n ggplot2::ggtitle(names(role)[i])\n patchwork::wrap_plots(plots = gg)\n }',
-                'legend': 'One sender-against-receiver scatter per arm, drawn on SHARED AXES AND A SHARED POINT SCALE so the two are comparable by eye - which is this plugin doing, not the tool, and is the reason the panel exists. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested.',
+                'legend': 'One sender-against-receiver scatter per arm, drawn on SHARED AXES AND A SHARED POINT SCALE so the two are comparable by eye - which is this plugin doing, not the tool, and is the reason the panel exists. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point\'s label is placed and its leader line drawn or withheld by this call\'s own internal ggrepel step, and each point\'s colour comes from the run\'s own colour map or, absent one, the tool\'s own palette - neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is an argument this call exposes, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue.',
             },
             {
                 'id': 'native_signalingRole_heatmap_out',
@@ -1588,8 +1603,19 @@ PLUGIN = {
                 # happens to fall in one quadrant. `gg` is already captured; the labels are
                 # overridden rather than the title re-read, and the direction is this file's own
                 # convention, name_b minus name_a.
-                'expr': '{\n gg <- tryCatch(netAnalysis_diff_signalingRole_scatter(m), error = function(e) NULL)\n if (is.null(gg)) stop("netAnalysis_diff_signalingRole_scatter returned nothing")\n gg + ggplot2::labs(\n x = paste0("Change in outgoing strength  (", name_b, " minus ", name_a, ")"),\n y = paste0("Change in incoming strength  (", name_b, " minus ", name_a, ")"))\n }',
-                'legend': 'Each population placed by how much its OUTGOING signalling changed between the arms against how much its INCOMING changed. The origin is a population that did not shift. It is a difference of two inferences, so a point far from the origin means the two fits disagree there - not that anything was measured to change.',
+                # THE RUN'S OWN COLOUR MAP WAS NEVER PASSED HERE. Found on a real run: the same
+                # population drawn in one colour on this plate and another on
+                # `nativecmp_signalingRole_scatter_pair` for the same contrast, contradicting the
+                # caption's claim of one colour per label across the run. The cause was not a
+                # missing map - `.ccol` already exists in this same contrast scope and already
+                # feeds `nativecmp_diffInteraction` and the differential heatmaps above - it was
+                # simply never threaded into this call.
+                # `netAnalysis_diff_signalingRole_scatter` takes `color.use` (default NULL, then
+                # its own `scPalette`) exactly like the sibling function `.ccol` already drives,
+                # indexed the same way (`levels(m@idents$joint)`, which is what `.ccol` is built
+                # from), so passing it here is a straight argument, not a guess.
+                'expr': '{\n gg <- tryCatch(netAnalysis_diff_signalingRole_scatter(m, color.use = .ccol), error = function(e) NULL)\n if (is.null(gg)) stop("netAnalysis_diff_signalingRole_scatter returned nothing")\n gg + ggplot2::labs(\n x = paste0("Change in outgoing strength  (", name_b, " minus ", name_a, ")"),\n y = paste0("Change in incoming strength  (", name_b, " minus ", name_a, ")"))\n }',
+                'legend': 'Each population placed by how much its OUTGOING signalling changed between the arms against how much its INCOMING changed. The origin is a population that did not shift. It is a difference of two inferences, so a point far from the origin means the two fits disagree there - not that anything was measured to change. Drawn with the run\'s own colour map, the same one every other panel of this contrast uses, so one label keeps one colour across the run\'s panels.',
             },
             {
                 'id': 'nativecmp_signalingChanges',
