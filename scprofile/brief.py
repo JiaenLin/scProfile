@@ -276,12 +276,21 @@ def write_brief(run, plugin, spec=None, design=None):
         L.append(f"> **The run's findings could not be read ({_e}), so no figure below is "
                  f"marked as carrying one.**")
         L.append("")
-    ordered = [path for path, _n in sorted(idx.items(), key=lambda kv: kv[1])]
-    for path, n in sorted(idx.items(), key=lambda kv: kv[1]):
+    # BY FIGURE AND PANEL (harness ADR-0024): the paper prints lettered figures, so the list a
+    # writer works from names each plate the way a sentence will cite it - `Figure 3b` - and
+    # the supplementary plates after them, which no sentence has to cite.
+    panels = C.figure_panels(run, plugin, spec, design)
+    ordered = [path for path, _n in sorted(idx.items(), key=lambda kv: (kv[1], panels.get(kv[0], ("", 0, ""))[2]))]
+    for path in ordered:
+        _s, n, letter = panels.get(path, (False, idx[path], ""))
         mark = " **(not yet looked at)**" if path in outstanding else ""
         if path in openf:
             mark += f" **(open finding: {openf[path][0][:120]} - no claim may cite it)**"
-        L.append(f"- Figure {n}: `{path}`{mark}")
+        L.append(f"- Figure {n}{letter}: `{path}`{mark}")
+    supp = sorted(((v[1], v[2], k) for k, v in panels.items() if v[0]))
+    if supp:
+        L += ["", "Supplementary, on the page and gating nothing:"]
+        L += [f"- Supplementary Figure S{n}{letter}: `{path}`" for n, letter, path in supp]
     if openf:
         # COUNTED ON THIS LIST (harness ADR-0019, found by the writer of blind 0006): the line
         # printed the run's count while the marks above counted the list's, and the two did not

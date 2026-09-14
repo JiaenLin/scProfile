@@ -193,7 +193,11 @@ def report_figures(spec) -> list:
 #: reads through the accessor now, so the next sibling cannot be one edit behind.
 REPORT_KEYS = ("figures", "reads_with", "unit_metrics", "unit_network",
                "provides_evidence", "comparison_stats", "subject", "figure_position",
-               "figure_axis", "writing_template", "skips")
+               "figure_axis", "writing_template", "skips",
+               # WHICH OF THE HOST'S OWN PANELS THIS PLUGIN'S PAGES CARRY, by the kind
+               # `panels.IMPLEMENTED` names; absent, every kind the host owns is drawn, as before
+               # (harness ADR-0024, step 3: the layout writes it, the host reads it).
+               "host_panels")
 
 #: THE COLUMNS A `unit_network` NAMES. `table`, `source`, `target` and `weight` are required and
 #: are the network itself; `group` and `member` are optional and each earns further panels -

@@ -2435,6 +2435,24 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
         _pf.write_text(_json.dumps(old_, indent=1), encoding="utf-8")
     except Exception:                                                     # noqa: BLE001
         pass
+    # THE FIGURE SET (harness ADR-0024, step 3): every plate the pages placed and every per-unit
+    # plate on the plan, copied under `report/figures/<axis>/<subject>/<NN>_<what>.png`, laid
+    # into lettered figures and indexed - the document the paper page and the prose cite
+    # through. Built here because this is the one place that knows the pages are complete;
+    # the manifest the set reads for the per-unit plates is the one `report.json` carries,
+    # which `write_all` has already written by the time the pages are built.
+    try:
+        from . import figureset as _FSet
+        _pay_for_set = dict(payload_all or {})
+        _pay_for_set.setdefault("kernels", {}).setdefault(name, {})
+        if not (_pay_for_set["kernels"].get(name) or {}).get("figures"):
+            _pay_for_set["kernels"][name] = dict(_pay_for_set["kernels"].get(name) or {},
+                                                 figures=p.get("figures") or [],
+                                                 spec=p.get("spec") or spec or {})
+        _FSet.build(out_dir, name, p.get("spec") or spec or {},
+                    (payload_all or {}).get("design") or {}, _pay_for_set)
+    except Exception as _fs_err:                                          # noqa: BLE001
+        print(f"  figure set not built for {name}: {_fs_err}")
     if per_unit_figs:
         ap = ["<h1>" + _e(name) + " &mdash; per sample</h1>",
               "<p class='sub'>The same panels, once per sample. They are here rather than on "

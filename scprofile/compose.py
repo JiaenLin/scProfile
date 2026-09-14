@@ -382,87 +382,25 @@ def _order(f, design, controls=None):
 
 
 def figure_index(run, plugin, spec=None, design=None):
-    """{figure path: number} - a stable figure number, in the order the section cites it.
+    """{plate path: figure number} - the main figure each plate is a panel of.
 
-    A PAPER NUMBERS ITS FIGURES AND THE TEXT POINTS AT THEM. Without this the composed section
-    named measurements in prose while the figures sat underneath it in a block captioned with
-    their FILENAMES, and nothing on the page said which picture any sentence was read off. A
-    reader could not check a single number against a single plate.
-
-    The number is a position in this run's own reading order - design order, and within a
-    contrast the order the sentences are written - so it is stable across rebuilds of the same
-    run and means nothing outside it. Numbers are contiguous because the index is built only
-    from plates that exist.
+    A PAPER NUMBERS ITS FIGURES AND THE TEXT POINTS AT THEM. The numbers are the figure set's
+    (`figureset`): the plates of one subject laid into lettered figures, in the order of the
+    argument - the cohort, the arms, the contrasts in the design's order, the interaction last -
+    so "Fig. 3b" in a sentence and the panel printed under Figure 3 are one object by
+    construction. A plate on a supplementary axis is numbered S1, S2, ... and is not in this map;
+    `figure_panels` carries every plate with its letter. Built only from plates that exist.
     """
-    f = findings(run, plugin, spec)
-    if not f:
-        return {}
-    by, routes, host = _native_index(run, plugin, spec)
-    order = _order(f, design, _controls(run))
-    place = _positions(spec)
-    idx, n = {}, 0
+    from . import figureset as _FS
 
-    # NUMBERING IN ONE PLACE. The cohort branch below normalises an unrecognised position to
-    # "conclusion" so an undeclared design-wide panel still reaches the page - which would take
-    # a panel declared `appendix` and number it anyway. The refusal has to sit where the number
-    # is handed out, not at each of the three call sites that hand one out.
-    def take(path):
-        nonlocal n
-        if place(path) == APPENDIX:
-            return
-        n += 1
-        idx[path] = n
+    return _FS.citation_maps(_FS.index_or_assemble(run, plugin, spec, design))[0]
 
-    # TWO PASSES, AND THE COHORT PANELS COME SECOND. A panel drawn over every arm at once is
-    # filed under no contrast, so it answers all of them - and in a single pass it was therefore
-    # collected by whichever contrast happened to be read FIRST, which handed the design-wide
-    # panels Figure 1 onwards. That put the question the whole design exists to answer at the
-    # top of the document, ahead of the comparisons it is built out of, and left the reader
-    # walking the argument backwards.
-    #
-    # The rule is about SCOPE and not about any particular panel: everything drawn for a single
-    # contrast is read first, in the design's own order, and everything drawn across the design
-    # is read after it. Nothing is dropped and nothing moves between documents - the same paths
-    # are numbered, in a different order, and `cite` keeps resolving each of them.
-    # THREE PASSES, BECAUSE A DESIGN-WIDE PANEL IS NOT ONE CATEGORY. The totals per arm orient a
-    # reader and belong first; the contrasts are the body; the interaction is the conclusion the
-    # design was built to reach and belongs last. All three are unlabelled, so nothing about the
-    # panel itself distinguishes them - the plugin says which is which, and this applies it.
-    for pos in ("overview",):
-        for label in order:
-            for _key, needs in SENTENCE_EVIDENCE:
-                for path in _figs_for(by, routes, label, needs, host, scope="cohort"):
-                    if path not in idx and place(path) == "overview":
-                        take(path)
-    # THE REFERENCE PROFILE IS NUMBERED BETWEEN THE OVERVIEW AND THE CONTRASTS, because that is
-    # where it is read. Its panels are filed under no contrast and under no design-wide need, so
-    # they entered no pass at all and the paper could not cite them - the control group had 144
-    # panels in the run and none in the manuscript.
-    for path in profile_figures(run, plugin, spec,
-                                reference_unit(design, _controls(run), _unit_dirs(run, plugin))):
-        if path not in idx and (Path(run) / path).is_file():
-            take(path)
-    for pos in ("contrast", "conclusion"):
-        scope = "contrast" if pos == "contrast" else "cohort"
-        for label in order:
-            for _key, needs in SENTENCE_EVIDENCE:
-                for path in _figs_for(by, routes, label, needs, host, scope=scope):
-                    if path in idx:
-                        continue
-                    if scope == "cohort":
-                        # AN UNDECLARED DESIGN-WIDE PANEL GOES LAST, which is where all of them
-                        # went before positions existed. Defaulting it to the CONTRAST position
-                        # instead dropped it from the document entirely - it matched neither
-                        # cohort pass and the contrast pass never looks at unlabelled panels -
-                        # so a need answered only by a host route was numbered by nothing and
-                        # the plate the figure panel placed never reached the paper.
-                        at = place(path)
-                        if at not in ("overview", "conclusion"):
-                            at = "conclusion"
-                        if at != pos:
-                            continue
-                    take(path)
-    return idx
+
+def figure_panels(run, plugin, spec=None, design=None):
+    """{plate path: (supplementary, figure number, panel letter)} for every plate of the set."""
+    from . import figureset as _FS
+
+    return _FS.citation_maps(_FS.index_or_assemble(run, plugin, spec, design))[1]
 
 
 #: A panel with no declared position is body - the middle of the document, with the contrasts.
@@ -505,12 +443,19 @@ def _positions(spec):
     return where
 
 
-def cite(idx, paths):
-    """" (Figure 3, 4)" for these plates, or "" - the citation as it appears in a sentence."""
+def cite(idx, paths, panels=None):
+    """`" (Fig. 3b,c)"` for these plates, or `""` - the citation as it appears in a sentence.
+
+    With `panels` (from `figure_panels`) the citation names the panel letters and reaches the
+    supplementary figures; without it, the figure numbers alone.
+    """
+    if panels is not None:
+        from . import figureset as _FS
+        return _FS.cite(panels, paths)
     ns = sorted({idx[p] for p in paths if p in idx})
     if not ns:
         return ""
-    return (" (Figure " if len(ns) == 1 else " (Figures ") + ", ".join(str(i) for i in ns) + ")"
+    return (" (Fig. " if len(ns) == 1 else " (Figs ") + ", ".join(str(i) for i in ns) + ")"
 
 
 #: A population is NAMED as accounting for a contrast on its own when its share of the two arms
@@ -742,6 +687,29 @@ def _settings(run, plugin, units):
     return first, all(v == first for v in seen.values())
 
 
+def _effect_heading(label, kind=""):
+    """`Effect of dose within late` from `dose | time = late`; `Effect of dose` from `dose`."""
+    import re as _re
+
+    m = _re.match(r"^\s*(\S+)\s*\|\s*(\S+)\s*=\s*(.+?)\s*$", str(label))
+    if m:
+        return f"Effect of {m.group(1)} within {m.group(3)}"
+    if str(kind).lower() == "interaction" or " x " in str(label):
+        return "Interaction of " + " and ".join(x.strip() for x in str(label).split(" x "))
+    return f"Effect of {label}"
+
+
+def _arm_words(unit, design, run):
+    """`low early` for the arm `low_early`, from the design; the unit's name otherwise."""
+    from . import figureset as _FS
+
+    try:
+        pay = json.loads((Path(run) / "report.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pay = {}
+    return _FS._arm_phrase(unit, design, pay)
+
+
 def section(run, plugin, spec=None, design=None, run_key=""):
     """The result section, as Markdown, composed from this run's tables.
 
@@ -772,13 +740,18 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     # panel places by, so a number in this text and the plate printed under it are the same
     # object by construction rather than by anyone keeping two lists in step.
     by, routes, host = _native_index(run, plugin, spec)
-    idx = figure_index(run, plugin, spec, design)
-    # THE SAME MAPPING THE INDEX WALKS, so the section and the numbering cannot disagree about
-    # which panels are the document's conclusion.
+    from . import figureset as _FS
+    _set = _FS.index_or_assemble(run, plugin, spec, design)
+    idx, panels = _FS.citation_maps(_set)
     place = _positions(spec)
 
     def _c(label, *needs):
-        return cite(idx, _figs_for(by, routes, label, needs, host))
+        return cite(idx, _figs_for(by, routes, label, needs, host), panels)
+
+    def _figs(axis, subject=None):
+        """`, shown in Fig. 6–7` - the figures of one subject, so every figure is pointed at."""
+        got = _FS.figure_labels(_set, axis=axis, subject=subject)
+        return got
 
     kind = {c.get("label"): str(c.get("kind", "")) for c in cmps}
     quest = {c.get("label"): str(c.get("question", "")) for c in cmps}
@@ -789,7 +762,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
 
     ranked = [l for l in order if f[l]["ratio"]]
     by_size = sorted(ranked, key=lambda l: -f[l]["ratio"])
-    L = [COMPOSED_MARK, "", "# What this run measured across the design", ""]
+    L = [COMPOSED_MARK, "", "# Results", ""]
 
     # THE SUMMARY FIRST. A reader should not have to assemble the shape of the result from six
     # subsections; the run knows which contrast is largest and can say so.
@@ -806,8 +779,13 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         L += [f"Across {len(order)} comparison(s) the design supports, the largest difference in "
               f"total {W} is **{by_size[0]}** at **{_n(big['ratio'])}x**, and the smallest is "
               f"**{by_size[-1]}** at **{_n(small['ratio'])}x**. Every difference below is measured "
-              f"against that contrast's reference arm, and every number is read from a table in "
-              f"run `{run_key or Path(run).name}`.", ""]
+              f"against that contrast's reference arm."
+              + (f" The design, the populations and the totals are shown in {_figs('cohort')}."
+                 if _figs("cohort") else "")
+              + (f" Each arm's own {SUBJECT} is shown in {_figs('group')}."
+                 if _figs("group") else "")
+              + (f" Per-sample panels are in {_figs('sample')}." if _figs("sample") else ""),
+              ""]
         _has_pc = any(f[l].get("ratio_per_cell") for l in ranked)
         L += [f"| comparison | reference | {W} |"
               + (" per observation |" if _has_pc else "")
@@ -955,12 +933,12 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     _ref = reference_unit(design, ctl, _unit_dirs(run, plugin))
     _reffigs = [p_ for p_ in profile_figures(run, plugin, spec, _ref) if p_ in idx]
     if _ref and _reffigs:
-        L += [f"## The reference group: {_ref}", "",
+        L += [f"## The reference arm ({_arm_words(_ref, design, run)})", "",
               f"**{_ref}** is the arm at the control level of every factor "
               + ", ".join(f"`{k} = {v}`" for k, v in sorted(ctl.items()))
               + f", and every comparison below is read against it. Described here on its own, "
               f"at each level this method resolves, with nothing compared and nothing tested"
-              + cite(idx, _reffigs) + ".", "",
+              + cite(idx, _reffigs, panels) + ".", "",
               "*The reading of these panels — which populations send and which receive, which "
               "programmes dominate and in which populations, and which pairs carry them — is "
               "for the authored version. This names the evidence and its numbers.*", ""]
@@ -980,10 +958,9 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         # same two levels in both - while comparing different objects. Only the units tell them
         # apart, and the run records them. Falls back to the levels where a contrast has no units
         # recorded, which is what a marginal one looks like on some designs.
-        _to = d.get("unit_against") or d["against"]
-        _fr = d.get("unit_reference") or d["reference"]
-        head = f"Differential {SUBJECT} between {_to} and {_fr}" if _to and _fr else lab
-        L += [f"## {head}", ""]
+        # IN THE REGISTER A JOURNAL PRINTS: `Effect of <factor> within <stratum>`, the heading
+        # the writing skill asks for, never the label with its pipe or the design's own tag.
+        L += [f"## {_effect_heading(lab, kind.get(lab, ''))}", ""]
         if quest.get(lab):
             L += [f"*{quest[lab]}*", ""]
         if d["ratio"]:
@@ -1049,6 +1026,9 @@ def section(run, plugin, spec=None, design=None, run_key=""):
             L += [f"{d['disagree']} of {d['n_elements']} elements move in opposite directions on "
                   f"the raw and share scales, because the arms differ in total {W}; both scales "
                   f"are in the table below."]
+        _own = _figs("contrast", _FS.subject_of_contrast(lab))
+        if _own:
+            L += [f"The panels for this comparison are {_own}."]
         L += ["", f"*Source: `{d['source_table']}`"
                   + (f"; significance from `{d['source_stats']}` in this contrast's directory"
                      if d["source_stats"] else "")
@@ -1074,11 +1054,11 @@ def section(run, plugin, spec=None, design=None, run_key=""):
                   for fac, _ls in sorted(inter)]
         _named = "; ".join(f"**{a}** on **{b}**" for a, b in _pairs if b)
         if len(_pairs) == 1 and _pairs[0][1]:
-            _head = f"Whether the **{_pairs[0][0]}** effect depends on **{_pairs[0][1]}**"
+            _head = f"Interaction of {_pairs[0][0]} and {_pairs[0][1]}"
         elif _named:
-            _head = f"Whether one factor's effect depends on another - {_named}"
+            _head = "Interaction of the factors: " + "; ".join(f"{a} and {b}" for a, b in _pairs if b)
         else:
-            _head = "Whether one factor's effect depends on the other"
+            _head = "Interaction of the factors"
         L += [f"## {_head}", ""]
         for fac, ls in sorted(inter):
             a, b = f[ls[0]], f[ls[1]]
@@ -1093,12 +1073,15 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         # left this one - the section they were drawn for - citing nothing at all. The plugin
         # marks them as the document's conclusion; that mark is what selects them here.
         _concl = sorted((p_ for p_ in idx if place(p_) == "conclusion"), key=lambda x: idx[x])
+        _ifigs = _figs("interaction")
+        if _ifigs:
+            L += ["", f"The interaction is shown in {_ifigs}."]
         if _concl:
             # THE HOST STATES THE STRUCTURE; IT DOES NOT NAME THE LEVELS. Enumerating them here
             # put one method's vocabulary into prose every plugin emits - so a different method
             # would have described its result in terms it does not measure. What the levels ARE
             # is the plugin's template's to say.
-            L += ["", f"The panels for this question{cite(idx, _concl)} carry it at every level "
+            L += ["", f"The panels for this question{cite(idx, _concl, panels)} carry it at every level "
                       f"the method resolves, including any element whose direction OVERTURNS "
                       f"between the strata rather than only changing in size.", ""]
         L += ["", "*This is arithmetic on the simple effects above. The method provides no test "
@@ -1116,13 +1099,136 @@ def section(run, plugin, spec=None, design=None, run_key=""):
               "reach the first finding.", ""] + SUPP
 
     L += ["## How this section was produced", "",
-          "Every number above was read from a table in this run, by the tool, so the text and "
+          "Every number above was read from a table the run wrote, by the tool, so the text and "
           "the figures beside it cannot disagree and the section exists for every run. It is the "
           "measured skeleton of a result. **The reading of it — what the changes mean, and what "
           "they suggest — belongs in an authored version**, written against "
           "`.claude/skills/result-section`, which may state findings and hypotheses in the "
           "field's own language; carry it in with `scprofile paper --write` and it replaces this "
           "and is never overwritten.", ""]
+    return "\n".join(L)
+
+
+def methods(run, plugin, spec=None, design=None, pay=None):
+    """The Methods section, as Markdown, composed from the declarations and the run's own record.
+
+    NEVER HAND-WRITTEN (harness ADR-0024, step 3). What was run and with which settings, on
+    which units, compared how and against what, what was excluded and which panels the
+    method's own functions drew are all recorded - by the plugin's declaration, by the design,
+    by every unit's `out.json` - and a Methods paragraph typed from memory drifts from every one
+    of them the next time any changes. Nothing here says what a setting MEANS; the plugin's
+    declaration is where that is written, and the tool name and its citation are the plugin's.
+    """
+    from . import declare as _DC
+    from . import units as _U
+    from . import compare_panel as _CP
+
+    if pay is None:
+        try:
+            pay = json.loads((Path(run) / "report.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            pay = {}
+    spec = spec or {}
+    rep = spec.get("report") or {}
+    design = design if design is not None else (pay.get("design") or {})
+    S = str(rep.get("subject") or "the result").strip()
+    wraps = spec.get("wraps") or {}
+    tool = str(wraps.get("tool") or "").strip()
+    cite_ = str(wraps.get("cite") or "").strip()
+    unit_axis = pay.get("unit_axis") or {}
+    unit_members = pay.get("unit_members") or {}
+    controls = pay.get("controls") or {}
+    L = ["## Methods", ""]
+
+    # THE DESIGN AND THE SAMPLES.
+    factors = _U.biological_factors(design) if design else []
+    if design:
+        levels = {f: sorted({str((r or {}).get(f)) for r in design.values()
+                             if (r or {}).get(f) is not None}) for f in factors}
+        arms = {}
+        for s_, row in design.items():
+            g = _U.group_label(row, factors) if factors else None
+            if g is not None:
+                arms.setdefault(str(g), []).append(str(s_))
+        L += ["### Samples and design", "",
+              f"{len(design)} samples were analysed"
+              + (", crossing " + " and ".join(f"{f} ({' and '.join(levels[f])})" for f in factors)
+                 if factors else "")
+              + "."
+              + ((" The arms were " + "; ".join(f"{_arm_words(a, design, run)} (n = {len(m)})"
+                                                 for a, m in sorted(arms.items())) + ".")
+                 if arms else "")
+              + ((" The reference levels were " + ", ".join(f"{k} = {v}" for k, v in
+                                                            sorted(controls.items())) + ".")
+                 if controls else ""), ""]
+
+    # THE INFERENCE, WITH ITS SETTINGS.
+    samples = sorted(u for u, a in unit_axis.items() if a == "sample")
+    groups = sorted(u for u, a in unit_axis.items() if a == "group")
+    cfg, same = _settings(run, plugin, sorted(unit_axis) or _unit_dirs(run, plugin))
+    head = S[:1].upper() + S[1:]
+    L += [f"### {head}", ""]
+    para = (f"{head} was inferred with {tool}" + (f" ({cite_})" if cite_ else "") + "."
+            if tool else f"{head} was inferred as the plugin declares.")
+    if samples or groups:
+        para += " Inference was run " + " and ".join(
+            x for x in [f"once per sample (n = {len(samples)})" if samples else "",
+                        f"once per arm on the arm's pooled cells (n = {len(groups)})" if groups else ""]
+            if x) + "."
+    if cfg:
+        para += (" Every unit was fitted with the same settings: " if same else
+                 " The units were not all fitted with the same settings; one unit's were: ")
+        para += ", ".join(f"{k} = {v}" for k, v in sorted(cfg.items())) + "."
+    L += [para, ""]
+
+    # THE COMPARISONS AND THE TEST.
+    try:
+        pairs = _CP.arm_pairs(design, controls=controls) if design else []
+    except Exception:                                                     # noqa: BLE001
+        pairs = []
+    stats = rep.get("comparison_stats") or {}
+    if pairs:
+        L += ["### Comparisons", ""]
+        named = []
+        for lab, fac, lo, hi, lo_f, hi_f in pairs:
+            within = ", ".join(str(v) for k, v in sorted(lo_f.items()) if k != fac)
+            named.append(f"{hi} versus {lo} {fac}" + (f" within {within}" if within else ""))
+        para = ("Arms were compared as " + "; ".join(named) + ", each against the arm at the "
+                "reference level.")
+        if stats.get("test"):
+            para += f" Differences between arms were assessed by {stats['test']}."
+        try:
+            inter = _CP.interaction_specs(design, controls=controls)
+        except Exception:                                                 # noqa: BLE001
+            inter = []
+        if inter:
+            para += (" The interaction of " + " and ".join(f"{a} and {b}" for a, b, *_ in inter)
+                     + " was read as the difference of the two simple effects; no test is attached "
+                     "to a difference of two differences.")
+        L += [para, ""]
+
+    # EXCLUSIONS, FROM THE RUN'S OWN RECORD.
+    sentinels = [str(x) for x in (pay.get("sentinels") or [])]
+    lbu = pay.get("label_by_unit") or {}
+    present = sorted({s_ for s_ in sentinels if any(s_ in (v or {}) for v in lbu.values())})
+    if present:
+        L += ["### Exclusions", "",
+              f"Cells labelled {', '.join(present)} were not treated as a population; they carry "
+              f"an annotator's sentinel and are excluded from every population-level result.", ""]
+
+    # THE FIGURES: which panels the method's own functions drew.
+    fns = sorted({str(e.get("fn")) for e in _DC.report_figures(spec)
+                  if str(e.get("drawn_by") or "tool") == "tool" and e.get("fn")})
+    own = [str(e.get("id")) for e in _DC.report_figures(spec)
+           if str(e.get("drawn_by") or "tool") != "tool"]
+    if fns or own:
+        L += ["### Figures", "",
+              ((f"Panels marked as drawn by {tool or 'the method'} were produced by its own "
+                f"plotting functions ({', '.join(fns)})" if fns else "")
+               + (("; the" if fns else "The") + " remaining panels were drawn from its output "
+                  "tables without recomputation" if own else "")
+               + ". Figures were assembled from the run's plates as drawn; no panel was edited."),
+              ""]
     return "\n".join(L)
 
 

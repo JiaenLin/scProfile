@@ -245,10 +245,12 @@ plugin is measuring something else is the failure this arrangement exists to pre
 
 ### Section headings name the comparison, not the finding
 
-> `Differential <subject> between <treated arm> and <reference arm>`
+> `Effect of <factor> within <stratum>` for a contrast taken within one level of another
+> factor; `Effect of <factor>` for a marginal one; `Interaction of <factor> and <factor>`.
 >
-> where `<subject>` is what the plugin declares it measures and the two arm names are the
-> UNITS the run recorded for that contrast.
+> The composed section already carries these headings. Keep them. Never a raw contrast label
+> (`age | diet = chow`) and never the design's own tags (`SIMPLE`, `MARGINAL`, `INTERACTION`):
+> a section carried in with either is refused.
 
 **This supersedes the older rule that a heading should be a finding.** That rule was written when
 the result was one section, and it is wrong once there is a section per comparison: a heading
@@ -257,10 +259,26 @@ of the same design produce differently-shaped papers and nothing can be cross-re
 finding goes in the section's first sentence, where it belongs and where it can be as specific
 as the data allows.
 
-**The arm names come from the units, never from the factor levels.** In a crossed design two
+**The stratum is what tells two contrasts of one factor apart.** In a crossed design two
 contrasts can both read "level A against level B" at the level of FACTORS while comparing
 different objects - the same factor contrast taken within each level of the other factor. The
-levels are identical in both; only the units differ. The run records the units; use them.
+heading names the level it was taken within; the first sentence names the two arms as the run
+named them.
+
+### Cite figures by number and panel, and name nothing of the run
+
+The paper prints lettered figures - the plates of one subject laid into one figure, `Figure 3`
+with panels `a`, `b`, `c` - and the supplementary figures `S1`, `S2`, ... after them. The brief
+lists every plate the way a sentence cites it: `(Fig. 3b)`, `(Fig. 3b,c)`, `(Supplementary Fig.
+S2a)`. Cite the panel, not the file.
+
+A manuscript names no run key, never says "this run", and never names the tool that produced it
+or its parts ("the plugin", "the kernel", "the host"). The method's own name belongs in Methods,
+which the tool composes from the declarations; a Results sentence may name it where a journal
+would. `paper --write` refuses a section that breaks any of these, quoting the line.
+
+*Cost: a full draft went in with `## SIMPLE age | diet = chow` as its headings, "in this run" in
+its first paragraph and the run key in its last. Every number in it was right. It read as a log.*
 
 ### When two scales disagree, say which one carries the claim
 
@@ -347,7 +365,8 @@ parameter. Choosing silently would have hidden that entirely.*
 - [ ] Every number traceable to a named file in the run
 - [ ] Every claim recorded with `paper --claim ... --cites ...` — the ledger refuses a citation
       to a figure the run does not contain, which is the check that matters
-- [ ] The figures in the section are the figures in the panel
+- [ ] The figures in the section are the figures in the panel, cited as `Fig. 3b`
+- [ ] No run key, no "this run", no tool naming itself; headings in the journal's register
 - [ ] The reference arm of every contrast is stated
 - [ ] The tool's own statistic reported wherever a finding is stated
 - [ ] Carried into the run with `paper --write` and rendered with `paper --render`, not left

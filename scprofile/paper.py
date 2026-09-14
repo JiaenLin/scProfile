@@ -492,6 +492,33 @@ def next_step(out, plugin=""):
     return ((note + head) if note else head, cmd)
 
 
+#: WHAT A MANUSCRIPT NEVER SAYS (harness ADR-0024, step 3): each is a pattern and the reason,
+#: checked on every section carried in. Run keys and "this run" are the document describing
+#: its own production; the tool's and the plugin's names are the apparatus naming itself. The
+#: wrapped method's name is not here: a Methods section names it, and a Results sentence may.
+REGISTER = (
+    (re.compile(r"\d{8}T\d{6}Z"), "a run key is named"),
+    (re.compile(r"\bthis run\b", re.I), "'this run' - a paper reports the experiment, not the run"),
+    (re.compile(r"\bscprofile\b", re.I), "the tool names itself"),
+    (re.compile(r"\b(?:this|the) (?:plugin|kernel|host|maker)\b", re.I),
+     "the apparatus is named ('the plugin', 'the kernel', 'the host')"),
+    (re.compile(r"^#+.*\|", re.M), "a heading carries a raw contrast label with its pipe"),
+    (re.compile(r"^#+\s*(?:SIMPLE|MARGINAL|INTERACTION)\b", re.M),
+     "a heading carries the design's own tag (SIMPLE, MARGINAL, INTERACTION)"),
+)
+
+
+def register_findings(text):
+    """[why: the offending line] - every place the text leaves a manuscript's register."""
+    out = []
+    for pat, why in REGISTER:
+        m = pat.search(str(text or ""))
+        if m:
+            line = next((l for l in str(text).splitlines() if m.group(0) in l), m.group(0))
+            out.append(f"{why}: {line.strip()[:120]!r}")
+    return out
+
+
 def write_draft(out, text, *, author="", plugin=""):
     """Store the authored result section IN THE RUN, and return where it went.
 
@@ -516,19 +543,29 @@ def write_draft(out, text, *, author="", plugin=""):
     # the write task blocked and `--claim` refused a marked plate, and this accepted a section
     # resting on the same plates. One rule for the section, the claims, the agenda and `next`:
     # a figure the run's own record calls wrong is cited by nothing until it is redrawn.
-    cited = sorted({int(n) for n in re.findall(r"\bFig(?:ure|\.)?\s*(\d+)", body)})
+    cited = sorted({int(n) for n in re.findall(r"\bFig(?:ure|s|\.)?\s*(\d+)", body)})
+    # THE REGISTER (harness ADR-0024): a manuscript names no run, no run key and no tool of
+    # its own making. Refused with the sentence, so the writer sees what to change.
+    bad_register = register_findings(body)
+    if bad_register:
+        raise Refused("the section is not in a manuscript's register: "
+                      + "; ".join(bad_register[:3])
+                      + ". Write it as a journal prints it (see the skill's register rules).")
     if cited:
         from . import review as _RV
         try:
             openf = _RV.open_findings(out, plugin)
         except Exception:                                                 # noqa: BLE001
             openf = {}
-        by_num = {n: path for path, n in (_figure_index(out, plugin) or {}).items()}
-        bad = [n for n in cited if openf.get(by_num.get(n, ""))]
+        # A FIGURE IS A SET OF PANELS NOW: every plate under a cited number is checked.
+        by_num = {}
+        for path, n in (_figure_index(out, plugin) or {}).items():
+            by_num.setdefault(n, []).append(path)
+        bad = [(n, path) for n in cited for path in by_num.get(n, []) if openf.get(path)]
         if bad:
-            n = bad[0]
-            raise Refused(f"the section cites Figure {n} ({by_num[n]}), which carries an open "
-                          f"finding: {openf[by_num[n]][0][:180]}. A section cannot rest on a "
+            n, path = bad[0]
+            raise Refused(f"the section cites Figure {n} ({path}), which carries an open "
+                          f"finding: {openf[path][0][:180]}. A section cannot rest on a "
                           f"plate the run's own record calls wrong - fix it in the plan or the "
                           f"plugin, rerun, look again, then carry the section in "
                           f"({len(bad)} cited figure(s) carry one)")
@@ -605,14 +642,21 @@ def _figure_index(out, plugin=""):
         return {}
 
 
-def render(out, *, run_key="", title="Result section", plugin=""):
-    """Write `report/paper.html`: the authored section, the claims, and every figure they cite.
+def render(out, *, run_key="", title="", plugin=""):
+    """Write `report/<plugin>_paper.html`: Results, Methods, the figures with their legends.
 
     ASSEMBLED FROM THE RUN, so it cannot describe figures that are not there. Every claim's
     state is printed beside it and a stale claim is called out at the top, which is the whole
     reason the claims carry digests: a document written from pictures that have since been
     redrawn is the failure this project calls rule six, and here it is structural rather than
     remembered.
+
+    THE PAGE READS AS A MANUSCRIPT (harness ADR-0024, step 3): the Results the author carried in,
+    a Methods section composed from the plugin's declarations and the run's own settings, then
+    the figures of the figure set - lettered composites in the order of the argument, each with
+    the legend a journal prints - and the supplementary figures after them. The run key is in
+    the page's source and not in its text; the review record is at the end, under its own
+    heading, because a reader of a result should meet the result first.
     """
     root = Path(out)
     body = read_draft(out, plugin)
@@ -620,12 +664,24 @@ def render(out, *, run_key="", title="Result section", plugin=""):
     if not body and not rows:
         return None
     from .report import _page, _e                                     # noqa: PLC0415
+    from . import compose as _CO                                      # noqa: PLC0415
+    from . import figureset as _FS                                    # noqa: PLC0415
 
+    pay, spec, design = {}, {}, {}
+    try:
+        pay = json.loads((root / "report.json").read_text(encoding="utf-8"))
+        spec = _plugin_spec_of(pay, plugin)
+        design = pay.get("design") or {}
+    except (OSError, ValueError):
+        pass
+    subject = str(((spec or {}).get("report") or {}).get("subject") or "").strip()
+    if not title:
+        title = (subject[:1].upper() + subject[1:]) if subject else "Results"
     stale = [c for c, st, _n, _t in rows if st in (STALE, UNREVIEWED)]
     out_html = [f"<h1>{_e(title)}</h1>"]
     if run_key:
-        out_html.append(f'<p class="sub">Written from run <code>{_e(run_key)}</code>. '
-                        f'Every figure cited below is in that run.</p>')
+        # PROVENANCE IN THE SOURCE, NOT IN THE TEXT: a manuscript names no run.
+        out_html.append(f"<!-- run: {_e(run_key)} -->")
     if stale:
         out_html.append(
             '<div class="bad"><b>NOT CURRENT.</b> ' + str(len(stale)) +
@@ -641,12 +697,11 @@ def render(out, *, run_key="", title="Result section", plugin=""):
     # The banner carries a machine-readable attribute as well, because the exit standard has to
     # be able to fail on it: a warning nobody is obliged to act on is a warning that gets read
     # past.
-    from . import compose as _CO                                      # noqa: PLC0415
     composed = bool(body) and body.strip().startswith(_CO.COMPOSED_MARK)
     if composed:
         out_html.append(
             '<div class="bad" data-section-composed="1"><b>THIS IS NOT A WRITTEN RESULT.</b> '
-            'Every sentence below was assembled by the tool from this run\'s own tables. It is '
+            'Every sentence below was assembled by the tool from the run\'s own tables. It is '
             'a truthful skeleton and it is not a reading: nothing here decided what matters, '
             'and no figure below was looked at before it was cited. '
             '<b>The agent running this tool is the author of this section</b> \u2014 open the '
@@ -659,77 +714,77 @@ def render(out, *, run_key="", title="Result section", plugin=""):
         out_html.append('<div class="warn">No result section has been written for this run. '
                         'The claims below exist without the document they came from.</div>')
 
+    # METHODS, COMPOSED FROM THE DECLARATIONS AND THE RUN'S OWN SETTINGS. Never hand-written:
+    # what was run, with which parameters, on which units, compared how, is recorded by the run
+    # and declared by the plugin, and a Methods paragraph typed from memory drifts from both.
+    try:
+        methods = _CO.methods(out, plugin, spec=spec, design=design, pay=pay)
+    except Exception:                                                     # noqa: BLE001
+        methods = ""
+    if methods:
+        out_html.append(_md(methods))
+
+    # THE FIGURES, LETTERED, WITH THE LEGEND A JOURNAL PRINTS. The composites and their legends
+    # come from the figure set - the same index the prose cites through, so "Fig. 3b" in a
+    # sentence and the panel lettered b under Figure 3 are one object by construction.
+    fset = _FS.read(out, plugin)
+    if not (fset and fset.get("figures")):
+        # A RUN REPORTED BEFORE THE SET EXISTED, or a writing replay of one: build it now, from
+        # the run's own records, so the page never renders without its figures.
+        try:
+            fset = _FS.build(out, plugin, spec, design, pay, log=lambda *a, **k: None)
+        except Exception:                                                 # noqa: BLE001
+            fset = _FS.index_or_assemble(out, plugin, spec, design, pay)
+    figs = [f for f in (fset.get("figures") or []) if (root / f["path"]).is_file()]
+    if figs:
+        out_html.append(
+            '<p class="sub" data-standard-exempt="count">One figure per subject of the argument, '
+            'as a manuscript prints them; a cap would delete a figure a sentence points at.</p>'
+            '<p class="sub" data-standard-exempt="captions">Legends are printed whole. A '
+            'figure legend truncated to a skimmable length is not a legend.</p>')
+        for head, sel in (("Figures", [f for f in figs if not f.get("supplementary")]),
+                          ("Supplementary figures", [f for f in figs if f.get("supplementary")])):
+            if not sel:
+                continue
+            out_html.append(f"<h2>{head}</h2>")
+            for f in sel:
+                href = _os.path.relpath(root / f["path"], _report_dir(out, plugin))
+                leg = _FS.legend_for(f)
+                lead, _, rest = leg.partition(" | ")
+                out_html.append(
+                    f'<figure><img src="{_e(href)}" alt="{_e(f["label"])}">'
+                    f'<figcaption><b>{_e(lead)} |</b> {_e(rest)}</figcaption></figure>')
+
     if rows:
-        out_html.append("<h2>The claims, and what review did to them</h2>")
+        out_html.append("<h2>Review record</h2>"
+                        "<p class='sub'>Every sentence registered as a claim, the state review "
+                        "left it in, and the panels it was read off.</p>")
         out_html.append('<div class="wrap"><table><tr><th>claim</th><th>state</th>'
                         '<th>rounds</th><th>cites</th></tr>')
         cites = {r["id"]: r.get("cites") or {} for r in read_ledger(out, plugin)
                  if r.get("kind") == "claim"}
+        _numbers, panels = _FS.citation_maps(fset)
         for cid, st, n, txt in rows:
-            names = ", ".join(Path(f).name for f in sorted(cites.get(cid, {})))
+            paths = sorted(cites.get(cid, {}))
+            names = _FS.cite(panels, paths).strip(" ()") or ", ".join(Path(f).name for f in paths)
             out_html.append(f"<tr><td>{_e(txt)}</td><td><b>{_e(st)}</b></td>"
                             f"<td>{n}</td><td class='sub'>{_e(names)}</td></tr>")
         out_html.append("</table></div>")
-        # THE FIGURES, NUMBERED, WITH THE LEGEND THEY WERE DRAWN WITH.
-        #
-        # They were printed in an unordered block captioned with their FILENAMES - the whole of
-        # the legend a reader of the paper got. Nothing said what a panel showed, what its
-        # colours meant, or which sentence it belonged to, so no number in the text could be
-        # checked against any picture. A paper numbers its figures and its text points at them.
-        #
-        # The order and the numbers come from `compose.figure_index`, the same index the prose
-        # cites through, so "Figure 3" in a sentence and the plate printed under Figure 3 are one
-        # object by construction. Any figure a claim cites that the index does not carry is
-        # printed after them rather than dropped.
-        idx = _figure_index(out, plugin)
-        caps = _captions(out, plugin)
-        seen, figs = set(), []
-        for f in sorted(idx, key=lambda x: idx[x]):
-            if (root / f).is_file():
-                seen.add(f)
-                figs.append(f)
+        # A CITED PLATE THE SET DOES NOT CARRY IS STILL PRINTED, after the figures, so a claim
+        # never rests on a picture the page does not show.
+        shown = {p["source"] for f in figs for p in f.get("panels") or []}
+        extra = []
         for cid, _st, _n, _t in rows:
             for f in sorted(cites.get(cid, {})):
-                if f not in seen and (root / f).is_file():
-                    seen.add(f)
-                    figs.append(f)
-        if figs:
-            # DECLARED, WITH REASONS, RATHER THAN THE CAPS BEING LOWERED. Two criteria are
-            # written against a REPORT page - a reader meeting a wall of plates, and a caption
-            # that has to be skimmable - and this page is neither. It prints one numbered plate
-            # for every figure its own prose cites, so cutting to twelve would delete evidence a
-            # sentence points at; and it prints each legend whole, because a figure legend that
-            # stops at forty-five words is not a legend. Both are properties of the document
-            # class, both are stated here where a reader of the page can see them, and every
-            # other criterion still applies to this page unchanged.
-            out_html.append(
-                '<p class="sub" data-standard-exempt="count">One numbered plate per figure the '
-                'prose above cites; a cap would delete evidence a sentence points at.</p>'
-                '<p class="sub" data-standard-exempt="captions">Legends are printed whole. A '
-                'figure legend truncated to a skimmable length is not a legend.</p>')
-            out_html.append("<h2>Figures</h2>")
-            for i, f in enumerate(figs, 1):
-                # RELATIVE TO WHERE THE PAGE ACTUALLY IS, computed rather than assumed. The
-                # href was hard-coded as "../" + path, which was right while every page sat in
-                # `<run>/report/`. A plugin's page now sits in `<run>/kernels/<plugin>/report/`,
-                # three levels down, and every `<img>` pointed at nothing - the section rendered
-                # with its claims, its verdicts and NO FIGURES, which is the one thing a figure
-                # panel has to have.
-                rel = Path(f)
-                href = _os.path.relpath(root / rel, _report_dir(out, plugin))
-                n = idx.get(f, i)
-                # THE LEGEND IS PRINTED WHOLE. `report.CAPTION_LEAD_WORDS` splits a caption into
-                # a lead and a disclosure, which is right for a page of a hundred panels and
-                # wrong for a paper: a figure legend that stops at 32 words is not a legend. No
-                # cap and no disclosure here - what the figure was drawn with is what is printed.
-                leg = _caption_for(out, caps, f)
-                out_html.append(
-                    f'<figure><img src="{_e(href)}" alt="Figure {n}">'
-                    f'<figcaption><b>Figure {n}.</b> {_e(leg) if leg else ""}'
-                    f'<span class="sub"> Source: <code>{_e(str(rel))}</code>.</span>'
-                    f'</figcaption></figure>')
+                if f not in shown and f not in extra and (root / f).is_file():
+                    extra.append(f)
+        for f in extra:
+            href = _os.path.relpath(root / f, _report_dir(out, plugin))
+            out_html.append(f'<figure><img src="{_e(href)}" alt="{_e(Path(f).name)}">'
+                            f'<figcaption class="sub">A panel a claim cites that the figure set '
+                            f'does not carry.</figcaption></figure>')
 
-    out_html.append("<h2>What this test does not cover</h2><div class='warn'><ul>"
+    out_html.append("<h2>Scope of the review</h2><div class='warn'><ul>"
                     + "".join(f"<li>{_e(x)}</li>" for x in NARROW) + "</ul></div>")
     d = _report_dir(out, plugin)
     d.mkdir(parents=True, exist_ok=True)
@@ -826,8 +881,8 @@ def _md(text):
 #: WHAT THIS TEST DOES NOT YET COVER. Named, because a test whose limits are unwritten gets used
 #: as though it had none. Each line is a concrete gap, not a disclaimer.
 NARROW = (
-    "only the RESULTS section - a paper is also methods, discussion and a figure legend, and "
-    "none of those is exercised here",
+    "only the RESULTS section is written and defended - the Methods and the figure legends are "
+    "composed from the declarations and the run, and no discussion is written at all",
     "only claims that CITE A FIGURE - a claim resting on a table, or on a number in the text, "
     "is invisible to this ledger",
     "the REVIEWER is unspecified - this records that a round happened and what it decided, not "

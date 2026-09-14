@@ -49,29 +49,32 @@ check("COMPOSED_MARK" in pap,
 check("startswith(_C.COMPOSED_MARK)" in pap,
       "the composed/authored distinction is not actually applied when deciding to rebuild")
 
-# 4. THE HEADING NAMES THE COMPARISON AND IS GENERATED FROM THE RUN; THE FINDING IS THE FIRST
-#    SENTENCE UNDER IT.
+# 4. THE HEADING NAMES THE COMPARISON, IN THE REGISTER A JOURNAL PRINTS, AND IS GENERATED FROM
+#    THE RUN; THE FINDING IS THE FIRST SENTENCE UNDER IT.
 #
 #    This check previously required the heading to BE the finding - "aged carries 3.22x the
 #    strength of young". That reads well and makes the document's SHAPE depend on its outcome:
 #    two runs of one design produce differently-titled sections, so nothing can be laid side by
-#    side or cited across runs. With a section per comparison that is the wrong trade, and the
-#    requirement it protected has not gone - a reader still meets the result immediately, one
-#    line lower, where it can be more specific than a heading allowed.
-#
-#    What still has to hold, and is what this checks: the heading is BUILT FROM THE RUN rather
-#    than authored, so it cannot drift from the text beneath it; and it names the arms by UNIT,
-#    because two contrasts can read "young against aged" while comparing different objects.
-sec = src[src.index("def section("):src.index("def claims(")]
-if "## {head}" not in sec:
+#    side or cited across runs. Then it named the arms by unit - "Differential <subject> between
+#    <unit> and <unit>" - which a writer copied into a manuscript beside headings like
+#    `SIMPLE age | diet = chow` (harness ADR-0024). The writing skill's own rule is the heading
+#    a journal prints: `Effect of <factor> within <stratum>`, the stratum telling two
+#    conditional contrasts of one factor apart. What still has to hold: the heading is BUILT
+#    FROM THE RUN rather than authored, so it cannot drift from the text beneath it.
+sec = src[src.index("def section("):src.index("def methods(")]
+if "_effect_heading(" not in sec:
     FAILURES.append("the section's headings are not generated at all, so they can drift from "
                     "the text beneath them")
-if "unit_against" not in sec or "unit_reference" not in sec:
-    FAILURES.append("the heading does not name the arms by UNIT, so two different comparisons "
-                    "can carry the same title")
-if "Differential {SUBJECT}" not in sec:
-    FAILURES.append("the heading does not name the comparison, or names a subject this host "
-                    "decided rather than one the plugin declared")
+if C._effect_heading("dose | time = late") != "Effect of dose within late":
+    FAILURES.append("a conditional contrast's heading is not `Effect of <factor> within "
+                    f"<stratum>`: {C._effect_heading('dose | time = late')!r}")
+if C._effect_heading("dose") != "Effect of dose":
+    FAILURES.append(f"a marginal contrast's heading is not `Effect of <factor>`: "
+                    f"{C._effect_heading('dose')!r}")
+if C._effect_heading("dose | time = late") == C._effect_heading("dose | time = early"):
+    FAILURES.append("two conditional contrasts of one factor carry the same heading")
+if "|" in C._effect_heading("dose | time = late") or "SIMPLE" in sec:
+    FAILURES.append("a heading carries the raw label's pipe or the design's own tag")
 if "the largest difference in" not in sec:
     FAILURES.append("the section does not open with the shape of the result, so a reader must "
                     "assemble it from the subsections")

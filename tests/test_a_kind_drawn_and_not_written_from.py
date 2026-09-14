@@ -32,39 +32,66 @@ def check(ok, msg):
         FAILURES.append(msg)
 
 
-BY = {("age", "fnA"): ["body_of_age.png"],
-      ("diet", "fnA"): ["body_of_diet.png"],
-      ("age", "fnB"): ["perthing_one.png", "perthing_two.png", "perthing_three.png"]}
-ROUTES = {"who_changed": ["native:fnA"], "what_carries_it": ["native:fnB"]}
 
-C.findings = lambda run, plugin, spec: {"age": {}, "diet": {}}
-C._native_index = lambda run, plugin, spec: (BY, ROUTES, [])
-C._controls = lambda run: {}
-C._order = lambda f, design, controls=None: ["age", "diet"]
 
-# ---- the declaration removes a kind from the numbering, and only that kind ------------------
-plain = C.figure_index("run", "p", spec={}, design={})
-check(len(plain) == 5, "the fixture cannot express the failure: expected 5 numbered, got %d"
+def _png(path):
+    import numpy as np
+    from matplotlib import image as _im
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _im.imsave(str(path), np.zeros((8, 12, 3)))
+
+
+def _index(spec):
+    """{plate: main figure number} and {plate: (supplementary, n, letter)} on a run invented here."""
+    import shutil
+    d = Path(tempfile.mkdtemp())
+    try:
+        run = d / "run"
+        (run / "report").mkdir(parents=True)
+        native = []
+        for lab in ("dose", "time"):
+            for stem in ("body", "perthing_one", "perthing_two", "perthing_three"):
+                rel = f"kernels/p/compare/{lab}/figures/{stem}.png"
+                _png(run / rel)
+                native.append({"id": f"NC_{lab}_{stem}", "path": rel, "label": lab,
+                               "caption": f"{lab}: {stem}."})
+        (run / "report" / "panels.json").write_text(
+            json.dumps({"p": {"native": native, "cohort": [], "contrast": [], "arm": []}}),
+            encoding="utf-8")
+        design = {"S1": {"dose": "low", "time": "early"}, "S2": {"dose": "high", "time": "late"}}
+        (run / "report.json").write_text(json.dumps({"design": design,
+                                                     "kernels": {"p": {"spec": spec}}}),
+                                         encoding="utf-8")
+        return (C.figure_index(run, "p", spec=spec, design=design),
+                C.figure_panels(run, "p", spec=spec, design=design))
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+plain, plain_p = _index({})
+check(len(plain) == 8, "the fixture cannot express the failure: expected 8 numbered, got %d"
       % len(plain))
-
-apx = C.figure_index("run", "p", spec={"report": {"figure_position": {"perthing": C.APPENDIX}}},
-                     design={})
-check(set(apx) == {"body_of_age.png", "body_of_diet.png"},
+apx, apx_p = _index({"report": {"figure_position": {"perthing": C.APPENDIX}}})
+check({k.rsplit("/", 1)[-1] for k in apx} == {"body.png"},
       "an `appendix` kind was numbered into the paper, or a body panel was lost: %r"
       % (sorted(apx),))
-check(sorted(apx.values()) == [1, 2],
+check(sorted(set(apx.values())) == [1, 2],
       "the numbers are not contiguous from 1 after a kind was withheld: %r" % (sorted(apx.values()),))
+check(all(apx_p[k][0] for k in apx_p if "perthing" in k) and any("perthing" in k for k in apx_p),
+      "an `appendix` kind is not in the set as a SUPPLEMENTARY figure: %r"
+      % ({k.rsplit('/', 1)[-1]: v for k, v in apx_p.items()},))
+keep, _ = _index({"report": {"figure_position": {"perthing": C.APPENDIX,
+                                                 "perthing_two": "contrast"}}})
+names = {k.rsplit("/", 1)[-1] for k in keep}
+check("perthing_two.png" in names and "perthing_one.png" not in names,
+      "a plugin cannot state a rule and its exception together: %r" % (sorted(names),))
+# THE POSITION MAP ITSELF: a rule and its exception, longest prefix first, and the default.
+w = C._positions({})
+check(w("anything.png") == C.DEFAULT_POSITION, "an undeclared panel is not body by default")
+w2 = C._positions({"report": {"figure_position": {"a_long": "conclusion", "a": "overview"}}})
+check(w2("a_long_x.png") == "conclusion" and w2("a_x.png") == "overview",
+      "the longest declared prefix does not win")
 
-# THE LONGEST PREFIX STILL WINS, so a plugin can withhold a family and keep one member of it.
-keep = C.figure_index("run", "p", spec={"report": {"figure_position": {
-    "perthing": C.APPENDIX, "perthing_two": "contrast"}}}, design={})
-check("perthing_two.png" in keep and "perthing_one.png" not in keep,
-      "a plugin cannot state a rule and its exception together: %r" % (sorted(keep),))
-
-# ---- the writing step waits on the ONE SELECTION, not on every panel drawn -----------------
-# The set is `review.scan_set` (harness ADR-0017): the paper's figures plus one instance of
-# every kind the paper does not show. A second instance of an appendix kind is outside it and
-# blocks nothing; the paper's own figures, and the one instance of an uncited kind, do.
 with tempfile.TemporaryDirectory() as d:
     run = Path(d)
     (run / "report.json").write_text(json.dumps({"design": {}, "kernels": {"p": {"spec": {}}}}),
@@ -72,7 +99,7 @@ with tempfile.TemporaryDirectory() as d:
     (run / "kernels" / "p").mkdir(parents=True)
     (run / "kernels" / "p" / "WRITING_BRIEF.md").write_text("brief", encoding="utf-8")
 
-    R.scan_set = lambda out, plugin="": ["body_of_age.png", "perthing_one.png"]
+    R.scan_set = lambda out, plugin="": ["body_of_dose.png", "perthing_one.png"]
     A._authored = lambda run_, plugin_: (False, False)
 
     # every figure of the set looked at; a SECOND instance of the appendix kind outstanding
@@ -84,7 +111,7 @@ with tempfile.TemporaryDirectory() as d:
 
     # a figure of the set outstanding must still block it: the paper's own, or the one
     # instance of a kind the paper does not show
-    for fig in ("body_of_age.png", "perthing_one.png"):
+    for fig in ("body_of_dose.png", "perthing_one.png"):
         R.outstanding = lambda out, plugin="", fig=fig: [(fig, "unreviewed")]
         st = {t["id"]: t["state"] for t in A.tasks(run, "p")}
         check(st.get("write") == A.BLOCKED,
@@ -94,7 +121,7 @@ with tempfile.TemporaryDirectory() as d:
     # has an empty set, and intersecting against nothing would report every figure as looked
     # at and unblock the writing of a section against a paper that does not exist.
     R.scan_set = lambda out, plugin="": []
-    R.outstanding = lambda out, plugin="": [("body_of_age.png", "unreviewed")]
+    R.outstanding = lambda out, plugin="": [("body_of_dose.png", "unreviewed")]
     st = {t["id"]: t["state"] for t in A.tasks(run, "p")}
     check(st.get("write") == A.BLOCKED,
           "an empty selection unblocked the writing step: nothing read as nothing left")
