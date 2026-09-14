@@ -397,6 +397,11 @@ try:
     ck("the page does not print a source path under each figure",
        not re.search(r"<figcaption>[^<]*(?:<[^>]+>[^<]*)*Source:", html))
     ck("the page carries a Methods section", "<h2>Methods</h2>" in html or ">Methods<" in html)
+    meth = C.methods(run, PLUGIN, spec=SPEC, design=DESIGN, pay=pay)
+    ck("the Methods name the comparisons with the factor bracketed, as the legends do",
+       "high versus low (dose) within late" in meth, meth[:400])
+    ck("and the declared test, the tool and its citation",
+       "a rank test between the two arms" in meth and "WidgetTool" in meth and "Someone et al." in meth)
 
     print("\na section carried in must be in a manuscript's register")
     words = " ".join(["word"] * 250)

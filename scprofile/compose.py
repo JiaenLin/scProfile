@@ -1200,7 +1200,7 @@ def methods(run, plugin, spec=None, design=None, pay=None):
         named = []
         for lab, fac, lo, hi, lo_f, hi_f in pairs:
             within = ", ".join(str(v) for k, v in sorted(lo_f.items()) if k != fac)
-            named.append(f"{hi} versus {lo} {fac}" + (f" within {within}" if within else ""))
+            named.append(f"{hi} versus {lo} ({fac})" + (f" within {within}" if within else ""))
         para = ("Arms were compared as " + "; ".join(named) + ", each against the arm at the "
                 "reference level.")
         if stats.get("test"):
