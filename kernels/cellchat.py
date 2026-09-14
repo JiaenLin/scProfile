@@ -129,7 +129,7 @@ PLUGIN = {
     # no number changes: every edit is presentation, and the cores cap changes how much of the
     # host's share is spent, not what the inference computes - `seed.use = 1L` and every other
     # inference argument are untouched.
-    "version": "0.35.0",
+    "version": "0.36.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -387,6 +387,7 @@ PLUGIN = {
     # EVERY PLOT CELLCHAT SHIPS, ACCOUNTED FOR. Measured from this plugin's own environment,
 
     "report": {
+            'host_panels': ['across_design', 'unit_presence', 'unit_totals', 'interaction'],   # held to the layout: the host's own panels these pages carry
         # WHERE EACH PANEL SITS IN THE DOCUMENT, DECLARED BY THIS PLUGIN AND APPLIED BY THE HOST.
         #
         # A panel drawn over the whole design is filed under no contrast, and the host used to
@@ -1153,6 +1154,17 @@ PLUGIN = {
                 'legend': 'The open points here mark individual replicate samples underlying each arm\'s bar; this bar-plus-dots panel draws no legend for them on the image itself, so this caption, not the plate, is where a reader finds what they are and how each is computed. The same totals divided by the cells each fit used, per 1,000 cells. A SECOND SCALE, NOT A CORRECTION: the quantity does not rise linearly with cell number, so dividing puts the arithmetic on the page rather than removing the dependence. {if (.decomposed) paste0( "Each open point is one animal\'s share OF THIS ARM\'S OWN FIT, ", "credited by that animal\'s share of the arm\'s cells in the two ", "populations of each pair - half for sending, half for receiving. ", "That split is exact, so the bar is the cell-weighted mean of its ", "own points and a point may fall on either side of it. It is a ", "DERIVED attribution, not something CellChat reports: the method ", "fits the arm\'s pooled cells and says nothing about which animal ", "carried which edge. Each animal\'s INDEPENDENT fit is the raw panel ", "beside this one.") else paste0( "Each point is one sample\'s OWN fit divided by ITS OWN cells. A ", "pooled arm and a single sample are not comparable on this scale - ", "a smaller fit finds proportionally more - so read the points ", "against each other, not against the bar.")}',
             },
             {
+                'id': 'estimationNumCluster',
+                'kind': 'other',
+                'drawn_by': 'tool',
+                'fn': 'netClustering',
+                'axis': 'unit',
+                'position': 'appendix',
+                'at_most': 2,
+                'generated': False,
+                'legend': "NOT A PANEL. CellChat's NMF rank estimation writes this while the plugin is clustering pathways by functional similarity; a diagnostic of that fit, kept because it is evidence the clustering was fitted and not because a result is written from it.",
+            },
+            {
                 'id': 'nativecmp_chord_cell',
                 'kind': 'chord',
                 'drawn_by': 'tool',
@@ -1196,7 +1208,6 @@ PLUGIN = {
             'netAnalysis_signalingRole_network': {'skip': 'over_budget', 'axis': 'sample', 'budget': 2},   # held to the layout
             'netVisual_hierarchy1': {'skip': 'over_budget', 'axis': 'sample', 'budget': 2},   # held to the layout
             'netVisual_individual': {'skip': 'over_budget', 'axis': 'sample', 'budget': 2},   # held to the layout
-            'netClustering': {'skip': 'over_budget', 'axis': 'sample', 'budget': 2},   # held to the layout
             'netVisual_diffInteraction': {'skip': 'over_budget', 'axis': 'contrast', 'budget': 10},   # held to the layout
             'netVisual_embedding': {'skip': 'over_budget', 'axis': 'sample', 'budget': 2},   # held to the layout
             'netVisual_embeddingZoomIn': {'skip': 'over_budget', 'axis': 'sample', 'budget': 2},   # held to the layout

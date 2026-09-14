@@ -341,6 +341,11 @@ points:
             skips: report.skips
             axis: axis
             position: position
+            # A FILE THE TOOL WRITES AS A SIDE EFFECT OF A CALL THE METHOD MAKES (`generated:
+            # False`): an accounting entry, not a plate. The layout neither counts nor drops it
+            # - the first trim dropped one, the call still ran, and the run was refused on 24
+            # files accounted for by nothing (harness ADR-0024, PBS 711438).
+            side_effect: generated
             # WHERE THE PLAN'S PANELS ARE ROUTED TO THE NEEDS THEY ANSWER: `native:<fn>` reaches
             # the entries drawn by the tool with that fn, `plan:<id>` reaches the entry itself,
             # `host:` the host's own panels. A panel the plugin draws itself off the unit axis
@@ -412,6 +417,34 @@ points:
             cohort: {budget: 3, keep: [unit_presence, unit_totals, coverage]}
           prefer: [tool, plugin]
           drop_first: [appendix, conclusion, contrast, overview]
+          # THE HOST'S OWN PANELS, by the kind `panels.IMPLEMENTED` names, each with the axis it
+          # is drawn on and its files per occurrence. The reader's budget is per axis whoever
+          # drew the file, so a kept host kind takes its files out of that axis first.
+          host:
+            across_design: {axis: cohort}
+            unit_presence: {axis: cohort}
+            unit_totals: {axis: cohort}
+            diff_matrix: {axis: contrast, files: 2}
+            flow_compare: {axis: contrast}
+            role_shift: {axis: contrast}
+            interaction: {axis: interaction}
+            circle: {axis: group}
+            chord: {axis: group}
+            matrix: {axis: group}
+            role_scatter: {axis: group}
+            flow_rank: {axis: group}
+            role_heatmap: {axis: group}
+            contribution: {axis: group}
+          # WHICH OF THEM A READER IS HANDED (harness ADR-0024, decided 2026-09-14): the upstream's
+          # own drawing first, so a host kind with a twin the wrapped tool draws goes - the arm
+          # networks, the flow ranking, the role shift, and the difference matrices, whose twin
+          # is the tool's own differential heatmap and which would have taken two of a
+          # contrast's ten in its place - and what no tool draws stays: the design grid, the
+          # population census, the per-unit totals, the interaction. One word here keeps a
+          # kind; `diff_matrix` restores the host's difference matrices at two files a contrast.
+          host_keep: [across_design, unit_presence, unit_totals, interaction]
+          # WHERE THE PLUGIN CARRIES THE DECISION, and the host reads it at every draw site.
+          host_list: report.host_panels
           # THE PLUGIN-SIDE LIST OF PROFILE PLOTS, by the name this format gives it: the R guard
           # names plot stems, the plan marks entries `profile`, and the trim keeps them agreeing.
           profile_list: _PROFILE_PLOTS

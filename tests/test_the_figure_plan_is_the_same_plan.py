@@ -29,8 +29,9 @@ sys.path.insert(0, str(ROOT))
 from scprofile import kernels as K, planner as PL                          # noqa: E402
 
 BASELINE = ROOT / "tests" / "baselines" / "cellchat_figure_plan.json"
-#: The cohort shape the sealed reference was drawn on: 18 units, 6 arm-pair contrasts, 1 cohort.
-SHAPE = {"units": 18, "contrasts": 6, "cohort": 1}
+#: The cohort shape the sealed reference was drawn on: 10 samples and 4 arms (the 4 marginal
+#: pools draw nothing), 6 arm-pair contrasts, 2 directions of the one interaction, 1 cohort.
+SHAPE = {"units": 14, "samples": 10, "groups": 4, "contrasts": 6, "interactions": 2, "cohort": 1}
 
 
 def fingerprint(spec):

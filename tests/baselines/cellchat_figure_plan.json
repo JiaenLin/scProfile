@@ -1,25 +1,31 @@
 {
- "files": 168,
+ "files": 158,
  "vector": 0,
- "total": 168,
+ "total": 158,
  "by_axis": {
   "contrast": 60,
-  "group": 72,
-  "interaction": 0,
-  "sample": 18,
-  "unit": 18
+  "group": 16,
+  "interaction": 30,
+  "sample": 10,
+  "unit": 42
  },
  "by_position": {
-  "appendix": 60,
-  "conclusion": 0,
-  "contrast": 108,
-  "overview": 0
+  "appendix": 66,
+  "conclusion": 22,
+  "contrast": 62,
+  "overview": 8
  },
  "families": [
   [
    "F2_population_power",
    1,
    "sample",
+   "appendix"
+  ],
+  [
+   "estimationNumCluster",
+   2,
+   "unit",
    "appendix"
   ],
   [
