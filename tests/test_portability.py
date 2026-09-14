@@ -1889,9 +1889,10 @@ ck("NO panel module names a shipped plugin or its method",
    not any(w in _src_all.lower() for w in
            ("cellchat", "liana", "pertpy", "scenic", "decoupler", "pydeseq")),
    "a host module naming a method is the definition of overfitting to it")
-ck("both shipped communication plugins declare the SAME contract",
-   all("unit_network" in discover()[n].report_spec for n in ("cellchat", "liana")),
-   "one caller is a special case; two is an interface")
+if _have('liana'):
+    ck("both shipped communication plugins declare the SAME contract",
+       all("unit_network" in discover()[n].report_spec for n in ("cellchat", "liana")),
+       "one caller is a special case; two is an interface")
 
 
 print("\n" + ("nothing here assumes one dataset" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
