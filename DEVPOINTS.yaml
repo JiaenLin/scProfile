@@ -412,6 +412,9 @@ points:
             cohort: {budget: 3, keep: [unit_presence, unit_totals, coverage]}
           prefer: [tool, plugin]
           drop_first: [appendix, conclusion, contrast, overview]
+          # THE PLUGIN-SIDE LIST OF PROFILE PLOTS, by the name this format gives it: the R guard
+          # names plot stems, the plan marks entries `profile`, and the trim keeps them agreeing.
+          profile_list: _PROFILE_PLOTS
           apply: [sch, dev, convert, layout, --apply]
           finished_by: >
             `sch dev convert layout --root . --point kernel --name <plugin>` prints the plan's

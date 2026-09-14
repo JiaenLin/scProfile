@@ -1,101 +1,25 @@
 {
- "files": 897,
+ "files": 78,
  "vector": 0,
- "total": 897,
+ "total": 78,
  "by_axis": {
-  "cohort": 15,
-  "contrast": 234,
-  "unit": 648
+  "contrast": 60,
+  "group": 0,
+  "interaction": 0,
+  "sample": 0,
+  "unit": 18
  },
  "by_position": {
-  "appendix": 666,
-  "conclusion": 11,
-  "contrast": 216,
-  "overview": 4
+  "appendix": 24,
+  "conclusion": 0,
+  "contrast": 54,
+  "overview": 0
  },
  "families": [
   [
-   "F10_pathway_similarity",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "F1_database_coverage",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
    "F2_population_power",
    1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "F3_permutation",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "F4_network",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "F5_dotplot",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "F6_signaling_roles",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "F7_pathway_roles",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "F8_pathway_rank",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "F9_patterns",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "estimationNumCluster",
-   2,
-   "unit",
-   "appendix"
-  ],
-  [
-   "native_aggregate_circle",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "native_bubble",
-   1,
-   "unit",
-   "contrast"
-  ],
-  [
-   "native_chord_gene",
-   1,
-   "unit",
+   "sample",
    "appendix"
   ],
   [
@@ -105,121 +29,37 @@
    "contrast"
   ],
   [
-   "native_circle_weight",
-   1,
-   "unit",
-   "contrast"
-  ],
-  [
-   "native_contribution",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "native_database_category",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "native_dot",
-   2,
-   "unit",
-   "appendix"
-  ],
-  [
-   "native_embeddingZoomIn_functional",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "native_embedding_functional",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "native_geneExpression",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
    "native_heatmap_count",
    1,
-   "unit",
+   "group",
    "contrast"
-  ],
-  [
-   "native_heatmap_weight",
-   1,
-   "unit",
-   "contrast"
-  ],
-  [
-   "native_hierarchy",
-   1,
-   "unit",
-   "appendix"
-  ],
-  [
-   "native_individual",
-   1,
-   "unit",
-   "appendix"
   ],
   [
    "native_patterns",
-   2,
-   "unit",
-   "appendix"
-  ],
-  [
-   "native_river",
-   2,
-   "unit",
-   "appendix"
-  ],
-  [
-   "native_signalingRole_heatmap_in",
    1,
-   "unit",
-   "contrast"
+   "group",
+   "appendix"
   ],
   [
    "native_signalingRole_heatmap_out",
    1,
-   "unit",
+   "group",
    "contrast"
-  ],
-  [
-   "native_signalingRole_network",
-   1,
-   "unit",
-   "appendix"
   ],
   [
    "native_signalingRole_scatter",
    1,
-   "unit",
+   "group",
    "contrast"
   ],
   [
    "nativecmp_aggregate_circle",
-   6,
+   1,
    "contrast",
    "appendix"
   ],
   [
    "nativecmp_barplot_count",
-   1,
-   "contrast",
-   "appendix"
-  ],
-  [
-   "nativecmp_barplot_weight",
    1,
    "contrast",
    "appendix"
@@ -231,34 +71,22 @@
    "contrast"
   ],
   [
-   "nativecmp_bubble_focused",
-   1,
-   "contrast",
-   "contrast"
-  ],
-  [
    "nativecmp_chord_cell",
-   8,
+   1,
    "contrast",
    "appendix"
   ],
   [
    "nativecmp_compareInteractions",
-   4,
-   "cohort",
+   2,
+   "interaction",
    "overview"
   ],
   [
-   "nativecmp_diffInteraction_count",
-   1,
-   "contrast",
-   "contrast"
-  ],
-  [
-   "nativecmp_diffInteraction_weight",
-   1,
-   "contrast",
-   "contrast"
+   "nativecmp_compareInteractions_per1k",
+   2,
+   "interaction",
+   "overview"
   ],
   [
    "nativecmp_diff_heatmap_count",
@@ -273,61 +101,37 @@
    "contrast"
   ],
   [
-   "nativecmp_diff_signalingRole",
-   1,
-   "contrast",
-   "contrast"
-  ],
-  [
-   "nativecmp_embeddingPairwiseZoomIn_functional",
-   1,
-   "contrast",
-   "appendix"
-  ],
-  [
-   "nativecmp_embeddingPairwise_functional",
-   1,
-   "contrast",
-   "appendix"
-  ],
-  [
    "nativecmp_interaction",
    3,
-   "cohort",
+   "interaction",
    "conclusion"
   ],
   [
    "nativecmp_interaction_flow",
    2,
-   "cohort",
+   "interaction",
    "conclusion"
   ],
   [
    "nativecmp_interaction_flow_log",
    2,
-   "cohort",
+   "interaction",
    "conclusion"
   ],
   [
    "nativecmp_interaction_lr",
    2,
-   "cohort",
+   "interaction",
    "conclusion"
   ],
   [
    "nativecmp_interaction_lr_scatter",
    2,
-   "cohort",
+   "interaction",
    "conclusion"
   ],
   [
    "nativecmp_rankNet_stacked",
-   1,
-   "contrast",
-   "contrast"
-  ],
-  [
-   "nativecmp_rankNet_unstacked",
    1,
    "contrast",
    "contrast"
@@ -339,14 +143,8 @@
    "appendix"
   ],
   [
-   "nativecmp_signalingChanges",
-   8,
-   "contrast",
-   "appendix"
-  ],
-  [
    "nativecmp_signalingRole_heatmap",
-   2,
+   1,
    "contrast",
    "contrast"
   ],
