@@ -497,6 +497,13 @@ R_PLAN = r'''
     cat("not on the plan: ", id, " - skipped; the layout holds the plan\n", sep = "")
     return(invisible(NULL))
   }
+  # A MARGINAL POOL DRAWS NOTHING: fitted for the marginal contrasts, and under the layout the
+  # group axis is the design's arms.
+  if (identical(.fctx$axis, "margin")) {
+    cat("not drawn: ", id, " - this unit is a marginal pool, fitted for the marginal ",
+        "contrasts; a pool draws no figure of its own\n", sep = "")
+    return(invisible(NULL))
+  }
   # AN ENTRY FOR ONE KIND OF UNIT: `sample` or `group` on the entry, the unit's own axis from the
   # host's figure context; a mismatch is skipped, not drawn.
   if (!is.null(e$axis) && e$axis %in% c("sample", "group") && isTRUE(nzchar(.fctx$axis))

@@ -939,7 +939,8 @@ def figure_families(plugin_spec):
             for stem, n in sorted(fams.items())]
 
 
-def figure_plan(plugin_spec, *, units=1, contrasts=0, cohort=1, vector_for_paper=True):
+def figure_plan(plugin_spec, *, units=1, contrasts=0, cohort=1, vector_for_paper=True,
+                samples=None, groups=None, interactions=None):
     """{rows, files, vector, total} - what a run of this shape will draw, before it is scheduled.
 
     A COUNT IS THE POINT. A specification a reader can argue with is worth having and is not the
@@ -947,8 +948,20 @@ def figure_plan(plugin_spec, *, units=1, contrasts=0, cohort=1, vector_for_paper
     invisible in a list of families. The arithmetic is the declaration's own - a ceiling times
     the number of times its axis occurs - so a plan that disagrees with a run is a defect in one
     of them and can be measured rather than felt.
+
+    PER AXIS (harness ADR-0024): `samples` and `groups` split the units into the two unit axes
+    a family may be declared on, `interactions` is the number of directions of the interaction.
+    Given neither, a sample- or group-axis family counts every unit, which is what it drew before
+    the split existed; an interaction family then counts nothing, which is the floor.
     """
-    per = {"unit": max(0, int(units)), "contrast": max(0, int(contrasts)),
+    n_units = max(0, int(units))
+    n_s = n_units if samples is None else max(0, int(samples))
+    n_g = n_units if groups is None else max(0, int(groups))
+    if samples is not None or groups is not None:
+        n_units = n_s + n_g
+    per = {"unit": n_units, "sample": n_s, "group": n_g,
+           "contrast": max(0, int(contrasts)),
+           "interaction": max(0, int(interactions or 0)),
            "cohort": max(0, int(cohort))}
     rows, files, vec = [], 0, 0
     for stem, n, axis, position, own in figure_families(plugin_spec):

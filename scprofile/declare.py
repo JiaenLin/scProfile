@@ -377,6 +377,22 @@ def _check_report(spec, out) -> None:
     if not isinstance(block, dict):
         out.append(("ERROR", f"`report` must be a mapping, got {type(block).__name__}"))
         return
+    # WHICH OF THE HOST'S OWN PANELS THIS PLUGIN'S PAGES CARRY (harness ADR-0024): a list of
+    # the kinds `panels.IMPLEMENTED` names, or absent for every kind. An unknown name would be
+    # a panel nobody draws, silently.
+    hp = block.get("host_panels")
+    if hp is not None:
+        from . import panels as _PN
+        known = set((_PN.IMPLEMENTED or {}).keys())
+        if not isinstance(hp, (list, tuple)):
+            out.append(("ERROR", f"report.host_panels must be a list of the host's panel kinds "
+                                 f"({', '.join(sorted(known))}), got {type(hp).__name__}"))
+        else:
+            bad = [str(k) for k in hp if str(k) not in known]
+            if bad:
+                out.append(("ERROR", f"report.host_panels names {', '.join(bad)}, which the host "
+                                     f"draws no panel for; the kinds it owns are "
+                                     f"{', '.join(sorted(known))}"))
 
     figs = block.get("figures")
     if figs is None or (isinstance(figs, list) and not figs):

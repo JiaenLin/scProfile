@@ -754,7 +754,7 @@ def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, unit_member
         return False
     _ax = unit_axis or {}
     _all = sorted(per)
-    _grp = [u for u in _all if _ax.get(u) == "group"]
+    _grp = [u for u in _all if _ax.get(u) in ("group", "margin")]
     units = _grp + [u for u in _all if u not in _grp]
     n_grp = len(_grp)
 
@@ -825,7 +825,7 @@ def unit_totals(ctx, per_unit_edges, *, design=None, unit_axis=None, unit_member
         ax.tick_params(labelsize=6)
         if 0 < n_grp < len(units):
             ax.axhline(n_grp - 0.5, color=F.INK, lw=1.1, zorder=5)
-    axes[0].set_yticks(y, [f"{u}*" if _ax.get(u) == "group" else u for u in units], fontsize=6)
+    axes[0].set_yticks(y, [f"{u}*" if _ax.get(u) in ("group", "margin") else u for u in units], fontsize=6)
     axes[0].invert_yaxis()
     if order:
         from matplotlib.patches import Patch
@@ -879,7 +879,7 @@ def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=Non
     # way the rest of the tool does, and drawing the boundary, makes the two blocks two blocks.
     _ax = unit_axis or {}
     _all = sorted(label_by_unit or {})
-    _grp = [u for u in _all if _ax.get(u) == "group"]
+    _grp = [u for u in _all if _ax.get(u) in ("group", "margin")]
     units = _grp + [u for u in _all if u not in _grp]
     n_grp = len(_grp)
     labels = [l for l, _n in sorted((label_total or {}).items(), key=lambda kv: -kv[1])]
@@ -920,7 +920,7 @@ def unit_presence(ctx, label_by_unit, label_total, *, design=None, unit_axis=Non
         ax.text((n_grp + len(units)) / 2 - 0.5, -0.75, "samples", ha="center", va="bottom",
                 fontsize=6, color=F.INK)
     ax.set_xticks(range(len(units)),
-                  [f"{u}*" if _ax.get(u) == "group" else u for u in units],
+                  [f"{u}*" if _ax.get(u) in ("group", "margin") else u for u in units],
                   rotation=90, fontsize=6)
     # AN ANNOTATOR SENTINEL IS NOT A CELL TYPE, and drawn in the same ink as one it reads as a
     # population with an odd name. On the first real render `UNRESOLVED` and `EXCLUDED` sat in

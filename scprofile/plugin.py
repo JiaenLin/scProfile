@@ -369,7 +369,8 @@ class Context(FigureContextReader):
                  unit_members=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
                  sentinels=(), provenance=None, constraint="", cache_dir=None,
-                 config=None, figure_context=None, r_companion="", log=print, plan_ids=()):
+                 config=None, figure_context=None, r_companion="", log=print, plan_ids=(),
+                 plan_axis=None):
         self.adata = adata
         #: THE GENERATED DRAWING PROTOCOL AND PLAN, as text, for `rscript` to put before every
         #: embedded script this plugin runs. "" for a plugin that draws through no R.
@@ -407,6 +408,11 @@ class Context(FigureContextReader):
         #: draws itself that the layout dropped is gated here, at the one place a figure is
         #: written. Empty for a plugin still on prose and prefix maps, which draws as before.
         self.plan_ids = tuple(str(x) for x in (plan_ids or ()))
+        #: THE AXIS EACH PLAN ENTRY IS DRAWN ON, `{id: sample|group|unit|...}`: a panel declared
+        #: for one kind of unit is not drawn for the other kind. The generated R companion held
+        #: its entries to this from the first run under the layout and this emit path did not,
+        #: so every arm drew the per-sample census and the group axis read six against five.
+        self.plan_axis = {str(k): str(v) for k, v in (plan_axis or {}).items()}
         #: Which unit axes this RUN wants per-unit figures for. Empty means all of them, which
         #: is the default and what every run did before the setting existed. It is NOT a plugin
         #: parameter: which axes are worth drawing is a property of the run, not of the method.
@@ -510,6 +516,10 @@ class Context(FigureContextReader):
         on per-unit numbers keeps them. Nothing here knows what the axes are called - it compares
         against whatever the resolver named them.
         """
+        # A MARGINAL POOL DRAWS NOTHING (harness ADR-0024): it is fitted for the marginal
+        # contrasts, and under the layout the group axis is the design's arms.
+        if self.unit_axis == "margin":
+            return False
         if not self.figures_for:
             return True
         return (self.unit_axis or "") in set(self.figures_for)
@@ -524,6 +534,11 @@ class Context(FigureContextReader):
         """
         if self.plan_ids and str(fid) not in self.plan_ids \
                 and str(fid) not in self.profile_figures:
+            return False
+        if self.unit_axis == "margin":
+            return False
+        ax = self.plan_axis.get(str(fid), "")
+        if ax in ("sample", "group") and self.unit_axis and ax != self.unit_axis:
             return False
         return self.draw_figures or str(fid) in self.profile_figures
 
@@ -986,6 +1001,14 @@ class Context(FigureContextReader):
                     and str(name) not in self.profile_figures:
                 self.log(f"  {name}: NOT DRAWN - not on the plan (the layout holds the plan; "
                          f"`sch dev convert layout` says what it keeps)")
+            elif self.unit_axis == "margin":
+                self.log(f"  {name}: NOT DRAWN - {self.unit} is a marginal pool, fitted for the "
+                         f"marginal contrasts; a pool draws no figure of its own")
+            else:
+                _ax = self.plan_axis.get(str(name), "")
+                if _ax in ("sample", "group") and _ax != self.unit_axis:
+                    self.log(f"  {name}: NOT DRAWN - drawn per {_ax}; this unit is on the "
+                             f"{self.unit_axis or 'unit'} axis")
             if close:
                 try:
                     import matplotlib.pyplot as _plt

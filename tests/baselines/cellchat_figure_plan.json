@@ -1,18 +1,18 @@
 {
- "files": 78,
+ "files": 168,
  "vector": 0,
- "total": 78,
+ "total": 168,
  "by_axis": {
   "contrast": 60,
-  "group": 0,
+  "group": 72,
   "interaction": 0,
-  "sample": 0,
+  "sample": 18,
   "unit": 18
  },
  "by_position": {
-  "appendix": 24,
+  "appendix": 60,
   "conclusion": 0,
-  "contrast": 54,
+  "contrast": 108,
   "overview": 0
  },
  "families": [

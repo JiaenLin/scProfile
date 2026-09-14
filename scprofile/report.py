@@ -427,7 +427,8 @@ def _presence_block(payload_all, *, out_dir=None, name=""):
 
 
 def _arm_content(units, design, spec, *, native_plots=None, out_dir=None, name="", prefix=None,
-                 controls=None, unit_axis=None, unit_members=None, timeout=None, cores=None):
+                 controls=None, unit_axis=None, unit_members=None, timeout=None, cores=None,
+                 host_kinds=None):
     """({"contrast": [...], "arm": [...]}) - every between-arm and per-arm figure, drawn.
 
     THE COHORT PAGE CARRIED ONE FIGURE while the per-sample appendix carried a hundred. On a
@@ -506,6 +507,8 @@ def _arm_content(units, design, spec, *, native_plots=None, out_dir=None, name="
     _cohort = []
     try:
         from . import network_panels as _NP
+        if host_kinds is not None and "unit_totals" not in host_kinds:
+            raise LookupError("unit_totals is not among this plugin's host panels")
         _NP.unit_totals(CPan._Shim(figdir, name, "cohort", _cohort), per,
                         design=design, unit_axis=unit_axis or {},
                         unit_members=unit_members or {},
@@ -551,19 +554,22 @@ def _arm_content(units, design, spec, *, native_plots=None, out_dir=None, name="
     con = []
     for sp in pairs:
         con += CPan.draw_contrast(per, design, sp, figdir, name, group_col=net.get("group"),
-                                  weight_scale=net.get("weight_scale", "per_object"))
+                                  weight_scale=net.get("weight_scale", "per_object"),
+                                  kinds=host_kinds)
     # THE INTERACTION, ONCE PER CROSSED PAIR OF TWO-LEVEL FACTORS. It is the question a factorial
     # design is built to answer and the one nothing drew: the six two-arm contrasts were all
     # there and a reader had to hold two of them side by side in their head. A marginal effect
     # can be flat while both simple effects are large and opposite.
     inter = []
-    for isp in CPan.interaction_specs(design, controls=controls):
+    for isp in (CPan.interaction_specs(design, controls=controls)
+                if host_kinds is None or "interaction" in host_kinds else []):
         inter += CPan.draw_interaction(per, design, isp, figdir, name,
                                        group_col=net.get("group"),
                                        weight_scale=net.get("weight_scale", "per_object"))
     arm = CPan.draw_arm_networks(per, design, CPan.arms_in(design, pairs), figdir, name,
                                  group_col=net.get("group"), member_col=net.get("member"),
-                                 weight_scale=net.get("weight_scale", "per_object"))
+                                 weight_scale=net.get("weight_scale", "per_object"),
+                                 kinds=host_kinds)
     return {"contrast": con, "arm": arm, "interaction": inter, "native": nat,
             "cohort": _cohort}
 
@@ -1409,7 +1415,7 @@ def _fig_ctx(out_dir, unit=None, contrast=None):
                      contrast=contrast)
 
 
-def _units_by_arm(units, design, declared, *, out_dir=None, name=""):
+def _units_by_arm(units, design, declared, *, out_dir=None, name="", design_grid=True):
     """THE PER-UNIT NUMBERS, GROUPED BY ARM. The comparison the study exists to make.
 
     A per-unit plugin already records one comparable number per unit, and the units already sit
@@ -1499,7 +1505,7 @@ def _units_by_arm(units, design, declared, *, out_dir=None, name=""):
                                        for k, v in (u.get("metrics") or {}).items()
                                        if isinstance(v, (int, float))}
                   for u in units if u.get("unit") is not None}
-    if out_dir and per_sample:
+    if out_dir and per_sample and design_grid:
         try:
             from . import design_panel
             rel = f"kernels/{name}/figures/{name}_across_design.png"
@@ -1677,7 +1683,7 @@ def _arm_rows_categorical(arms, categories, *, width=560, row=22):
             f'style="max-width:{width}px">' + "".join(out) + "</svg>")
 
 
-def _by_arm_block(by_arm, *, aware, out_dir=None, name="", design=None):
+def _by_arm_block(by_arm, *, aware, out_dir=None, name="", design=None, design_grid=True):
     """THE DESIGN, ON A PAGE THAT DID NOT TEST IT. Description only.
 
     Of nine plugins on the cohort that motivated this, the two that test the design reported
@@ -1748,7 +1754,7 @@ def _by_arm_block(by_arm, *, aware, out_dir=None, name="", design=None):
             for smp, val in (d.get("per_sample") or {}).items():
                 per_sample.setdefault(str(smp), {})[col] = float(val)
             break
-    if out_dir and design and per_sample:
+    if out_dir and design and per_sample and design_grid:
         try:
             from . import design_panel
             rel = f"kernels/{name}/figures/{name}_across_design.png"
@@ -2070,6 +2076,13 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # `population_axis` could never fire. Two consumers now read one binding.
     from . import native as _NATd
     _decl_native = _NATd.declared_from(p.get("spec") or {})
+    # WHICH OF THE HOST'S OWN PANELS THIS PLUGIN'S PAGES CARRY (harness ADR-0024): None is
+    # every kind, as before the declaration existed.
+    _hk = _D.report_get(spec, "host_panels") if isinstance(spec, dict) else None
+    _host_kinds = None if _hk is None else [str(k) for k in _hk]
+
+    def _host(kind):
+        return _host_kinds is None or kind in _host_kinds
     # ONCE ON THE PAGE, AT THE TOP. `ctx.contradiction` records into `caveats` as well, so that
     # a refutation survives into any document built from the payload by something that has
     # never heard of the newer field. On the page that is the same sentence twice, once in a
@@ -2144,18 +2157,21 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
         # BEFORE ANY RESULT: WHAT THE METHOD WAS GIVEN. Every per-unit panel draws the axis its
         # own unit happens to have, so a reader meeting a matrix before meeting this one has
         # already taken a missing population for a silent one.
-        _pres_html, _presence_placed = _presence_block(payload_all, out_dir=out_dir, name=name)
+        _pres_html, _presence_placed = (_presence_block(payload_all, out_dir=out_dir, name=name)
+                                        if _host("unit_presence") else ("", []))
         body.append(_pres_html)
         body.append(_across_units(units, _D.report_get(spec, "unit_metrics")))
         body.append(_units_by_arm(units, (payload_all or {}).get("design") or {},
                                   _D.report_get(spec, "unit_metrics"),
-                                  out_dir=out_dir, name=name))
+                                  out_dir=out_dir, name=name,
+                                  design_grid=_host("across_design")))
         _arms = _arm_content(units, (payload_all or {}).get("design") or {}, spec,
                              native_plots=_decl_native,
                              prefix=prefix, timeout=timeout, cores=cores,
                              out_dir=out_dir, name=name,
                              unit_axis=(payload_all or {}).get("unit_axis") or {},
                              unit_members=(payload_all or {}).get("unit_members") or {},
+                             host_kinds=_host_kinds,
                              # `payload_all`, not `payload` - the latter is not in scope here
                              # and would have raised on the first run that reached this line.
                              controls=(payload_all or {}).get("controls"))
@@ -2219,7 +2235,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                         f'{_rest} further panel(s)</a> &mdash; every contrast this design '
                         f'supports, and each arm\'s own network.</p>')
     body.append(_by_arm_block(by_arm, aware=bool(aware), out_dir=out_dir,
-                              name=name, design=(payload_all or {}).get("design")))
+                              name=name, design=(payload_all or {}).get("design"),
+                              design_grid=_host("across_design")))
     body.append(_concordance_block(name, concordance))
     # PER-SAMPLE PANELS GO TO AN APPENDIX, AND ARE LINKED. Three plugins here run once per
     # sample, so their pages carried the same five plots ten times over - 140 of 191 figures in
@@ -2249,7 +2266,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     _design = (payload_all or {}).get("design") or {}
     if _axis:
         def _is_group(f):
-            return _axis.get(str(f.get("unit"))) == "group"
+            return _axis.get(str(f.get("unit"))) in ("group", "margin")
     elif _design:
         # A run written before the axis was recorded. The design table is the only other place
         # the answer exists: a unit that is not one of its samples is an arm.
@@ -2312,8 +2329,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
         _by_unit = {}
         for f in _prof:
             _by_unit.setdefault(str(f.get("unit")), []).append(f)
-        _order = ([u for u in sorted(_by_unit) if _axis.get(u) == "group"]
-                  + [u for u in sorted(_by_unit) if _axis.get(u) != "group"])
+        _order = ([u for u in sorted(_by_unit) if _axis.get(u) in ("group", "margin")]
+                  + [u for u in sorted(_by_unit) if _axis.get(u) not in ("group", "margin")])
         pp = ["<h1>" + _e(name) + " &mdash; profile of each unit</h1>",
               "<p class='sub'>What each unit carries <b>on its own</b>. Nothing on this page is "
               "a comparison: every panel describes one unit, drawn from that unit's own fit, and "
@@ -2325,7 +2342,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
               "the other.</div>"]
         _n = 0
         for u in _order:
-            kind = "arm" if _axis.get(u) == "group" else "sample"
+            kind = {"group": "arm", "margin": "pooled level"}.get(_axis.get(u), "sample")
             pp.append(f"<h2>{_e(u)} <span class='sub'>&mdash; {kind}</span></h2>")
             for f_ in sorted(_by_unit[u], key=lambda x: str(x.get("id"))):
                 _n += 1

@@ -92,7 +92,10 @@ def resolve(design, *, sample_key=None, samples=None, technical=DEFAULT_TECHNICA
     if prefer in ("group", "both") and len(groups) > 1:
         allg = dict(groups)
         allg.update(marg)
-        plan.append({"kind": "group", "units": allg, "factors": factors})
+        # THE POOLS, NAMED APART FROM THE ARMS (harness ADR-0024): a pool is fitted so a
+        # marginal contrast has an object on each side, and it draws no figure of its own.
+        plan.append({"kind": "group", "units": allg, "factors": factors,
+                     "margins": sorted(marg)})
         if marg:
             why.append(f"group: {len(marg)} marginal unit(s) as well "
                        f"({', '.join(sorted(marg))}) - each pools one level of one factor over "
@@ -119,6 +122,16 @@ def resolve(design, *, sample_key=None, samples=None, technical=DEFAULT_TECHNICA
         why.append("NO UNIT AXIS: the plugin runs once over everything. That is a fact about "
                    "the design, not a failure - and it is not a reason to withhold a figure.")
     return plan, why
+
+
+def axis_of(plan):
+    """{unit: kind} from a resolved plan - `sample`, `group`, or `margin` for a pooled level."""
+    out = {}
+    for ax in plan or []:
+        marg = set(ax.get("margins") or [])
+        for u in (ax.get("units") or {}):
+            out.setdefault(str(u), "margin" if u in marg else str(ax.get("kind")))
+    return out
 
 
 def marginal_groups(design, factors, samples=None):

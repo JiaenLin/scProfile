@@ -60,6 +60,44 @@ with tempfile.TemporaryDirectory() as td:
     fig = plt.figure()
     ck("a plugin with no plan draws as before", legacy.emit_figure("F9_anything", fig) is not None)
 
+print("\nthe host gates a plugin-drawn panel by the entry's axis, and a marginal pool draws nothing")
+with tempfile.TemporaryDirectory() as td:
+    lines = []
+    # A SAMPLE-AXIS PANEL ON A GROUP UNIT: found on the first run under the layout (PBS 711438),
+    # where the R companion held its entries to the unit's axis and the host's own emit path
+    # did not, so every arm drew the per-sample census and the group axis read 6 against 5.
+    ctx = Context(None, keys={}, out=Path(td), cores=1, unit="ARM", unit_axis="group",
+                  figure_position={"F2_census": "appendix"}, plan_ids=("F2_census", "F3_roles"),
+                  plan_axis={"F2_census": "sample", "F3_roles": "group"}, log=lines.append)
+    fig = plt.figure()
+    ck("a sample-axis panel is not drawn for a group unit",
+       ctx.emit_figure("F2_census", fig) is None and "F2_census" not in ctx.drawn)
+    ck("and the log names the axis", any("axis" in x for x in lines), str(lines))
+    fig = plt.figure()
+    ck("a group-axis panel is drawn for it", ctx.emit_figure("F3_roles", fig) is not None)
+    lines = []
+    marg = Context(None, keys={}, out=Path(td), cores=1, unit="aged", unit_axis="margin",
+                   figure_position={"F3_roles": "contrast"}, plan_ids=("F3_roles",),
+                   plan_axis={"F3_roles": "group"}, log=lines.append)
+    fig = plt.figure()
+    ck("a marginal pool draws nothing from the plan",
+       not marg.draw_figures and marg.emit_figure("F3_roles", fig) is None)
+    ck("and says why", any("margin" in x for x in lines), str(lines))
+
+print("\nthe resolver names the marginal pools, and the run files them under their own axis")
+from scprofile import units as U                                                # noqa: E402
+_design = {"S1": {"dose": "low", "time": "early"}, "S2": {"dose": "low", "time": "late"},
+           "S3": {"dose": "high", "time": "early"}, "S4": {"dose": "high", "time": "late"}}
+_plan, _why = U.resolve(_design)
+_grp = next((a for a in _plan if a["kind"] == "group"), {})
+ck("the group axis lists its marginal pools apart from the arms",
+   sorted(_grp.get("margins") or []) == ["early", "high", "late", "low"], str(_grp.get("margins")))
+ck("and the arms are not among them", "low_early" in _grp.get("units", {})
+   and "low_early" not in (_grp.get("margins") or []))
+ck("the axis of a unit is `margin` for a pool and `group` for an arm",
+   U.axis_of(_plan) .get("low") == "margin" and U.axis_of(_plan).get("low_early") == "group"
+   and U.axis_of(_plan).get("S1") == "sample", str(U.axis_of(_plan)))
+
 print("\nthe companion skips an entry the layout dropped, and one not for this unit's axis")
 from scprofile import scaffold as SC                                             # noqa: E402
 SPEC = {"name": "demo", "requires": {"r": ["4.3"]},
@@ -78,6 +116,9 @@ if rscript:
         script = (comp + '\n.fctx$axis <- "group"\n'
                   '.draw("native_gone")\n'
                   '.draw("native_a")\n'
+                  '.fctx$axis <- "margin"\n'
+                  '.draw("native_b")\n'
+                  '.draw_all("unit")\n'
                   'cat("reached the end\\n")\n')
         f = Path(td) / "probe.R"
         f.write_text(script, encoding="utf-8")
@@ -87,6 +128,7 @@ if rscript:
            out[-600:])
         ck("the dropped id is named as not on the plan", "not on the plan" in out, out[-300:])
         ck("the sample-only entry is skipped for a group unit", "not for this unit" in out, out[-300:])
+        ck("a marginal pool draws nothing, and says so", "marginal" in out, out[-300:])
         ck("and nothing was drawn", not list(Path(td).glob("*.png")))
 else:
     print("  skip  Rscript is not on this machine; the companion's text was checked")

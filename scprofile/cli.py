@@ -497,11 +497,10 @@ def _run(a):
               f"axis regardless")
         return want
 
-    unit_axis = {}
+    unit_axis = _UN.axis_of(_plan_axes)
     for _ax in _plan_axes:
         for _u, _mem in _ax["units"].items():
             unit_members.setdefault(str(_u), list(_mem))
-            unit_axis.setdefault(str(_u), _ax["kind"])
     units = sorted(unit_members) or (samples or None)
     for _w in _why_axes:
         print(f"  units: {_w}")
@@ -2396,7 +2395,17 @@ def _plan(a):
     _rows, _tot, _vec = [], 0, 0
     for _n in (sorted(runnable or []) if _countable else []):
         _sp = (ks[_n].spec or {}) if _n in ks else {}
-        _fp = PL.figure_plan(_sp, units=len(units or []), contrasts=len(_pairs), cohort=1)
+        # PER AXIS (harness ADR-0024): the samples, the arms - a marginal pool draws nothing -
+        # and the directions of the interaction, from the same resolution the run uses.
+        _uax = _UNP.axis_of(_pax)
+        try:
+            _ndir = 2 * len(_CP.interaction_specs(dtab or {}, factors=dfactors)) if dtab is not None else 0
+        except Exception:                                                 # noqa: BLE001
+            _ndir = 0
+        _fp = PL.figure_plan(_sp, units=len(units or []), contrasts=len(_pairs), cohort=1,
+                             samples=sum(1 for v in _uax.values() if v == "sample"),
+                             groups=sum(1 for v in _uax.values() if v == "group"),
+                             interactions=_ndir)
         if not _fp["rows"]:
             continue
         _rows.append((_n, _fp))

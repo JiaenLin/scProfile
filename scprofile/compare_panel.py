@@ -194,8 +194,12 @@ def confound_sentence(conf, factor):
 
 
 def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob",
-                  group_col=None, min_edges=1, weight_scale="per_object"):
+                  group_col=None, min_edges=1, weight_scale="per_object", kinds=None):
     """Every panel for ONE contrast. Returns [(figure_id, path, caption)].
+
+    `kinds` is the plugin's `report.host_panels` (harness ADR-0024): the kinds of the host's own
+    panels its pages carry, by the names `panels.IMPLEMENTED` gives them. None draws every kind,
+    as every plugin did before the declaration existed; a list draws those and no other.
 
     WHERE THE WEIGHT IS NORMALISED WITHIN EACH UNIT, EVERY WEIGHT-DERIVED PANEL IS DRAWN ON
     SHARES. Measured on a real cohort: two arms of one contrast had total inferred strength of
@@ -267,6 +271,10 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                     {"audit": entry.get("audit", []), "repairs": entry.get("repairs", [])}))
 
     arm_n = f"{lo_lv} (n={len(lo_m)}) vs {hi_lv} (n={len(hi_m)})"
+
+    def _want(kind):
+        return kinds is None or kind in set(kinds)
+
     # WHAT THIS PARTICULAR CONTRAST CANNOT SEPARATE, on every panel it produces.
     _conf = contrast_confounds(design, lo_m, hi_m)
     _csent = confound_sentence(_conf, str(fac))
@@ -288,6 +296,8 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
 
     for what, A, B, unit in (("count", c_lo, c_hi, "significant interactions"),
                              ("strength", w_lo, w_hi, _wunit)):
+        if not _want("diff_matrix"):
+            break
         D = B - A
         if not np.any(D):
             continue
@@ -333,7 +343,8 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
                   "though a count still rises with an arm's total power.")))
 
     # ---- 2. information flow per group (rankNet, paired) -------------------------------------
-    if group_col and group_col in e_lo.columns and group_col in e_hi.columns:
+    if _want("flow_compare") and group_col and group_col in e_lo.columns \
+            and group_col in e_hi.columns:
         fl = e_lo.groupby(group_col)[weight].sum()
         fh = e_hi.groupby(group_col)[weight].sum()
         if rel:
@@ -389,7 +400,7 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
     # ---- 3. signalling role shift ------------------------------------------------------------
     o_lo, i_lo = w_lo.sum(1), w_lo.sum(0)
     o_hi, i_hi = w_hi.sum(1), w_hi.sum(0)
-    if float(o_lo.sum() + o_hi.sum()) > 0:
+    if _want("role_shift") and float(o_lo.sum() + o_hi.sum()) > 0:
         fig, ax = plt.subplots(figsize=(F.SINGLE, F.SINGLE * 0.92), layout="constrained")
         cmap = F.palette(list(pops))
         # MARKERS FIRST, ARROWS ON TOP, AND THE HEAD STOPPING SHORT OF THE MARKER. The first
@@ -567,7 +578,7 @@ def contrast_populations(pooled):
 
 
 def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edges=1,
-                     group_col=None, member_col=None, weight_scale="per_object"):
+                     group_col=None, member_col=None, weight_scale="per_object", kinds=None):
     """The single-network kinds for each arm, pooled. Returns [(fid, path, caption)].
 
     GROUP LEVEL BY CONSTRUCTION: an arm's cells are pooled before anything is drawn, so no panel
@@ -592,6 +603,11 @@ def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edge
     # THE COLOUR SCALE IS STILL PER ARM, deliberately (panels.R5). A shared axis is a statement
     # about WHICH populations exist; a shared scale would be a statement that two arms' strengths
     # are on one ruler, which for a per-object normalisation they are not.
+    # THE KINDS THE PLUGIN'S PAGES CARRY (harness ADR-0024): None is every kind, as before.
+    _kinds = None if kinds is None else set(kinds)
+    if _kinds is not None and not _kinds & {"circle", "chord", "matrix", "role_scatter",
+                                            "flow_rank", "role_heatmap", "contribution"}:
+        return []
     pooled = {}
     for label, filt in sorted(arms.items()):
         e, _ = pool(per_unit_edges, _members(design, filt),
@@ -638,16 +654,25 @@ def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edge
         got = []
         shim = _Shim(out_dir, prefix, slug, got, label=label,
                      members=_members(design, arms[label]))
-        NP.circle(shim, e, pops, title=label, scale=scale, note=_scale_note)
-        NP.chord(shim, e, pops, title=label)
-        NP.matrix(shim, e, pops, title=label, scale=scale, note=_scale_note)
-        NP.role_scatter(shim, e, pops, title=label, scale=scale, note=_scale_note)
+        def _w(kind):
+            return _kinds is None or kind in _kinds
+        if _w("circle"):
+            NP.circle(shim, e, pops, title=label, scale=scale, note=_scale_note)
+        if _w("chord"):
+            NP.chord(shim, e, pops, title=label)
+        if _w("matrix"):
+            NP.matrix(shim, e, pops, title=label, scale=scale, note=_scale_note)
+        if _w("role_scatter"):
+            NP.role_scatter(shim, e, pops, title=label, scale=scale, note=_scale_note)
         # DECLARED OR NOT DRAWN. Each of these returns False rather than raising when the
         # declaration names no grouping column, so a plugin that declares less gets fewer
         # panels and never a broken one.
-        NP.flow_rank(shim, e, pops, group_col, title=label, scale=scale, note=_scale_note)
-        NP.role_heatmap(shim, e, pops, group_col, title=label)
-        NP.contribution(shim, e, pops, group_col, member_col, title=label)
+        if _w("flow_rank"):
+            NP.flow_rank(shim, e, pops, group_col, title=label, scale=scale, note=_scale_note)
+        if _w("role_heatmap"):
+            NP.role_heatmap(shim, e, pops, group_col, title=label)
+        if _w("contribution"):
+            NP.contribution(shim, e, pops, group_col, member_col, title=label)
         made += got
     return made
 
