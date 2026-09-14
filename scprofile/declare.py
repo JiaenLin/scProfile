@@ -117,7 +117,10 @@ SHOWS = ("diagnostic", "result", "comparison")
 #: those words is one of these or the entry is refused. The reader is `planner.figure_families`;
 #: the generator is `scaffold.render_plan`; both read these same tuples.
 from .captions import DRAWN_BY          # ONE definition: the legend writer already owns it
-AXES = ("unit", "contrast", "cohort")
+#: THE AXES A FIGURE MULTIPLIES OVER. `unit` is every unit; `sample` and `group` are the two
+#: kinds of unit a design resolves (harness ADR-0024), so an entry can be drawn for one and not
+#: the other; `interaction` is the cross of the design's factors, drawn once per direction.
+AXES = ("unit", "sample", "group", "contrast", "interaction", "cohort")
 POSITIONS = ("overview", "contrast", "conclusion", "appendix")
 
 #: The order the reporter lays them out in. Not alphabetical, not emission order: a reader must

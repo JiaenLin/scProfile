@@ -348,7 +348,7 @@ points:
             routes: report.provides_evidence
           each_item_declares:
             drawn_by: [tool, plugin]
-            axis: [unit, contrast, cohort]
+            axis: [unit, sample, group, contrast, interaction, cohort]
             position: [overview, contrast, conclusion, appendix]
             legend: []
           outstanding_if: wraps.plots_unreviewed
@@ -371,7 +371,7 @@ points:
           # comparison, or once for the whole cohort - and until it does, no figure count can be
           # computed before a job is submitted. Read as a prefix map like `figure_position`, so a
           # plugin whose families are named by phase states it in two rules.
-          axes: [unit, contrast, cohort]
+          axes: [unit, sample, group, contrast, interaction, cohort]
           # THE CEILING IS HONOURED BY THE GENERATED COMPANION (`.at_ceiling`, from the plan's
           # `at_most`), and `generated_by` below is what proves the companion is generated. The
           # check that read a hand-written draw wrapper for its guard (`enforced_by`) retired
@@ -392,6 +392,39 @@ points:
             and a `skip` in the accounting did not stop the site drawing. The plan is where a
             figure is adjusted; the companion is generated from it; `promised` and the loop's
             stations read the run back against it
+        - name: layout
+          phase: build
+          fills: [report.figures]
+          # THE FIGURE PLAN UNDER A LAYOUT (harness ADR-0024). 945 figures a run was the floor of
+          # a plan with no budget: every entry drawn for every unit, contrast and the cohort. The
+          # budgets are FILES per occurrence of the axis; a per-item family takes a ceiling inside
+          # the budget. `sample` and `group` are the two unit axes (`unit` on an entry means both);
+          # `interaction` is the cross of the design's factors, one budget per direction; `cohort`
+          # is what is drawn once for everything. `keep` names, in order, the kinds a reader needs
+          # on that axis; the upstream's own drawing comes before the plugin's (`prefer`), and
+          # `drop_first` is the position that goes first when something must.
+          under_layout: true
+          axes:
+            sample: {budget: 2, keep: [unit_presence, circle]}
+            group: {budget: 5, keep: [circle, matrix, role_scatter, role_heatmap, patterns]}
+            contrast: {budget: 10, keep: [diff_matrix, flow_compare, role_shift, role_heatmap, similarity, chord, other]}
+            interaction: {budget: 20, keep: [interaction, unit_totals]}
+            cohort: {budget: 3, keep: [unit_presence, unit_totals, coverage]}
+          prefer: [tool, plugin]
+          drop_first: [appendix, conclusion, contrast, overview]
+          apply: [sch, dev, convert, layout, --apply]
+          finished_by: >
+            `sch dev convert layout --root . --point kernel --name <plugin>` prints the plan's
+            files per axis against the budgets and what the trim would keep and drop; `--apply`
+            trims the plan in the plugin's own file, by span - a dropped upstream entry is
+            accounted for in `report.skips` as over_budget, a kept per-item family takes the
+            ceiling that fits, an entry on one unit axis is named as such. Then `scprofile
+            scaffold <plugin> --force` regenerates the companion
+          why: >
+            HOW MANY FIGURES A READER IS HANDED, PER SAMPLE, PER GROUP, PER CONTRAST AND FOR THE
+            INTERACTION, decided once for every plugin. Without it the plan had a ceiling per
+            family and no total, and one plugin drew 945 plates a run of which a paper numbered
+            105 and a reader could open none
         - name: measure
           phase: test
           fills: [memory_gb_base, memory_gb_per_100k]

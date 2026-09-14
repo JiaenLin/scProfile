@@ -261,7 +261,7 @@ R_DRAW = r'''# __NAME__ - the host-to-plugin drawing protocol, in R.
 # run and every row of it is a term of this contract: the provenance stamp, the sentence that says
 # what an absent population means, the colour map that keeps one population one colour across every
 # panel of the whole report, and the ceilings.
-.fctx <- list(stamp = "", absence = "", colours = character(0))
+.fctx <- list(stamp = "", absence = "", colours = character(0), axis = "")
 .ceil <- integer(0)
 
 .plots <- new.env(); .plots$ok <- 0L; .plots$bad <- character(0)
@@ -283,6 +283,7 @@ R_DRAW = r'''# __NAME__ - the host-to-plugin drawing protocol, in R.
     if (!is.null(fc) && nrow(fc)) {
       .fctx$stamp <<- paste(fc$v[fc$k == "stamp"], collapse = "")
       .fctx$absence <<- paste(fc$v[fc$k == "absence"], collapse = "")
+      .fctx$axis <<- paste(fc$v[fc$k == "axis"], collapse = "")
       cr <- fc[startsWith(fc$k, "colour:"), , drop = FALSE]
       if (nrow(cr)) .fctx$colours <<- stats::setNames(cr$v, sub("^colour:", "", cr$k))
       cl <- fc[startsWith(fc$k, "ceiling:"), , drop = FALSE]
@@ -490,7 +491,20 @@ R_PLAN = r'''
 
 .draw <- function(id, item = NULL, env = parent.frame()) {
   e <- .plan[[id]]
-  if (is.null(e)) stop("no entry in the plan is called ", id)
+  # NOT ON THE PLAN IS NOT AN ERROR (harness ADR-0024): the layout trims the plan in the
+  # plugin's file, and a draw site that still names a dropped entry is skipped and says so.
+  if (is.null(e)) {
+    cat("not on the plan: ", id, " - skipped; the layout holds the plan\n", sep = "")
+    return(invisible(NULL))
+  }
+  # AN ENTRY FOR ONE KIND OF UNIT: `sample` or `group` on the entry, the unit's own axis from the
+  # host's figure context; a mismatch is skipped, not drawn.
+  if (!is.null(e$axis) && e$axis %in% c("sample", "group") && isTRUE(nzchar(.fctx$axis))
+      && !identical(e$axis, .fctx$axis)) {
+    cat("not for this unit's axis: ", id, " is drawn per ", e$axis, "; this unit is a ",
+        .fctx$axis, "\n", sep = "")
+    return(invisible(NULL))
+  }
   if (!is.null(item)) assign(".item", item, envir = env)
   # THE ENTRY, VISIBLE TO ITS OWN LEGEND: `{.entry$at_most}` names the ceiling from the plan,
   # once, where a legend that retyped it said 8 while the declaration said 6.
@@ -513,7 +527,10 @@ R_PLAN = r'''
 .draw_all <- function(axis, env = parent.frame()) {
   for (id in names(.plan)) {
     e <- .plan[[id]]
-    if (!identical(e$axis, axis)) next
+    # `unit` reaches the entries declared for a sample or a group too; `.draw` keeps the ones
+    # for this unit's own axis.
+    if (!identical(e$axis, axis)
+        && !(identical(axis, "unit") && e$axis %in% c("sample", "group"))) next
     if (is.null(e$items)) {
       .draw(id, NULL, env)
     } else {

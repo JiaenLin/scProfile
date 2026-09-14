@@ -614,12 +614,17 @@ def main(argv):
                               absent=[{"what": "everything", "why": str(e)}])
         return 0
 
+    from scprofile import declare as _DC
     ctx = Context(A, keys=keys, out=out, cores=cores, memory_gb=memory_gb, unit=unit,
                   unit_members=members, r_companion=_companion_text(plugin_path),
                   unit_axis=inp.get("unit_axis"), figures_for=inp.get("figures_for"),
                   profile_figures=[str(f.get("id")) for f in
                                    ((spec.get("report") or {}).get("figures") or [])
                                    if f.get("profile") and f.get("id")],
+                  # THE PLAN'S IDS, when this plugin is on the plan (harness ADR-0024).
+                  plan_ids=[str(f.get("id")) for f in
+                            ((spec.get("report") or {}).get("figures") or [])
+                            if isinstance(f, dict) and f.get("id") and _DC.on_plan(f)],
                   # THE ONE MAP, with every plan entry's own position folded in (ADR-0016).
                   figure_position=_PLN.position_map(spec),
                   # THE DECLARED CEILINGS, resolved to {family: n} by the same reader the plan

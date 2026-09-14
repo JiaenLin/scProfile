@@ -232,6 +232,10 @@ class FigureContextReader:
             rows += [(f"colour:{k}", v) for k, v in sorted((self.figure_colours() or {}).items())]
         rows += [(f"ceiling:{k}", int(v))
                  for k, v in sorted((getattr(self, "figure_ceiling", None) or {}).items())]
+        # THE UNIT'S AXIS (harness ADR-0024): a sample or a group, so the generated companion can
+        # draw an entry declared for one and not the other.
+        if getattr(self, "unit_axis", ""):
+            rows.append(("axis", str(self.unit_axis)))
         rows = [(k, str(v).replace("\t", " ").replace("\n", " ")) for k, v in rows if str(v)]
         if not rows:
             return ""
@@ -365,7 +369,7 @@ class Context(FigureContextReader):
                  unit_members=None, organism=None, assay=None,
                  references=None, reference_specs=None, params=None, design=None,
                  sentinels=(), provenance=None, constraint="", cache_dir=None,
-                 config=None, figure_context=None, r_companion="", log=print):
+                 config=None, figure_context=None, r_companion="", log=print, plan_ids=()):
         self.adata = adata
         #: THE GENERATED DRAWING PROTOCOL AND PLAN, as text, for `rscript` to put before every
         #: embedded script this plugin runs. "" for a plugin that draws through no R.
@@ -399,6 +403,10 @@ class Context(FigureContextReader):
         #: Which axis this unit came from - the resolver knows it for certain, so it is carried
         #: rather than inferred from whether the name happens to be a key of the design table.
         self.unit_axis = str(unit_axis or "")
+        #: THE IDS THE PLAN CARRIES (harness ADR-0024): when the plugin is on the plan, a panel it
+        #: draws itself that the layout dropped is gated here, at the one place a figure is
+        #: written. Empty for a plugin still on prose and prefix maps, which draws as before.
+        self.plan_ids = tuple(str(x) for x in (plan_ids or ()))
         #: Which unit axes this RUN wants per-unit figures for. Empty means all of them, which
         #: is the default and what every run did before the setting existed. It is NOT a plugin
         #: parameter: which axes are worth drawing is a property of the run, not of the method.
@@ -514,6 +522,9 @@ class Context(FigureContextReader):
         the few declared profile panels everywhere, because the page built from them describes
         every unit and a page with holes in it is worse than no page.
         """
+        if self.plan_ids and str(fid) not in self.plan_ids \
+                and str(fid) not in self.profile_figures:
+            return False
         return self.draw_figures or str(fid) in self.profile_figures
 
     def was_drawn(self, fid):
@@ -971,6 +982,10 @@ class Context(FigureContextReader):
         # RECORDED either: a figure that was not drawn must not appear in the manifest, or the
         # report links a file that is not on disk.
         if not self.draws(name):
+            if self.plan_ids and str(name) not in self.plan_ids \
+                    and str(name) not in self.profile_figures:
+                self.log(f"  {name}: NOT DRAWN - not on the plan (the layout holds the plan; "
+                         f"`sch dev convert layout` says what it keeps)")
             if close:
                 try:
                     import matplotlib.pyplot as _plt

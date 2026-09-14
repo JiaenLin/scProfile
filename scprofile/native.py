@@ -41,6 +41,14 @@ VALID = {
         ("same_as",),
         "Name the function actually called. Two entry points to one plot is a property of the "
         "upstream API, not a decision by this plugin."),
+    # THE LAYOUT'S OWN REASON (harness ADR-0024): the maker trims a plan to a budget per axis and
+    # accounts for every upstream entry it drops here, with the axis and the budget that dropped
+    # it. Written by `sch dev convert layout --apply`, never by hand.
+    "over_budget": (
+        "the layout keeps fewer files on this axis than the plan drew",
+        ("axis", "budget"),
+        "Name the axis and its budget. This ruling is the maker's: `sch dev convert layout` "
+        "writes it when it trims a plan, and the plan stage prints what the budget kept instead."),
 }
 
 #: Reasons that are NOT reasons, with what to do instead. Rejected by name so the message lands
