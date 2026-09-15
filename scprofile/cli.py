@@ -2890,7 +2890,8 @@ def _paper(a):
             print(f"scprofile: REFUSED - {e}", file=sys.stderr)
             return REFUSE
         print(f"the result section is now part of this run: {dst}")
-        print(f"    scprofile paper --out {out} --render")
+        print(f"    scprofile paper --out {out}" + (f" --plugin {a.plugin}" if a.plugin else "")
+              + " --render")
         return 0
 
     if a.render:

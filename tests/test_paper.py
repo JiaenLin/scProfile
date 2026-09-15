@@ -338,6 +338,13 @@ def test_every_cli_paper_call_passes_the_plugin():
             missing.append(f"{fn}: {call[:70]}")
     assert not missing, ("a paper call in the CLI does not pass the plugin, so it reads the "
                          f"run-root ledger instead of the plugin's: {missing}")
+    # AND EVERY COMMAND THE HANDLER PRINTS FOR THE AGENT TO RUN NEXT carries the plugin too
+    # (harness ADR-0025, found by the writer of the final run): the hint after `--write`
+    # printed `scprofile paper --out <run> --render` and, run as printed, renders the run-root
+    # page rather than the plugin's.
+    printed = [m.group(0) for m in re.finditer(r"scprofile paper --out \{out\}[^\"']*", body)]
+    bare = [p for p in printed if "--plugin" not in p]
+    assert not bare, f"a printed next command omits --plugin: {bare}"
 
 
 def test_the_status_line_agrees_with_itself():
