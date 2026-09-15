@@ -117,6 +117,28 @@ the file, `<plugin>.signatures.json` - the wrapped tool's exports and signatures
 where the tool is installed by `sch dev convert inventory --rscript <R> --record` - against
 which the validator holds every entry's named arguments.
 
+Four things the host reads from those declarations without your code doing anything (harness
+ADR-0026, the open items): a table `produces` names and your tool wrote into `tables/` is
+registered in the manifest when `run(ctx)` returns, so it need not pass through `emit_table`;
+the unit's cache directory is keyed by a digest of the `cache` span, so versions of the
+inference coexist in the store and a run of another span never overwrites yours (the first run
+after a span change re-infers, and the forecast says so); an entry's `axis` must be one the
+script holding its `.draw` site draws by - `run(ctx)`'s scripts draw per `unit`, `sample`,
+`group`, `compare(ctx)`'s per `contrast`, `interaction`, `cohort` - and the validator refuses
+the mismatch before any job; and `capacity --memory --declare` writes the envelope over every
+run measured, raising a term the fit exceeds and keeping one it does not (the reuse path and the
+inference path fit different bases and rates), so lowering a term on purpose is the maker's
+`--set`.
+
+Before the cohort, the job runs your plugin on the harness's two-shape fixture (`run.fixture_first`
+in `DEVPOINTS.yaml`; the fixture command under `fixture:` runs `scprofile run` on each shape
+with the fixture's own role names, `--factor` naming the one factor its design is about, the
+organism human because its symbols are, then `capacity --promised` on that run). A plate an
+entry promised and did not draw on the fixture fails the tier and the cohort is not run: that is
+where a `when` or a count fitted to the cohort shows, and nothing static can see it. On a
+workstation without the plugin's environment, `run` refuses at its door in `plan`'s words and
+the tier accepts the refusal.
+
 ---
 
 ## The rules a plugin must keep
