@@ -461,7 +461,7 @@ def _run(a):
     _axis_design = {}
     try:
         _axis_design, _adk, _adf, _adsrc = inputs.design_or_derive(
-            getattr(a, "design", None), A, sample_key, samples)
+            getattr(a, "design", None), A, sample_key, samples, factors=getattr(a, "factor", None))
     except Exception as _e:                                                  # noqa: BLE001
         print(f"  units: design not readable for axis resolution ({_e}); sample axis only")
     _plan_axes, _why_axes = _UN.resolve(_axis_design or {}, sample_key=sample_key,
@@ -567,7 +567,7 @@ def _run(a):
         # samples missing from the table - "design table unreadable" on a table that
         # was perfectly readable.
         _dtab, _dkey, _dfactors, _dsrc = inputs.design_or_derive(
-            a.design, A, sample_key, samples or [], quiet=True)
+            a.design, A, sample_key, samples or [], quiet=True, factors=getattr(a, "factor", None))
         if _dfactors:
             _run_facts = _PL.design_facts(_dtab, _dfactors, sample_key, units or [])
             if _dsrc == "object":
@@ -598,6 +598,22 @@ def _run(a):
                     print(f"  {name}: {key} {shown}  (decided from the design, by the planner)")
         return out
 
+    # THE DOOR, IN THE PLAN'S WORDS (harness ADR-0026, the open items): a plugin whose
+    # environment is not built here was launched on every instance and failed on every one
+    # with "no environment at ..." - twenty failures for one fact `plan` states once and exits
+    # 2 on. The same words, before any instance, so a ladder that accepts the plan's refusal
+    # accepts this one and a crash still fails.
+    _unready = []
+    for _n in want:
+        _exe, _why = runner.interpreter(ks[_n], a.prefix)
+        if not _exe:
+            _unready.append((_n, _why))
+    if _unready:
+        print(f"\n  PREPARATION: {len(_unready)} plugin(s) are not ready in this installation; "
+              f"nothing was launched.")
+        for _n, _why in _unready:
+            print(f"    {_n:<12} {_why}")
+        return REFUSE
     budget = int(getattr(a, "cores", 0) or _default_cores())
     mem_budget = getattr(a, "memory_gb", None) or _default_memory_gb()
     waves = schedule(want, ks, budget_cores=budget, units=units)
@@ -1206,7 +1222,7 @@ def _run(a):
     if _run_facts.get("has_design") and sample_key:
         try:
             _dt, _dk, _df, _ = inputs.design_or_derive(a.design, A, sample_key,
-                                                       samples or [], quiet=True)
+                                                       samples or [], quiet=True, factors=getattr(a, "factor", None))
             for _n, _slots in sorted(merged_slots.items()):
                 _cols = list((_slots or {}).get("obs") or [])
                 # AND ITS ARRAYS. A plugin whose per-cell output is a matrix has no obs column,
@@ -1816,7 +1832,7 @@ def _plan(a):
             samples_in_obj = (sorted(set(A.obs[keys["sample"][0]].astype(str)))
                               if keys["sample"][0] else [])
             tab, key, factors, _src = inputs.design_or_derive(
-                a.design, A, keys["sample"][0], samples_in_obj, quiet=True)
+                a.design, A, keys["sample"][0], samples_in_obj, quiet=True, factors=getattr(a, "factor", None))
             if not factors:
                 raise inputs.Refuse("no design table given, and no column in the object is "
                                     "constant within every sample")
@@ -1939,7 +1955,7 @@ def _plan(a):
     dtab, dfactors = None, []
     try:
         dtab, _dkey, dfactors, _dsrc = inputs.design_or_derive(
-            a.design, A, keys["sample"][0], samples, quiet=True)
+            a.design, A, keys["sample"][0], samples, quiet=True, factors=getattr(a, "factor", None))
     except Exception:                                                     # noqa: BLE001
         dtab, dfactors = None, []              # already reported above, as a refusal
     # THE PLAN SCHEDULES WHAT THE RUN WILL RUN. `plan` resolved units as samples while `run`
@@ -4192,6 +4208,10 @@ def main(argv=None):
                    help="does not change what is computed; changes what each kernel may claim. "
                         "'cell' and 'nucleus' are reasoned about; anything else is taken as "
                         "declared and reported as unrecognised")
+    r.add_argument("--factor", action="append", default=None, metavar="COLUMN",
+                   help="a factor this run is about, when the design table carries more "
+                        "columns than factors (repeatable); the other columns stay for the "
+                        "panels that state confounds")
     r.add_argument("--design", default=None, type=Path,
                    help="CSV keyed on the sample column, carrying the experimental factors")
     r.add_argument("--params", default=None, help="JSON passed through to every kernel")
@@ -4226,6 +4246,7 @@ def main(argv=None):
     pl.add_argument("--all", action="store_true")
     pl.add_argument("--prefix", default=None)
     pl.add_argument("--design", default=None)
+    pl.add_argument("--factor", action="append", default=None, metavar="COLUMN")
     # THE SAME DEFAULT AS `run`, AND IT HAS TO BE. A hard-coded 8 made `plan` describe a machine
     # nobody was using: on PBS 679143 the plan printed `scenic[S1](8c)` and the run, given the
     # allocation, did `scenic[S1](16c)`. The plan is the document a person reads BEFORE

@@ -22,9 +22,27 @@ fixture:
     # correctly and then exits 2 saying the plugin is not prepared in this installation, which
     # is the tool being right and the declaration being incomplete.
     - ["{python}", "-m", "scprofile.cli", "plan", "--h5ad", "{observations}",
-       "--kernel", "{name}", "--design", "{design}", "--prefix", "{out}/prefix"]
+       "--kernel", "{name}", "--design", "{design}", "--prefix", "{prefix}"]
+    # THE PLUGIN RUNS ON THE FIXTURE (harness ADR-0026, the open items). Every ladder before
+    # this planned and refused - `{out}/prefix` was a fresh directory, so "not ready in this
+    # installation" was the whole tier, and no plugin of this repository had ever been executed
+    # on the two-shape cohort. A literal fitted to the real cohort therefore had no gate. The
+    # prefix is the SITE's now (`{prefix}` fills from SCH_DEV_PREFIX where the emitted job sets
+    # it, and from a fresh directory otherwise, where the refusal below is still the right
+    # answer); the roles are the fixture's own names for that shape, so shape b is the test that
+    # nothing here knows a column by heart; the organism is human because the fixture's symbols
+    # are. Then the plan's promise is read on the fixture run: a plate an entry promised and
+    # did not draw fails the tier, which is where a `when` fitted to the cohort shows.
+    - ["{python}", "-m", "scprofile.cli", "run", "--h5ad", "{observations}", "--out", "{out}/run",
+       "--kernel", "{name}", "--prefix", "{prefix}", "--design", "{design}",
+       "--label-key", "{role_cell_type}", "--sample-key", "{role_sample}",
+       "--batch-key", "{role_batch}", "--counts-layer", "{role_counts}",
+       "--lognorm-layer", "lognorm", "--embedding", "X_pca", "--organism", "human",
+       "--assay", "cell", "--timeout", "1200", "--factor", "{role_condition}",
+       "--control", "{role_condition}=ctrl"]
+    - ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{out}/run", "--promised"]
   products: []
-  timeout: 900
+  timeout: 1800
   # `plan` computes the whole plan against the data and then exits 2 where the kernel's own
   # environment has not been built in this installation. That is the tool being right - the
   # kernel point already declares it cannot prove the environment installs - so the refusal is
@@ -50,6 +68,11 @@ run:
   # reproduced it re-inferred every unit. This repository names its own flag; the emitter drops
   # it on a redraw and says so in the job's header.
   redraw_drops: ["--no-cache"]
+  # THE PLUGIN ON THE FIXTURE BEFORE THE COHORT (harness ADR-0026, the open items): the
+  # emitted job runs the fixture tiers above, with the reference's --prefix as the site's, and
+  # refuses the cohort if either shape fails. A literal fitted to this cohort has no static
+  # gate; this is its gate.
+  fixture_first: true
   # WHAT TO READ BEFORE A JOB (harness ADR-0026): whether the next run will reuse the saved
   # objects the reference run left, from the plugin's `cache` declaration against the run's tool
   # commit. `sch dev edit --run` prints it after an edit; `sch dev job` puts it in the header.

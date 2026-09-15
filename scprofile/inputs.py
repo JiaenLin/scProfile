@@ -703,8 +703,14 @@ def describe(adata, keys, organism, assay, constraint_src):
     }
 
 
-def read_design(path, samples=None, sample_col=None):
+def read_design(path, samples=None, sample_col=None, factors=None):
     """The design table: a CSV keyed on the sample column. Returns (table, key, factors).
+
+    `factors` names the factors a run is ABOUT when the table carries more columns than
+    factors (harness ADR-0026, the open items): the harness's fixture design carries batch,
+    subject and a covariate beside the condition, and every column read as a factor made nine
+    marginal pools and five arms over a numeric age of a one-factor study. The other columns
+    stay in the rows, for the panels that state what a contrast is confounded with.
 
     The factors a study is ABOUT are usually not in an annotated object - it carries the
     annotation, not the animal metadata - so they arrive as a table keyed on the sample.
@@ -741,7 +747,14 @@ def read_design(path, samples=None, sample_col=None):
         raise Refuse(f"{path}: no sample column found among {cols}. Pass --design-sample-col.")
 
     table = {str(r[key]): {c: r[c] for c in cols if c != key} for r in rows}
-    factors = [c for c in cols if c != key]
+    if factors:
+        missing = [f for f in factors if f not in cols or f == key]
+        if missing:
+            raise Refuse(f"{path}: --factor names {missing}, not a column of the table; it has "
+                         f"{[c for c in cols if c != key]}")
+        factors = [str(f) for f in factors]
+    else:
+        factors = [c for c in cols if c != key]
 
     if samples:
         missing = [s for s in samples if s not in table]
@@ -913,7 +926,8 @@ def derive_design(obs, sample_key, *, exclude=()):
     return table, factors
 
 
-def design_or_derive(path, adata=None, sample_key=None, samples=None, *, quiet=False):
+def design_or_derive(path, adata=None, sample_key=None, samples=None, *, quiet=False,
+                     factors=None):
     """(table, key, factors, source) - the design table if one was given, else the object's own.
 
     ONE PLACE DECIDES WHERE THE DESIGN COMES FROM. Six call sites each wrote `if --design was
@@ -926,7 +940,7 @@ def design_or_derive(path, adata=None, sample_key=None, samples=None, *, quiet=F
     derived design must be visible as derived.
     """
     if path:
-        tab, key, factors = read_design(path, samples)
+        tab, key, factors = read_design(path, samples, factors=factors)
         return tab, key, factors, "table"
     if adata is not None and sample_key:
         try:
