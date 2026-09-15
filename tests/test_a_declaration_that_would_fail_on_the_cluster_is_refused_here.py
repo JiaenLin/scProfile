@@ -67,6 +67,45 @@ ck("warned, by the entry's id and the key",
    warns(spec, "native_a") and any("args" in m for m in warns(spec, "native_a")),
    str(D.check(spec, "demo"))[:300])
 
+print("\nan argument the wrapped function has not got is refused against the recorded signatures")
+import json
+import tempfile
+SIGS = {"tool": "faketool", "functions": {
+    "drawA": "function (x, color = NULL, width = 10)",
+    "drawB": "function (x, ...)",
+    "drawC": "function (m, measure = c(\"count\", \"weight\"), title.name = NULL)"}}
+
+
+def with_record(spec):
+    with tempfile.TemporaryDirectory() as td:
+        rec = Path(td) / "demo.signatures.json"
+        rec.write_text(json.dumps(SIGS))
+        return D.check(spec, "demo", signatures=rec)
+
+
+spec = base()
+spec["report"]["figures"][0]["args"] = "x, colour = 1"
+found = [m for lvl, m in with_record(spec) if lvl == "ERROR" and "colour" in m]
+ck("a misspelt argument is refused, naming the function's own parameters",
+   found and "color" in found[0] and "width" in found[0], str(with_record(spec))[:300])
+spec["report"]["figures"][0]["args"] = "x, color = 1, width = 12"
+ck("the function's own parameters pass", not [m for lvl, m in with_record(spec) if lvl == "ERROR" and "drawA" in m])
+spec["report"]["figures"][0]["fn"] = "drawB"
+spec["report"]["figures"][0]["args"] = "x, anything = 1"
+ck("a function taking `...` accepts any name; the check says it cannot refuse there",
+   not [m for lvl, m in with_record(spec) if lvl == "ERROR" and "anything" in m])
+spec["report"]["figures"][0]["fn"] = "drawC"
+del spec["report"]["figures"][0]["args"]
+spec["report"]["figures"][0]["expr"] = 'ComplexHeatmap::draw( drawC(m, measure = "weight", colour.heatmap = "RdBu", title.name = paste("a", b)))'
+found = [m for lvl, m in with_record(spec) if lvl == "ERROR" and "colour.heatmap" in m]
+ck("a named argument inside an expr's call is checked too, nested calls left alone", bool(found), str(with_record(spec))[:300])
+spec["report"]["figures"][0]["fn"] = "drawZ"
+spec["report"]["figures"][0]["expr"] = "drawZ(m, q = 1)"
+found = [m for lvl, m in with_record(spec) if "drawZ" in m and "record" in m]
+ck("a function the record does not carry is a warning to re-record, not an error",
+   found and all(lvl != "ERROR" for lvl, m in with_record(spec) if "drawZ" in m), str(with_record(spec))[:300])
+ck("without a record nothing is said", not [m for lvl, m in D.check(spec, "demo") if "signature" in m.lower()])
+
 if FAIL:
     print(f"\n{len(FAIL)} FAILED: " + ", ".join(FAIL))
     sys.exit(1)

@@ -11,6 +11,8 @@ reason discovery must never execute plugin code.
 """
 from __future__ import annotations
 
+import re
+
 #: The contract version a plugin was written against. A host that meets a higher one REFUSES BY
 #: NAME rather than calling it and failing somewhere inside - without this, the only way to
 #: discover a contract change is a crash in a stranger's run.
@@ -571,7 +573,98 @@ def _unfilled(value, path=""):
     return out
 
 
-def check(spec, name="<plugin>"):
+def _r_call_args(text, fn=None):
+    """The named arguments of an R call: of the whole text when `fn` is None (an `args`
+    string), else of the outermost `fn(...)` inside it (an `expr`). Nested calls are left alone:
+    only the top-level `name = value` pairs of that call count."""
+    t = str(text or "")
+    if fn:
+        m = re.search(r"(?<![\w.])%s\s*\(" % re.escape(fn), t)
+        if not m:
+            return []
+        i, depth, j = m.end(), 1, m.end()
+        while j < len(t) and depth:
+            if t[j] == "(":
+                depth += 1
+            elif t[j] == ")":
+                depth -= 1
+            j += 1
+        t = t[i:j - 1]
+    parts, depth, cur = [], 0, ""
+    for ch in t:
+        if ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        if ch == "," and depth == 0:
+            parts.append(cur)
+            cur = ""
+        else:
+            cur += ch
+    parts.append(cur)
+    out = []
+    for p_ in parts:
+        m = re.match(r"\s*([A-Za-z.][A-Za-z0-9._]*)\s*=(?!=)", p_)
+        if m:
+            out.append(m.group(1))
+    return out
+
+
+def _r_formals(signature):
+    """The parameter names of `function (a, b = 1, ...)`, `...` kept as a name."""
+    m = re.search(r"function\s*\((.*)\)\s*$", str(signature or "").strip(), re.S)
+    if not m:
+        return None
+    names = []
+    for p_ in re.split(r",(?![^()\[\]]*[)\]])", m.group(1)):
+        p_ = p_.strip()
+        if not p_:
+            continue
+        names.append(p_.split("=", 1)[0].strip())
+    return names
+
+
+def _check_signatures(spec, name, out, signatures=None):
+    """Every plan entry's call against the recorded signatures of the wrapped tool (harness
+    ADR-0026): `kernels/<name>.signatures.json`, written by the maker's inventory verb where
+    the tool is installed. An argument the function has not got was learned from a
+    thirty-minute run; here it is refused before any job, naming the function's own
+    parameters. A function taking `...` cannot be refused by name and is not; a function the
+    record does not carry is a warning to re-record."""
+    from pathlib import Path as _P
+    rec = _P(signatures) if signatures else _P(__file__).resolve().parent.parent / "kernels" / f"{name}.signatures.json"
+    if not rec.is_file():
+        return
+    import json as _json
+    try:
+        sigs = _json.loads(rec.read_text(encoding="utf-8")).get("functions") or {}
+    except (OSError, ValueError) as e:
+        out.append(("WARN", f"{rec.name} cannot be read ({e}); the plan's calls are not held to "
+                            f"the wrapped tool's signatures"))
+        return
+    for f in report_figures(spec):
+        fn = str(f.get("fn") or "")
+        if not fn or str(f.get("drawn_by") or "tool") != "tool":
+            continue
+        at = f"report.figures[{f.get('id')}]"
+        if fn not in sigs:
+            out.append(("WARN", f"{at}: the signatures record carries no {fn!r}; re-record it "
+                                f"where the tool is installed (sch dev convert inventory "
+                                f"--record) or the call cannot be held to the function"))
+            continue
+        formals = _r_formals(sigs[fn])
+        if not formals or "..." in formals:
+            continue
+        named = _r_call_args(f.get("args"), None) if f.get("args") else []
+        if f.get("expr"):
+            named += _r_call_args(f.get("expr"), fn)
+        bad = [n for n in named if n not in formals]
+        if bad:
+            out.append(("ERROR", f"{at} calls {fn} with argument(s) it has not got: "
+                                 f"{', '.join(bad)}; its parameters are {', '.join(formals)}"))
+
+
+def check(spec, name="<plugin>", signatures=None):
     """Every problem with a declaration, as a list. Empty means it is usable.
 
     Returns [(level, message)] - ERROR stops the builder, WARN is something a reader of the
@@ -579,6 +672,9 @@ def check(spec, name="<plugin>"):
     a maintainer fixing one problem per run is a maintainer who stops running the check.
     """
     out = []
+    # THE PLUGIN'S NAME, KEPT: a loop below reuses `name` for a package's, and a check placed
+    # after it read the last package as the plugin (harness ADR-0026).
+    plugin_name = name
     # A PLACEHOLDER IS NOT A DECLARATION, and this is checked first because every other message
     # below is about a field that at least says something. A scaffold reported clean is the tool
     # telling an author their plugin is ready when its run() raises.
@@ -870,6 +966,7 @@ def check(spec, name="<plugin>"):
                                     f"what it still works with."))
 
     _check_report(spec, out)
+    _check_signatures(spec, plugin_name, out, signatures=signatures)
 
     # MATPLOTLIB IS A CONTRACT DEPENDENCY OF DRAWING, on the same terms as anndata is of reading.
     # `ctx.plot()` imports it inside the plugin's own interpreter, so a plugin that declares
