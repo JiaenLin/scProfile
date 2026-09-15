@@ -185,14 +185,14 @@ PLUGIN = {
     # coloured below the first tick, off the labelled scale, naming which colour is which
     # direction. The roster sentence from 0.38.0 is kept on both. Eleven `--stated` records close
     # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
-    "version": "0.41.0",
+    "version": "0.42.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
     # 386 of 404 tables byte-identical - the 18 that differ are `cellchat_net_embedding.csv`,
     # which differs between any two runs because the UMAP is not seeded.
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
-    "summary": "cell-cell communication, CellChat's own database and scoring",
+    "summary": "cell-cell communication, CellChat's own database and scoring (class F mutant)",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
               "license": "GPL-3.0",
@@ -822,7 +822,7 @@ PLUGIN = {
                 # merged object wants actual colours, not a palette name, and already draws a
                 # two-colour diverging pair by default. The asymmetric-looking key on some
                 # contrasts is the tool's own legend on an asymmetric range; see the legend.
-                'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, title.name = .diffttl("Differential interaction strength")))',
+                'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, title.name = .diffttl("Differential interaction strength")))',
                 'legend': "The same differential matrix on interaction strength rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair: it can gain interactions while each of them weakens, which is why the two panels are drawn together. Restricted to the same shared populations as its count sibling, for the same reason. The colour key's own printed ticks follow only the larger-magnitude sign; a cell of the smaller sign is coloured below the first printed tick, off the labelled scale, with red still meaning higher in the second arm and blue still meaning higher in the reference.",
             },
             # THE TITLE NAMES THE EFFECT, NOT ONLY THE STRATA. "change within X minus change within Y"
@@ -1634,6 +1634,7 @@ if (file.exists(rds) && file.exists(stampf) &&
 
 if (is.null(cc)) {
 # --- RECIPE START --- everything between these two markers determines the SAVED OBJECT, and the
+# (a comment added by the campaign)
 # cache stamp hashes exactly this span. Hashing the whole script instead was correct and far too
 # blunt: a figure title, a legend, a colour - none of which the object has ever heard of -
 # invalidated eighteen fitted objects and bought a two-and-a-half hour re-inference. Under-
@@ -2562,6 +2563,7 @@ def _fig_coverage(ctx, db, var_names, detected, edges, thresh):
             ". THE RETURNED STAGE IS NOT DRAWN: the edge table's interaction names did not join "
             "to the database dump's, so how many of these interactions came back cannot be "
             "counted here - read that from tables/ccc_edges.csv instead. ")
+    fig.savefig(str(ctx.out / "figures" / "F1_extra_nobody_asked.png"))
     ctx.emit_figure(
         "F1_database_coverage", fig,
         caption=("How much of CellChat's own database could be tested on this object, stage by "
