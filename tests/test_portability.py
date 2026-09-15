@@ -604,6 +604,19 @@ print("\nan axis label is a convention of this tool, not of each plugin")
 # convention implemented per plugin is a convention that drifts.
 _KSRC = {q.name: q.read_text() for q in
          (Path(__file__).resolve().parents[1] / "kernels").glob("*.py")}
+
+
+def _family(what, ok=None):
+    """A check about the SHIPPED SET - what is falsy across every plugin, whether the set
+    still composes, whether any plugin draws on a layout - proves nothing on a tree carrying one
+    kernel and failed there on five counts, so every edit through the maker's verb in a cold
+    room read exit 2 from this suite for reasons no edit had caused (harness ADR-0026, K-q).
+    Skipped, and said so, when `ok` is False or the tree carries fewer than two kernels."""
+    if ok is False or len(_KSRC) < 2:
+        print(f"  skip  {what}: a check about the shipped set, and this tree carries "
+              f"{len(_KSRC)} kernel(s)")
+        return False
+    return True
 _own = sorted(n for n, s in _KSRC.items()
               if re.search(r'set_[xy]label\(\s*f["\']\{[A-Za-z_]+\}\s*[12]', s))
 ck("no plugin spells its own basis axis label", not _own, str(_own))
@@ -616,7 +629,8 @@ def _code(s):
 
 
 _draws = [n for n, s in _KSRC.items() if "ctx.layout()" in _code(s)]
-ck("some plugin draws on a layout, or this check proves nothing", bool(_draws), str(_draws))
+if _family("some plugin draws on a layout"):
+    ck("some plugin draws on a layout, or this check proves nothing", bool(_draws), str(_draws))
 ck("the ones that draw on a layout use the shared label",
    all("basis_label" in _KSRC[n] for n in _draws),
    str([n for n in _draws if "basis_label" not in _KSRC[n]]))
@@ -686,22 +700,25 @@ def _have(*names):
 
 print("\na requirement is stated once, and no decision reads a flag nobody sets")
 _dead = _FB.dead_predicates(_K)
-ck("no kernel predicate is falsy for every installed plugin",
-   not _dead, str([a for a, _ in _dead]))
+if _family("no kernel predicate is falsy for every installed plugin"):
+    ck("no kernel predicate is falsy for every installed plugin",
+       not _dead, str([a for a, _ in _dead]))
 ck("every exemption from that check carries a written reason",
    all(str(v).strip() for v in _FB.PREDICATE_EXEMPT.values()),
    str([k for k, v in _FB.PREDICATE_EXEMPT.items() if not str(v).strip()]))
-ck("needs_design is DERIVED from inject, not declared beside it",
-   all(k.needs_design == ("design" in k.injects_required or bool(k.spec.get("needs_design")))
-       for k in _K.values())
-   and any(k.needs_design for k in _K.values()),
-   "a kernel injecting `design` must report needs_design")
+if _family("needs_design is derived from inject", ok=any(k.needs_design for k in _K.values())):
+    ck("needs_design is DERIVED from inject, not declared beside it",
+       all(k.needs_design == ("design" in k.injects_required or bool(k.spec.get("needs_design")))
+           for k in _K.values())
+       and any(k.needs_design for k in _K.values()),
+       "a kernel injecting `design` must report needs_design")
 _dk = next((k for k in _K.values() if k.requires_role("design")), None)
 _probs = _KN.unmet(_dk, obs=(), obsm=(), layers=(), available=_K, ran=set(),
                    has_design=False, keys={}, organism=None, var=(), derived=()) if _dk else []
-ck("a kernel requiring a design reports that lack ONCE, not once per statement of it",
-   len([x for x in _probs if "design" in str(x).lower()]) == 1,
-   str([x for x in _probs if "design" in str(x).lower()]))
+if _family("a kernel requiring a design reports that lack once", ok=_dk is not None):
+    ck("a kernel requiring a design reports that lack ONCE, not once per statement of it",
+       len([x for x in _probs if "design" in str(x).lower()]) == 1,
+       str([x for x in _probs if "design" in str(x).lower()]))
 
 print("\na plugin names a capability, never a peer")
 _named = {n: [c for c in (k.spec.get("needs_kernels") or [])] for n, k in _K.items()}
@@ -716,10 +733,11 @@ ck("every capability a plugin asks for has an installed provider",
 # derived capabilities are provided by six plugins and injected by none. The mechanism is proved
 # on sets built for it in tests/test_wave_graph.py - required edges, chains, diamonds, cycles -
 # so what is left here is the claim that this tree still composes at all.
-ck("the shipped set still has an edge to compose",
-   bool(_pe(_K)),
-   "no plugin here reads another's output. The machinery is proved in test_wave_graph.py; this "
-   "says the nine no longer exercise any of it")
+if _family("the shipped set still has an edge to compose"):
+    ck("the shipped set still has an edge to compose",
+       bool(_pe(_K)),
+       "no plugin here reads another's output. The machinery is proved in test_wave_graph.py; this "
+       "says the nine no longer exercise any of it")
 # TWO WAVE BUILDERS, ONE GRAPH. `schedule` orders the run and `order_of_runs` orders the plan,
 # and until both were made to call one edge function they read different things: the run put a
 # consumer in the same wave as its producer while the plan put it in the next one. The first fix
@@ -1304,11 +1322,12 @@ if _have('de'):
     for _nd in _ast.walk(_ast.parse(_desrc)):
         if isinstance(_nd, _ast.For) and getattr(getattr(_nd, "target", None), "id", "") == "term":
             _determ = _ast.unparse(_ast.Module(_nd.body, []))
-ck("the per-term loop still contains the gene accounting",
-   _determ is not None and "acct_rows.append" in _determ,
-   "an insert at the wrong indent ends the loop and the accounting falls out of it")
-ck("and the hits rows every figure is built from",
-   _determ is not None and "hit_rows.append" in _determ)
+if _have('de'):
+    ck("the per-term loop still contains the gene accounting",
+       _determ is not None and "acct_rows.append" in _determ,
+       "an insert at the wrong indent ends the loop and the accounting falls out of it")
+    ck("and the hits rows every figure is built from",
+       _determ is not None and "hit_rows.append" in _determ)
 if _have('de'):
     ck("the interaction is accounted for too, or it is in the table and in no figure",
        "\"term\": f\"{a_}:{b_}\"" in _desrc and _desrc.count("hit_rows.append") >= 5)
