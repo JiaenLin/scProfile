@@ -129,7 +129,30 @@ PLUGIN = {
     # no number changes: every edit is presentation, and the cores cap changes how much of the
     # host's share is spent, not what the inference computes - `seed.use = 1L` and every other
     # inference argument are untouched.
-    "version": "0.36.0",
+    # 0.37.0: the worksheet's third kind was this plugin's - `native_signalingRole_heatmap_out`'s
+    # colour-key floor is the plate's own minimum and not comparable across arms (0.1 on one arm,
+    # 0 on another), and the upstream function exposes no argument that reaches it, so the finding
+    # is disclosed in the legend and closed `--stated`; the other two kinds are the host's own
+    # colour-map fix and are skipped here. Two decisions the layout trim could not make by itself:
+    # the one kept circle entry now draws STRENGTH rather than count (`native_circle_count`
+    # renamed `native_circle_weight`, on `cc@net$weight` rather than `cc@net$count`) because a
+    # network overview per sample and per arm is read for shape, and strength is the encoding
+    # every other panel on this page already calls by that name; and `nativecmp_interaction`,
+    # previously computed once and shown under only whichever framing ran first, now draws under
+    # BOTH directions with the algebraic identity stated on the plate, so a reader of either
+    # direction's section finds the panel rather than only one of them (`at_most` raised 3 -> 6 to
+    # match; the interaction axis still reads under its budget of 20). Three cheap answers from
+    # the lookers' unmarked notes: F2_population_power's panel (b) axis now fits the data instead
+    # of a fixed 0-1 that compressed every real value into its first tenth; the count heatmap
+    # gains a `Targets (Receiver)` column title at the draw level beside its tool-drawn `Sources
+    # (Sender)` row title, the same lever the differential heatmaps already use; the aggregate
+    # circle per pathway gains the on-image colour/width key its single-arm sibling already has.
+    # AND, ACROSS ALL 24 KEPT ENTRIES: every legend rewritten to read as a printed figure legend
+    # does rather than as an internal defect note - no shouting capitals, no instruction to the
+    # reader, no tool naming itself - with every disclosure the earlier rounds won preserved in
+    # substance. Still no number changes: every edit is presentation or which plate gets drawn,
+    # never what a table computes.
+    "version": "0.37.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -602,7 +625,7 @@ PLUGIN = {
                 # original fix already established - so the correction is carried as two lines
                 # rather than a font size shrunk until it happens to fit.
                 'expr': '{\n gg <- rankNet(m, mode = "comparison", stacked = TRUE, do.stat = TRUE, paired.test = FALSE)\n gg + ggplot2::labs(caption = paste0(\n "Pathway-name colour marks a SIGNIFICANT SHIFT toward that arm (rankNet\'s own paired test on relative flow), not exclusivity -\\n",\n "a name can be coloured like one arm\'s bar while the bar still shows a segment for the other; only a bar with NO segment is exclusive.")) +\n ggplot2::theme(plot.caption = ggplot2::element_text(size = 7))\n }',
-                'legend': 'Every pathway ranked by its RELATIVE information flow, each bar split between the two arms. Because the bars are normalised this shows how a pathway flow is DIVIDED between arms and not how much flow it carries: a rare pathway and a dominant one can look identical here. Read the unstacked panel beside it for the amounts. PATHWAY-NAME COLOUR marks a SIGNIFICANT SHIFT toward one arm on rankNet\'s own paired test, NOT exclusivity to that arm: a name can be coloured like one arm\'s bar while the bar still carries a visible segment for the other. A bar with no segment at all for the untested arm is the only case that is actually exclusive.',
+                'legend': 'Every pathway ranked by its relative information flow, each bar split between the two arms. Because the bars are normalised, this shows how a pathway\'s flow is divided between the arms and not how much flow it carries: a rare pathway and a dominant one can look identical here; the unstacked panel beside it carries the amounts. Pathway-name colour marks a significant shift toward one arm on a paired test of relative flow between the two arms, not exclusivity to that arm: a name can be coloured like one arm\'s bar while the bar still carries a visible segment for the other. Only a bar with no segment at all for the untested arm is actually exclusive to the coloured one.',
             },
             # THE COLOUR KEY NEEDS SYMMETRIC LIMITS, NOT JUST A SYMMETRIC PALETTE. `midpoint = 0`
             # centres the diverging palette, but ggplot2's own break algorithm still picks ticks
@@ -633,7 +656,7 @@ PLUGIN = {
                 # of this figure. The short form keeps the one fact a reader needs while looking
                 # at the plot and cannot get from the axis labels alone: which side of the line is
                 # which arm.
-                'legend': "Does the {fac} response depend on {as.character(rows$stratum_factor[1])}? One point per signalling pathway. The vertical axis is the {eff_lbl} within {st[1]}; the horizontal axis is the same response within {st[2]}, which is the control. The dashed line is NO interaction - an identical response in both strata - so a point's distance from it IS the interaction, and points ABOVE it respond more in {st[1]}. Every value is rankNet's own per-pathway contribution; the method provides no test for a difference of two differences and none is claimed. UP TO THE TWELVE LARGEST INTERACTIONS ARE NAMED, spaced apart rather than picked by size alone - a labelled pathway can therefore sit below one that is not, if the larger one landed too close to a point already chosen. Every pathway's own value is in this figure's source table regardless of whether its name is drawn.",
+                'legend': "Does the {fac} response depend on {as.character(rows$stratum_factor[1])}? One point per signalling pathway. The vertical axis is the {eff_lbl} within {st[1]}; the horizontal axis is the same response within {st[2]}, which is the control. The dashed line is no interaction, an identical response in both strata, so a point's distance from it is the interaction, and points above the line respond more in {st[1]}. Every value is a per-pathway contribution from the same ranked-flow test used elsewhere in this comparison; no test exists for a difference of two differences and none is claimed. Up to the twelve largest interactions are named, spaced apart rather than picked by size alone, so a labelled pathway can sit below one that is not if the larger one landed too close to a point already chosen. Every pathway's value is in the source table regardless of whether its name is drawn.",
             },
             # THE MULTIPLICATIVE COMPANION, drawn under the additive panel's own `if`: the prose
             # bounded `interaction_flow<suffix>` at four over both suffixes, so the ceiling is
@@ -660,16 +683,24 @@ PLUGIN = {
                 # pathway out of view, which this plugin does nowhere else - every value stays on
                 # the plate, named or not, and the caption says why the margin is there instead.
                 'expr': '{ ggplot2::ggplot(pos, ggplot2::aes(x = l2, y = l1)) + ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") + ggplot2::geom_point(ggplot2::aes(colour = li), size = 2.4) + ggrepel::geom_text_repel(data = ptop, ggplot2::aes(label = name), size = 3, max.overlaps = 20, min.segment.length = 0) + ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b", midpoint = 0) + ggplot2::coord_equal(xlim = c(-lim2, lim2), ylim = c(-lim2, lim2)) + ggplot2::labs(x = paste0("log2 fold ", eff_lbl, " within ", st[2], " (the control)"), y = paste0("log2 fold ", eff_lbl, " within ", st[1]), colour = paste0("larger in\\n", st[1], " (+) /\\n", st[2], " (-)"), title = paste0("Does the ", fac, " response depend on ", as.character(rows$stratum_factor[1]), "? - multiplicative scale"), subtitle = paste0(nrow(pos), " of ", nrow(both), " pathways; the rest ", "are absent from an arm and have no fold change; axes span the largest log2 fold change actually plotted, so one extreme pathway widens the margin for every other point")) + ggplot2::theme_classic() }',
-                'legend': 'The same question on the MULTIPLICATIVE scale: log2 fold {eff_lbl} within {st[1]} against the same within {st[2]}, the control. Here no interaction means the same FOLD change in both strata rather than the same absolute change, which is a different question and can rank pathways differently. Drawn only on the {nrow(pos)} of {nrow(both)} pathways present in all four arms; the rest are absent from one and have no fold change, which is why this panel never appears without the additive one beside it. THE AXES ARE CROPPED TO THE DATA THE SAME WAY THE ADDITIVE PANEL\'S ARE - the largest log2 value actually plotted, on either axis - but a log-ratio has a far longer tail than a bounded probability difference, so one pathway near a zero denominator can widen the shared range well past where most points sit; that margin is a real value on the plate, not unused space, and tightening it would mean clipping that pathway out of view. The on-plot subtitle is cut by the canvas edge on some renders, ending mid-sentence after so one ex; the sentence it was completing is given here in full instead: axes span the largest log2 fold change actually plotted, so one extreme pathway widens the margin for every other point.',
+                'legend': 'The same question on the multiplicative scale: log2 fold {eff_lbl} within {st[1]} against the same within {st[2]}, the control. Here no interaction means the same fold change in both strata rather than the same absolute change, which is a different question and can rank pathways differently. Drawn only on the {nrow(pos)} of {nrow(both)} pathways present in all four arms; the rest are absent from one arm and have no fold change, which is why this panel never appears without the additive one beside it. The axes are cropped to the data the same way the additive panel\'s are, to the largest log2 value actually plotted on either axis, but a log-ratio has a far longer tail than a bounded probability difference, so one pathway near a zero denominator can widen the shared range well past where most points sit; that margin is a real value on the plate, not unused space, and tightening it would mean clipping that pathway out of view. The on-plot subtitle is cut by the canvas edge on some renders, ending mid-sentence after so one ex; the sentence it was completing in full is: axes span the largest log2 fold change actually plotted, so one extreme pathway widens the margin for every other point.',
             },
             {
-                'id': 'native_circle_count',
+                'id': 'native_circle_weight',
                 'kind': 'circle',
                 'drawn_by': 'tool',
                 'fn': 'netVisual_circle',
                 'axis': 'unit',
                 'position': 'contrast',
                 'profile': True,
+                # STRENGTH, NOT COUNT - THE LAYOUT COULD NOT MAKE THIS CALL. The plan carried one
+                # circle entry and the trim kept it by order, not by reading it: a network overview
+                # per sample and per arm is read for shape, and the shape a reader wants from the
+                # one kept ring is how much was inferred, not how many edges cleared the
+                # permutation test - the same summed communication probability every other panel on
+                # this page already calls the strength. Drawn on `cc@net$weight` rather than
+                # `cc@net$count`, the tool's own alternative matrix for the identical call; the id
+                # carries the change so a file name says what is on the plate.
                 # SMALLER LABELS, THE TOOL'S OWN LEVER FOR IT. `vertex.label.cex` (default 1) is
                 # `netVisual_circle`'s own argument for node-label size; at the roster sizes this
                 # ring draws (up to thirteen full hierarchical names spaced evenly around one
@@ -694,8 +725,8 @@ PLUGIN = {
                 # said what edge colour and width mean, in the legend text below; this puts the
                 # same two facts ON THE PLATE, in the tool's own base-graphics margin, the way
                 # `.diffkey()` does for the comparison rings.
-                'expr': '{\n netVisual_circle(cc@net$count, vertex.weight = as.numeric(table(cc@idents)),\n weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,\n vertex.label.cex = 0.5, title.name = "interactions")\n graphics::legend("bottomleft", bty = "n", cex = 0.65,\n legend = c("edge colour = the sending population (matches its node)",\n "edge width = COUNT of inferred interactions sent"))\n .stampf()\n }',
-                'legend': 'Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is HOW MANY ligand-receptor interactions were inferred from the sender to the receiver, and edge colour is the sender. The ring is a layout and nothing more - a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.',
+                'expr': '{\n netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),\n weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,\n vertex.label.cex = 0.5, title.name = "interaction strength")\n graphics::legend("bottomleft", bty = "n", cex = 0.65,\n legend = c("edge colour = the sending population (matches its node)",\n "edge width = summed communication probability sent"))\n .stampf()\n }',
+                'legend': 'Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is the summed communication probability inferred from the sender to the receiver, not a count of interactions, and edge colour is the sender. The ring is a layout and nothing more: a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.',
             },
             {
                 'id': 'native_heatmap_count',
@@ -705,8 +736,18 @@ PLUGIN = {
                 'axis': 'group',
                 'position': 'contrast',
                 'at_most': 1,
-                'args': 'cc, measure = "count", color.heatmap = "Blues", color.use = .gcol, title.name = .ttl("interactions")',
-                'legend': 'Senders down the rows, receivers across the columns, colour is the NUMBER of inferred interactions for that ordered pair. The bars above and beside are the column and row totals. Read it directionally: the cell at row i, column j is i signalling to j, and is not the cell opposite it.',
+                'device': 'ndev',
+                # A RECEIVER TITLE, THE SAME DRAW-LEVEL LEVER THE DIFFERENTIAL HEATMAPS ALREADY
+                # USE. `netVisual_heatmap` hardcodes `row_title = "Sources (Sender)"` and spends its
+                # own `column_title` slot on `title.name` - found on a real run, a y-axis plainly
+                # titled Sources (Sender) beside an x-axis with no matching Targets (Receiver) of
+                # its own, that role stated only in the caption. ComplexHeatmap's `draw()` accepts a
+                # second, independent title at a chosen side of the whole canvas; `nativecmp_
+                # interaction` a few entries above already places one there on its own Heatmap, and
+                # wrapping this call's returned object the same way reaches the identical slot
+                # without touching what the tool computes or draws internally.
+                'expr': '{\n ComplexHeatmap::draw(\n netVisual_heatmap(cc, measure = "count", color.heatmap = "Blues", color.use = .gcol,\n title.name = .ttl("interactions")),\n column_title = "Targets (Receiver)", column_title_side = "bottom")\n }',
+                'legend': "Senders down the rows, receivers across the columns; colour is the number of inferred interactions for that ordered pair. The bars above and beside are the column and row totals. The reading is directional: the cell at row i, column j is i signalling to j, and is not the cell opposite it.",
             },
             {
                 'id': 'nativecmp_diff_heatmap_count',
@@ -720,7 +761,7 @@ PLUGIN = {
                 'w': 2400,
                 'h': 1800,
                 'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, title.name = .diffttl("Differential number of interactions")))',
-                'legend': 'Which population pairs differ in the NUMBER of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is NOT the same as neither arm having interactions.',
+                'legend': 'Which population pairs differ in the number of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is not the same as neither arm having interactions.',
             },
             {
                 'id': 'nativecmp_diff_heatmap_weight',
@@ -734,7 +775,7 @@ PLUGIN = {
                 'w': 2400,
                 'h': 1800,
                 'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, title.name = .diffttl("Differential interaction strength")))',
-                'legend': 'The same differential matrix on interaction STRENGTH rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair - it can gain interactions while each of them weakens - so the two panels are drawn together.',
+                'legend': 'The same differential matrix on interaction strength rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair: it can gain interactions while each of them weakens, which is why the two panels are drawn together.',
             },
             # THE TITLE NAMES THE EFFECT, NOT ONLY THE STRATA. "change within X minus change within Y"
             # never says change OF WHAT, and a reader who has to reconstruct which factor is being
@@ -760,11 +801,11 @@ PLUGIN = {
                 'drawn_by': 'plugin',
                 'axis': 'interaction',
                 'position': 'conclusion',
-                'at_most': 3,
+                'at_most': 6,
                 'file': 'paste0("interaction_", ms, "__", safe)',
                 'device': 'ndev',
                 'expr': '{\n mx <- max(abs(M), na.rm = TRUE)\n ttl <- paste0("Does the ", fac, " response depend on ",\n as.character(rows$stratum_factor[1]), "?   (", ms_lbl, ")")\n sub <- paste0("(", as.character(rows$against[1]), " - ",\n as.character(rows$reference[1]), ") within ", st[1],\n "   minus   (", as.character(rows$against[2]), " - ",\n as.character(rows$reference[2]), ") within ", st[2], " (control)",\n "\\nRED: ", fac, " response larger in ", st[1],\n "     BLUE: larger in ", st[2])\n ComplexHeatmap::draw(ComplexHeatmap::Heatmap(\n M, name = paste0("interaction\\n(", ms_short, ")\\n+ = larger in\\n", st[1]),\n col = circlize::colorRamp2(c(-mx, 0, mx), c("#2166ac", "white", "#b2182b")),\n border = TRUE,\n rect_gp = grid::gpar(col = "grey88", lwd = 0.4),\n cluster_rows = FALSE, cluster_columns = FALSE,\n row_title = "Sources (Sender)", column_title_side = "top",\n row_title_gp = grid::gpar(fontsize = 10),\n row_names_side = "left",\n row_names_gp = grid::gpar(fontsize = 8),\n column_names_gp = grid::gpar(fontsize = 8),\n column_title = paste0(ttl, "\\n", sub),\n column_title_gp = grid::gpar(fontsize = 9)),\n column_title = "Targets (Receiver)", column_title_side = "bottom",\n column_title_gp = grid::gpar(fontsize = 10))\n }',
-                'legend': "Does the {fac} response depend on {as.character(rows$stratum_factor[1])}? Per ordered population pair, for {ms_lbl}: the {eff_lbl} within {st[1]} minus the same response within {st[2]}, which is the control. RED means the {fac} response is LARGER in {st[1]}; BLUE means larger in {st[2]}; WHITE means the same response in both, which is NO interaction and not an absence of signalling. Rows are senders, columns are receivers. Drawn on the {nrow(M)} populations present in every arm, which is fewer than the two-arm panels carry. Values are the merged object's own matrices; no test applies to a difference of two differences.{ms_unit}{ms_note}",
+                'legend': "Does the {fac} response depend on {as.character(rows$stratum_factor[1])}? Per ordered population pair, for {ms_lbl}: the {eff_lbl} within {st[1]} minus the same response within {st[2]}, which is the control. Red means the {fac} response is larger in {st[1]}; blue means larger in {st[2]}; white means the same response in both, which is no interaction and not an absence of signalling. Rows are senders, columns are receivers. Drawn on the {nrow(M)} populations present in every arm, which is fewer than the two-arm panels carry. For two factors crossed this way the interaction is symmetric: naming the other factor the response gives the identical matrix, so this panel and its counterpart under the other framing carry the same values under two equivalent questions. Values are the merged object's own matrices; no test applies to a difference of two differences.{ms_unit}{ms_note}",
             },
             {
                 'id': 'native_signalingRole_scatter',
@@ -809,7 +850,7 @@ PLUGIN = {
                 # the returned ggplot instead, the same `.fctx$stamp` this file's base-graphics
                 # panels already carry, added through `+` rather than a base-graphics call.
                 'expr': '{\n gg <- netAnalysis_signalingRole_scatter(cc, color.use = .gcol, label.size = 2.0)\n .xr <- range(gg$data$x, na.rm = TRUE)\n gg <- gg + ggplot2::xlim(.xr[1] - diff(.xr) * 0.04, .xr[2] + diff(.xr) * 0.14)\n gg + ggplot2::labs(caption = if (nzchar(.fctx$stamp)) .fctx$stamp else NULL)\n }',
-                'legend': 'Each population placed by how much inferred signalling it SENDS (horizontal) against how much it RECEIVES (vertical), for this unit alone. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested. netAnalysis_signalingRole_scatter places its own text labels with CellChat\'s built-in repel algorithm, which can still set a label directly on its own point when several populations sit close together; label size has already been lowered once for a different crowding defect on this same panel, and a real run found a further reduction does not move a label off the point it sits on, so this is the tool\'s own placement rather than an omission this call\'s arguments can reach.',
+                'legend': 'Each population is placed by how much inferred signalling it sends (horizontal) against how much it receives (vertical), for this unit alone. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested. Text labels are placed by an automatic label-repel step that can still set a label directly on its own point when several populations sit close together; label size has already been lowered once for a different crowding defect on this same panel, and a further reduction was found not to move a label off the point it sits on, so this is the automatic placement rather than an omission reachable through this call\'s own arguments.',
             },
             # THE SIZE LEGEND MUST BE SHARED TOO. With shared axes but per-panel size scales the two panels
             # read as comparable and are not: measured on one pair, the left legend ran to 500 and the
@@ -856,7 +897,7 @@ PLUGIN = {
                 # hue. Both are the tool's own placement, stated in the legend below rather than
                 # chased through a fifth device size or a sixth label size.
                 'expr': '{\n gg <- Filter(Negate(is.null), role)\n if (!length(gg)) stop("neither object returned a role scatter")\n lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)\n .padr <- diff(lim) * 0.08\n lim <- c(lim[1] - .padr, lim[2] + .padr)\n smax <- max(unlist(lapply(gg, function(g) g$data$Count)), na.rm = TRUE)\n for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +\n ggplot2::scale_size_continuous(limits = c(0, smax)) +\n ggplot2::ggtitle(names(role)[i])\n patchwork::wrap_plots(plots = gg)\n }',
-                'legend': 'One sender-against-receiver scatter per arm, drawn on SHARED AXES AND A SHARED POINT SCALE so the two are comparable by eye - which is this plugin doing, not the tool, and is the reason the panel exists. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point\'s label is placed and its leader line drawn or withheld by this call\'s own internal ggrepel step, and each point\'s colour comes from the run\'s own colour map or, absent one, the tool\'s own palette - neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is an argument this call exposes, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue.',
+                'legend': 'One sender-against-receiver scatter per arm, drawn on shared axes and a shared point scale so the two are comparable by eye, a comparison this panel adds beyond what either single-arm scatter carries alone. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point\'s label is placed, and its leader line drawn or withheld, by an automatic label-repel step, and each point\'s colour comes from a shared colour map when the cohort provides one, or a default palette otherwise; neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is reachable through this call\'s own arguments, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue.',
             },
             {
                 'id': 'native_signalingRole_heatmap_out',
@@ -867,7 +908,7 @@ PLUGIN = {
                 'position': 'contrast',
                 'at_most': 1,
                 'args': 'cc, pattern = "outgoing", width = 10, height = 12',
-                'legend': 'Which signalling programmes this unit SENDS, and from which populations. Rows are programmes, columns are populations. Colour is relative strength RESCALED WITHIN EACH ROW, so it shows where a programme acts and NOT how strong one programme is against another. The bars above and beside are the column and row totals. One unit, no comparison.',
+                'legend': "Which signalling programmes this unit sends, and from which populations. Rows are programmes, columns are populations. Colour is relative strength rescaled within each row, so it shows where a programme acts and not how strong one programme is against another. The bars above and beside are the column and row totals. The colour key's floor is this plate's own minimum value rather than a fixed zero, so it is not shared across arms: a white cell can mean a true zero on one arm's plate and a small nonzero value on another's. One unit, no comparison.",
             },
             # BOTH HEATMAPS OVER THE SAME PATHWAY SET, or ComplexHeatmap refuses to draw them side by
             # side: "`nrow` of all heatmaps ... should be the same". The two arms rarely detect the same
@@ -908,7 +949,7 @@ PLUGIN = {
                 # `netAnalysis_signalingRole_heatmap`'s own centrality-annotation rendering, the
                 # same territory the existing "solid block" sentence below already disclaims for
                 # this plugin. Extended to cover the reversed case rather than left unsaid.
-                'legend': 'Pathways down the rows, populations across the columns, for {pat} signalling - one heatmap per arm, side by side ON ONE SHARED COLOUR SCALE AND SHARED MARGINAL AXES, which this plugin imposes so that the two can be compared. Colour is centrality, not communication probability, and it is RESCALED WITHIN EACH ROW - a pathway drawn near-maximum in most of its cells is near-maximum AGAINST ITS OWN ROW, which is a different quantity from the right-margin total bar, so a large-looking row and a small right-margin bar are not a contradiction. A pathway present in one arm and absent in the other is drawn as zeros in the arm that lacks it. A row whose right-hand marginal bar renders as a single solid block rather than the usual thin proportional bar, OR extends in the opposite direction from its neighbours, is CellChat\'s own centrality-annotation output for that pathway, not a rendering choice of this plugin\'s - this plugin shares the marginal axes\' RANGE across both arms and does not touch how any one bar within it is drawn. The panel titles printed above each heatmap are netAnalysis_signalingRole_heatmap\'s own annotation and can sit a small coloured block over an arm name\'s own last letter, which this call\'s shared marginal axes do not reach; and the colour key\'s own floor is not one of the ranges this plugin shares across the pair - only the top and right marginal axes are - so the same green can start at zero in one arm\'s key and just above zero in the other\'s, a scale-floor difference CellChat draws independently per heatmap.',
+                'legend': "Pathways down the rows, populations across the columns, for {pat} signalling: one heatmap per arm, side by side, on one shared colour scale and shared marginal axes so the two can be compared. Colour is centrality, not communication probability, and it is rescaled within each row, so a pathway drawn near-maximum in most of its cells is near-maximum against its own row, a different quantity from the right-margin total bar, so a large-looking row and a small right-margin bar are not a contradiction. A pathway present in one arm and absent in the other is drawn as zeros in the arm that lacks it. A row whose right-hand marginal bar renders as a single solid block rather than the usual thin proportional bar, or extends in the opposite direction from its neighbours, is the underlying centrality annotation for that pathway rather than a choice made here: the marginal axes' range is shared across both arms, but how any one bar within it is drawn is not. The panel titles printed above each heatmap are the same automatic annotation and can sit a small coloured block over an arm name's own last letter, which the shared marginal axes do not reach. The colour key's own floor is not one of the ranges shared across the pair, only the top and right marginal axes are, so the same green can start at zero in one arm's key and just above zero in the other's, a scale-floor difference drawn independently per heatmap.",
             },
             # WHAT THE NUMBER IS, ON THE AXIS. It read "percentage points" and never
             # said of WHAT - a pair's share of its own arm's total communication
@@ -930,7 +971,7 @@ PLUGIN = {
                 'w': 2200,
                 'file': 'paste0("interaction_lr__", safe)',
                 'expr': '{\n dd <- lr$d\n dd$label <- factor(dd$label, levels = rev(dd$label))\n ggplot2::ggplot(dd, ggplot2::aes(x = label, y = ix, fill = ix > 0)) +\n ggplot2::geom_col(show.legend = FALSE) +\n ggplot2::geom_hline(yintercept = 0, linewidth = 0.3) +\n ggplot2::coord_flip() +\n ggplot2::scale_fill_manual(values = c(`TRUE` = "#b2182b", `FALSE` = "#2166ac")) +\n ggplot2::labs(x = NULL,\n y = paste0(eff_lbl, " within ", st[1], " minus the same within ", st[2],\n "\\n(percentage points of each arm\'s total communication ",\n "probability)"),\n title = paste0("Which ligand-receptor pairs respond to ", fac,\n " differently between ", st[1], " and ", st[2], "?"),\n subtitle = paste0("RED: the ", fac, " response is larger in ", st[1],\n "    BLUE: larger in ", st[2],\n "\\n", nrow(dd), " of ", lr$n_all,\n " pairs present in all four arms, of ", lr$n_any,\n " seen in any")) +\n ggplot2::theme_classic() +\n ggplot2::theme(axis.text.y = ggplot2::element_text(size = 7))\n }',
-                'legend': "Which ligand-receptor pairs respond to {fac} differently between {st[1]} and {st[2]}? Each bar is one pair: the {eff_lbl} within {st[1]} minus the same response within {st[2]}, which is the control. RED means the response is LARGER in {st[1]}; BLUE means larger in {st[2]}. In brackets after each pair is the sender and receiver carrying most of it, so the pair is read in a cell type rather than on its own. Values are PERCENTAGE POINTS: each arm's pairs are expressed as a share of that arm's own total before any difference is taken, because a communication probability is normalised within its own object. Drawn on the {nrow(lr$d)} largest of {lr$n_all} pairs present in ALL FOUR arms, out of {lr$n_any} seen in any of them - a pair absent from one arm has no difference of differences and is not shown. No test applies to a difference of two differences and none is claimed.",
+                'legend': "Which ligand-receptor pairs respond to {fac} differently between {st[1]} and {st[2]}? Each bar is one pair: the {eff_lbl} within {st[1]} minus the same response within {st[2]}, which is the control. Red means the response is larger in {st[1]}; blue means larger in {st[2]}. In brackets after each pair is the sender and receiver carrying most of it, so the pair is read in a cell type rather than on its own. Values are percentage points: each arm's pairs are expressed as a share of that arm's own total before any difference is taken, because a communication probability is normalised within its own object. Drawn on the {nrow(lr$d)} largest of {lr$n_all} pairs present in all four arms, out of {lr$n_any} seen in any of them; a pair absent from one arm has no difference of differences and is not shown. No test applies to a difference of two differences and none is claimed.",
             },
             # ONE RANGE FOR BOTH AXES. The dashed diagonal only MEANS "no interaction" if a unit on
             # one axis is a unit on the other, so equal scaling is not a style choice here. But
@@ -970,7 +1011,7 @@ PLUGIN = {
                 'w': 2400,
                 'file': 'paste0("interaction_lr_scatter__", safe)',
                 'expr': '{\n dd <- lr$d\n .r <- range(c(dd$resp1, dd$resp2), na.rm = TRUE)\n .pad <- max(diff(.r) * 0.10, 1e-9)\n .lim <- c(.r[1] - .pad, .r[2] + .pad)\n .lab <- dd[dd$flip, , drop = FALSE]\n .lab <- .lab[order(-abs(.lab$ix)), , drop = FALSE]\n .lab <- utils::head(.lab, 10)\n .repel <- requireNamespace("ggrepel", quietly = TRUE)\n .lab_layer <- if (.repel)\n ggrepel::geom_text_repel(data = .lab, ggplot2::aes(label = pair), size = 2.6,\n min.segment.length = 0, segment.size = 0.25,\n segment.colour = "grey55", box.padding = 0.45,\n max.overlaps = Inf, seed = 1L)\n else\n ggplot2::geom_text(data = .lab, ggplot2::aes(label = pair), size = 2.6, hjust = -0.1)\n ggplot2::ggplot(dd, ggplot2::aes(x = resp2, y = resp1)) +\n ggplot2::annotate("rect", xmin = -Inf, xmax = 0, ymin = 0, ymax = Inf,\n fill = "#b2182b", alpha = 0.06) +\n ggplot2::annotate("rect", xmin = 0, xmax = Inf, ymin = -Inf, ymax = 0,\n fill = "#2166ac", alpha = 0.06) +\n ggplot2::geom_hline(yintercept = 0, linewidth = 0.3, colour = "grey40") +\n ggplot2::geom_vline(xintercept = 0, linewidth = 0.3, colour = "grey40") +\n ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed",\n linewidth = 0.4, colour = "grey30") +\n ggplot2::geom_point(ggplot2::aes(colour = flip), size = 2.4, alpha = 0.9) +\n .lab_layer +\n ggplot2::scale_colour_manual(values = c(`TRUE` = "#b2182b", `FALSE` = "grey45"),\n labels = c(`TRUE` = "direction overturns",\n `FALSE` = "same direction in both"),\n name = NULL) +\n ggplot2::coord_equal(xlim = .lim, ylim = .lim) +\n ggplot2::labs(\n x = paste0(eff_lbl, " within ", st[2], " (the control)"),\n y = paste0(eff_lbl, " within ", st[1]),\n title = paste0("Does any ligand-receptor pair respond to ", fac,\n " in OPPOSITE directions between ", st[1], " and ", st[2], "?"),\n subtitle = paste0("Axes: percentage points of each arm\'s own total.\\n",\n "Dashed line = no interaction. Shaded quadrants = direction ",\n "overturns (", lr$n_flip, " of ", lr$n_all, " pairs; ",\n nrow(.lab), " named).")) +\n ggplot2::theme_classic() +\n ggplot2::theme(legend.position = "top")\n }',
-                'legend': "Each point is one ligand-receptor pair, placed by its {eff_lbl} within {st[1]} (vertical) against the same response within {st[2]}, which is the control (horizontal). Both axes are PERCENTAGE POINTS of each arm's total communication probability, so a value is a pair's share of its own arm before any difference is taken. The dashed diagonal is NO interaction - an identical response in both strata - so a point's distance from it IS the interaction. THE SHADED QUADRANTS ARE THE OVERTURNS: a pair there responds to {fac} in one direction within {st[1]} and in the OPPOSITE direction within {st[2]}, which the bar panel beside this one cannot show, because a difference of +1 against -1 and one of +8 against +5 are both simply a gap. {lr$n_flip} of {lr$n_all} pairs present in all four arms overturn. Overturning pairs are labelled, the largest reversals first, and the count of both is on the plate; the rest are not, to keep the panel readable. No test applies to a difference of two differences and none is claimed.",
+                'legend': "Each point is one ligand-receptor pair, placed by its {eff_lbl} within {st[1]} (vertical) against the same response within {st[2]}, which is the control (horizontal). Both axes are percentage points of each arm's total communication probability, so a value is a pair's share of its own arm before any difference is taken. The dashed diagonal is no interaction, an identical response in both strata, so a point's distance from it is the interaction. The shaded quadrants mark the overturns: a pair there responds to {fac} in one direction within {st[1]} and in the opposite direction within {st[2]}, which the bar panel beside this one cannot show, because a difference of +1 against -1 and one of +8 against +5 are both simply a gap. {lr$n_flip} of {lr$n_all} pairs present in all four arms overturn. Overturning pairs are labelled, the largest reversals first, and the count of both is on the plate; the rest are not labelled, to keep the panel readable. No test applies to a difference of two differences and none is claimed.",
             },
             {
                 'id': 'nativecmp_bubble_comparison',
@@ -982,7 +1023,7 @@ PLUGIN = {
                 'w': '.bw',
                 'h': 5200,
                 'args': 'm, comparison = c(1, 2), angle.x = 90, remove.isolate = TRUE, font.size = 6, font.size.title = 9, title.name = paste("every enriched pair -", name_a, "against", name_b)',
-                'legend': 'Every enriched ligand-receptor pair, {name_a} against {name_b}. Rows are pairs, columns are sender to receiver within each arm; colour is the communication probability and DOT SIZE IS THE PERMUTATION P-VALUE, so size is confidence and not strength. Pairs with nothing to show in either arm are dropped, so an absent row was not tested and found empty. The dot colour key here is netVisual_bubble\'s own Commun. Prob. minimum and maximum labelling, not an argument this call exposes to change, and the wrapped column labels are already sized by this plugin\'s own canvas-width formula - twenty pixels of device per column at the six-point font already used here, enough to clear the collision a narrower canvas once produced - on a page whose column count the design sets and not this panel, so enlarging the font again would shrink that same margin back toward the overlap it was written to remove.',
+                'legend': 'Every enriched ligand-receptor pair, {name_a} against {name_b}. Rows are pairs, columns are sender to receiver within each arm; colour is the communication probability and dot size is the permutation p-value, so size is confidence and not strength. Pairs with nothing to show in either arm are dropped, so an absent row was not tested and found empty. The dot colour key\'s own minimum and maximum labelling is fixed by the underlying routine and is not an argument this call exposes to change, and the wrapped column labels are sized by a canvas-width formula of twenty pixels of device per column at the six-point font already used here, enough to clear a collision a narrower canvas once produced; the column count is set by the page design rather than by this panel, so enlarging the font again would shrink that same margin back toward the overlap it was written to remove.',
             },
             # THE PATHWAY AXIS NEEDS ROOM. At the default height about forty pathway labels were drawn
             # into the same span and overprinted into an illegible block; the heatmap body also sat
@@ -1031,7 +1072,7 @@ PLUGIN = {
                 # call, just below the title, in that same blank margin, is the same proven
                 # mechanism used a second time rather than a new one guessed at.
                 'expr': '{\n ccp <- identifyCommunicationPatterns(cc, pattern = pat, k = 3, width = 5, height = 16)\n grid::grid.text(paste0("communication patterns - ", pat),\n x = 0.5, y = 0.97, gp = grid::gpar(fontface = "bold", fontsize = 13))\n grid::grid.text("columns, left to right, both heatmaps: P1   P2   P3",\n x = 0.5, y = 0.945, gp = grid::gpar(fontsize = 9))\n assign(paste0("ccp_", pat), ccp, envir = globalenv())\n NULL\n }',
-                'legend': 'The {pat} communication patterns, from a non-negative factorisation. Two heatmaps: populations against patterns, and patterns against pathways. Colour is LOADING, not communication probability. THE NUMBER OF PATTERNS WAS FIXED AT 3 AND NOT SELECTED - a different k gives a different decomposition, so read this as one grouping of the signal rather than as the grouping. The P1/P2/P3 header above both heatmaps names the same left-to-right column order in each; neither heatmap prints that header on its own axis. identifyCommunicationPatterns lays its own pair of heatmaps into roughly the bottom two-thirds of whatever device this call opens, a placement decided by the function\'s internal grid layout and not by an argument this call exposes to move; the device height here is sized for the longer of the two pattern lists this cohort can produce, so a run whose list is shorter leaves the blank margin above the panels that this costs, and that margin is where the pattern title and column header above are already printed.',
+                'legend': 'The {pat} communication patterns, from a non-negative factorisation. Two heatmaps: populations against patterns, and patterns against pathways. Colour is loading, not communication probability. The number of patterns was fixed at three and not selected; a different k gives a different decomposition, so this is one grouping of the signal rather than the grouping. The P1/P2/P3 header above both heatmaps names the same left-to-right column order in each; neither heatmap prints that header on its own axis. The pair of heatmaps is laid by the underlying routine into roughly the bottom two-thirds of whatever device this call opens, a placement decided by its own internal grid layout and not by an argument this call exposes to move; the device height here is sized for the longer of the two pattern lists this cohort can produce, so a unit whose list is shorter leaves the blank margin above the panels that this costs, and that margin is where the pattern title and column header above are already printed.',
             },
             {
                 'id': 'nativecmp_rankSimilarity_functional',
@@ -1059,7 +1100,7 @@ PLUGIN = {
                 # arm names for the contrast axis, already used by the panels around this one
                 # (`nativecmp_barplot_count`, `nativecmp_bubble_comparison`).
                 'expr': '{\n gg <- rankSimilarity(m, type = "functional")\n gg + ggplot2::theme(axis.text.x = ggplot2::element_text(), axis.ticks.x = ggplot2::element_line()) +\n ggplot2::labs(title = paste0("Functional rank similarity - ", name_a, " against ", name_b))\n }',
-                'legend': 'The {length(union(a@netP$pathways, b@netP$pathways))} pathways either arm inferred, ranked by HOW FAR THEY MOVED in the joint functional embedding - the largest values are the pathways whose participating populations differ most between the arms. It ranks a change in ROLE, not a change in amount: a pathway can carry the same flow in both arms and still rank highly here.',
+                'legend': 'The {length(union(a@netP$pathways, b@netP$pathways))} pathways either arm inferred, ranked by how far they moved in the joint functional embedding: the largest values are the pathways whose participating populations differ most between the arms. It ranks a change in role, not a change in amount, so a pathway can carry the same flow in both arms and still rank highly here.',
             },
             {
                 'id': 'nativecmp_aggregate_circle',
@@ -1073,8 +1114,13 @@ PLUGIN = {
                 'device': 'ndev',
                 'w': 2800,
                 'h': 1500,
-                'expr': '{\n graphics::par(mfrow = c(1, 2), xpd = TRUE)\n for (i in seq_along(object.list))\n netVisual_aggregate(object.list[[i]], signaling = pw, layout = "circle",\n edge.weight.max = wmax,\n signaling.name = paste(pw, names(object.list)[i]))\n }',
-                'legend': "The {pw} pathway - one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order - drawn once per arm, side by side, ON A SHARED MAXIMUM EDGE WEIGHT so the two rings are comparable - which this plugin imposes and the tool does not. Nodes are populations, edge width is the inferred communication probability, and position on the ring carries no meaning. A missing edge in one arm is an inference that arm did not make.",
+                # AN ON-IMAGE KEY, THE SAME MOVE THE SINGLE-ARM RING ALREADY MAKES. `netVisual_
+                # aggregate` draws neither a colour key nor a width key of its own, and the prose
+                # legend below used to state the width encoding and never the colour one - found
+                # on a real run, two pathway rings with no on-image explanation for either channel.
+                # Added inside the loop so both side-by-side panels carry their own key.
+                'expr': '{\n graphics::par(mfrow = c(1, 2), xpd = TRUE)\n for (i in seq_along(object.list)) {\n netVisual_aggregate(object.list[[i]], signaling = pw, layout = "circle",\n edge.weight.max = wmax,\n signaling.name = paste(pw, names(object.list)[i]))\n graphics::legend("bottomleft", bty = "n", cex = 0.65,\n legend = c("edge colour = the sending population (matches its node)",\n "edge width = communication probability for this pathway"))\n }\n }',
+                'legend': "The {pw} pathway, one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order, drawn once per arm, side by side, on a shared maximum edge weight so the two rings are comparable. Edge colour is the sending population, matching its node, and edge width is the inferred communication probability for this pathway; position on the ring carries no meaning. A missing edge in one arm is an inference that arm did not make.",
             },
             {
                 'id': 'nativecmp_barplot_count',
@@ -1111,7 +1157,7 @@ PLUGIN = {
                 # reads the same two variables rather than recomputing anything, so the two
                 # figures cannot disagree about which populations are missing and why.
                 'expr': '{\n gg <- netVisual_barplot(m, comparison = c(1, 2), measure = "count",\n sources.use = seq_along(group_new), x.lab.rot = TRUE)\n .miss <- c(\n if (length(absent)) paste0("no counterpart in the other arm: ", paste(absent, collapse = ", ")) else character(0),\n if (length(.iso_count)) paste0("present in both, no measured difference: ", paste(.iso_count, collapse = ", ")) else character(0))\n gg + ggplot2::labs(\n y = paste0("Difference in number of interactions  (", name_b, " minus ", name_a, ")"),\n title = paste0("Differential number of interactions by population  -  ",\n name_b, " minus ", name_a),\n subtitle = if (length(.miss)) paste(.miss, collapse = ";  ") else NULL) +\n ggplot2::theme(plot.margin = ggplot2::margin(l = 50, r = 15, t = 10, b = 10))\n }',
-                'legend': "Which populations account for the change in the NUMBER of inferred interactions between the two arms: one bar per population - not one bar per arm - its height the population's outgoing edges in {name_b} minus the same in {name_a}, the reference. Positive means more interactions in {name_b}; negative means more in {name_a}. A single fit per arm behind each side of the subtraction, so this is arithmetic, not a tested difference. A population missing from the bars is named in the subtitle, either with no counterpart in the other arm or, if present in both, unchanged between them on this measure - the same disclosure the differential ring carries for the identical reason.",
+                'legend': "Which populations account for the change in the number of inferred interactions between the two arms: one bar per population, not one bar per arm, its height the population's outgoing edges in {name_b} minus the same in {name_a}, the reference. Positive means more interactions in {name_b}; negative means more in {name_a}. A single fit per arm sits behind each side of the subtraction, so this is arithmetic, not a tested difference. A population missing from the bars is named in the subtitle, either with no counterpart in the other arm or, if present in both, unchanged between them on this measure, the same disclosure the differential ring carries for the identical reason.",
             },
             {
                 'id': 'nativecmp_compareInteractions',
@@ -1126,7 +1172,7 @@ PLUGIN = {
                 'w': 'max(1500, 340 * length(objs))',
                 'h': 1300,
                 'expr': 'g',
-                'legend': 'Total {if (ms == "count") "number of inferred interactions" else "interaction strength"} in each arm the design crosses, one bar per arm, from one fit on that arm\'s pooled cells. Open points are the individual samples inside each arm, each its OWN separate fit: the bar is not their sum or their mean, and on this cohort an arm\'s fit finds fewer interactions than its samples do separately. Nothing here is tested; these are totals with no interval.',
+                'legend': 'Total {if (ms == "count") "number of inferred interactions" else "interaction strength"} in each arm the design crosses, one bar per arm, from one fit on that arm\'s pooled cells. Open points are the individual samples inside each arm, each its own separate fit: the bar is not their sum or their mean, and on this cohort an arm\'s fit finds fewer interactions than its samples do separately. Nothing here is tested; these are totals with no interval.',
             },
             # THE SAME TOTALS PER 1,000 CELLS, drawn in the same loop by the same site as the raw
             # panel: the prose bounded `compareInteractions_<measure>` at four over both, so the
@@ -1151,7 +1197,7 @@ PLUGIN = {
                 'expr': 'gg',
                 'w': 'max(1500, 340 * length(objs))',
                 'h': 1300,
-                'legend': 'The open points here mark individual replicate samples underlying each arm\'s bar; this bar-plus-dots panel draws no legend for them on the image itself, so this caption, not the plate, is where a reader finds what they are and how each is computed. The same totals divided by the cells each fit used, per 1,000 cells. A SECOND SCALE, NOT A CORRECTION: the quantity does not rise linearly with cell number, so dividing puts the arithmetic on the page rather than removing the dependence. {if (.decomposed) paste0( "Each open point is one animal\'s share OF THIS ARM\'S OWN FIT, ", "credited by that animal\'s share of the arm\'s cells in the two ", "populations of each pair - half for sending, half for receiving. ", "That split is exact, so the bar is the cell-weighted mean of its ", "own points and a point may fall on either side of it. It is a ", "DERIVED attribution, not something CellChat reports: the method ", "fits the arm\'s pooled cells and says nothing about which animal ", "carried which edge. Each animal\'s INDEPENDENT fit is the raw panel ", "beside this one.") else paste0( "Each point is one sample\'s OWN fit divided by ITS OWN cells. A ", "pooled arm and a single sample are not comparable on this scale - ", "a smaller fit finds proportionally more - so read the points ", "against each other, not against the bar.")}',
+                'legend': 'The open points here mark individual replicate samples underlying each arm\'s bar; this bar-plus-dots panel draws no legend for them on the image itself, so this caption, not the plate, is where a reader finds what they are and how each is computed. The same totals divided by the cells each fit used, per 1,000 cells. A second scale, not a correction: the quantity does not rise linearly with cell number, so dividing puts the arithmetic on the page rather than removing the dependence. {if (.decomposed) paste0( "Each open point is one animal\'s share of this arm\'s own fit, ", "credited by that animal\'s share of the arm\'s cells in the two ", "populations of each pair, half for sending, half for receiving. ", "That split is exact, so the bar is the cell-weighted mean of its ", "own points and a point may fall on either side of it. It is a ", "derived attribution rather than a quantity the method reports ", "directly: the fit uses the arm\'s pooled cells and says nothing ", "about which animal carried which edge. Each animal\'s independent ", "fit is the raw panel beside this one.") else paste0( "Each point is one sample\'s own fit divided by its own cells. A ", "pooled arm and a single sample are not comparable on this scale, ", "because a smaller fit finds proportionally more; the points are ", "comparable against each other and not against the bar.")}',
             },
             {
                 'id': 'estimationNumCluster',
@@ -1162,7 +1208,7 @@ PLUGIN = {
                 'position': 'appendix',
                 'at_most': 2,
                 'generated': False,
-                'legend': "NOT A PANEL. CellChat's NMF rank estimation writes this while the plugin is clustering pathways by functional similarity; a diagnostic of that fit, kept because it is evidence the clustering was fitted and not because a result is written from it.",
+                'legend': "Not a panel: this file is written by the rank-estimation step of a non-negative factorisation while pathways are clustered by functional similarity. It is a diagnostic of that fit, kept as evidence the clustering was fitted, and not because a result is written from it.",
             },
             {
                 'id': 'nativecmp_chord_cell',
@@ -1186,7 +1232,7 @@ PLUGIN = {
                 'w': 1800,
                 'h': 1800,
                 'args': 'object.list[[i]], signaling = pw, lab.cex = 0.45, small.gap = 1, big.gap = 8, title.name = paste(pw, names(object.list)[i])',
-                'legend': "The {pw} pathway as a chord diagram, one per arm - one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning. A shorter canvas was tried to close up this panel's blank margin and it failed on a real run for every pathway on both arms, because circlize refuses to draw its own sector track below a minimum size that depends on how many cell-state sectors and how long their labels are for a given unit - not a figure this plugin can compute without circlize itself, and not safe to guess at again on a live run - so the canvas stays at the size already proven to draw everywhere and the blank margin is the cost of that safety.",
+                'legend': "The {pw} pathway as a chord diagram, one per arm, one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning. A shorter canvas was tried to close up this panel's blank margin and it failed for every pathway on both arms, because the underlying layout refuses to draw its own sector track below a minimum size that depends on how many cell-state sectors and how long their labels are for a given unit, a size not computable here without rendering that layout itself and not safe to guess at again on a live dataset; so the canvas stays at the size already proven to draw everywhere and the blank margin is the cost of that safety.",
             },
             {
                 'id': 'F2_population_power', 'profile': True,
@@ -1709,7 +1755,7 @@ ngrp <- length(groups)
 .stampf <- function() if (nzchar(.fctx$stamp))
   graphics::mtext(.fctx$stamp, side = 1, line = 0, cex = 0.75, col = "grey25")
 
-.draw("native_circle_count")
+.draw("native_circle_weight")
 .draw("native_heatmap_count")
 .draw("native_signalingRole_scatter")
 .draw("native_signalingRole_heatmap_out")
@@ -2569,7 +2615,13 @@ def _fig_population_power(ctx, names, n_cells, sent, received, above_floor, min_
         ax = axs[1]
         ax.barh(y, src["frac_present_db_genes_above_floor"].to_numpy(), height=bh,
                 color="#E69F00")
-        ax.set_xlim(0, 1)
+        # FIT TO THE DATA, NOT TO THE THEORETICAL RANGE. This is a fraction and can never exceed
+        # 1, but a fixed `(0, 1)` axis on a cohort where every population sits under 0.1 compresses
+        # every real bar into the first tenth of the panel - found on a real run, panel (b) reading
+        # as nearly blank beside its two working neighbours. Padded 15% past the largest bar and
+        # capped at 1 so a cohort that genuinely approaches full coverage is not clipped.
+        ax.set_xlim(0, min(1.0, max(0.05,
+                    float(src["frac_present_db_genes_above_floor"].max()) * 1.15)))
         ax.set_xlabel("fraction of the database genes\nPRESENT here above the averaging floor")
 
     # (c) SENT AND RECEIVED, SIDE BY SIDE IN THE BAR. The docstring above says a population that
@@ -4825,8 +4877,11 @@ for (ms in c("count", "weight")) {
 # TWO QUESTIONS, ONE NUMBER. Each factor's effect measured within each level of the other gives
 # two framings, and expanding them shows they are the same arithmetic:
 #     (agn_agn - agn_ref) - (ref_agn - ref_ref)  ==  (agn_agn - ref_agn) - (agn_ref - ref_ref)
-# So this computes it once and presents it under each framing, beside that framing's own simple
-# effects. Reporting them as two findings would double-count one quantity.
+# The population-pair matrix below is drawn under BOTH framings rather than computed once and
+# shown under one: a reader who opens only one direction's section still finds the panel, and the
+# panel's own legend states the identity so neither plate is mistaken for a second, independent
+# finding. The flow panels are unaffected either way - they plot the two framings' simple effects
+# as coordinates, which genuinely differ by orientation.
 #
 # EVERY QUANTITY IS THE TOOL'S. Per-pathway flow and its between-arm p-value come from `rankNet`
 # in comparison mode with its own test; per-pair counts and strengths are the objects' own `@net`
@@ -4891,7 +4946,6 @@ if (!is.null(inter) && nrow(inter)) {
   # unrestricted merge today, and would break the bars the moment something did.
   mi <- mergeCellChat(objs_i, add.names = nms)
   arm_of <- stats::setNames(seq_along(nms), nms)
-  .ix_matrix_done <- character(0)
   for (fr in unique(inter$framing)) {
     rows <- inter[inter$framing == fr, , drop = FALSE]
     if (nrow(rows) != 2) {
@@ -5034,19 +5088,23 @@ if (!is.null(inter) && nrow(inter)) {
       }
       A
     }
-    # THE INTERACTION MATRIX IS THE SAME MATRIX IN BOTH FRAMINGS, SO IT IS DRAWN ONCE.
+    # THE INTERACTION MATRIX IS THE SAME MATRIX IN BOTH FRAMINGS, AND BOTH FRAMINGS DRAW IT.
     #
     # Measured, not assumed: the two orientations agreed to 1e-15 on every cell of every metric,
     # and the interaction column of the ligand-receptor table was identical for all 18 pairs. The
     # algebra says why - with the four arms fixed, (b1 - a1) - (b2 - a2) and (a2 - a1) - (b2 - b1)
     # are one expression rearranged, so a difference of differences has no orientation.
     #
-    # Drawn inside the framing loop it shipped as two figures under two titles, and a reader given
-    # both believes two independent results were shown. The FLOW and LR SCATTER panels are not
-    # affected and stay per framing: those plot the two simple effects as COORDINATES, which do
-    # differ by orientation - only the difference between them is shared.
+    # A FIRST VERSION OF THIS DREW IT ONCE, under whichever framing ran first, on the reasoning
+    # that two figures under two titles would read as two independent results. That traded one
+    # defect for another: the framing that ran second carried no panel at all, so its own section
+    # of the report had no evidence for the question its own heading asks. Drawn under both
+    # framings instead, with the identity stated in the legend, so a reader of either section
+    # finds the panel and is told plainly that its counterpart under the other framing carries the
+    # same values. The FLOW and LR SCATTER panels were never affected by this either way: those
+    # plot the two simple effects as COORDINATES, which do differ by orientation - only the
+    # difference between them is shared.
     for (ms in c("count", "weight", "prob_all")) {
-      if (ms %in% .ix_matrix_done) next
       M <- tryCatch({
         g1 <- .armmat(arm_of[[as.character(rows$against[1])]], ms) -
               .armmat(arm_of[[as.character(rows$reference[1])]], ms)
@@ -5059,9 +5117,6 @@ if (!is.null(inter) && nrow(inter)) {
         .plots$bad <- c(.plots$bad, paste0("interaction_", ms, "__", safe))
         next
       }
-      # MARKED ONLY ONCE IT HAS A MATRIX. A metric that failed for the first framing must still
-      # be attempted for the second - it may be the framing whose strata pair like with like.
-      .ix_matrix_done <- c(.ix_matrix_done, ms)
       utils::write.csv(M, file.path(figdir,
                        paste0("nativecmp_interaction_", ms, "__", safe, ".csv")))
       # A METRIC NAME A READER CAN ACT ON. "prob_all" is a file name, not a quantity - the
@@ -5191,7 +5246,7 @@ cat("NATIVE PLOT TALLY:", .plots$ok, "written,", length(.plots$bad), "failed",
 #   level 2, which programmes carry it     - signalingRole_heatmap_out, signalingRole_heatmap_in,
 #                                            signalingRole_scatter
 #   level 3, which ligand-receptor pairs   - bubble
-_PROFILE_PLOTS = ('circle_count',)
+_PROFILE_PLOTS = ('circle_weight',)
 
 #: SEMICOLON AND NOT A COMMA. A comma inside the string literal that joins these was counted as
 #: an argument separator by the guard that checks the caller and the R script agree on how many

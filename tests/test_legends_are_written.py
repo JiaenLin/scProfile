@@ -160,9 +160,12 @@ own += len(re.findall(r'by = "plugin"', ck))                        # a hand-wri
 check(own >= 4, f"only {own} plugin-drawn panel family(ies) declare themselves as such; a panel "
                 f"we drew that omits it is reported to a reader as the tool's own work")
 
-# and a diverging panel must key its colours - the defect that shipped three times
-for must in ("RED means", "BLUE means", "WHITE means"):
-    check(must in ck, f"an interaction legend does not say what {must.split()[0]} means")
+# and a diverging panel must key its colours - the defect that shipped three times. IN ANY
+# CASE (harness ADR-0025): the check asked for "RED means" in capitals and held a legend to
+# the shouting it was written in; a legend in a journal's register says "red means".
+for must in ("red means", "blue means", "white means"):
+    check(re.search(r"\b" + must + r"\b", ck, re.I) is not None,
+          f"an interaction legend does not say what {must.split()[0]} means")
 
 if FAILURES:
     print("FAIL")

@@ -90,7 +90,7 @@ check("st[2]" in ck.split("BLUE: ", 1)[-1] if "BLUE: " in ck else False,
       "the BLUE half of the direction key does not name its stratum")
 check("Sources (Sender)" in ck and "Targets (Receiver)" in ck,
       "the interaction heatmap has no axis labels, unlike the tool's own heatmaps beside it")
-check("NO interaction" in ck,
+check("no interaction" in ck.lower(),
       "the panel does not say that white means the same response in both strata, which is the "
       "most misread value on a diverging scale")
 

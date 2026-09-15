@@ -1,17 +1,17 @@
 {
- "files": 158,
+ "files": 164,
  "vector": 0,
- "total": 158,
+ "total": 164,
  "by_axis": {
   "contrast": 60,
   "group": 16,
-  "interaction": 30,
+  "interaction": 36,
   "sample": 10,
   "unit": 42
  },
  "by_position": {
   "appendix": 66,
-  "conclusion": 22,
+  "conclusion": 28,
   "contrast": 62,
   "overview": 8
  },
@@ -29,7 +29,7 @@
    "appendix"
   ],
   [
-   "native_circle_count",
+   "native_circle_weight",
    1,
    "unit",
    "contrast"
@@ -108,7 +108,7 @@
   ],
   [
    "nativecmp_interaction",
-   3,
+   6,
    "interaction",
    "conclusion"
   ],
