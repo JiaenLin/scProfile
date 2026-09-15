@@ -49,25 +49,29 @@ def measure(run_dir):
                     units.add(f"{p.name}/{u.name}")
     out["units"] = len(units)
     out["plugins"] = len(plugins)
-    pngs = list(r.rglob("*.png"))
+    # COUNTED ON THE RUN'S OWN TREES (harness ADR-0026, the open items): the fixture gate's
+    # scratch under the run read as a hundred-odd figures gained against the reference.
+    from .manifest import own_files
+    pngs = own_files(r, (".png",))
     out["figures"] = len(pngs)
     out["figures_native"] = sum(1 for f in pngs if f.name.startswith("native_"))
     out["figures_compare"] = sum(1 for f in pngs if f.name.startswith("nativecmp_"))
-    out["tables"] = len(list(r.rglob("*.csv")))
+    out["tables"] = len(own_files(r, (".csv",)))
     out["contrasts"] = sum(1 for p in ker.rglob("compare/*") if p.is_dir()) if ker.is_dir() else 0
     rep = r / "report"
     out["documents"] = len(list(rep.glob("*.html"))) if rep.is_dir() else 0
 
     # what the plugin's own script said it drew, which is the only place a SILENT failure shows
     w = f = 0
-    for log in r.rglob("*_R.log"):
+    rlogs = [q for q in own_files(r, (".log",)) if q.name.endswith("_R.log")]
+    for log in rlogs:
         for m in re.finditer(r"NATIVE PLOT TALLY:\s*(\d+) written,\s*(\d+) failed",
                              log.read_text(encoding="utf-8", errors="replace")):
             w += int(m.group(1))
             f += int(m.group(2))
     out["plots_written"], out["plots_failed"] = w, f
     out["cache_hits"] = sum(
-        1 for log in r.rglob("*_R.log")
+        1 for log in rlogs
         if "inference skipped" in log.read_text(encoding="utf-8", errors="replace"))
 
     for page in (rep.glob("*_panel.html") if rep.is_dir() else []):
@@ -79,7 +83,7 @@ def measure(run_dir):
     out["claims"] = sum(
         sum(1 for ln in p.read_text(encoding="utf-8", errors="replace").splitlines()
             if '"kind": "claim"' in ln)
-        for p in r.rglob("PAPER_CLAIMS*.jsonl"))
+        for p in own_files(r, (".jsonl",)) if p.name.startswith("PAPER_CLAIMS"))
     try:
         card = json.loads((r / "RUN_CARD.json").read_text(encoding="utf-8"))
         out["failed_units"] = sum(1 for i in (card.get("instances") or [])

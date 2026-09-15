@@ -249,6 +249,44 @@ def _jsonable(v):
         return repr(v)
 
 
+#: THE RUN'S OWN TREES, DECLARED ONCE (harness ADR-0026, the open items). A run directory
+#: holds more than the run: the job that made it writes its logs and its cache there, the
+#: fixture gate its scratch, a writing job its incoming layer and its replay - and three
+#: readers that walked the whole directory swept the fixture's two synthetic cohorts in as the
+#: run's own plates, tables and products. What the run itself writes is these four trees and
+#: the files at the top; a directory of any other name at the top is somebody else's, however
+#: it is called, and every reader that walks a run walks through `own_files`.
+OWN_TREES = ("kernels", "report", "tables", "objects")
+
+
+def is_own(rel) -> bool:
+    """Whether a run-relative path is the run's own: a file at the top, or under OWN_TREES."""
+    parts = Path(str(rel)).parts
+    return len(parts) == 1 or (len(parts) > 1 and parts[0] in OWN_TREES)
+
+
+def own_files(run, suffixes=None):
+    """Every file of the run's own, sorted - the files at the top and those under OWN_TREES;
+    `suffixes` (lower-case, with the dot) narrows it. Never a file of a foreign directory."""
+    root = Path(run)
+    if not root.is_dir():
+        return []
+    out = []
+    try:
+        tops = sorted(root.iterdir())
+    except OSError:
+        return []
+    for p in tops:
+        if p.is_file():
+            out.append(p)
+        elif p.is_dir() and p.name in OWN_TREES:
+            out.extend(q for q in sorted(p.rglob("*")) if q.is_file())
+    if suffixes is not None:
+        want = {s.lower() for s in suffixes}
+        out = [q for q in out if q.suffix.lower() in want]
+    return out
+
+
 def declared_tables(out_dir, produces, registered):
     """The tables a plugin DECLARED and wrote into `tables/` without registering them.
 

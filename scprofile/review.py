@@ -183,12 +183,15 @@ def digest(path):
 
 def figures(out):
     """Every figure a run directory holds, as paths relative to it, sorted."""
+    # THE RUN'S OWN TREES, NOT THE WHOLE DIRECTORY (harness ADR-0026, the open items): the
+    # fixture gate's scratch under the run held two synthetic cohorts' plates, and this walk
+    # would have handed them to a cold looker beside the real ones. `manifest.own_files`.
+    from . import manifest as _M
     root = Path(out)
     if not root.is_dir():
         return []
-    return sorted(str(p.relative_to(root)) for p in root.rglob("*")
-                  if p.is_file() and p.suffix.lower() in SUFFIXES
-                  and "report" not in p.relative_to(root).parts[:1])
+    return sorted(str(p.relative_to(root)) for p in _M.own_files(root, SUFFIXES)
+                  if "report" not in p.relative_to(root).parts[:1])
 
 
 def read_ledger(out, plugin=""):

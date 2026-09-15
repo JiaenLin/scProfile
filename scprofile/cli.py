@@ -613,7 +613,14 @@ def _run(a):
               f"nothing was launched.")
         for _n, _why in _unready:
             print(f"    {_n:<12} {_why}")
-        return REFUSE
+        # A RUN THAT RAN NOTHING IS NOT A RUN THAT RAN (the status contract, tests/
+        # test_status_contract.py): the verdict is `failed`, FAILED.txt, and the headline says
+        # no plugin ran - in the same words the instances' own failure said it, so a reader of
+        # either file reads the same thing; the plan's phrase stays in it for the ladder.
+        print(f"scprofile: no plugin ran - {len(_unready)} plugin(s) are not ready in this "
+              f"installation ({', '.join(n for n, _ in _unready)}); nothing was launched",
+              file=sys.stderr)
+        return 1
     budget = int(getattr(a, "cores", 0) or _default_cores())
     mem_budget = getattr(a, "memory_gb", None) or _default_memory_gb()
     waves = schedule(want, ks, budget_cores=budget, units=units)
@@ -2488,7 +2495,9 @@ def _write_readme(out, payload):
     partial = {k: v for k, v in by_kernel.items() if k in ran}
     did_not = {k: v for k, v in by_kernel.items() if k not in ran}
     (out / "README.md").touch()          # so the enumeration below counts this file too
-    files = sorted(q for q in out.rglob("*") if q.is_file())
+    # THE RUN'S OWN FILES, not everything under the directory (harness ADR-0026, the open items)
+    from .manifest import own_files
+    files = own_files(out)
     by_dir = {}
     for q in files:
         by_dir.setdefault(str(q.parent.relative_to(out)) or ".", []).append(q.name)

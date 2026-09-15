@@ -88,8 +88,9 @@ def station_licence(runs):
 
 def station_adopt(runs):
     """4. Does reuse actually reuse? MEASURED on the filesystem, not read off a log."""
+    from scprofile.manifest import own_files
     adopted = [(r, f.parent) for r in runs
-               for f in r.rglob("ADOPTED.json")]
+               for f in own_files(r, (".json",)) if f.name == "ADOPTED.json"]
     if not adopted:
         return BLOCKED, "no instance in any run was adopted from another", \
             "scprofile run ... --reuse-from <dir-of-runs>"

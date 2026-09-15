@@ -98,10 +98,12 @@ def products_of(out: Path) -> list:
     res = []
     if not out.is_dir():
         return res
-    for p in sorted(out.rglob("*")):
-        if p.is_file() and p.suffix in (".json", ".csv", ".tsv", ".html", ".h5ad", ".md", ".jsonl") \
-                and not p.name.startswith(("STATUS", "RUNNING", "SEALED", "FAILED")) \
-                and "cache" not in p.relative_to(out).parts:
+    # THE RUN'S OWN FILES (harness ADR-0026, the open items): this record listed the fixture
+    # gate's scratch, and the next job emitted from the run expected it as products.
+    from .manifest import own_files
+    for p in own_files(out):
+        if p.suffix in (".json", ".csv", ".tsv", ".html", ".h5ad", ".md", ".jsonl") \
+                and not p.name.startswith(("STATUS", "RUNNING", "SEALED", "FAILED")):
             res.append({"path": _rel(p, out), "bytes": p.stat().st_size})
             if len(res) >= 2000:
                 break
