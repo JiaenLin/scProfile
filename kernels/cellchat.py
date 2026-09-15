@@ -185,7 +185,7 @@ PLUGIN = {
     # coloured below the first tick, off the labelled scale, naming which colour is which
     # direction. The roster sentence from 0.38.0 is kept on both. Eleven `--stated` records close
     # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
-    "version": "0.41.0",
+    "version": "0.42.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -359,7 +359,7 @@ PLUGIN = {
                              "note": "CellChatDB.human ships inside the CellChat package and is "
                                      "pinned by its commit, not by anything this tool records"},
         "cellchatdb_mouse": {"tier": "bundled", "organism": "mouse", "role": "interactions",
-                             "package": "CellChat", "cite": "Jin et al., Nat Commun 2021",
+                             "package": "CellChatX", "cite": "Jin et al., Nat Commun 2021",
                              "source": "https://github.com/jinworks/CellChat",
                              "note": "CellChatDB.mouse ships inside the CellChat package and is "
                                      "pinned by its commit, not by anything this tool records"},
@@ -430,11 +430,11 @@ PLUGIN = {
         "channels": ["conda-forge", "bioconda"],
     },
 
-    "cost": "high", "cores": 2,  # measured in 20260913T170934Z__scprofile-7c188a4__04_profile__rerun
+    "cost": "low", "cores": 4,  # measured in 20260913T170934Z__scprofile-7c188a4__04_profile__rerun
 
     # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
     # Fitted from ten per-sample instances.
-    "memory_gb_base": 2.4, "memory_gb_per_100k": 14.3,  # measured in 20260913T042903Z__scprofile-c260046__04_profile__audit, +10%
+    "memory_gb_base": 1.2, "memory_gb_per_100k": 14.3,  # measured in 20260913T042903Z__scprofile-c260046__04_profile__audit, +10%
 
     # WHAT ITS PAGE SHOULD CONTAIN. Three checks then two answers, and the order is the whole
     # point: every failure this method has returns a well-formed edge table, so the edge table on
@@ -702,7 +702,7 @@ PLUGIN = {
                 'axis': 'interaction',
                 'position': 'conclusion',
                 'at_most': 2,
-                'when': 'nrow(pos) >= 3',
+                'when': 'nrow(pos) >= 14',
                 'file': 'paste0("interaction_flow_log__", safe)',
                 'w': 2000,
                 'h': 1900,
