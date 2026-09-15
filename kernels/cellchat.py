@@ -172,7 +172,19 @@ PLUGIN = {
     # EDIT IS VERIFIED RENDERED - CellChat, ComplexHeatmap and circlize are not installed in this
     # room - so both differential-heatmap kinds are left OPEN for the next rerun rather than
     # closed here; every other kind's ledger record is written against this run's own bytes.
-    "version": "0.38.0",
+    # 0.39.0: the 0.38.0 redraw named the guess wrong. `color.heatmap = "RdBu"` failed on the
+    # cluster on all six contrasts of both differential heatmaps - "invalid color name 'RdBu'" -
+    # because this function's `color.heatmap` on a merged object is a vector of actual colours,
+    # not a palette name, and the tool already draws the two-colour diverging pair by default;
+    # the run fell from 122 plates to 110 on exactly these two kinds. Reverted both `expr`s to
+    # what they were before that guess, byte for byte. The asymmetric-looking key most of the
+    # worksheet's instances actually named is the tool's own legend on an asymmetric range, not a
+    # missing argument, so it is disclosed instead: one sentence on each of the two legends says
+    # the printed ticks follow only the larger-magnitude sign and a cell of the other sign is
+    # coloured below the first tick, off the labelled scale, naming which colour is which
+    # direction. The roster sentence from 0.38.0 is kept on both. Eleven `--stated` records close
+    # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
+    "version": "0.39.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -780,18 +792,16 @@ PLUGIN = {
                 'device': 'ndev',
                 'w': 2400,
                 'h': 1800,
-                # AN EXPLICIT DIVERGING PALETTE, NOT THE AUTO-DETECTED ONE. Found on a real run:
-                # the printed colour key ran 0 to 40 in a single red gradient while the grid
-                # plainly held several solid blue cells (higher in the reference arm), so the key
-                # gave no scale at all to read a blue cell's magnitude by - not a missing tick at
-                # the low end of one gradient, but the whole negative half of the key absent.
-                # `color.heatmap` is this function's own argument for which palette family it
-                # draws with, left to auto-detection until now; naming the two-sided palette
-                # explicitly is the documented way this exact comparison plot is called in the
-                # tool's own tutorial. Not verified rendered - CellChat and ComplexHeatmap are not
-                # installed in this room - so this is recorded as needing a redraw, not closed.
-                'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, color.heatmap = "RdBu", title.name = .diffttl("Differential number of interactions")))',
-                'legend': 'Which population pairs differ in the number of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is not the same as neither arm having interactions. Restricted to the populations both arms carry; a population present in only one arm has no difference to plot and is not on either axis.',
+                # NOT A PALETTE ARGUMENT - REVERTED. `color.heatmap = "RdBu"` was tried here on
+                # the reasoning that the printed key ran 0 to 40 in red alone while the grid held
+                # solid blue cells; it failed on the cluster on every contrast of both differential
+                # heatmaps - "invalid color name 'RdBu'" - because this function's `color.heatmap`
+                # on a merged object takes a vector of actual colours, not a palette name, and the
+                # tool's own default for a merged object is already the two-colour diverging pair
+                # seen on the plate. The asymmetric key is the tool's own legend on an asymmetric
+                # range, not a missing argument - see the legend for what it means and does not.
+                'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, title.name = .diffttl("Differential number of interactions")))',
+                'legend': "Which population pairs differ in the number of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is not the same as neither arm having interactions. Restricted to the populations both arms carry; a population present in only one arm has no difference to plot and is not on either axis. The colour key's own printed ticks follow only the larger-magnitude sign; a cell of the smaller sign is coloured below the first printed tick, off the labelled scale, with red still meaning higher in the second arm and blue still meaning higher in the reference.",
             },
             {
                 'id': 'nativecmp_diff_heatmap_weight',
@@ -804,15 +814,14 @@ PLUGIN = {
                 'device': 'ndev',
                 'w': 2400,
                 'h': 1800,
-                # THE SAME EXPLICIT PALETTE AS THE COUNT SIBLING, FOR THE SAME REASON. Found on a
-                # real run across several contrasts of this panel: a colour key running from a
-                # small negative number to a larger positive one, once with no negative tick at
-                # all despite a visible blue cell - the same missing-negative-half defect as the
-                # count heatmap beside this one, not a fresh one. Not verified rendered - CellChat
-                # and ComplexHeatmap are not installed in this room - recorded as needing a
-                # redraw, not closed.
-                'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, color.heatmap = "RdBu", title.name = .diffttl("Differential interaction strength")))',
-                'legend': 'The same differential matrix on interaction strength rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair: it can gain interactions while each of them weakens, which is why the two panels are drawn together. Restricted to the same shared populations as its count sibling, for the same reason.',
+                # NOT A PALETTE ARGUMENT - REVERTED, THE SAME REASON AS THE COUNT SIBLING.
+                # `color.heatmap = "RdBu"` failed on the cluster on every contrast of this panel
+                # too - "invalid color name 'RdBu'" - because this function's `color.heatmap` on a
+                # merged object wants actual colours, not a palette name, and already draws a
+                # two-colour diverging pair by default. The asymmetric-looking key on some
+                # contrasts is the tool's own legend on an asymmetric range; see the legend.
+                'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, title.name = .diffttl("Differential interaction strength")))',
+                'legend': "The same differential matrix on interaction strength rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair: it can gain interactions while each of them weakens, which is why the two panels are drawn together. Restricted to the same shared populations as its count sibling, for the same reason. The colour key's own printed ticks follow only the larger-magnitude sign; a cell of the smaller sign is coloured below the first printed tick, off the labelled scale, with red still meaning higher in the second arm and blue still meaning higher in the reference.",
             },
             # THE TITLE NAMES THE EFFECT, NOT ONLY THE STRATA. "change within X minus change within Y"
             # never says change OF WHAT, and a reader who has to reconstruct which factor is being

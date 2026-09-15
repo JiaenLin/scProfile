@@ -317,8 +317,8 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   at_most = 1,
   w = quote(2400),
   h = quote(1800),
-  expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, color.heatmap = "RdBu", title.name = .diffttl("Differential number of interactions")))),
-  legend = "Which population pairs differ in the number of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is not the same as neither arm having interactions. Restricted to the populations both arms carry; a population present in only one arm has no difference to plot and is not on either axis.")
+  expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, title.name = .diffttl("Differential number of interactions")))),
+  legend = "Which population pairs differ in the number of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is not the same as neither arm having interactions. Restricted to the populations both arms carry; a population present in only one arm has no difference to plot and is not on either axis. The colour key's own printed ticks follow only the larger-magnitude sign; a cell of the smaller sign is coloured below the first printed tick, off the labelled scale, with red still meaning higher in the second arm and blue still meaning higher in the reference.")
 .plan[["nativecmp_diff_heatmap_weight"]] <- list(
   id = "nativecmp_diff_heatmap_weight",
   axis = "contrast",
@@ -328,8 +328,8 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   at_most = 1,
   w = quote(2400),
   h = quote(1800),
-  expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, color.heatmap = "RdBu", title.name = .diffttl("Differential interaction strength")))),
-  legend = "The same differential matrix on interaction strength rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair: it can gain interactions while each of them weakens, which is why the two panels are drawn together. Restricted to the same shared populations as its count sibling, for the same reason.")
+  expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, title.name = .diffttl("Differential interaction strength")))),
+  legend = "The same differential matrix on interaction strength rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair: it can gain interactions while each of them weakens, which is why the two panels are drawn together. Restricted to the same shared populations as its count sibling, for the same reason. The colour key's own printed ticks follow only the larger-magnitude sign; a cell of the smaller sign is coloured below the first printed tick, off the labelled scale, with red still meaning higher in the second arm and blue still meaning higher in the reference.")
 .plan[["nativecmp_interaction"]] <- list(
   id = "nativecmp_interaction",
   axis = "interaction",
