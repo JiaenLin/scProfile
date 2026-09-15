@@ -309,11 +309,22 @@ def adopt(out, plugin=""):
     # A STATED DISCLOSURE FOLLOWS ITS KIND, as the closure reads it across siblings: a redrawn
     # plate of a kind whose disclosure is still in the words the page prints is closed by that
     # disclosure beside its siblings, and must be alone too. Adopted by entry, once per plate.
+    # EVERY STATED RECORD OF THE KIND, across the siblings, latest first: the words a disclosure
+    # was recorded in may have been rewritten since, and only a record whose words are still in
+    # the legend closes anything.
     by_kind = {}
     for run in sibling_runs(out):
-        for _rel, rec in _own_answers(run, plugin).items():
-            if rec.get("stated") is True:
-                by_kind.setdefault(kind_of(str(rec["figure"])), dict(rec, run=run.name))
+        f = ledger_path(run, plugin)
+        if not f.exists():
+            continue
+        for line in f.read_text(encoding="utf-8").splitlines():
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(rec, dict) and rec.get("stated") is True and rec.get("figure") \
+                    and rec.get("answer"):
+                by_kind.setdefault(kind_of(str(rec["figure"])), []).append(dict(rec, run=run.name))
     own_kinds = {kind_of(r) for r, rec in own_answers.items() if rec.get("stated") is True}
     words_by_kind = {}
     for rel in figures(out):
@@ -322,17 +333,22 @@ def adopt(out, plugin=""):
         if rel in own_answers or rel in adopted_answers:
             continue
         kind = kind_of(rel)
-        rec = by_kind.get(kind)
-        if rec is None or kind in own_kinds:
+        if kind in own_kinds or not by_kind.get(kind):
             continue
         if kind not in words_by_kind:
             words_by_kind[kind] = _norm(declared_text(plugin, rel, out=root)[1])
-        if words_by_kind[kind] and _norm(rec.get("answer")) in words_by_kind[kind]:
-            new = dict(rec, figure=rel, sha256=digest(root / rel),
-                       carried_from=str(rec.get("run") or ""), carried_by="entry")
-            new.pop("run", None)
-            _append_line(ledger, json.dumps(new))
-            n_answers += 1
+        words = words_by_kind[kind]
+        if not words:
+            continue
+        fit = [r for r in by_kind[kind] if _norm(r.get("answer")) in words]
+        if not fit:
+            continue
+        rec = sorted(fit, key=lambda r: str(r.get("at") or ""))[-1]
+        new = dict(rec, figure=rel, sha256=digest(root / rel),
+                   carried_from=str(rec.get("run") or ""), carried_by="entry")
+        new.pop("run", None)
+        _append_line(ledger, json.dumps(new))
+        n_answers += 1
     return {"looks": n_looks, "answers": n_answers}
 
 
