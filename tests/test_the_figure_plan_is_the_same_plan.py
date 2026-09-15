@@ -9,7 +9,10 @@ AFTER, with no run needed. The reproduction on the cluster is the second proof; 
 that costs nothing.
 
 RECORD DELIBERATELY, NEVER AUTOMATICALLY:  python3 tests/test_the_figure_plan_is_the_same_plan.py --record
-A baseline a test writes for itself cannot fail the first time it runs.
+A baseline a test writes for itself cannot fail the first time it runs. The one other writer is
+the maker's edit verb (`sch dev edit`, harness ADR-0026), which re-records as a follower
+DECLARED in DEVPOINTS (`plan.after_edit`) after printing the plan's delta: an edit of the plan
+through the verb is the deliberate act, and a plan changed any other way still fails here.
 
 RECORDED TWICE, and the second time is written down. The first baseline was read by the prose
 reader, which placed a brace family by its STEM: `native_heatmap` for `native_heatmap_{count,

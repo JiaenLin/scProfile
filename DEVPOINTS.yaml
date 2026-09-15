@@ -391,6 +391,15 @@ points:
           generated_by:
             command: ["{python}", "-m", "scprofile.cli", "scaffold", "{name}",
                       "--dir", "{out}", "--force"]
+          # WHAT FOLLOWS AN EDIT OF THE PLAN BY THE MAKER'S VERB (`sch dev edit`, harness
+          # ADR-0026): the companion regenerated from the plan, the plan baseline re-recorded -
+          # deliberately, as the declared follower of a deliberate edit, the verb printing the
+          # plan's delta first - and the validator's verdict. Run by the verb when it is given
+          # the interpreter; printed as the next step when it is not.
+          after_edit:
+            - ["{python}", "-m", "scprofile.cli", "scaffold", "{name}", "--force"]
+            - ["{python}", "tests/test_the_figure_plan_is_the_same_plan.py", "--record"]
+            - ["{python}", "-m", "scprofile.cli", "validate", "{name}"]
           finished_by: >
             `sch dev convert plan --root . --point kernel --name <plugin>` prints every entry
             with what it lacks and, given `--python`, the upstream function's parameters beside
