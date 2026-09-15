@@ -105,7 +105,9 @@ SPEC = {"name": "demo", "requires": {"r": ["4.3"]},
             {"id": "native_a", "kind": "circle", "drawn_by": "tool", "fn": "plotA", "args": "obj",
              "axis": "sample", "position": "contrast", "legend": "a"},
             {"id": "native_b", "kind": "matrix", "drawn_by": "tool", "fn": "plotB", "args": "obj",
-             "axis": "group", "position": "contrast", "legend": "b"}]}}
+             "axis": "group", "position": "contrast", "legend": "b"},
+            {"id": "nativecmp_c", "kind": "diff_matrix", "drawn_by": "tool", "fn": "plotC",
+             "args": "m", "axis": "contrast", "position": "contrast", "legend": "c"}]}}
 comp = SC.R_DRAW.replace("__NAME__", "demo") + SC.render_plan(SPEC)
 ck("the companion no longer stops on an id that is not on the plan",
    "not on the plan" in comp and 'stop("no entry in the plan is called "' not in comp)
@@ -116,6 +118,9 @@ if rscript:
         script = (comp + '\n.fctx$axis <- "group"\n'
                   '.draw("native_gone")\n'
                   '.draw("native_a")\n'
+                  '.draw("nativecmp_c")\n'
+                  '.fctx$axis <- "contrast"\n'
+                  '.draw("native_b")\n'
                   '.fctx$axis <- "margin"\n'
                   '.draw("native_b")\n'
                   '.draw_all("unit")\n'
@@ -128,6 +133,14 @@ if rscript:
            out[-600:])
         ck("the dropped id is named as not on the plan", "not on the plan" in out, out[-300:])
         ck("the sample-only entry is skipped for a group unit", "not for this unit" in out, out[-300:])
+        # AN AXIS THE SCRIPT DOES NOT DRAW BY (harness ADR-0026, K-o): a contrast entry called
+        # from a unit's script, or a unit entry from a contrast's, is skipped and named - the
+        # maker had counted a pair scatter moved to the group axis while the run drew it per
+        # contrast exactly as before, its draw site being in the compare script.
+        ck("a contrast entry drawn from a unit's script is skipped and named",
+           "nativecmp_c" in out and "drawn per contrast" in out, out[-500:])
+        ck("a unit entry drawn from a contrast's script is skipped and named",
+           "native_b is drawn per group; this unit is a contrast" in out, out[-500:])
         ck("a marginal pool draws nothing, and says so", "marginal" in out, out[-300:])
         ck("and nothing was drawn", not list(Path(td).glob("*.png")))
 else:

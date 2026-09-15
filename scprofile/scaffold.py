@@ -512,6 +512,26 @@ R_PLAN = r'''
         .fctx$axis, "\n", sep = "")
     return(invisible(NULL))
   }
+  # AN AXIS THIS SCRIPT DOES NOT DRAW BY (harness ADR-0026, K-o): a draw site sits in the
+  # script that runs per unit, or in the one that runs per contrast, and the entry's `axis`
+  # must be that script's. A pair scatter moved to the group axis in its declaration was
+  # counted per arm by the plan and drawn per contrast by the run, its site being in the
+  # compare script; now a site whose script does not draw by the entry's axis skips and says
+  # so, and `capacity --promised` reads the entry as not drawn.
+  .unit_axes <- c("unit", "sample", "group")
+  .cmp_axes <- c("contrast", "interaction")
+  if (!is.null(e$axis) && isTRUE(nzchar(.fctx$axis))) {
+    if (e$axis %in% .cmp_axes && .fctx$axis %in% .unit_axes) {
+      cat("not drawn: ", id, " is drawn per ", e$axis, ", and this script draws a unit (",
+          .fctx$axis, ")\n", sep = "")
+      return(invisible(NULL))
+    }
+    if (e$axis %in% .unit_axes && .fctx$axis %in% .cmp_axes) {
+      cat("not drawn: ", id, " is drawn per ", e$axis, ", and this script draws a contrast (",
+          .fctx$axis, ")\n", sep = "")
+      return(invisible(NULL))
+    }
+  }
   if (!is.null(item)) assign(".item", item, envir = env)
   # THE ENTRY, VISIBLE TO ITS OWN LEGEND: `{.entry$at_most}` names the ceiling from the plan,
   # once, where a legend that retyped it said 8 while the declaration said 6.
