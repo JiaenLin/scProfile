@@ -789,6 +789,9 @@ def main(argv):
             + (f"; this instance's process tree peaked at {tree_peak:.2f} GB ({tree_basis}, "
                f"{tree_n} sample(s))" if tree_peak else ""))
 
+    # A DECLARED TABLE THE PLUGIN'S OWN TOOL WROTE IS AN OUTPUT (harness ADR-0026): what
+    # `produces` names and `tables/` holds is registered, so the manifest says what the run has.
+    ctx._tables.extend(manifest.declared_tables(out, spec.get("produces"), ctx._tables))
     manifest.write_output(
         out, kernel=Path(plugin_path).stem,
         version=str((getattr(mod, "PLUGIN", {}) or {}).get("version", "0.1.0")),

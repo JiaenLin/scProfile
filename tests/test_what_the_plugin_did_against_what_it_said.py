@@ -79,6 +79,36 @@ bad = errs(["objects/fit.rds"])
 ck("a path into a slot directory is refused, and the slot form named",
    bad and "objects[fit.rds]" in bad[0], str(bad))
 
+print("\na declared table the plugin wrote without registering it is an output")
+# FOUR TABLES A RUN COULD NOT SEE (harness ADR-0026, the open items): cellchat's R writes its
+# side tables into `tables/` and never passes them to `emit_table`, so the manifest carried
+# `ccc_edges.csv` and `cellchat_composition.csv` and nothing else; 72 files a run that no stage
+# could vouch for and the writer could not cite. `produces` already names them. A declared table
+# that is on disk when the plugin returns is registered by the host, so the declaration and the
+# manifest agree without every plugin re-registering what its own tool wrote.
+from scprofile import manifest as M                                             # noqa: E402
+
+with tempfile.TemporaryDirectory() as td:
+    out = Path(td)
+    (out / "tables").mkdir()
+    for f in ("cellchat_centrality.csv", "cellchat_rank_net.csv", "ccc_edges.csv", "scratch.csv"):
+        (out / "tables" / f).write_text("a,b\n1,2\n")
+    registered = [out / "tables" / "ccc_edges.csv"]
+    got = M.declared_tables(out, ["tables/ccc_edges.csv", "tables/cellchat_centrality.csv?",
+                                  "tables/cellchat_rank_net.csv?", "tables/cellchat_never.csv?",
+                                  "obs[phase]"], registered)
+    names = sorted(p.name for p in got)
+    ck("the declared tables on disk are registered, the registered one not twice",
+       names == ["cellchat_centrality.csv", "cellchat_rank_net.csv"], str(names))
+    ck("a file nobody declared is not adopted", "scratch.csv" not in names, str(names))
+    ck("a declared table that is absent is not invented", "cellchat_never.csv" not in names)
+    ck("a slot declaration is not read as a table", all(p.parent.name == "tables" for p in got))
+    ck("nothing declared, nothing adopted", M.declared_tables(out, [], registered) == [])
+src = (ROOT / "scprofile" / "_entry.py").read_text(encoding="utf-8")
+ck("the entry point adopts them before it writes the manifest",
+   src.index("manifest.declared_tables(") < src.index("manifest.write_output(\n        out, kernel=")
+   if "manifest.declared_tables(" in src else False)
+
 if FAIL:
     print(f"\n{len(FAIL)} FAILED: " + ", ".join(FAIL))
     sys.exit(1)

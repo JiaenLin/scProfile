@@ -249,6 +249,44 @@ def _jsonable(v):
         return repr(v)
 
 
+def declared_tables(out_dir, produces, registered):
+    """The tables a plugin DECLARED and wrote into `tables/` without registering them.
+
+    FOUR TABLES A RUN COULD NOT SEE (harness ADR-0026). cellchat's R writes its side tables
+    (centrality, pathway probability, rank-net, embedding) straight into `tables/` and never
+    hands them to `emit_table`, so the manifest carried the two tables the Python side
+    re-registered and nothing else: 72 files a run that no stage could vouch for and the writer
+    could not cite, declared in `produces` all along. A declared table that is on disk when the
+    plugin returns IS an output of that plugin; the host registers it here, so the declaration
+    and the manifest agree without every plugin re-registering what its own tool wrote.
+
+    Only the `tables/` slot, only names `produces` declares (a glob is a glob, `?` is stripped),
+    never a file nobody declared and never one already registered. Stdlib only: this runs in
+    the plugin's environment.
+    """
+    import fnmatch
+    out = Path(out_dir)
+    tdir = out / "tables"
+    if not tdir.is_dir():
+        return []
+    patterns = []
+    for item in produces or ():
+        s = str(item).strip().rstrip("?").strip()
+        if not s or ("[" in s and s.endswith("]")):
+            continue                      # obs[x], objects[x]: a slot, not a table
+        patterns.append(s.split("/")[-1])
+    if not patterns:
+        return []
+    have = {Path(r).resolve() for r in (registered or ())}
+    found = []
+    for f in sorted(tdir.iterdir()):
+        if not f.is_file() or f.resolve() in have:
+            continue
+        if any(fnmatch.fnmatchcase(f.name, pat) for pat in patterns):
+            found.append(f)
+    return found
+
+
 def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=None, layers=None,
                  tables=None, figures=None, objects=None, absent=None, caveats=None, headline="",
                  measured=None, metrics=None, contradictions=None, config=None,
