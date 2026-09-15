@@ -167,6 +167,36 @@ with tempfile.TemporaryDirectory() as td:
        fc["hit"] is True and "overwrote" not in " ".join(fc["reasons"]), str(fc))
     ck("it names the one thing that still defeats it", "clear" in " ".join(fc["reasons"]), str(fc))
 
+print("\nthe store's key changed since the run named: a MISS, once, said rather than met")
+# THE FORECAST WOULD HAVE BEEN WRONG BY THIS VERY CHANGE: keying the store by span moves every
+# existing object out of reach once, and a forecast reading only the plugin's span would say
+# HIT while every unit re-inferred. The tool at the run's commit either keyed the store or did
+# not; where it did not and the tree does, the objects are under the unkeyed path.
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td) / "tool"
+    (root / "kernels").mkdir(parents=True)
+    (root / "scprofile").mkdir()
+    f = root / "kernels" / "demo.py"
+    f.write_text(PLUGIN, encoding="utf-8")
+    (root / "scprofile" / "landscape.py").write_text("# the tool before the store was keyed\n")
+    git(root, "init", "-q")
+    git(root, "-c", "user.email=t@t", "-c", "user.name=t", "add", "-A")
+    git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "one")
+    commit = git(root, "rev-parse", "--short", "HEAD").stdout.strip()
+    (root / "scprofile" / "landscape.py").write_text("def span_key(plugin_path, decl):\n    pass\n")
+    run = Path(td) / "run"
+    (run / "kernels" / "demo" / "U1").mkdir(parents=True)
+    (run / "report.json").write_text(json.dumps({"tool_commit": commit}))
+    (run / "kernels" / "demo" / "U1" / "in.json").write_text(json.dumps({"params": {}}))
+    fc = L.cache_forecast(root, "demo", run)
+    ck("a miss, and the reason names the store's key", fc["hit"] is False
+       and any("key" in r and "once" in r for r in fc["reasons"]), str(fc))
+    git(root, "-c", "user.email=t@t", "-c", "user.name=t", "add", "-A")
+    git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "two")
+    (run / "report.json").write_text(json.dumps({"tool_commit": git(root, "rev-parse", "--short", "HEAD").stdout.strip()}))
+    fc = L.cache_forecast(root, "demo", run)
+    ck("a run made after the keying: a hit again", fc["hit"] is True, str(fc))
+
 print("\nthe declaration's shape is held")
 from scprofile import declare as D                                              # noqa: E402
 

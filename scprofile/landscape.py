@@ -342,6 +342,17 @@ def cache_forecast(root, plugin, run):
         out["reasons"].append(f"the span markers {markers} are not both in the file now")
         return out
     reasons = []
+    # THE STORE'S OWN KEY: the tool at the run's commit either keyed the unit's cache directory
+    # by the span (`span_key`) or did not. Where it did not and this tree does, every object the
+    # run left is under the unkeyed path - a MISS once, and this forecast would have said HIT
+    # over it by its own change.
+    r2 = subprocess.run(["git", "-C", str(root), "show", f"{commit}:scprofile/landscape.py"],
+                        capture_output=True, text=True)
+    if r2.returncode == 0 and "def span_key(" not in r2.stdout \
+            and "def span_key(" in Path(__file__).read_text(encoding="utf-8", errors="replace"):
+        reasons.append(f"the store's key changed since {commit} (objects are kept per span "
+                       f"now, and the run's are under the unkeyed path): every unit re-infers "
+                       f"once and writes under the new key")
     if span_then is None or span_now != span_then:
         import difflib
         n = sum(1 for ln in difflib.unified_diff((span_then or "").splitlines(),
