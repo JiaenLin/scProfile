@@ -476,6 +476,10 @@ def station_paper(runs):
                              f"scprofile paper --out {r} --plugin {p} --round {out[0][0]} "
                              f"--verdict standing|narrowed|withdrawn --why '...'"))
                 continue
+            if PA.section_state(r, p) == PA.SECTION_STALE:
+                gaps.append((f"{p}: the figure set changed since the section was carried in",
+                             f"scprofile paper --out {r} --plugin {p} --write <section.md>"))
+                continue
             if not (r / "report" / PA.page_name(p)).is_file():
                 gaps.append((f"{p}: claims defended, section not rendered into the run",
                              f"scprofile paper --out {r} --plugin {p} --render"))

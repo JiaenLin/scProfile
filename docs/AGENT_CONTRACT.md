@@ -82,7 +82,9 @@ Two ordering rules follow, both paid for:
   panels a–f) in the order of the argument — the cohort, the arms, the contrasts, the
   interaction, then the supplementary S1, S2, … — with the index `report/figures/<plugin>_figures.json`
   naming every panel's source. The brief lists each plate as a sentence cites it: `Figure 3b`.
-  Cite the panel (`Fig. 3b`), not the file.
+  Cite the panel (`Fig. 3b`), not the file. A section carried in against a set that later
+  changes is marked NOT CURRENT on the page and by `scprofile next`, the way a claim goes stale
+  on a redraw: re-read the brief and carry it in again.
 - **Write it as a journal prints it.** Headings `Effect of <factor> within <stratum>`; no run
   key, no "this run", no tool naming itself; `paper --write` refuses a section that does any of
   these, quoting the line. The page carries a Methods section composed from the declarations and

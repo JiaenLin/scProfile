@@ -450,6 +450,14 @@ def next_step(out, plugin=""):
     def _rest():
         rows = status(out, plugin)
         have_draft = bool(read_draft(out, plugin))
+        # THE SET FIRST (harness ADR-0025): a section carried in against a set that has since
+        # changed is re-carried before anything is defended, because the re-carry is what the
+        # claims are then read against.
+        if have_draft and section_state(out, plugin) == SECTION_STALE:
+            return ("The figure set changed since the section was carried in - a plate added, "
+                    "removed or re-lettered - so a citation in the prose can point at another "
+                    "panel while reading perfectly. Re-read the brief and carry the section in "
+                    "again.", _cmd(out, plugin, "--write section.md"))
         if not rows:
             return ("Nothing has been written from these figures yet. Start by reading the brief.",
                     _cmd(out, plugin, "--brief"))
@@ -467,6 +475,7 @@ def next_step(out, plugin=""):
             return ("Every claim is defended and no section has been written. The ledger holds the "
                     "sentences and not the document they came from.",
                     _cmd(out, plugin, "--write section.md"))
+
         page = _report_dir(out, plugin) / page_name(plugin)
         if not page.is_file():
             return ("The section is written and every claim defended. Render it into the run.",
@@ -599,9 +608,46 @@ def write_draft(out, text, *, author="", plugin=""):
                           f"({len(bad)} cited figure(s) carry one)")
     _root(out, plugin).mkdir(parents=True, exist_ok=True)
     (_root(out, plugin) / draft_name(plugin)).write_text(body, encoding="utf-8")
+    # THE SET IT WAS WRITTEN AGAINST (harness ADR-0025): the digest of the figure set's shape,
+    # so a set that changes afterwards - a plate added, a panel re-lettered - marks the section
+    # stale the way a redrawn plate marks a claim stale.
     _append(out, {"kind": "draft", "words": len(body.split()), "author": str(author or ""),
+                  "figures": _set_digest(out, plugin),
                   "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}, plugin)
     return _root(out, plugin) / draft_name(plugin)
+
+
+def _set_digest(out, plugin=""):
+    """The figure set's digest as it stands - the written index, else assembled from the run."""
+    from . import figureset as _FS
+    try:
+        pay = _payload_of(out)
+        return _FS.digest(_FS.index_or_assemble(out, plugin, _plugin_spec_of(pay, plugin),
+                                                (pay or {}).get("design") or {}, pay))
+    except Exception:                                                     # noqa: BLE001
+        return ""
+
+
+#: THE SECTION'S OWN STATES, beside the claims': written against the set as it stands, or
+#: against a set that has since changed, or not written at all.
+SECTION_CURRENT, SECTION_STALE, SECTION_NONE = "current", "stale", "none"
+
+
+def section_state(out, plugin=""):
+    """`current`, `stale` or `none` - whether the carried-in section still cites this set.
+
+    A section carried in before the digest was recorded is read as current: nothing says it is
+    not, and calling every earlier section stale would send every run back to its writer.
+    """
+    drafts = [r for r in read_ledger(out, plugin) if r.get("kind") == "draft"]
+    if not drafts or not read_draft(out, plugin):
+        return SECTION_NONE
+    last = sorted(drafts, key=lambda r: str(r.get("at") or ""))[-1]
+    then = str(last.get("figures") or "")
+    if not then:
+        return SECTION_CURRENT
+    now = _set_digest(out, plugin)
+    return SECTION_CURRENT if (not now or now == then) else SECTION_STALE
 
 
 def read_draft(out, plugin=""):
@@ -717,6 +763,13 @@ def render(out, *, run_key="", title="", plugin=""):
     if run_key:
         # PROVENANCE IN THE SOURCE, NOT IN THE TEXT: a manuscript names no run.
         out_html.append(f"<!-- run: {_e(run_key)} -->")
+    if body and section_state(out, plugin) == SECTION_STALE:
+        out_html.append(
+            '<div class="bad" data-section-stale="1"><b>NOT CURRENT.</b> The figure set has '
+            'changed since this section was carried in - a plate added, removed or re-lettered '
+            '- so a figure cited in the text can point at another panel while reading '
+            'perfectly. The section is re-read against the brief and carried in again before '
+            'it is a result.</div>')
     if stale:
         out_html.append(
             '<div class="bad"><b>NOT CURRENT.</b> ' + str(len(stale)) +

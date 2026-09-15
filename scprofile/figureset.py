@@ -542,6 +542,21 @@ def index_or_assemble(run, plugin, spec, design, pay=None):
         return {"plugin": plugin, "figures": []}
 
 
+def digest(idx):
+    """A digest of the set's shape: every figure's number and each panel's letter and source.
+
+    What a citation in prose depends on. Two sets with the same plates laid the same way have
+    one digest; a plate added, removed or re-lettered changes it.
+    """
+    import hashlib
+    h = hashlib.sha1()
+    for f in (idx or {}).get("figures") or []:
+        for p in f.get("panels") or []:
+            h.update(f"{'S' if f.get('supplementary') else ''}{f['n']}{p['letter']}\t{p['source']}\n"
+                     .encode("utf-8"))
+    return h.hexdigest()[:12]
+
+
 def citation_maps(idx):
     """({source: figure number} for the main figures, {source: (supp, number, letter)} for all)."""
     numbers, panels = {}, {}

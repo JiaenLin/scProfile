@@ -449,6 +449,34 @@ try:
     except P.Refused as err:
         ck("the whole figure, cited without a panel, is refused while any panel is flagged", "open" in str(err))
 
+    print("\na section is stale when the figure set changed after it was carried in")
+    # THE CONTRACT'S OWN RULE, made a mechanism (harness ADR-0025): "a section written against
+    # the old set cites the wrong plates while reading perfectly". The claims already go stale
+    # on a redraw; the section did not - three plates added to one direction of the
+    # interaction re-letter two figures and every `Fig. 14a` in the prose points elsewhere.
+    ck("a section just carried in is current", P.section_state(run, PLUGIN) == "current",
+       P.section_state(run, PLUGIN))
+    # a plate arrives: one more interaction plate in the direction the section cites
+    extra = f"kernels/{PLUGIN}/compare/_across_arms/figures/nativecmp_inter_late__dose_response_by_time.png"
+    _png(run / extra)
+    pj = json.loads((run / "report" / "panels.json").read_text())
+    pj[PLUGIN]["native"].append({"id": "NC_late", "path": extra, "label": "", "caption": "late."})
+    (run / "report" / "panels.json").write_text(json.dumps(pj))
+    FS.build(run, PLUGIN, SPEC, DESIGN, pay, log=lambda *a, **k: None)
+    ck("after the set changes, the section is stale", P.section_state(run, PLUGIN) == "stale",
+       P.section_state(run, PLUGIN))
+    head, cmd = P.next_step(run, PLUGIN)
+    ck("and the next step says to re-carry it, with the write command",
+       "figure set" in head.lower() and "--write" in cmd, f"{head} | {cmd}")
+    page = P.render(run, run_key="k", plugin=PLUGIN)
+    html2 = Path(page).read_text(encoding="utf-8")
+    ck("the page says so before the section", 'data-section-stale="1"' in html2
+       and html2.find('data-section-stale="1"') < html2.find("Effect of dose"))
+    P.write_draft(run, "## Effect of dose within late\n\nSignal rose (Fig. 3b). " + words,
+                  author="w", plugin=PLUGIN)
+    ck("re-carried, it is current again", P.section_state(run, PLUGIN) == "current")
+    ck("a run with no section has none to be stale", P.section_state(tmp, PLUGIN) == "none")
+
     print("\nbuilding twice leaves one set")
     idx2 = FS.build(run, PLUGIN, SPEC, DESIGN, pay)
     files = sorted(str(p.relative_to(run)) for p in (run / "report" / "figures").rglob("*.png"))
