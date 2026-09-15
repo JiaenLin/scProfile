@@ -97,9 +97,18 @@ root = Path(__file__).resolve().parents[1]
 #: language is covered on the day it lands instead of the day somebody remembers.
 BINARY = {".png", ".jpg", ".jpeg", ".pdf", ".svg", ".ico", ".gz", ".zip", ".h5", ".h5ad",
           ".feather", ".npy", ".npz", ".parquet", ".so", ".pyc", ".whl"}
+# WHAT THE REPOSITORY DOES NOT SHIP IS NOT SCANNED: the directories `.gitignore` names (an
+# installed `.venv`, `__pycache__`, `build`) are this machine's, and an environment's own
+# `activate` script carries this machine's absolute path by construction (harness ADR-0026, the
+# open items - the gate's interpreter lives in `.venv` now, so the tree holds one).
+_ignored = {ln.strip().rstrip("/") for ln in (root / ".gitignore").read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.startswith("#") and ln.strip().endswith("/")
+            and "*" not in ln} if (root / ".gitignore").is_file() else set()
 hits, scanned = [], 0
 for f in sorted(root.rglob("*")):
     if not f.is_file() or ".git" in f.parts or f.name == Path(__file__).name:
+        continue
+    if any(part in _ignored for part in f.relative_to(root).parts[:-1]):
         continue
     if f.suffix.lower() in BINARY:
         continue

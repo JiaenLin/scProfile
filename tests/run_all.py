@@ -42,10 +42,55 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def has_arrays(py) -> bool:
+    """Whether interpreter `py` can import the array stack the CLI checks need."""
+    try:
+        return subprocess.run([py, "-c", "import anndata, numpy, pandas"], capture_output=True,
+                              timeout=120).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def interpreter(python=None):
+    """(interpreter, why) - the one the suites run under.
+
+    THE GATE SKIPPED THE HALF THAT WOULD HAVE FAILED (harness ADR-0026, the open items): its
+    interpreter has no array stack, the status contract's CLI half printed SKIP and exited 0,
+    and a change that broke that contract was committed green; the same suite under an
+    interpreter with anndata said FAIL. When the running interpreter lacks the stack and the
+    repository's own `.venv/bin/python` - or $SCPROFILE_TEST_PYTHON - has it, the suites run
+    under that one, and the summary says which. `--python` and SCPROFILE_TEST_PYTHON_FORCE=1
+    take an interpreter as given.
+    """
+    if python:
+        return python, "given with --python"
+    forced = os.environ.get("SCPROFILE_TEST_PYTHON")
+    if forced and os.environ.get("SCPROFILE_TEST_PYTHON_FORCE"):
+        return forced, "$SCPROFILE_TEST_PYTHON, forced"
+    if has_arrays(sys.executable):
+        return sys.executable, "this interpreter has the array stack"
+    for cand, why in ((forced, "$SCPROFILE_TEST_PYTHON"),
+                      (str(ROOT / ".venv" / "bin" / "python"), "the repository's .venv")):
+        if cand and os.path.exists(cand) and has_arrays(cand):
+            return cand, f"{why}: this interpreter lacks the array stack and that one has it"
+    return sys.executable, ("this interpreter lacks the array stack and no other was found "
+                            "(.venv/bin/python or $SCPROFILE_TEST_PYTHON); CLI checks SKIP")
+
+
+#: A SKIP LINE STARTS WITH THE WORD: `  SKIP a run in which ...`, `ok: skipped, pandas is not
+#: importable here`. Matching the word anywhere counted a check that PASSED about skipping.
+SKIP_STARTS = ("SKIP", "skipped", "ok: skipped")
+
+
+def skipped_in(out) -> int:
+    """How many checks a suite's output says it skipped."""
+    return sum(1 for ln in out.splitlines() if ln.strip().startswith(SKIP_STARTS))
+
+
 def run(pattern=None, python=None, jobs=1):
-    """[(name, output)] for every suite that exited non-zero."""
+    """[(name, output)] for every suite that exited non-zero, and the skip count."""
     pat = pattern or str(ROOT / "tests" / "test_*.py")
-    py = python or sys.executable
+    py, _why = interpreter(python)
     env = dict(os.environ, PYTHONPATH=str(ROOT))
     bad = []
 
@@ -60,6 +105,7 @@ def run(pattern=None, python=None, jobs=1):
             outcomes = list(pool.map(one, paths))     # sorted order, not completion order
     else:
         outcomes = [one(x) for x in paths]
+    run.skipped = sum(skipped_in(out) for _p, _c, out in outcomes)
     for path, code, out in outcomes:
         if code != 0:
             bad.append((os.path.basename(path), out))
@@ -83,7 +129,10 @@ def main(argv=None):
                     help="run this many suites at once; each is still its own process")
     ap.add_argument("--tail", type=int, default=12, help="lines of output per failing suite")
     a = ap.parse_args(argv)
-    bad, files = run(a.pattern, a.python, a.jobs)
+    py, why = interpreter(a.python)
+    print(f"interpreter: {py}  ({why})")
+    bad, files = run(a.pattern, py, a.jobs)
+    skipped = getattr(run, "skipped", 0)
     if bad:
         print(f"{len(bad)} FAILING of {len(files)} suite(s):")
         for name, out in bad:
@@ -91,7 +140,11 @@ def main(argv=None):
             for line in out.splitlines()[-a.tail:]:
                 print(f"       {line}")
         return 1
-    print(f"green: {len(files)} suite(s), nothing failing")
+    # A GREEN WITH SKIPS IS A WEAKER STATEMENT, and the summary says so in the word the suites
+    # use: what this interpreter could not run has not been established.
+    print(f"green: {len(files)} suite(s), nothing failing"
+          + (f"; {skipped} check(s) SKIPPED on this interpreter - not established here"
+             if skipped else ""))
     return 0
 
 

@@ -56,6 +56,14 @@ do next. Four rules, each paid for:
   escaped the runner's `except`, and the runner terminated WITH CODE 0 - hiding every file
   sorted after it and two genuine failures. **Verify a gate by making it fail**: drop a test that
   asserts False and confirm non-zero, which is one command and would have caught this on day one.
+  **And the gate runs under an interpreter that has the array stack** (harness ADR-0026, the
+  open items): the hook's own interpreter had none, the CLI half of the status contract printed
+  SKIP and exited 0, and a change that broke that contract was committed green. `run_all.py`
+  runs the suites under `<repo>/.venv/bin/python` (or `$SCPROFILE_TEST_PYTHON`) when the running
+  interpreter lacks anndata and that one has it, prints which, and counts every SKIP the suites
+  printed in its summary - a green with skips says so. Make the `.venv` once per clone
+  (`python3 -m venv .venv && .venv/bin/pip install anndata numpy pandas scipy h5py matplotlib
+  PyYAML`; it is gitignored, and the portability scan skips what `.gitignore` names).
 - **A wrapper uses the wrapped tool's own plots.** List them from the package, use them, and
   account for every one you do not - from the closed vocabulary in `scprofile/native.py`, which
   rejects "reimplemented", "not considered" and "dependency missing" by name. A reimplementation
