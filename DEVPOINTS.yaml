@@ -416,6 +416,9 @@ points:
             # named a variable no script defines and six files failed on the cluster; R itself
             # says it here in two seconds, and says it was skipped where there is no R.
             - ["{python}", "tests/test_an_expr_names_only_what_the_script_binds.py"]
+            # AND THE PLUGIN'S OWN PYTHON (harness ADR-0026, K-s): one line naming `Path`, never
+            # imported, cost eighteen units five minutes of inference each before the NameError.
+            - ["{python}", "tests/test_a_plugin_names_only_what_it_binds.py"]
           finished_by: >
             `sch dev convert plan --root . --point kernel --name <plugin>` prints every entry
             with what it lacks and, given `--python`, the upstream function's parameters beside
