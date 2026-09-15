@@ -86,6 +86,30 @@ if _cc is not None:
               "the other promises of a one-file run must still read as never drawn, or this "
               "proves nothing")
 
+# A PROMISE IS PER ENTRY, NOT PER FUNCTION (harness ADR-0025, found on the third run): one
+# upstream function drew a per-unit heatmap on every unit and failed on every one of the twelve
+# differential heatmaps it also draws - "invalid color name" on all six contrasts - and the
+# promise read as kept because the FUNCTION had produced a file somewhere. The plan promises by
+# entry; an entry whose family drew nothing anywhere is the broken promise, whoever else the
+# function drew for.
+PLAN = {"report": {"figures": [
+    {"id": "native_heat", "kind": "matrix", "drawn_by": "tool", "fn": "drawHeat", "axis": "unit",
+     "position": "contrast"},
+    {"id": "nativecmp_diff_heat", "kind": "diff_matrix", "drawn_by": "tool", "fn": "drawHeat",
+     "axis": "contrast", "position": "contrast"},
+    {"id": "nativecmp_chords", "kind": "chord", "drawn_by": "tool", "fn": "drawChord",
+     "axis": "contrast", "position": "appendix", "items": "c('a', 'b')", "at_most": 2}]}}
+_decl = N.declared_from(PLAN)
+_files = ["u1/figures/native_heat.png", "u2/figures/native_heat.png",
+          "compare/x/figures/nativecmp_chords__a.png"]
+_gaps = N.undrawn(_decl, _files)
+check(any("nativecmp_diff_heat" in use for _fn, use in _gaps),
+      f"an entry that drew nothing is not named when its function drew for another: {_gaps}")
+check(not any("native_heat" in use and "diff" not in use for _fn, use in _gaps),
+      f"an entry that drew is reported as undrawn: {_gaps}")
+check(not any("chords" in use for _fn, use in _gaps),
+      f"a per-item family with one file anywhere is reported as undrawn: {_gaps}")
+
 if FAILURES:
     print("FAIL")
     for f in FAILURES:

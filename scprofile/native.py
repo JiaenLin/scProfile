@@ -387,6 +387,17 @@ def undrawn(declared, filenames):
         # is the rate at which a check stops being read.
         if ".png" not in use:
             continue
+        # PER ENTRY WHERE THE PLAN SAYS SO (harness ADR-0025): one function drew a per-unit
+        # heatmap on every unit and failed on every differential heatmap it also draws, and the
+        # promise read as kept because the function had a file somewhere. Each id the plan puts
+        # under the function is its own promise; a family with one file anywhere kept it.
+        ids = list((rec or {}).get("ids") or [])
+        if ids:
+            per_item = set((rec or {}).get("per_item") or [])
+            for fid in ids:
+                if not any(names_file(fid, st, fid in per_item) for st in stems):
+                    out.append((fn, f"figures/{fid}.png"))
+            continue
         if not any(function_for(  # the SAME matcher, so the two can never disagree
                 {fn: rec}, name) == fn for name in stems):
             out.append((fn, use))
