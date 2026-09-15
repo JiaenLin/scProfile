@@ -18,6 +18,7 @@ contract test creating a run under /tmp caught it on the first execution.
 
 Checked on real files with real digests, because the whole mechanism is about bytes.
 """
+import json
 import os
 import shutil
 import sys
@@ -118,6 +119,38 @@ with tempfile.TemporaryDirectory() as td:
           % (st4.get("kernels/p/figures/same.png"),))
     check(R.adopt(b, "p") == {"looks": 0, "answers": 0},
           "adopting twice appends the same records again")
+    # AND A STATED DISCLOSURE FOLLOWS ITS KIND, not only its bytes (the writing seal again): a
+    # redrawn plate of a kind whose disclosure is still in the words the page prints is closed
+    # by that disclosure when the siblings are beside the run, and read as open when the run
+    # stands alone. Adopted by entry, with the run named, it closes alone too.
+    _mkfig(a, "kernels/p/figures/kindx__one.png", b"OLD-KINDX")
+    _mkfig(b, "kernels/p/figures/kindx__one.png", b"NEW-KINDX")
+    for r in (a, b):
+        (r / "report").mkdir(exist_ok=True)
+        (r / "report" / "panels.json").write_text(json.dumps({"p": {"cohort": [
+            {"id": "kindx__one", "path": "kernels/p/figures/kindx__one.png",
+             "caption": "The ring's margin is the drawing's own minimum canvas and not a gap."}]}}),
+            encoding="utf-8")
+    R.record(a, "kernels/p/figures/kindx__one.png", "a blank margin above the ring on run A",
+             reviewer="eye", plugin="p", defect=True)
+    R.answer(a, "kernels/p/figures/kindx__one.png",
+             "The ring's margin is the drawing's own minimum canvas and not a gap.", by="author",
+             plugin="p", stated=True)
+    R.record(b, "kernels/p/figures/kindx__one.png", "the same blank margin above the ring on run B",
+             reviewer="eye", plugin="p", defect=True)
+    check("kernels/p/figures/kindx__one.png" in R.stated_answers(b, "p"),
+          "beside its sibling, the kind's disclosure does not close the redrawn plate")
+    got2 = R.adopt(b, "p")
+    check(got2.get("answers") == 1, f"the kind's stated disclosure was not adopted by entry: {got2}")
+    lone3 = Path(td) / "alone2" / "runB3"
+    _mkfig(lone3, "kernels/p/figures/kindx__one.png", b"NEW-KINDX")
+    (lone3 / "report.json").write_text("{}", encoding="utf-8")
+    (lone3 / "report").mkdir(exist_ok=True)
+    shutil.copy(b / "report" / "panels.json", lone3 / "report" / "panels.json")
+    shutil.copy(R.ledger_path(b, "p"), R.ledger_path(lone3, "p"))
+    check("kernels/p/figures/kindx__one.png" in R.stated_answers(lone3, "p"),
+          "standing alone, the adopted disclosure does not close the redrawn plate")
+    check(not R.open_findings(lone3, "p"), f"the finding stays open alone: {R.open_findings(lone3, 'p')}")
     check(not any("kernels/p/figures/redrawn.png" == k for k in own if own[k].get("carried_from")),
           "a look on different bytes was adopted")
 

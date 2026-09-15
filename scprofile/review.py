@@ -292,6 +292,7 @@ def adopt(out, plugin=""):
             sha = str(rec.get("sha256") or "")
             if sha:
                 by_sha.setdefault(sha, dict(rec, run=run.name))
+    adopted_answers = set()
     for rel in figures(out):
         if plugin and not rel.startswith(f"kernels/{plugin}/"):
             continue
@@ -301,6 +302,34 @@ def adopt(out, plugin=""):
         rec = by_sha.get(now) if now else None
         if rec:
             new = dict(rec, figure=rel, carried_from=str(rec.get("run") or ""))
+            new.pop("run", None)
+            _append_line(ledger, json.dumps(new))
+            adopted_answers.add(rel)
+            n_answers += 1
+    # A STATED DISCLOSURE FOLLOWS ITS KIND, as the closure reads it across siblings: a redrawn
+    # plate of a kind whose disclosure is still in the words the page prints is closed by that
+    # disclosure beside its siblings, and must be alone too. Adopted by entry, once per plate.
+    by_kind = {}
+    for run in sibling_runs(out):
+        for _rel, rec in _own_answers(run, plugin).items():
+            if rec.get("stated") is True:
+                by_kind.setdefault(kind_of(str(rec["figure"])), dict(rec, run=run.name))
+    own_kinds = {kind_of(r) for r, rec in own_answers.items() if rec.get("stated") is True}
+    words_by_kind = {}
+    for rel in figures(out):
+        if plugin and not rel.startswith(f"kernels/{plugin}/"):
+            continue
+        if rel in own_answers or rel in adopted_answers:
+            continue
+        kind = kind_of(rel)
+        rec = by_kind.get(kind)
+        if rec is None or kind in own_kinds:
+            continue
+        if kind not in words_by_kind:
+            words_by_kind[kind] = _norm(declared_text(plugin, rel, out=root)[1])
+        if words_by_kind[kind] and _norm(rec.get("answer")) in words_by_kind[kind]:
+            new = dict(rec, figure=rel, sha256=digest(root / rel),
+                       carried_from=str(rec.get("run") or ""), carried_by="entry")
             new.pop("run", None)
             _append_line(ledger, json.dumps(new))
             n_answers += 1
