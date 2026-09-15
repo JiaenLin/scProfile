@@ -343,10 +343,16 @@ def cache_forecast(root, plugin, run):
         then_, now_ = _effective(spec_then, key), _effective(spec_now, key)
         if then_ != now_:
             reasons.append(f"keyed parameter {key} {then_!r} -> {now_!r}: every unit re-infers")
+    # RELATIVE TO THE RUN NAMED, NOT TO THE CACHE'S CONTENTS (harness ADR-0026, run F): the
+    # store beside the runs holds one object per parameter key, stamped by whichever run wrote
+    # it last, and nothing here can read it. A run since the one named may have written objects
+    # for this span (a MISS that hits) or overwritten the ones it left (a HIT that misses).
     out["hit"] = not reasons
-    out["reasons"] = reasons or [f"the inference span and the keyed parameters are those of the "
-                                 f"run at {commit}; the saved objects are reused (assuming the "
-                                 f"same environment)"]
+    out["reasons"] = ([r + " - unless a run since then already wrote objects for this span"
+                       for r in reasons]
+                      or [f"the inference span and the keyed parameters are those of the run at "
+                          f"{commit}; the saved objects are reused, unless a run since then "
+                          f"overwrote them (assuming the same environment)"])
     return out
 
 
