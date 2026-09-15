@@ -1,19 +1,19 @@
 {
- "files": 164,
+ "files": 168,
  "vector": 0,
- "total": 164,
+ "total": 168,
  "by_axis": {
   "contrast": 60,
-  "group": 16,
+  "group": 20,
   "interaction": 36,
   "sample": 10,
   "unit": 42
  },
  "by_position": {
   "appendix": 66,
-  "conclusion": 28,
-  "contrast": 62,
-  "overview": 8
+  "conclusion": 24,
+  "contrast": 66,
+  "overview": 12
  },
  "families": [
   [
@@ -102,7 +102,7 @@
   ],
   [
    "nativecmp_diff_heatmap_weight",
-   1,
+   2,
    "contrast",
    "contrast"
   ],
@@ -116,7 +116,7 @@
    "nativecmp_interaction_flow",
    2,
    "interaction",
-   "conclusion"
+   "overview"
   ],
   [
    "nativecmp_interaction_flow_log",
@@ -157,7 +157,7 @@
   [
    "nativecmp_signalingRole_scatter_pair",
    1,
-   "contrast",
+   "group",
    "contrast"
   ]
  ]

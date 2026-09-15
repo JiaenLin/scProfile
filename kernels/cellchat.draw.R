@@ -315,8 +315,8 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   fn = "netVisual_heatmap",
   device = "ndev",
   at_most = 1,
-  w = quote(2400),
-  h = quote(1800),
+  w = quote(3600),
+  h = quote(2700),
   expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, title.name = .diffttl("Differential number of interactions")))),
   legend = "Which population pairs differ in the number of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is not the same as neither arm having interactions. Restricted to the populations both arms carry; a population present in only one arm has no difference to plot and is not on either axis. The colour key's own printed ticks follow only the larger-magnitude sign; a cell of the smaller sign is coloured below the first printed tick, off the labelled scale, with red still meaning higher in the second arm and blue still meaning higher in the reference.")
 .plan[["nativecmp_diff_heatmap_weight"]] <- list(
@@ -325,7 +325,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   by = "tool",
   fn = "netVisual_heatmap",
   device = "ndev",
-  at_most = 1,
+  at_most = 2,
   w = quote(2400),
   h = quote(1800),
   expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, title.name = .diffttl("Differential interaction strength")))),
@@ -380,7 +380,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   legend = "Each population is placed by how much inferred signalling it sends (horizontal) against how much it receives (vertical), for this unit alone. Both axes are scaled to this unit's own data and are not matched to any other unit's copy of this plot, so a point's position cannot be read against the same point on another unit's version without checking both axes' ranges. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested. Text labels are placed by an automatic label-repel step that can still set a label directly on its own point when several populations sit close together; label size has already been lowered once for a different crowding defect on this same panel, and a further reduction was found not to move a label off the point it sits on, so this is the automatic placement rather than an omission reachable through this call's own arguments.")
 .plan[["nativecmp_signalingRole_scatter_pair"]] <- list(
   id = "nativecmp_signalingRole_scatter_pair",
-  axis = "contrast",
+  axis = "group",
   by = "tool",
   fn = "netAnalysis_signalingRole_scatter",
   device = "png",
@@ -652,7 +652,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   h = quote(1800),
   file = quote(paste0("chord_cell__", safe, "__", gsub("[^A-Za-z0-9]+", "_", names(object.list)[i]))),
   expr = quote(netVisual_chord_cell(object.list[[i]], signaling = pw, lab.cex = 0.45, small.gap = 1, big.gap = 8, title.name = paste(pw, names(object.list)[i]))),
-  legend = "The {pw} pathway as a chord diagram, one per arm, one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning. A shorter canvas was tried to close up this panel's blank margin and it failed for every pathway on both arms, because the underlying layout refuses to draw its own sector track below a minimum size that depends on how many cell-state sectors and how long their labels are for a given unit, a size not computable here without rendering that layout itself and not safe to guess at again on a live dataset; so the canvas stays at the size already proven to draw everywhere and the blank margin is the cost of that safety.")
+  legend = "The {pw} pathway as a chord diagram, one per arm, one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning. The canvas is kept at the size that draws on every arm; the blank margin is the cost of that.")
 
 # THE INTERPRETER. `.draw(id)` draws one entry of the plan where a hand-written site stood;
 # `.draw_all(axis)` draws every entry of an axis, `.item` bound over an entry's items. Every

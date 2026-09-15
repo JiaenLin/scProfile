@@ -185,7 +185,7 @@ PLUGIN = {
     # coloured below the first tick, off the labelled scale, naming which colour is which
     # direction. The roster sentence from 0.38.0 is kept on both. Eleven `--stated` records close
     # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
-    "version": "0.41.0",
+    "version": "0.42.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -342,7 +342,7 @@ PLUGIN = {
                                  "every gene present in the object, the run reports `partial`. A "
                                  "gene-subset object or a different symbol set returns a small "
                                  "plausible table rather than failing"},
-        "dotplot_n": {"type": "int", "default": 20, "min": 1,
+        "dotplot_n": {"type": "int", "default": 30, "min": 1,
                       "help": "ligand-receptor pairs drawn in the dotplot. The full table is the "
                               "honest artifact; this is for the figure"},
     },
@@ -677,7 +677,7 @@ PLUGIN = {
                 'kind': 'interaction',
                 'drawn_by': 'plugin',
                 'axis': 'interaction',
-                'position': 'conclusion',
+                'position': 'overview',
                 'at_most': 2,
                 'file': 'paste0("interaction_flow__", safe)',
                 'expr': '{ ggplot2::ggplot(both, ggplot2::aes(x = d2, y = d1)) + ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") + ggplot2::geom_hline(yintercept = 0, colour = "grey85") + ggplot2::geom_vline(xintercept = 0, colour = "grey85") + ggplot2::geom_point(ggplot2::aes(colour = interaction), size = 2.4) + ggrepel::geom_text_repel(data = top, ggplot2::aes(label = name), size = 3, max.overlaps = 20, min.segment.length = 0) + ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b", midpoint = 0, limits = c(-max(abs(both$interaction), na.rm = TRUE), max(abs(both$interaction), na.rm = TRUE))) + ggplot2::coord_equal(xlim = c(-lim, lim), ylim = c(-lim, lim)) + ggplot2::labs(x = paste0(eff_lbl, " within ", st[2], " (the control)"), y = paste0(eff_lbl, " within ", st[1]), colour = paste0("larger in\\n", st[1], " (+) /\\n", st[2], " (-)"), title = paste0("Does the ", fac, " response depend on ", as.character(rows$stratum_factor[1]), "?"), subtitle = paste0("ABOVE the dashed line: larger response in ", st[1], "   BELOW: larger in ", st[2], " (control)")) + ggplot2::theme_classic() }',
@@ -792,8 +792,8 @@ PLUGIN = {
                 'position': 'contrast',
                 'at_most': 1,
                 'device': 'ndev',
-                'w': 2400,
-                'h': 1800,
+                'w': 3600,
+                'h': 2700,
                 # NOT A PALETTE ARGUMENT - REVERTED. `color.heatmap = "RdBu"` was tried here on
                 # the reasoning that the printed key ran 0 to 40 in red alone while the grid held
                 # solid blue cells; it failed on the cluster on every contrast of both differential
@@ -812,7 +812,7 @@ PLUGIN = {
                 'fn': 'netVisual_heatmap',
                 'axis': 'contrast',
                 'position': 'contrast',
-                'at_most': 1,
+                'at_most': 2,
                 'device': 'ndev',
                 'w': 2400,
                 'h': 1800,
@@ -909,7 +909,7 @@ PLUGIN = {
                 'kind': 'role_shift',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_signalingRole_scatter',
-                'axis': 'contrast',
+                'axis': 'group',
                 'position': 'contrast',
                 # MORE DEVICE, NOT SMALLER TEXT. Padding the shared axes 8% fixed a label pushed
                 # past the edge; it does nothing for several labels stacking on each other near
@@ -1280,7 +1280,7 @@ PLUGIN = {
                 'w': 1800,
                 'h': 1800,
                 'args': 'object.list[[i]], signaling = pw, lab.cex = 0.45, small.gap = 1, big.gap = 8, title.name = paste(pw, names(object.list)[i])',
-                'legend': "The {pw} pathway as a chord diagram, one per arm, one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning. A shorter canvas was tried to close up this panel's blank margin and it failed for every pathway on both arms, because the underlying layout refuses to draw its own sector track below a minimum size that depends on how many cell-state sectors and how long their labels are for a given unit, a size not computable here without rendering that layout itself and not safe to guess at again on a live dataset; so the canvas stays at the size already proven to draw everywhere and the blank margin is the cost of that safety.",
+                'legend': "The {pw} pathway as a chord diagram, one per arm, one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning. The canvas is kept at the size that draws on every arm; the blank margin is the cost of that.",
             },
             {
                 'id': 'F2_population_power', 'profile': True,
