@@ -3551,9 +3551,28 @@ def _measured(run, declare=None):
                 print(f"scprofile: no plugin named {name!r} in this tree", file=sys.stderr)
                 rc = REFUSE
                 continue
+            # THE ENVELOPE, NOT THE LAST RUN (harness ADR-0026, the open items): the model
+            # differs by path - cellchat's reuse path fits a higher base and a lower rate than
+            # its inference path - and replacing both terms from one run under-declared the
+            # other path from a measurement that was true. A term the fit exceeds is raised; one
+            # it does not is kept and said. Lowering a term on purpose is the maker's `--set`.
+            db0, dr0 = k.executor.get("memory_gb_base"), k.executor.get("memory_gb_per_100k")
+            kept = []
+            new_base = want_base if want_base is not None else 0.0
+            if db0 is not None and float(db0) > new_base:
+                kept.append(f"base {float(db0):.1f} kept above the fit's {new_base:.1f}")
+                new_base = float(db0)
+            new_rate = want_rate
+            if dr0 is not None and float(dr0) > new_rate:
+                kept.append(f"rate {float(dr0):.1f} kept above the fit's {new_rate:.1f}")
+                new_rate = float(dr0)
+            if kept:
+                print(f"  {'; '.join(kept)} - a run on another path is not evidence the "
+                      f"ceiling was wrong; lower it on purpose with the maker's --set")
             try:
-                write_memory_terms(k.path, want_base if want_base is not None else 0.0,
-                                   want_rate, note=f"measured in {Path(run).name}, +{pct}%")
+                write_memory_terms(k.path, new_base, new_rate,
+                                   note=f"measured in {Path(run).name}, +{pct}%"
+                                        + ("; the envelope over earlier runs" if kept else ""))
             except DeclarationError as e:
                 print(f"scprofile: REFUSED - {e}", file=sys.stderr)
                 rc = REFUSE

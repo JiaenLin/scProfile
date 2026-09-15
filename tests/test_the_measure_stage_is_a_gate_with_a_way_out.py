@@ -109,14 +109,23 @@ with tempfile.TemporaryDirectory() as td:
     rc, out = capacity(run, kernels)
     ck("and the gate is now answered without --declare", rc == 0, out[-200:])
 
-    print("\na later measurement re-declares; a file the tool cannot anchor in is left alone")
+    print("\na later measurement raises what it exceeds and keeps what it does not: the envelope")
+    # THE MODEL DIFFERS BY PATH (harness ADR-0026, the open items): cellchat's reuse path fits a
+    # HIGHER base (loading the saved object) and a LOWER per-cell rate than its inference path.
+    # `--declare` on the reuse run replaced both terms and so under-declared the rate for the
+    # next inference run - the direction that kills a job - from a measurement that was true.
+    # A declaration is a ceiling over every path measured so far: a term the new fit exceeds is
+    # raised, a term it does not is kept and said. Lowering one on purpose is the maker's
+    # `--set`, not a measurement's.
     (run / "report.json").write_text(json.dumps(model("widget", 3.0, 1.0, 4)))
     rc, out = capacity(run, kernels)
     ck("a base now below the fit owes again, whatever the rate does", rc != 0, out[-200:])
     rc, out = capacity(run, kernels, "--declare", "widget")
-    ck("re-declaring replaces both terms with the new fit",
-       rc == 0 and '"memory_gb_base": 3.3' in plug.read_text()
-       and '"memory_gb_per_100k": 1.1' in plug.read_text(), plug.read_text()[-400:])
+    ck("re-declaring raises the base the fit exceeds",
+       rc == 0 and '"memory_gb_base": 3.3' in plug.read_text(), plug.read_text()[-400:])
+    ck("and keeps the rate the fit does not reach, saying so",
+       '"memory_gb_per_100k": 4.4' in plug.read_text() and "kept" in out and "4.4" in out,
+       plug.read_text()[-400:] + out[-300:])
     ck("and there is still exactly one line carrying them",
        plug.read_text().count('"memory_gb_base"') == 1, plug.read_text()[-400:])
     odd = kernels / "oddity.py"
