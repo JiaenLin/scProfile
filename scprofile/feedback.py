@@ -235,9 +235,14 @@ def figure_drift(kernel, payload):
     recs = [f for f in (payload.get("figures") or []) if isinstance(f, dict)]
     drew = {str(f.get("id") or "") for f in recs}
     stems = {_Path(str(f.get("path") or "")).stem or str(f.get("id") or "") for f in recs}
+    # WHAT THE UNIT'S OWN GATE SKIPPED BY DESIGN (harness ADR-0026): a marginal pool draws
+    # nothing, a group unit draws no sample plate; the run records what `Context.draws` refused
+    # and a promise the unit was never to keep is not one it broke. Four pools of every run
+    # read as four broken promises before this.
+    by_design = {str(x) for x in (payload.get("not_drawn_by_design") or [])}
     for d in declared:
         fid = str(d.get("id") or "")
-        if fid in drew or not d.get("required", True):
+        if fid in drew or not d.get("required", True) or fid in by_design:
             continue
         # A FILE THE TOOL WRITES AS A SIDE EFFECT carries no caption and no record; the run is
         # held to it from disk, by `capacity --promised`, and nobody is charged for it here.

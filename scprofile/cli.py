@@ -3830,6 +3830,42 @@ def _promised(run):
     return 2 if (bad or lit or over) else 0
 
 
+def _drift(run):
+    """THE run -> declare EDGE, READ BACK AND GATED (harness ADR-0026). Every run computed
+    what the plugin DID against what it SAID (`feedback.declaration_drift`), printed one line
+    per unit per mismatch - 260 a run on the plugin the arc ended on - stored them in
+    report.json, and gated on nothing: the maker's contract stage read `done` over seven
+    mismatches. Each distinct drift once, with how many units said it; non-zero on any."""
+    from . import feedback as FB
+    p = run / "report.json"
+    if not p.is_file():
+        print(f"scprofile: no {p}. Run `scprofile run` first.", file=sys.stderr)
+        return REFUSE
+    try:
+        diags = (json.loads(p.read_text(encoding="utf-8")).get("diagnoses") or [])
+    except (OSError, ValueError) as e:
+        print(f"scprofile: cannot read {p}: {e}", file=sys.stderr)
+        return REFUSE
+    seen = {}
+    for d in diags:
+        if not isinstance(d, dict) or str(d.get("layer") or "") != FB.DECLARATION:
+            continue
+        why = str(d.get("why") or "")
+        seen.setdefault(why, {"n": 0, "action": str(d.get("action") or "")})
+        seen[why]["n"] += 1
+    if not seen:
+        print(f"  no declaration drift: what the plugins did is what they said ({run.name})")
+        return 0
+    print(f"  {len(seen)} declaration drift(s) on {run.name} - what a plugin did against what it "
+          f"said in `produces` and `report`:")
+    for why, rec in sorted(seen.items(), key=lambda kv: -kv[1]["n"]):
+        print(f"    {rec['n']} unit(s): {why[:160]}")
+        if rec["action"]:
+            print(f"        -> {rec['action'][:120]}")
+    print("  fix the declaration or the method, then rerun; the maker's `declared` stage reads this")
+    return 1
+
+
 def _capacity(a):
     """What a run delivered, held against another run.
 
@@ -3844,6 +3880,8 @@ def _capacity(a):
     run = Path(a.out).resolve()
     if getattr(a, "promised", False):
         return _promised(run)
+    if getattr(a, "drift", False):
+        return _drift(run)
     if getattr(a, "memory", False):
         return _measured(run, declare=getattr(a, "declare", None))
     if getattr(a, "cores", False):
@@ -4254,6 +4292,10 @@ def main(argv=None):
     cp_.add_argument("--promised", action="store_true",
                      help="instead: which upstream plots this run's plugins DECLARE they draw and "
                           "produced no file for, anywhere in the run")
+    cp_.add_argument("--drift", action="store_true",
+                     help="instead: what this run's plugins DID against what they SAID - the "
+                          "declaration diagnoses the run stored - each once with its unit count; "
+                          "non-zero on any (harness ADR-0026)")
     cp_.add_argument("--strict", action="store_true",
                      help="exit non-zero if this run delivered less than the other")
     cp_.set_defaults(fn=_capacity)

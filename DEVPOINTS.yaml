@@ -536,6 +536,16 @@ points:
           why: >
             `cost` orders a wave, longest pole first; a word the author felt was trusted for the
             whole life of the tool
+        - name: declared
+          phase: test
+          fills: [produces]
+          command: ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--drift"]
+          why: >
+            what the plugin DID against what it SAID (harness ADR-0026). Every run computed the
+            drift between `produces` and the outputs it registered, printed one line per unit
+            per mismatch - 260 a run on the plugin the arc ended on - stored them in report.json
+            and gated on nothing; the build's contract stage read `done` over seven mismatches
+            because it reads the keys and not the run. This stage reads the run back
         - name: promised
           phase: test
           # THE PROMISE IS THE PLAN (harness ADR-0016, step 3): `native.declared_from` reads an

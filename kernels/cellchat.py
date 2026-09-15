@@ -184,7 +184,7 @@ PLUGIN = {
     # coloured below the first tick, off the labelled scale, naming which colour is which
     # direction. The roster sentence from 0.38.0 is kept on both. Eleven `--stated` records close
     # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
-    "version": "0.39.0",
+    "version": "0.40.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -297,12 +297,13 @@ PLUGIN = {
     # the guard finds no object, and the inference is paid again - which is the exact cost this
     # was built to remove. Declaring it is what makes the saving worth anything across runs.
     "produces": ["tables/ccc_edges.csv",
-                 "[optional] objects/cellchat.rds",
-                 "[optional] objects/cellchat.inference.txt",
-                 "[optional] tables/cellchat_pathway_prob.csv",
-                 "[optional] tables/cellchat_centrality.csv",
-                 "[optional] tables/cellchat_rank_net.csv",
-                 "[optional] tables/cellchat_net_embedding.csv"],
+                 "objects[cellchat.rds]?",
+                 "objects[cellchat.inference.txt]?",
+                 "tables/cellchat_pathway_prob.csv?",
+                 "tables/cellchat_centrality.csv?",
+                 "tables/cellchat_rank_net.csv?",
+                 "tables/cellchat_net_embedding.csv?",
+                 "tables/cellchat_composition.csv"],
     "per_unit": "sample",
 
     "config": {

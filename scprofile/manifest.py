@@ -252,7 +252,7 @@ def _jsonable(v):
 def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=None, layers=None,
                  tables=None, figures=None, objects=None, absent=None, caveats=None, headline="",
                  measured=None, metrics=None, contradictions=None, config=None,
-                 contract=CONTRACT_VERSION):
+                 not_drawn=None, contract=CONTRACT_VERSION):
     """Write `out.json` from inside a kernel. The only supported way for a kernel to report.
 
     `caveats` is not decoration and is not optional in spirit: it is what the report prints under
@@ -304,6 +304,10 @@ def write_output(out_dir, *, kernel, version="", status="ok", obs=None, obsm=Non
         "figures": [_figure(v, rel) for v in (figures or [])],
         "objects": {str(k): rel(v) for k, v in (objects or {}).items()},
         "absent": [dict(a) for a in (absent or [])],
+        # WHAT THE UNIT'S OWN GATE DECLINED TO DRAW, by plan id (harness ADR-0026): a marginal
+        # pool, a plate of another unit axis. Read by the drift check so a plate the unit was
+        # never to draw is not a promise it broke.
+        "not_drawn_by_design": [str(x) for x in (not_drawn or [])],
         "caveats": [str(c) for c in (caveats or [])],
         # WHAT THE PLUGIN SAID AGAINST ITS OWN HEADLINE. Kept apart from `caveats` - which it
         # is also recorded in, so no existing reader loses it - because a refutation that
@@ -440,6 +444,7 @@ def read_output(out_dir):
     d.setdefault("contradictions", [])
     d.setdefault("absent", [])
     d.setdefault("objects", {})
+    d.setdefault("not_drawn_by_design", [])
     return d
 
 
@@ -456,7 +461,10 @@ def unknown_keys(payload):
              # the RESOLVED parameters this unit ran with - defaults filled in, overrides
              # applied. Without it a run cannot say what produced it and a reader cannot tell a
              # default from a choice.
-             "config"}
+             "config",
+             # what the unit's own gate declined to draw, by plan id, read by the drift check
+             # (harness ADR-0026)
+             "not_drawn_by_design"}
     return sorted(set(payload) - known - set(OUTPUT_SLOTS))
 
 

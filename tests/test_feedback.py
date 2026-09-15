@@ -371,6 +371,12 @@ _pay2 = {"status": "ok", "figures": [_pay["figures"][0]]}
 _d5 = [x for x in FB.figure_drift(_kern, _pay2) if x.layer == FB.DECLARATION]
 ck("a unit-axis panel the unit did not draw is still charged to it",
    len(_d5) == 1 and "native_ring" in _d5[0].why, "; ".join(x.why[:90] for x in _d5))
+# UNLESS THE UNIT'S OWN GATE SKIPPED IT (harness ADR-0026): a marginal pool draws nothing by
+# design and the run recorded that; the four pools of every run read as four broken promises.
+_pay2b = dict(_pay2, not_drawn_by_design=["native_ring"])
+_d5b = [x for x in FB.figure_drift(_kern, _pay2b) if x.layer == FB.DECLARATION]
+ck("a panel the unit's gate skipped by design is not a promise broken",
+   not _d5b, "; ".join(x.why[:90] for x in _d5b))
 
 # AND BY THE PLAN'S OWN FILE RULE, IN BOTH DIRECTIONS. A per-item family's records are its files -
 # `native_river_outgoing`, `native_chord_gene__LAMININ` - and its entry is the family's id; matched

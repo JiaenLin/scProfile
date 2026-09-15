@@ -802,6 +802,7 @@ def main(argv):
         obs=ctx._obs, obsm=ctx._obsm, layers=ctx._layers,
         tables=ctx._tables, figures=ctx._figures, objects=ctx._objects,
         absent=ctx.absent, caveats=ctx.caveats,
+        not_drawn=[fid for fid in (getattr(ctx, "plan_ids", None) or ()) if not ctx.draws(fid)],
         metrics=getattr(ctx, "_metrics", None),
         # THE RESOLVED PARAMETERS, so a run can say what it ran with and a section can print the
         # settings behind its numbers once, at the top, instead of nowhere.

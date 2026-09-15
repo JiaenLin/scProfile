@@ -647,6 +647,32 @@ def check(spec, name="<plugin>"):
     # declaration and nothing anywhere compared it with what the plugin produced. The host now
     # renders the per-arm view from any per-cell column a plugin writes, so the claim is
     # structurally possible exactly when there is such a column to split.
+    # THE GRAMMAR OF `produces` IS THE ONE ITS READERS READ (harness ADR-0026): a table by its
+    # name (`edges.csv`, or `tables/edges.csv`), a slot form (`obs[phase]`, `objects[fit.rds]`),
+    # a trailing `?` for an output only some runs make. A plugin wrote `[optional] objects/x.rds`
+    # and every reader took it for a required table named x.rds: seven drift lines per unit,
+    # every run, and nobody could say which side was wrong.
+    _SLOTS = ("obs", "obsm", "layers", "objects", "var", "varm", "uns", "obsp")
+    for item in (spec.get("produces") or []):
+        t = str(item).strip()
+        core = t.rstrip("?").strip()
+        if t.lower().startswith("[optional]"):
+            rest = t[len("[optional]"):].strip()
+            out.append(("ERROR", f"produces {t!r}: an optional output is written with a trailing "
+                                 f"`?`, as the readers of `produces` read it - `{rest}?` (and a "
+                                 f"slot's file as `slot[name]`)"))
+            continue
+        if "[" in core and core.endswith("]"):
+            slot = core.partition("[")[0].strip()
+            if slot not in _SLOTS:
+                out.append(("ERROR", f"produces {t!r}: {slot!r} is not a slot; the slots are "
+                                     f"{', '.join(_SLOTS)}"))
+            continue
+        parts = core.split("/")
+        if len(parts) > 1 and parts[0] != "tables":
+            out.append(("ERROR", f"produces {t!r}: a path under {parts[0]!r} is read as a table "
+                                 f"named {parts[-1]!r}; a file in a slot directory is declared "
+                                 f"`{parts[0]}[{parts[-1]}]`" + ("?" if t.endswith("?") else "")))
     if spec.get("design_aware") and not [q for q in (spec.get("produces") or [])
                                          if str(q).startswith("obs[")]:
         out.append(("ERROR", "declares `design_aware` - it reports per arm - and produces no "
