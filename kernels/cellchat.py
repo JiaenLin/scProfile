@@ -152,7 +152,27 @@ PLUGIN = {
     # reader, no tool naming itself - with every disclosure the earlier rounds won preserved in
     # substance. Still no number changes: every edit is presentation or which plate gets drawn,
     # never what a table computes.
-    "version": "0.37.0",
+    # 0.38.0: the worksheet on the 0.37.0 rerun, 33 findings on 12 kinds, most of them a legend
+    # rewritten in the last round no longer carrying a disclosure an earlier round had won - the
+    # words moved, the fact did not, and six kinds closed `--stated` on text already standing in
+    # this file (the shared-weight aggregate ring, the bubble's own label/key trade-off, the
+    # chord's own minimum canvas, the interaction matrix's own restricted roster, the log-scale
+    # subtitle cut, the pattern heatmap's own blank margin - none of these needed an edit, only
+    # the record). Four kinds needed one sentence each, added and closed the same way: a circle
+    # node with zero strength can render hollow rather than solid, which is the tool's own zero,
+    # not a missing population; a count heatmap's, a role scatter's and a paired role scatter's
+    # own scale or roster is fitted per unit or per pair and is not the same set or the same
+    # colour ceiling another unit's copy carries. Two kinds got an actual edit rather than a
+    # sentence, because the eye found more than an undisclosed default: the differential heatmaps
+    # on count and on weight print a colour key that can drop the whole negative half of a
+    # diverging scale - a real run's own key ran 0 to 40 in red alone while the grid held solid
+    # blue cells - so `color.heatmap = "RdBu"` is now named explicitly rather than left to
+    # auto-detection, the way the tool's own tutorial calls this exact comparison plot; both also
+    # gained the same restricted-roster sentence the interaction matrix already carries. NEITHER
+    # EDIT IS VERIFIED RENDERED - CellChat, ComplexHeatmap and circlize are not installed in this
+    # room - so both differential-heatmap kinds are left OPEN for the next rerun rather than
+    # closed here; every other kind's ledger record is written against this run's own bytes.
+    "version": "0.38.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -726,7 +746,7 @@ PLUGIN = {
                 # same two facts ON THE PLATE, in the tool's own base-graphics margin, the way
                 # `.diffkey()` does for the comparison rings.
                 'expr': '{\n netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),\n weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,\n vertex.label.cex = 0.5, title.name = "interaction strength")\n graphics::legend("bottomleft", bty = "n", cex = 0.65,\n legend = c("edge colour = the sending population (matches its node)",\n "edge width = summed communication probability sent"))\n .stampf()\n }',
-                'legend': 'Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is the summed communication probability inferred from the sender to the receiver, not a count of interactions, and edge colour is the sender. The ring is a layout and nothing more: a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.',
+                'legend': 'Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is the summed communication probability inferred from the sender to the receiver, not a count of interactions, and edge colour is the sender. A population with no inferred communication in either direction can render as an unfilled outline rather than a solid circle, which is the drawing\'s own way of showing zero strength and not a missing population; the {ngrp} here is this unit\'s own roster and is not necessarily the set another unit\'s copy of this figure carries. The ring is a layout and nothing more: a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.',
             },
             {
                 'id': 'native_heatmap_count',
@@ -747,7 +767,7 @@ PLUGIN = {
                 # wrapping this call's returned object the same way reaches the identical slot
                 # without touching what the tool computes or draws internally.
                 'expr': '{\n ComplexHeatmap::draw(\n netVisual_heatmap(cc, measure = "count", color.heatmap = "Blues", color.use = .gcol,\n title.name = .ttl("interactions")),\n column_title = "Targets (Receiver)", column_title_side = "bottom")\n }',
-                'legend': "Senders down the rows, receivers across the columns; colour is the number of inferred interactions for that ordered pair. The bars above and beside are the column and row totals. The reading is directional: the cell at row i, column j is i signalling to j, and is not the cell opposite it.",
+                'legend': "Senders down the rows, receivers across the columns; colour is the number of inferred interactions for that ordered pair. The colour scale is fitted to this unit's own maximum and is not shared with any other unit's copy of this heatmap, so the same shade on two plates is not the same count; the bars beside each plate carry the actual totals to check against. The reading is directional: the cell at row i, column j is i signalling to j, and is not the cell opposite it.",
             },
             {
                 'id': 'nativecmp_diff_heatmap_count',
@@ -760,8 +780,18 @@ PLUGIN = {
                 'device': 'ndev',
                 'w': 2400,
                 'h': 1800,
-                'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, title.name = .diffttl("Differential number of interactions")))',
-                'legend': 'Which population pairs differ in the number of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is not the same as neither arm having interactions.',
+                # AN EXPLICIT DIVERGING PALETTE, NOT THE AUTO-DETECTED ONE. Found on a real run:
+                # the printed colour key ran 0 to 40 in a single red gradient while the grid
+                # plainly held several solid blue cells (higher in the reference arm), so the key
+                # gave no scale at all to read a blue cell's magnitude by - not a missing tick at
+                # the low end of one gradient, but the whole negative half of the key absent.
+                # `color.heatmap` is this function's own argument for which palette family it
+                # draws with, left to auto-detection until now; naming the two-sided palette
+                # explicitly is the documented way this exact comparison plot is called in the
+                # tool's own tutorial. Not verified rendered - CellChat and ComplexHeatmap are not
+                # installed in this room - so this is recorded as needing a redraw, not closed.
+                'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, color.heatmap = "RdBu", title.name = .diffttl("Differential number of interactions")))',
+                'legend': 'Which population pairs differ in the number of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is not the same as neither arm having interactions. Restricted to the populations both arms carry; a population present in only one arm has no difference to plot and is not on either axis.',
             },
             {
                 'id': 'nativecmp_diff_heatmap_weight',
@@ -774,8 +804,15 @@ PLUGIN = {
                 'device': 'ndev',
                 'w': 2400,
                 'h': 1800,
-                'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, title.name = .diffttl("Differential interaction strength")))',
-                'legend': 'The same differential matrix on interaction strength rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair: it can gain interactions while each of them weakens, which is why the two panels are drawn together.',
+                # THE SAME EXPLICIT PALETTE AS THE COUNT SIBLING, FOR THE SAME REASON. Found on a
+                # real run across several contrasts of this panel: a colour key running from a
+                # small negative number to a larger positive one, once with no negative tick at
+                # all despite a visible blue cell - the same missing-negative-half defect as the
+                # count heatmap beside this one, not a fresh one. Not verified rendered - CellChat
+                # and ComplexHeatmap are not installed in this room - recorded as needing a
+                # redraw, not closed.
+                'expr': 'ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, color.heatmap = "RdBu", title.name = .diffttl("Differential interaction strength")))',
+                'legend': 'The same differential matrix on interaction strength rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair: it can gain interactions while each of them weakens, which is why the two panels are drawn together. Restricted to the same shared populations as its count sibling, for the same reason.',
             },
             # THE TITLE NAMES THE EFFECT, NOT ONLY THE STRATA. "change within X minus change within Y"
             # never says change OF WHAT, and a reader who has to reconstruct which factor is being
@@ -850,7 +887,7 @@ PLUGIN = {
                 # the returned ggplot instead, the same `.fctx$stamp` this file's base-graphics
                 # panels already carry, added through `+` rather than a base-graphics call.
                 'expr': '{\n gg <- netAnalysis_signalingRole_scatter(cc, color.use = .gcol, label.size = 2.0)\n .xr <- range(gg$data$x, na.rm = TRUE)\n gg <- gg + ggplot2::xlim(.xr[1] - diff(.xr) * 0.04, .xr[2] + diff(.xr) * 0.14)\n gg + ggplot2::labs(caption = if (nzchar(.fctx$stamp)) .fctx$stamp else NULL)\n }',
-                'legend': 'Each population is placed by how much inferred signalling it sends (horizontal) against how much it receives (vertical), for this unit alone. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested. Text labels are placed by an automatic label-repel step that can still set a label directly on its own point when several populations sit close together; label size has already been lowered once for a different crowding defect on this same panel, and a further reduction was found not to move a label off the point it sits on, so this is the automatic placement rather than an omission reachable through this call\'s own arguments.',
+                'legend': 'Each population is placed by how much inferred signalling it sends (horizontal) against how much it receives (vertical), for this unit alone. Both axes are scaled to this unit\'s own data and are not matched to any other unit\'s copy of this plot, so a point\'s position cannot be read against the same point on another unit\'s version without checking both axes\' ranges. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested. Text labels are placed by an automatic label-repel step that can still set a label directly on its own point when several populations sit close together; label size has already been lowered once for a different crowding defect on this same panel, and a further reduction was found not to move a label off the point it sits on, so this is the automatic placement rather than an omission reachable through this call\'s own arguments.',
             },
             # THE SIZE LEGEND MUST BE SHARED TOO. With shared axes but per-panel size scales the two panels
             # read as comparable and are not: measured on one pair, the left legend ran to 500 and the
@@ -897,7 +934,7 @@ PLUGIN = {
                 # hue. Both are the tool's own placement, stated in the legend below rather than
                 # chased through a fifth device size or a sixth label size.
                 'expr': '{\n gg <- Filter(Negate(is.null), role)\n if (!length(gg)) stop("neither object returned a role scatter")\n lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)\n .padr <- diff(lim) * 0.08\n lim <- c(lim[1] - .padr, lim[2] + .padr)\n smax <- max(unlist(lapply(gg, function(g) g$data$Count)), na.rm = TRUE)\n for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +\n ggplot2::scale_size_continuous(limits = c(0, smax)) +\n ggplot2::ggtitle(names(role)[i])\n patchwork::wrap_plots(plots = gg)\n }',
-                'legend': 'One sender-against-receiver scatter per arm, drawn on shared axes and a shared point scale so the two are comparable by eye, a comparison this panel adds beyond what either single-arm scatter carries alone. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point\'s label is placed, and its leader line drawn or withheld, by an automatic label-repel step, and each point\'s colour comes from a shared colour map when the cohort provides one, or a default palette otherwise; neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is reachable through this call\'s own arguments, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue.',
+                'legend': 'One sender-against-receiver scatter per arm, drawn on shared axes and a shared point scale so the two are comparable by eye, a comparison this panel adds beyond what either single-arm scatter carries alone. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point\'s label is placed, and its leader line drawn or withheld, by an automatic label-repel step, and each point\'s colour comes from a shared colour map when the cohort provides one, or a default palette otherwise; neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is reachable through this call\'s own arguments, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue. A population that appears in either arm\'s own single-panel version of this scatter can still be missing from both sides here; the single-arm panel beside each side of this pair carries the complete roster to check against.',
             },
             {
                 'id': 'native_signalingRole_heatmap_out',

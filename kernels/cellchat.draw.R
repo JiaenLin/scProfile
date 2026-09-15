@@ -293,7 +293,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
  "edge width = summed communication probability sent"))
  .stampf()
  }),
-  legend = "Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is the summed communication probability inferred from the sender to the receiver, not a count of interactions, and edge colour is the sender. The ring is a layout and nothing more: a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.")
+  legend = "Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is the summed communication probability inferred from the sender to the receiver, not a count of interactions, and edge colour is the sender. A population with no inferred communication in either direction can render as an unfilled outline rather than a solid circle, which is the drawing's own way of showing zero strength and not a missing population; the {ngrp} here is this unit's own roster and is not necessarily the set another unit's copy of this figure carries. The ring is a layout and nothing more: a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.")
 .plan[["native_heatmap_count"]] <- list(
   id = "native_heatmap_count",
   axis = "group",
@@ -307,7 +307,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
  title.name = .ttl("interactions")),
  column_title = "Targets (Receiver)", column_title_side = "bottom")
  }),
-  legend = "Senders down the rows, receivers across the columns; colour is the number of inferred interactions for that ordered pair. The bars above and beside are the column and row totals. The reading is directional: the cell at row i, column j is i signalling to j, and is not the cell opposite it.")
+  legend = "Senders down the rows, receivers across the columns; colour is the number of inferred interactions for that ordered pair. The colour scale is fitted to this unit's own maximum and is not shared with any other unit's copy of this heatmap, so the same shade on two plates is not the same count; the bars beside each plate carry the actual totals to check against. The reading is directional: the cell at row i, column j is i signalling to j, and is not the cell opposite it.")
 .plan[["nativecmp_diff_heatmap_count"]] <- list(
   id = "nativecmp_diff_heatmap_count",
   axis = "contrast",
@@ -317,8 +317,8 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   at_most = 1,
   w = quote(2400),
   h = quote(1800),
-  expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, title.name = .diffttl("Differential number of interactions")))),
-  legend = "Which population pairs differ in the number of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is not the same as neither arm having interactions.")
+  expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "count", color.use = .ccol, color.heatmap = "RdBu", title.name = .diffttl("Differential number of interactions")))),
+  legend = "Which population pairs differ in the number of inferred interactions between the two arms, as a matrix: senders down the rows, receivers across the columns. Red is higher in the second arm, blue is higher in the reference. A pale cell means the two arms agree there, which is not the same as neither arm having interactions. Restricted to the populations both arms carry; a population present in only one arm has no difference to plot and is not on either axis.")
 .plan[["nativecmp_diff_heatmap_weight"]] <- list(
   id = "nativecmp_diff_heatmap_weight",
   axis = "contrast",
@@ -328,8 +328,8 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   at_most = 1,
   w = quote(2400),
   h = quote(1800),
-  expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, title.name = .diffttl("Differential interaction strength")))),
-  legend = "The same differential matrix on interaction strength rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair: it can gain interactions while each of them weakens, which is why the two panels are drawn together.")
+  expr = quote(ComplexHeatmap::draw( netVisual_heatmap(m, measure = "weight", color.use = .ccol, color.heatmap = "RdBu", title.name = .diffttl("Differential interaction strength")))),
+  legend = "The same differential matrix on interaction strength rather than count. Red is higher in the second arm, blue in the reference. Strength and count can move in opposite directions for one pair: it can gain interactions while each of them weakens, which is why the two panels are drawn together. Restricted to the same shared populations as its count sibling, for the same reason.")
 .plan[["nativecmp_interaction"]] <- list(
   id = "nativecmp_interaction",
   axis = "interaction",
@@ -377,7 +377,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
  gg <- gg + ggplot2::xlim(.xr[1] - diff(.xr) * 0.04, .xr[2] + diff(.xr) * 0.14)
  gg + ggplot2::labs(caption = if (nzchar(.fctx$stamp)) .fctx$stamp else NULL)
  }),
-  legend = "Each population is placed by how much inferred signalling it sends (horizontal) against how much it receives (vertical), for this unit alone. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested. Text labels are placed by an automatic label-repel step that can still set a label directly on its own point when several populations sit close together; label size has already been lowered once for a different crowding defect on this same panel, and a further reduction was found not to move a label off the point it sits on, so this is the automatic placement rather than an omission reachable through this call's own arguments.")
+  legend = "Each population is placed by how much inferred signalling it sends (horizontal) against how much it receives (vertical), for this unit alone. Both axes are scaled to this unit's own data and are not matched to any other unit's copy of this plot, so a point's position cannot be read against the same point on another unit's version without checking both axes' ranges. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested. Text labels are placed by an automatic label-repel step that can still set a label directly on its own point when several populations sit close together; label size has already been lowered once for a different crowding defect on this same panel, and a further reduction was found not to move a label off the point it sits on, so this is the automatic placement rather than an omission reachable through this call's own arguments.")
 .plan[["nativecmp_signalingRole_scatter_pair"]] <- list(
   id = "nativecmp_signalingRole_scatter_pair",
   axis = "contrast",
@@ -398,7 +398,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
  ggplot2::ggtitle(names(role)[i])
  patchwork::wrap_plots(plots = gg)
  }),
-  legend = "One sender-against-receiver scatter per arm, drawn on shared axes and a shared point scale so the two are comparable by eye, a comparison this panel adds beyond what either single-arm scatter carries alone. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point's label is placed, and its leader line drawn or withheld, by an automatic label-repel step, and each point's colour comes from a shared colour map when the cohort provides one, or a default palette otherwise; neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is reachable through this call's own arguments, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue.")
+  legend = "One sender-against-receiver scatter per arm, drawn on shared axes and a shared point scale so the two are comparable by eye, a comparison this panel adds beyond what either single-arm scatter carries alone. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point's label is placed, and its leader line drawn or withheld, by an automatic label-repel step, and each point's colour comes from a shared colour map when the cohort provides one, or a default palette otherwise; neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is reachable through this call's own arguments, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue. A population that appears in either arm's own single-panel version of this scatter can still be missing from both sides here; the single-arm panel beside each side of this pair carries the complete roster to check against.")
 .plan[["native_signalingRole_heatmap_out"]] <- list(
   id = "native_signalingRole_heatmap_out",
   axis = "group",
