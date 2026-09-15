@@ -224,6 +224,7 @@ def _default_memory_gb():
 
 
 from . import figure_context as _FC   # noqa: E402
+from . import landscape as _L         # noqa: E402
 
 
 def _run(a):
@@ -708,8 +709,12 @@ def _run(a):
             # disposable; putting one in the other makes the run un-sealable or the cache
             # un-disposable. `_cache` sits next to the run directories, is scoped per plugin and
             # unit, and deleting it costs time and nothing else.
+            # AND, FOR A PLUGIN THAT DECLARES ITS INFERENCE SPAN, KEYED BY THAT SPAN (harness
+            # ADR-0026, runs F and G): versions of the inference coexist in the store instead of
+            # the last writer overwriting the rest. `landscape.span_key`.
             cache_dir=(None if getattr(a, "no_cache", False) else
-                       Path(a.out).resolve().parent / "_cache" / name / str(unit or "_")),
+                       Path(a.out).resolve().parent / "_cache" / name / str(unit or "_")
+                       / (_L.span_key(ks[name].path, ks[name].spec.get("cache")) or "")),
             # ONE COLOUR MAP AND ONE STAMP FOR THE WHOLE RUN. Built from the run's OWN label
             # totals, so every unit and every plugin resolves a label to the same colour - the
             # defect this fixes was one population drawn blue in the comparison figures and red

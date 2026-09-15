@@ -262,6 +262,30 @@ def _span_of(src, markers):
     return "\n".join(lines[ia:ib + 1])
 
 
+def span_key(plugin_path, decl):
+    """The key the host puts the unit's cache directory under: a digest of the declared
+    inference span, or None when the plugin declares none (harness ADR-0026, runs F and G).
+
+    LAST WRITER WON. The store held one object per parameter key; a run of another inference
+    span re-inferred and overwrote the objects the previous run left, and the next run of the
+    previous span - forecast HIT - paid the whole inference again and overwrote them back.
+    Keyed by the span, versions of the inference coexist: a run of another span writes beside,
+    never over, and what a run left is still there when its span comes back. The stamp inside
+    the object still decides validity; this only decides where it lives.
+    """
+    if not isinstance(decl, dict) or not decl.get("span"):
+        return None
+    try:
+        src = Path(plugin_path).read_text(encoding="utf-8")
+    except OSError:
+        return None
+    span = _span_of(src, list(decl.get("span") or []))
+    if span is None:
+        return None
+    import hashlib
+    return hashlib.sha1(span.encode("utf-8")).hexdigest()[:10]
+
+
 def cache_forecast(root, plugin, run):
     """{hit: True|False|None, reasons: [...], commit} - whether the next run of `plugin` from
     the tree at `root` will reuse the objects the run at `run` left, read from the declaration
@@ -343,16 +367,17 @@ def cache_forecast(root, plugin, run):
         then_, now_ = _effective(spec_then, key), _effective(spec_now, key)
         if then_ != now_:
             reasons.append(f"keyed parameter {key} {then_!r} -> {now_!r}: every unit re-infers")
-    # RELATIVE TO THE RUN NAMED, NOT TO THE CACHE'S CONTENTS (harness ADR-0026, run F): the
-    # store beside the runs holds one object per parameter key, stamped by whichever run wrote
-    # it last, and nothing here can read it. A run since the one named may have written objects
-    # for this span (a MISS that hits) or overwritten the ones it left (a HIT that misses).
+    # RELATIVE TO THE RUN NAMED, NOT TO THE CACHE'S CONTENTS (harness ADR-0026, run F): nothing
+    # here can read the store. The store keeps one object per span (`span_key`), so a run of
+    # another span since the one named cannot have overwritten what it left: a HIT holds short
+    # of the cache being cleared, and a MISS may still hit if a run since then wrote objects for
+    # this span.
     out["hit"] = not reasons
     out["reasons"] = ([r + " - unless a run since then already wrote objects for this span"
                        for r in reasons]
                       or [f"the inference span and the keyed parameters are those of the run at "
-                          f"{commit}; the saved objects are reused, unless a run since then "
-                          f"overwrote them (assuming the same environment)"])
+                          f"{commit}; the saved objects are under this span's key and are reused "
+                          f"unless the cache was cleared (assuming the same environment)"])
     return out
 
 

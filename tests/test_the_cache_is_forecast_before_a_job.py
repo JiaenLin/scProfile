@@ -117,6 +117,56 @@ with tempfile.TemporaryDirectory() as td:
     ck("MISS on the line, with the reason", p.returncode == 0 and "MISS" in p.stdout and "span" in p.stdout,
        p.stdout + p.stderr)
 
+print("\nthe store keeps one object per span: a run with another span writes beside, not over")
+# LAST WRITER WINS, TWICE IN ONE HOUR (harness ADR-0026, runs F and G): the store held one
+# object per parameter key, a mutant span re-inferred and overwrote main's objects, and the next
+# run of main - forecast HIT - paid twenty minutes re-inferring and overwrote them back. The
+# host keys the unit's cache directory by the declared span, so versions of the inference
+# coexist and the objects a run left cannot be overwritten by a run of another span; the
+# forecast's HIT then means what it says, short of the cache being cleared.
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td) / "tool"
+    (root / "kernels").mkdir(parents=True)
+    f = root / "kernels" / "demo.py"
+    f.write_text(PLUGIN, encoding="utf-8")
+    k1 = L.span_key(f, {"span": ["# --- RECIPE START ---", "# --- RECIPE END ---"]})
+    ck("a key, ten hex characters", isinstance(k1, str) and len(k1) == 10
+       and all(c in "0123456789abcdef" for c in k1), str(k1))
+    f.write_text(PLUGIN.replace('"legend": "a ring"', '"legend": "a ring, again"'), encoding="utf-8")
+    ck("a legend edit keeps the key",
+       L.span_key(f, {"span": ["# --- RECIPE START ---", "# --- RECIPE END ---"]}) == k1)
+    f.write_text(PLUGIN.replace("fit <- infer(", "# a note\nfit <- infer("), encoding="utf-8")
+    k2 = L.span_key(f, {"span": ["# --- RECIPE START ---", "# --- RECIPE END ---"]})
+    ck("an edit inside the span is another key", k2 != k1, f"{k1} {k2}")
+    ck("no declaration, no key: the directory is the unit's, as before",
+       L.span_key(f, None) is None and L.span_key(f, {}) is None)
+    f.write_text(PLUGIN.replace("# --- RECIPE END ---", "# --- gone ---"), encoding="utf-8")
+    ck("markers not both in the file: no key, said rather than guessed",
+       L.span_key(f, {"span": ["# --- RECIPE START ---", "# --- RECIPE END ---"]}) is None)
+src = (ROOT / "scprofile" / "cli.py").read_text(encoding="utf-8")
+ck("the runner keys the unit's cache directory by it",
+   "_L.span_key(" in src or "landscape.span_key(" in src or "span_key(" in src.split("cache_dir=")[1][:600]
+   if "cache_dir=" in src else False)
+
+print("\nthe HIT means what it says now")
+with tempfile.TemporaryDirectory() as td:
+    root = Path(td) / "tool"
+    (root / "kernels").mkdir(parents=True)
+    f = root / "kernels" / "demo.py"
+    f.write_text(PLUGIN, encoding="utf-8")
+    git(root, "init", "-q")
+    git(root, "-c", "user.email=t@t", "-c", "user.name=t", "add", "-A")
+    git(root, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "one")
+    commit = git(root, "rev-parse", "--short", "HEAD").stdout.strip()
+    run = Path(td) / "run"
+    (run / "kernels" / "demo" / "U1").mkdir(parents=True)
+    (run / "report.json").write_text(json.dumps({"tool_commit": commit}))
+    (run / "kernels" / "demo" / "U1" / "in.json").write_text(json.dumps({"params": {}}))
+    fc = L.cache_forecast(root, "demo", run)
+    ck("a hit no longer hedges about a later run overwriting the objects",
+       fc["hit"] is True and "overwrote" not in " ".join(fc["reasons"]), str(fc))
+    ck("it names the one thing that still defeats it", "clear" in " ".join(fc["reasons"]), str(fc))
+
 print("\nthe declaration's shape is held")
 from scprofile import declare as D                                              # noqa: E402
 
