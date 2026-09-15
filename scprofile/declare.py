@@ -679,6 +679,84 @@ def _check_signatures(spec, name, out, signatures=None):
                                  f"{', '.join(bad)}; its parameters are {', '.join(formals)}"))
 
 
+#: WHICH AXES EACH PHASE DRAWS BY - the same two sets the generated companion holds a site to
+#: at run time (`scaffold`, K-o). `run(ctx)` sees one unit; `compare(ctx)` sees a pair of arms
+#: and the cohort.
+PHASE_AXES = {"run": ("unit", "sample", "group"), "compare": ("contrast", "interaction", "cohort")}
+
+
+def draw_site_phase(src, spec):
+    """[(level, message)] for every plan entry whose `axis` is not one the script holding its
+    draw site draws by (harness ADR-0026, the static half of K-o).
+
+    Run A moved a pair scatter to the group axis and nothing moved: the plan counted it per
+    arm and the run drew it per contrast, its `.draw` site being in the compare script. The
+    plugin's own Python says which R string each phase launches - `ctx.rscript(_R_RUN, ...)`
+    inside `run(ctx)`, `_R_COMPARE` inside `compare(ctx)` - the strings say where each site is,
+    and `PHASE_AXES` says what each phase draws by. Nothing is inferred from the R's text
+    beyond the site itself; a string no phase launches contradicts nothing.
+    """
+    import ast as _ast
+    import re as _re
+    out = []
+    try:
+        mod = _ast.parse(src)
+    except SyntaxError:
+        return out
+    phase_of = {}
+    for node in mod.body:
+        if isinstance(node, _ast.FunctionDef) and node.name in PHASE_AXES:
+            for n in _ast.walk(node):
+                if (isinstance(n, _ast.Call) and isinstance(n.func, _ast.Attribute)
+                        and n.func.attr == "rscript" and n.args
+                        and isinstance(n.args[0], _ast.Name)):
+                    phase_of.setdefault(n.args[0].id, node.name)
+    def _text(node):
+        # THE LITERAL BENEATH A SPLICE: cellchat's scripts are `r\'\'\'...\'\'\'.replace("__R_CAP__",
+        # _R_CAP)`; the sites are in the literal, so a method call on a literal, a
+        # concatenation of literals and an f-string's constant parts are read to their text.
+        if isinstance(node, _ast.Constant) and isinstance(node.value, str):
+            return node.value
+        if isinstance(node, _ast.Call) and isinstance(node.func, _ast.Attribute):
+            return _text(node.func.value)
+        if isinstance(node, _ast.BinOp) and isinstance(node.op, _ast.Add):
+            a, b = _text(node.left), _text(node.right)
+            return None if a is None and b is None else (a or "") + (b or "")
+        if isinstance(node, _ast.JoinedStr):
+            return "".join(_text(v) or "" for v in node.values)
+        return None
+    strings = {}
+    for node in mod.body:
+        if (isinstance(node, _ast.Assign) and len(node.targets) == 1
+                and isinstance(node.targets[0], _ast.Name)):
+            text = _text(node.value)
+            if text is not None:
+                strings[node.targets[0].id] = text
+    if not phase_of or not strings:
+        return out
+    figs = ((spec.get("report") or {}).get("figures") or []) if isinstance(spec, dict) else []
+    for e in figs:
+        if not isinstance(e, dict) or not e.get("id") or not e.get("axis"):
+            continue
+        fid, axis = str(e["id"]), str(e["axis"])
+        site = _re.compile(r"""\.draw\((["'])%s\1""" % _re.escape(fid))
+        for sname, phase in phase_of.items():
+            text = strings.get(sname)
+            if text is None or not site.search(text):
+                continue
+            allowed = PHASE_AXES[phase]
+            if axis in allowed:
+                continue
+            other = next(p for p in PHASE_AXES if p != phase)
+            out.append(("ERROR", f"report.figures[{fid}] is drawn per {axis!r}, and its draw "
+                                 f"site is in {sname}, launched by {phase}(ctx), which draws "
+                                 f"per {', '.join(allowed)}. The run would skip it (the companion "
+                                 f"refuses a site whose script does not draw by the entry's "
+                                 f"axis): move the site to the script {other}(ctx) launches, or "
+                                 f"the axis to one of {', '.join(allowed)}"))
+    return out
+
+
 def check(spec, name="<plugin>", signatures=None):
     """Every problem with a declaration, as a list. Empty means it is usable.
 

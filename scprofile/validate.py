@@ -76,6 +76,10 @@ def validate_plugin(kernel):
         for lvl, msg in declare.check(spec, kernel.name):
             f.append(Finding(lvl, msg.split(".")[0][:70], msg))
         src = d.read_text(encoding="utf-8", errors="replace")
+        # AN AXIS THE SCRIPT HOLDING THE SITE DOES NOT DRAW BY, said here and not by the run
+        # (harness ADR-0026, the static half of K-o).
+        for lvl, msg in declare.draw_site_phase(src, spec):
+            f.append(Finding(lvl, msg.split(".")[0][:70], msg))
         up_inline = spec.get("upstream") or {}
         if wraps and not up_inline:
             f.append(Finding("ERROR", "wraps a tool and records nothing about it",
