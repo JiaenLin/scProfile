@@ -278,22 +278,27 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   file = quote(paste0("interaction_flow_log__", safe)),
   expr = quote({ ggplot2::ggplot(pos, ggplot2::aes(x = l2, y = l1)) + ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed", colour = "grey40") + ggplot2::geom_point(ggplot2::aes(colour = li), size = 2.4) + ggrepel::geom_text_repel(data = ptop, ggplot2::aes(label = name), size = 3, max.overlaps = 20, min.segment.length = 0) + ggplot2::scale_colour_gradient2(low = "#2166ac", mid = "grey90", high = "#b2182b", midpoint = 0) + ggplot2::coord_equal(xlim = c(-lim2, lim2), ylim = c(-lim2, lim2)) + ggplot2::labs(x = paste0("log2 fold ", eff_lbl, " within ", st[2], " (the control)"), y = paste0("log2 fold ", eff_lbl, " within ", st[1]), colour = paste0("larger in\n", st[1], " (+) /\n", st[2], " (-)"), title = paste0("Does the ", fac, " response depend on ", as.character(rows$stratum_factor[1]), "? - multiplicative scale"), subtitle = paste0(nrow(pos), " of ", nrow(both), " pathways; the rest ", "are absent from an arm and have no fold change; axes span the largest log2 fold change actually plotted, so one extreme pathway widens the margin for every other point")) + ggplot2::theme_classic() }),
   legend = "The same question on the multiplicative scale: log2 fold {eff_lbl} within {st[1]} against the same within {st[2]}, the control. Here no interaction means the same fold change in both strata rather than the same absolute change, which is a different question and can rank pathways differently. Drawn only on the {nrow(pos)} of {nrow(both)} pathways present in all four arms; the rest are absent from one arm and have no fold change, which is why this panel never appears without the additive one beside it. The axes are cropped to the data the same way the additive panel's are, to the largest log2 value actually plotted on either axis, but a log-ratio has a far longer tail than a bounded probability difference, so one pathway near a zero denominator can widen the shared range well past where most points sit; that margin is a real value on the plate, not unused space, and tightening it would mean clipping that pathway out of view. The on-plot subtitle is cut by the canvas edge on some renders, ending mid-sentence after so one ex; the sentence it was completing in full is: axes span the largest log2 fold change actually plotted, so one extreme pathway widens the margin for every other point.")
-.plan[["native_circle_weight"]] <- list(
-  id = "native_circle_weight",
-  axis = "unit",
+.plan[["nativecmp_signalingRole_scatter_pair_twin"]] <- list(
+  id = "nativecmp_signalingRole_scatter_pair_twin",
+  axis = "contrast",
   by = "tool",
-  fn = "netVisual_circle",
+  fn = "netAnalysis_signalingRole_scatter",
   device = "png",
+  w = quote(2600),
+  h = quote(1700),
   expr = quote({
- netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),
- weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
- vertex.label.cex = 0.5, title.name = "interaction strength")
- graphics::legend("bottomleft", bty = "n", cex = 0.65,
- legend = c("edge colour = the sending population (matches its node)",
- "edge width = summed communication probability sent"))
- .stampf()
+ gg <- Filter(Negate(is.null), role)
+ if (!length(gg)) stop("neither object returned a role scatter")
+ lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)
+ .padr <- diff(lim) * 0.08
+ lim <- c(lim[1] - .padr, lim[2] + .padr)
+ smax <- max(unlist(lapply(gg, function(g) g$data$Count)), na.rm = TRUE)
+ for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +
+ ggplot2::scale_size_continuous(limits = c(0, smax)) +
+ ggplot2::ggtitle(names(role)[i])
+ patchwork::wrap_plots(plots = gg)
  }),
-  legend = "Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is the summed communication probability inferred from the sender to the receiver, not a count of interactions, and edge colour is the sender. A population with no inferred communication in either direction can render as an unfilled outline rather than a solid circle, which is the drawing's own way of showing zero strength and not a missing population; the {ngrp} here is this unit's own roster and is not necessarily the set another unit's copy of this figure carries. The ring is a layout and nothing more: a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.")
+  legend = "One sender-against-receiver scatter per arm, drawn on shared axes and a shared point scale so the two are comparable by eye, a comparison this panel adds beyond what either single-arm scatter carries alone. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point's label is placed, and its leader line drawn or withheld, by an automatic label-repel step, and each point's colour comes from a shared colour map when the cohort provides one, or a default palette otherwise; neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is reachable through this call's own arguments, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue. A population that appears in either arm's own single-panel version of this scatter can still be missing from both sides here; the single-arm panel beside each side of this pair carries the complete roster to check against.")
 .plan[["native_heatmap_count"]] <- list(
   id = "native_heatmap_count",
   axis = "group",
@@ -378,27 +383,22 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
  gg + ggplot2::labs(caption = if (nzchar(.fctx$stamp)) .fctx$stamp else NULL)
  }),
   legend = "Each population is placed by how much inferred signalling it sends (horizontal) against how much it receives (vertical), for this unit alone. Both axes are scaled to this unit's own data and are not matched to any other unit's copy of this plot, so a point's position cannot be read against the same point on another unit's version without checking both axes' ranges. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested. Text labels are placed by an automatic label-repel step that can still set a label directly on its own point when several populations sit close together; label size has already been lowered once for a different crowding defect on this same panel, and a further reduction was found not to move a label off the point it sits on, so this is the automatic placement rather than an omission reachable through this call's own arguments.")
-.plan[["nativecmp_signalingRole_scatter_pair"]] <- list(
-  id = "nativecmp_signalingRole_scatter_pair",
-  axis = "contrast",
+.plan[["native_circle_weight"]] <- list(
+  id = "native_circle_weight",
+  axis = "unit",
   by = "tool",
-  fn = "netAnalysis_signalingRole_scatter",
+  fn = "netVisual_circle",
   device = "png",
-  w = quote(2600),
-  h = quote(1700),
   expr = quote({
- gg <- Filter(Negate(is.null), role)
- if (!length(gg)) stop("neither object returned a role scatter")
- lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)
- .padr <- diff(lim) * 0.08
- lim <- c(lim[1] - .padr, lim[2] + .padr)
- smax <- max(unlist(lapply(gg, function(g) g$data$Count)), na.rm = TRUE)
- for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +
- ggplot2::scale_size_continuous(limits = c(0, smax)) +
- ggplot2::ggtitle(names(role)[i])
- patchwork::wrap_plots(plots = gg)
+ netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),
+ weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,
+ vertex.label.cex = 0.5, title.name = "interaction strength")
+ graphics::legend("bottomleft", bty = "n", cex = 0.65,
+ legend = c("edge colour = the sending population (matches its node)",
+ "edge width = summed communication probability sent"))
+ .stampf()
  }),
-  legend = "One sender-against-receiver scatter per arm, drawn on shared axes and a shared point scale so the two are comparable by eye, a comparison this panel adds beyond what either single-arm scatter carries alone. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point's label is placed, and its leader line drawn or withheld, by an automatic label-repel step, and each point's colour comes from a shared colour map when the cohort provides one, or a default palette otherwise; neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is reachable through this call's own arguments, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue. A population that appears in either arm's own single-panel version of this scatter can still be missing from both sides here; the single-arm panel beside each side of this pair carries the complete roster to check against.")
+  legend = "Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is the summed communication probability inferred from the sender to the receiver, not a count of interactions, and edge colour is the sender. A population with no inferred communication in either direction can render as an unfilled outline rather than a solid circle, which is the drawing's own way of showing zero strength and not a missing population; the {ngrp} here is this unit's own roster and is not necessarily the set another unit's copy of this figure carries. The ring is a layout and nothing more: a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.")
 .plan[["native_signalingRole_heatmap_out"]] <- list(
   id = "native_signalingRole_heatmap_out",
   axis = "group",
@@ -653,6 +653,15 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   file = quote(paste0("chord_cell__", safe, "__", gsub("[^A-Za-z0-9]+", "_", names(object.list)[i]))),
   expr = quote(netVisual_chord_cell(object.list[[i]], signaling = pw, lab.cex = 0.45, small.gap = 1, big.gap = 8, title.name = paste(pw, names(object.list)[i]))),
   legend = "The {pw} pathway as a chord diagram, one per arm, one of the first {.entry$at_most} of the {length(paths)} pathways both arms carry, in the reference arm's own order: each ribbon runs from a sending population to a receiving one and ribbon width is the inferred communication probability. This is population-level, where the gene chord is pair-level. The ordering around the circle is a layout and carries no meaning. A shorter canvas was tried to close up this panel's blank margin and it failed for every pathway on both arms, because the underlying layout refuses to draw its own sector track below a minimum size that depends on how many cell-state sectors and how long their labels are for a given unit, a size not computable here without rendering that layout itself and not safe to guess at again on a live dataset; so the canvas stays at the size already proven to draw everywhere and the blank margin is the cost of that safety.")
+.plan[["nativecmp_signalingChanges_scatter"]] <- list(
+  id = "nativecmp_signalingChanges_scatter",
+  axis = "contrast",
+  by = "tool",
+  fn = "netAnalysis_signalingChanges_scatter",
+  device = "png",
+  at_most = 1,
+  expr = quote(netAnalysis_signalingChanges_scatter(m, idents.use = pop, comparison = c(1, 2))),
+  legend = "The change in each population signalling role between the two arms: outgoing strength against incoming strength, one point per population, arrows from the first arm to the second.")
 
 # THE INTERPRETER. `.draw(id)` draws one entry of the plan where a hand-written site stood;
 # `.draw_all(axis)` draws every entry of an axis, `.item` bound over an entry's items. Every

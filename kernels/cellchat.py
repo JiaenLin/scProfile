@@ -185,7 +185,7 @@ PLUGIN = {
     # coloured below the first tick, off the labelled scale, naming which colour is which
     # direction. The roster sentence from 0.38.0 is kept on both. Eleven `--stated` records close
     # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
-    "version": "0.41.0",
+    "version": "0.42.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -298,7 +298,6 @@ PLUGIN = {
     # the guard finds no object, and the inference is paid again - which is the exact cost this
     # was built to remove. Declaring it is what makes the saving worth anything across runs.
     "produces": ["tables/ccc_edges.csv",
-                 "objects[cellchat.rds]?",
                  "objects[cellchat.inference.txt]?",
                  "tables/cellchat_pathway_prob.csv?",
                  "tables/cellchat_centrality.csv?",
@@ -444,7 +443,7 @@ PLUGIN = {
     # EVERY PLOT CELLCHAT SHIPS, ACCOUNTED FOR. Measured from this plugin's own environment,
 
     "report": {
-            'host_panels': ['across_design', 'unit_presence', 'unit_totals', 'interaction'],   # held to the layout: the host's own panels these pages carry
+            'host_panels': ['across_design', 'unit_presence', 'unit_totals', 'interaction', 'role_shift'],   # held to the layout: the host's own panels these pages carry
         # WHERE EACH PANEL SITS IN THE DOCUMENT, DECLARED BY THIS PLUGIN AND APPLIED BY THE HOST.
         #
         # A panel drawn over the whole design is filed under no contrast, and the host used to
@@ -720,47 +719,47 @@ PLUGIN = {
                 'legend': 'The same question on the multiplicative scale: log2 fold {eff_lbl} within {st[1]} against the same within {st[2]}, the control. Here no interaction means the same fold change in both strata rather than the same absolute change, which is a different question and can rank pathways differently. Drawn only on the {nrow(pos)} of {nrow(both)} pathways present in all four arms; the rest are absent from one arm and have no fold change, which is why this panel never appears without the additive one beside it. The axes are cropped to the data the same way the additive panel\'s are, to the largest log2 value actually plotted on either axis, but a log-ratio has a far longer tail than a bounded probability difference, so one pathway near a zero denominator can widen the shared range well past where most points sit; that margin is a real value on the plate, not unused space, and tightening it would mean clipping that pathway out of view. The on-plot subtitle is cut by the canvas edge on some renders, ending mid-sentence after so one ex; the sentence it was completing in full is: axes span the largest log2 fold change actually plotted, so one extreme pathway widens the margin for every other point.',
             },
             {
-                'id': 'native_circle_weight',
-                'kind': 'circle',
+                'id': 'nativecmp_signalingRole_scatter_pair_twin',
+                'kind': 'role_shift',
                 'drawn_by': 'tool',
-                'fn': 'netVisual_circle',
-                'axis': 'unit',
+                'fn': 'netAnalysis_signalingRole_scatter',
+                'axis': 'contrast',
                 'position': 'contrast',
-                'profile': True,
-                # STRENGTH, NOT COUNT - THE LAYOUT COULD NOT MAKE THIS CALL. The plan carried one
-                # circle entry and the trim kept it by order, not by reading it: a network overview
-                # per sample and per arm is read for shape, and the shape a reader wants from the
-                # one kept ring is how much was inferred, not how many edges cleared the
-                # permutation test - the same summed communication probability every other panel on
-                # this page already calls the strength. Drawn on `cc@net$weight` rather than
-                # `cc@net$count`, the tool's own alternative matrix for the identical call; the id
-                # carries the change so a file name says what is on the plate.
-                # SMALLER LABELS, THE TOOL'S OWN LEVER FOR IT. `vertex.label.cex` (default 1) is
-                # `netVisual_circle`'s own argument for node-label size; at the roster sizes this
-                # ring draws (up to thirteen full hierarchical names spaced evenly around one
-                # circle) two adjacent long names can run into each other with no gap between
-                # them - found on a real run, two same-branch siblings merging into one illegible
-                # run of text at the top of the ring. Shrinking every label is the remedy this
-                # function exposes; renaming `cc@idents` to short labels would reach every OTHER
-                # panel this object feeds and is a larger, unverifiable change this entry alone
-                # should not make.
-                # STILL FUSING AT 0.65. A second look on a real run found the same collision
-                # persisting for a different pair of long same-branch names - two more siblings
-                # sharing a common prefix, reading as one fused word - so the first reduction was
-                # not enough for the longest names this roster carries. Reduced again, on the same
-                # lever, rather than tried once and left: text width scales with cex, so a further
-                # ~23% reduction gives a further ~23% more clearance between any two adjacent
-                # labels this ring draws.
-                # AN ON-IMAGE KEY FOR WHAT COLOUR AND WIDTH ENCODE, THE SAME MOVE `.diffkey()`
-                # ALREADY MAKES FOR THE DIFFERENTIAL RINGS BELOW. `netVisual_circle` draws neither
-                # a colour key nor a width key of its own - found on a real run, single-arm rings
-                # carrying no on-image explanation at all while their differential siblings
-                # (`nativecmp_diffInteraction_*`) carry one via `.diffkey()`. The prose already
-                # said what edge colour and width mean, in the legend text below; this puts the
-                # same two facts ON THE PLATE, in the tool's own base-graphics margin, the way
-                # `.diffkey()` does for the comparison rings.
-                'expr': '{\n netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),\n weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,\n vertex.label.cex = 0.5, title.name = "interaction strength")\n graphics::legend("bottomleft", bty = "n", cex = 0.65,\n legend = c("edge colour = the sending population (matches its node)",\n "edge width = summed communication probability sent"))\n .stampf()\n }',
-                'legend': 'Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is the summed communication probability inferred from the sender to the receiver, not a count of interactions, and edge colour is the sender. A population with no inferred communication in either direction can render as an unfilled outline rather than a solid circle, which is the drawing\'s own way of showing zero strength and not a missing population; the {ngrp} here is this unit\'s own roster and is not necessarily the set another unit\'s copy of this figure carries. The ring is a layout and nothing more: a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.',
+                # MORE DEVICE, NOT SMALLER TEXT. Padding the shared axes 8% fixed a label pushed
+                # past the edge; it does nothing for several labels stacking on each other near
+                # one corner, found on four different contrasts of this same panel - the low-
+                # strength corner is where most populations sit, so it is also where names
+                # collide most. This family draws at the default 2000x1600 for a TWO-PANEL
+                # patchwork, roughly 1000px per arm; more physical room between the same relative
+                # coordinates is the same lever `native_hierarchy`'s own two-up `mfrow` and
+                # `nativecmp_diffInteraction`'s device already use for crowding, applied here
+                # instead of guessing at which four names to stop labelling.
+                'w': 2600,
+                'h': 1700,
+                # THE SHARED RANGE NEEDS PADDING TOO, THE SAME BUG AS F6's Y-AXIS. `lim` was the
+                # bare min/max of both arms' data with no margin, so a point sitting at that exact
+                # extreme has its label pushed outward by the tool's own repel algorithm straight
+                # past the panel edge - found on a real run, a long hierarchical population name
+                # clipped at the right edge of one arm's panel. Padded 8% on both ends of the one
+                # shared range that already feeds both `xlim` and `ylim` here, so it grows both
+                # axes together and does not touch the panels' shared aspect.
+                # A FOURTH LOOK, SAME TWO MECHANISMS, NO NEW LEVER. Found on four contrasts this
+                # round: labels centred between two touching dots with no leader saying which is
+                # which, and two populations in a near-identical hue. `role` already builds each
+                # panel with `label.size = 2.4` (lowered once already) and `color.use =
+                # .cols_for(...)` (the run's own map, or the tool's own palette when the host gave
+                # none) - both of `netAnalysis_signalingRole_scatter`'s exposed levers for this.
+                # Its own source shows the label is drawn by one hardcoded call,
+                # `ggrepel::geom_text_repel(..., segment.size = 0.2, segment.alpha = 0.5)`, with no
+                # `min.segment.length` or `box.padding` exposed for this call to raise or lower -
+                # ggrepel's own default hides a leader short enough that two adjacent points need
+                # only a small push apart, which is exactly what a touching pair produces. The
+                # colour drawn is likewise whichever the map (or the tool's own palette) assigns
+                # per population name, not a choice this call makes to keep two neighbours apart in
+                # hue. Both are the tool's own placement, stated in the legend below rather than
+                # chased through a fifth device size or a sixth label size.
+                'expr': '{\n gg <- Filter(Negate(is.null), role)\n if (!length(gg)) stop("neither object returned a role scatter")\n lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)\n .padr <- diff(lim) * 0.08\n lim <- c(lim[1] - .padr, lim[2] + .padr)\n smax <- max(unlist(lapply(gg, function(g) g$data$Count)), na.rm = TRUE)\n for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +\n ggplot2::scale_size_continuous(limits = c(0, smax)) +\n ggplot2::ggtitle(names(role)[i])\n patchwork::wrap_plots(plots = gg)\n }',
+                'legend': 'One sender-against-receiver scatter per arm, drawn on shared axes and a shared point scale so the two are comparable by eye, a comparison this panel adds beyond what either single-arm scatter carries alone. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point\'s label is placed, and its leader line drawn or withheld, by an automatic label-repel step, and each point\'s colour comes from a shared colour map when the cohort provides one, or a default palette otherwise; neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is reachable through this call\'s own arguments, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue. A population that appears in either arm\'s own single-panel version of this scatter can still be missing from both sides here; the single-arm panel beside each side of this pair carries the complete roster to check against.',
             },
             {
                 'id': 'native_heatmap_count',
@@ -905,47 +904,47 @@ PLUGIN = {
             # right to 150, so an identical dot meant three times the count on one side. Found by opening
             # the figure - no metric reports it.
             {
-                'id': 'nativecmp_signalingRole_scatter_pair',
-                'kind': 'role_shift',
+                'id': 'native_circle_weight',
+                'kind': 'circle',
                 'drawn_by': 'tool',
-                'fn': 'netAnalysis_signalingRole_scatter',
-                'axis': 'contrast',
+                'fn': 'netVisual_circle',
+                'axis': 'unit',
                 'position': 'contrast',
-                # MORE DEVICE, NOT SMALLER TEXT. Padding the shared axes 8% fixed a label pushed
-                # past the edge; it does nothing for several labels stacking on each other near
-                # one corner, found on four different contrasts of this same panel - the low-
-                # strength corner is where most populations sit, so it is also where names
-                # collide most. This family draws at the default 2000x1600 for a TWO-PANEL
-                # patchwork, roughly 1000px per arm; more physical room between the same relative
-                # coordinates is the same lever `native_hierarchy`'s own two-up `mfrow` and
-                # `nativecmp_diffInteraction`'s device already use for crowding, applied here
-                # instead of guessing at which four names to stop labelling.
-                'w': 2600,
-                'h': 1700,
-                # THE SHARED RANGE NEEDS PADDING TOO, THE SAME BUG AS F6's Y-AXIS. `lim` was the
-                # bare min/max of both arms' data with no margin, so a point sitting at that exact
-                # extreme has its label pushed outward by the tool's own repel algorithm straight
-                # past the panel edge - found on a real run, a long hierarchical population name
-                # clipped at the right edge of one arm's panel. Padded 8% on both ends of the one
-                # shared range that already feeds both `xlim` and `ylim` here, so it grows both
-                # axes together and does not touch the panels' shared aspect.
-                # A FOURTH LOOK, SAME TWO MECHANISMS, NO NEW LEVER. Found on four contrasts this
-                # round: labels centred between two touching dots with no leader saying which is
-                # which, and two populations in a near-identical hue. `role` already builds each
-                # panel with `label.size = 2.4` (lowered once already) and `color.use =
-                # .cols_for(...)` (the run's own map, or the tool's own palette when the host gave
-                # none) - both of `netAnalysis_signalingRole_scatter`'s exposed levers for this.
-                # Its own source shows the label is drawn by one hardcoded call,
-                # `ggrepel::geom_text_repel(..., segment.size = 0.2, segment.alpha = 0.5)`, with no
-                # `min.segment.length` or `box.padding` exposed for this call to raise or lower -
-                # ggrepel's own default hides a leader short enough that two adjacent points need
-                # only a small push apart, which is exactly what a touching pair produces. The
-                # colour drawn is likewise whichever the map (or the tool's own palette) assigns
-                # per population name, not a choice this call makes to keep two neighbours apart in
-                # hue. Both are the tool's own placement, stated in the legend below rather than
-                # chased through a fifth device size or a sixth label size.
-                'expr': '{\n gg <- Filter(Negate(is.null), role)\n if (!length(gg)) stop("neither object returned a role scatter")\n lim <- range(unlist(lapply(gg, function(g) c(g$data$x, g$data$y))), na.rm = TRUE)\n .padr <- diff(lim) * 0.08\n lim <- c(lim[1] - .padr, lim[2] + .padr)\n smax <- max(unlist(lapply(gg, function(g) g$data$Count)), na.rm = TRUE)\n for (i in seq_along(gg)) gg[[i]] <- gg[[i]] + ggplot2::xlim(lim) + ggplot2::ylim(lim) +\n ggplot2::scale_size_continuous(limits = c(0, smax)) +\n ggplot2::ggtitle(names(role)[i])\n patchwork::wrap_plots(plots = gg)\n }',
-                'legend': 'One sender-against-receiver scatter per arm, drawn on shared axes and a shared point scale so the two are comparable by eye, a comparison this panel adds beyond what either single-arm scatter carries alone. Each point is a population: outgoing strength horizontally, incoming vertically, and point size is the number of inferred links. Nothing is tested. Each point\'s label is placed, and its leader line drawn or withheld, by an automatic label-repel step, and each point\'s colour comes from a shared colour map when the cohort provides one, or a default palette otherwise; neither the leader-line threshold nor a colour chosen to keep two nearby points visually apart is reachable through this call\'s own arguments, so two points that sit close together can still carry unled, centred labels, and two points can still land in a similar hue. A population that appears in either arm\'s own single-panel version of this scatter can still be missing from both sides here; the single-arm panel beside each side of this pair carries the complete roster to check against.',
+                'profile': True,
+                # STRENGTH, NOT COUNT - THE LAYOUT COULD NOT MAKE THIS CALL. The plan carried one
+                # circle entry and the trim kept it by order, not by reading it: a network overview
+                # per sample and per arm is read for shape, and the shape a reader wants from the
+                # one kept ring is how much was inferred, not how many edges cleared the
+                # permutation test - the same summed communication probability every other panel on
+                # this page already calls the strength. Drawn on `cc@net$weight` rather than
+                # `cc@net$count`, the tool's own alternative matrix for the identical call; the id
+                # carries the change so a file name says what is on the plate.
+                # SMALLER LABELS, THE TOOL'S OWN LEVER FOR IT. `vertex.label.cex` (default 1) is
+                # `netVisual_circle`'s own argument for node-label size; at the roster sizes this
+                # ring draws (up to thirteen full hierarchical names spaced evenly around one
+                # circle) two adjacent long names can run into each other with no gap between
+                # them - found on a real run, two same-branch siblings merging into one illegible
+                # run of text at the top of the ring. Shrinking every label is the remedy this
+                # function exposes; renaming `cc@idents` to short labels would reach every OTHER
+                # panel this object feeds and is a larger, unverifiable change this entry alone
+                # should not make.
+                # STILL FUSING AT 0.65. A second look on a real run found the same collision
+                # persisting for a different pair of long same-branch names - two more siblings
+                # sharing a common prefix, reading as one fused word - so the first reduction was
+                # not enough for the longest names this roster carries. Reduced again, on the same
+                # lever, rather than tried once and left: text width scales with cex, so a further
+                # ~23% reduction gives a further ~23% more clearance between any two adjacent
+                # labels this ring draws.
+                # AN ON-IMAGE KEY FOR WHAT COLOUR AND WIDTH ENCODE, THE SAME MOVE `.diffkey()`
+                # ALREADY MAKES FOR THE DIFFERENTIAL RINGS BELOW. `netVisual_circle` draws neither
+                # a colour key nor a width key of its own - found on a real run, single-arm rings
+                # carrying no on-image explanation at all while their differential siblings
+                # (`nativecmp_diffInteraction_*`) carry one via `.diffkey()`. The prose already
+                # said what edge colour and width mean, in the legend text below; this puts the
+                # same two facts ON THE PLATE, in the tool's own base-graphics margin, the way
+                # `.diffkey()` does for the comparison rings.
+                'expr': '{\n netVisual_circle(cc@net$weight, vertex.weight = as.numeric(table(cc@idents)),\n weight.scale = TRUE, label.edge = FALSE, color.use = .gcol,\n vertex.label.cex = 0.5, title.name = "interaction strength")\n graphics::legend("bottomleft", bty = "n", cex = 0.65,\n legend = c("edge colour = the sending population (matches its node)",\n "edge width = summed communication probability sent"))\n .stampf()\n }',
+                'legend': 'Every one of the {ngrp} populations is a node on a ring and every inferred interaction an edge. Node size is the number of cells in that population; edge width is the summed communication probability inferred from the sender to the receiver, not a count of interactions, and edge colour is the sender. A population with no inferred communication in either direction can render as an unfilled outline rather than a solid circle, which is the drawing\'s own way of showing zero strength and not a missing population; the {ngrp} here is this unit\'s own roster and is not necessarily the set another unit\'s copy of this figure carries. The ring is a layout and nothing more: a node position on it carries no meaning, and neither does the distance between two nodes. Inferred from expression, not measured.',
             },
             {
                 'id': 'native_signalingRole_heatmap_out',
@@ -1294,6 +1293,17 @@ PLUGIN = {
                 'source': 'figures/F2_population_power.csv',
                 'legend': 'Whether each population in {unit} could have produced an interaction at all - cells, genes above the expression floor, and what was sent and received - so a quiet population reads as detection power or as biology.',
             },
+            {
+                'id': 'nativecmp_signalingChanges_scatter',
+                'kind': 'role_shift',
+                'drawn_by': 'tool',
+                'fn': 'netAnalysis_signalingChanges_scatter',
+                'axis': 'contrast',
+                'position': 'contrast',
+                'at_most': 1,
+                'expr': 'netAnalysis_signalingChanges_scatter(m, idents.use = pop, comparison = c(1, 2))',
+                'legend': 'The change in each population signalling role between the two arms: outgoing strength against incoming strength, one point per population, arrows from the first arm to the second.',
+            },
         ],
         "skips": {
             'showDatabaseCategory': {'skip': 'over_budget', 'axis': 'sample', 'budget': 2},   # held to the layout
@@ -1310,7 +1320,7 @@ PLUGIN = {
             'netAnalysis_dot': {'skip': 'over_budget', 'axis': 'sample', 'budget': 2},   # held to the layout
             'netAnalysis_river': {'skip': 'over_budget', 'axis': 'sample', 'budget': 2},   # held to the layout
             'netAnalysis_diff_signalingRole_scatter': {'skip': 'over_budget', 'axis': 'contrast', 'budget': 10},   # held to the layout
-            'netAnalysis_signalingChanges_scatter': {'skip': 'over_budget', 'axis': 'contrast', 'budget': 10},   # held to the layout
+               # held to the layout
             'plotGeneExpression': {'skip': 'over_budget', 'axis': 'sample', 'budget': 2},   # held to the layout
             'StackedVlnPlot': {'skip': 'duplicate_of', 'same_as': 'plotGeneExpression'},
             'ggPalette': {'skip': 'not_applicable', 'evidence': "returns a character vector of n colours from ggplot2's default hue scale; it draws nothing. Matched only because the discovery pattern includes `gg`"},
@@ -4584,7 +4594,7 @@ role <- lapply(object.list, function(o)
   tryCatch(netAnalysis_signalingRole_scatter(o, color.use = .cols_for(levels(o@idents)),
                                              label.size = 2.4),
            error = function(e) NULL))
-.draw("nativecmp_signalingRole_scatter_pair")
+.draw("nativecmp_signalingRole_scatter_pair_twin")
 
 # 5. how each population's signalling ROLE moves between the two arms, in one panel
 
@@ -5270,6 +5280,7 @@ if (!is.null(inter) && nrow(inter)) {
       # the pairs whose direction OVERTURNS between strata - which no ordering of a difference
       # can surface, because a reversal is a property of the two components and not of their gap.
       .draw("nativecmp_interaction_lr_scatter")
+.draw("nativecmp_signalingChanges_scatter")
     }
     cat("interaction drawn for framing:", fr, "over", nrow(both), "pathway(s)\n")
   }

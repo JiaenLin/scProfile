@@ -1,9 +1,9 @@
 {
- "files": 164,
+ "files": 170,
  "vector": 0,
- "total": 164,
+ "total": 170,
  "by_axis": {
-  "contrast": 60,
+  "contrast": 66,
   "group": 16,
   "interaction": 36,
   "sample": 10,
@@ -12,7 +12,7 @@
  "by_position": {
   "appendix": 66,
   "conclusion": 28,
-  "contrast": 62,
+  "contrast": 68,
   "overview": 8
  },
  "families": [
@@ -149,13 +149,19 @@
    "appendix"
   ],
   [
+   "nativecmp_signalingChanges_scatter",
+   1,
+   "contrast",
+   "contrast"
+  ],
+  [
    "nativecmp_signalingRole_heatmap",
    1,
    "contrast",
    "contrast"
   ],
   [
-   "nativecmp_signalingRole_scatter_pair",
+   "nativecmp_signalingRole_scatter_pair_twin",
    1,
    "contrast",
    "contrast"
