@@ -23,7 +23,7 @@
    "appendix"
   ],
   [
-   "estimationNumCluster",
+   "estimationNumCluster_renamed",
    2,
    "unit",
    "appendix"
@@ -53,7 +53,7 @@
    "contrast"
   ],
   [
-   "native_signalingRole_scatter",
+   "native_signalingRole_scatter_renamed",
    1,
    "group",
    "contrast"

@@ -365,8 +365,8 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
  column_title_gp = grid::gpar(fontsize = 10))
  }),
   legend = "Does the {fac} response depend on {as.character(rows$stratum_factor[1])}? Per ordered population pair, for {ms_lbl}: the {eff_lbl} within {st[1]} minus the same response within {st[2]}, which is the control. Red means the {fac} response is larger in {st[1]}; blue means larger in {st[2]}; white means the same response in both, which is no interaction and not an absence of signalling. Rows are senders, columns are receivers. Drawn on the {nrow(M)} populations present in every arm, which is fewer than the two-arm panels carry. For two factors crossed this way the interaction is symmetric: naming the other factor the response gives the identical matrix, so this panel and its counterpart under the other framing carry the same values under two equivalent questions. Values are the merged object's own matrices; no test applies to a difference of two differences.{ms_unit}{ms_note}")
-.plan[["native_signalingRole_scatter"]] <- list(
-  id = "native_signalingRole_scatter",
+.plan[["native_signalingRole_scatter_renamed"]] <- list(
+  id = "native_signalingRole_scatter_renamed",
   axis = "group",
   by = "tool",
   fn = "netAnalysis_signalingRole_scatter",

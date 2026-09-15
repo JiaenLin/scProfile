@@ -185,7 +185,7 @@ PLUGIN = {
     # coloured below the first tick, off the labelled scale, naming which colour is which
     # direction. The roster sentence from 0.38.0 is kept on both. Eleven `--stated` records close
     # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
-    "version": "0.41.0",
+    "version": "0.42.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. PBS 710085 reproduced all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -297,14 +297,14 @@ PLUGIN = {
     # the object is written and then invisible to `adopt`: every new run directory starts empty,
     # the guard finds no object, and the inference is paid again - which is the exact cost this
     # was built to remove. Declaring it is what makes the saving worth anything across runs.
-    "produces": ["tables/ccc_edges.csv",
+    "produces": [
                  "objects[cellchat.rds]?",
                  "objects[cellchat.inference.txt]?",
                  "tables/cellchat_pathway_prob.csv?",
                  "tables/cellchat_centrality.csv?",
-                 "tables/cellchat_rank_net.csv?",
                  "tables/cellchat_net_embedding.csv?",
-                 "tables/cellchat_composition.csv"],
+                 "tables/cellchat_composition.csv",
+                 "tables/never_written.csv"],
     "per_unit": "sample",
 
     "config": {
@@ -342,7 +342,7 @@ PLUGIN = {
                                  "every gene present in the object, the run reports `partial`. A "
                                  "gene-subset object or a different symbol set returns a small "
                                  "plausible table rather than failing"},
-        "dotplot_n": {"type": "int", "default": 20, "min": 1,
+        "dotplot_n_x": {"type": "int", "default": 20, "min": 1,
                       "help": "ligand-receptor pairs drawn in the dotplot. The full table is the "
                               "honest artifact; this is for the figure"},
     },
@@ -460,7 +460,7 @@ PLUGIN = {
         # a plugin declares here and knows nothing about what these particular panels are.
         # WHAT THIS METHOD IS ABOUT, for a section heading. The host writes "Differential
         # <subject> between <arm> and <arm>" and must not know what any plugin measures.
-        "subject": "cell-cell communication",
+        "subject": "intercellular signalling",
         # THE TEMPLATE THIS METHOD IS WRITTEN WITH, declared here and not mapped from the
         # plugin's name by the host. A method ships the writing guidance that suits it exactly
         # as it ships its panels; mapping a name to a template is the place where adding a
@@ -856,7 +856,7 @@ PLUGIN = {
                 'legend': "Does the {fac} response depend on {as.character(rows$stratum_factor[1])}? Per ordered population pair, for {ms_lbl}: the {eff_lbl} within {st[1]} minus the same response within {st[2]}, which is the control. Red means the {fac} response is larger in {st[1]}; blue means larger in {st[2]}; white means the same response in both, which is no interaction and not an absence of signalling. Rows are senders, columns are receivers. Drawn on the {nrow(M)} populations present in every arm, which is fewer than the two-arm panels carry. For two factors crossed this way the interaction is symmetric: naming the other factor the response gives the identical matrix, so this panel and its counterpart under the other framing carry the same values under two equivalent questions. Values are the merged object's own matrices; no test applies to a difference of two differences.{ms_unit}{ms_note}",
             },
             {
-                'id': 'native_signalingRole_scatter',
+                'id': 'native_signalingRole_scatter_renamed',
                 'kind': 'role_scatter',
                 'drawn_by': 'tool',
                 'fn': 'netAnalysis_signalingRole_scatter',
@@ -1248,7 +1248,7 @@ PLUGIN = {
                 'legend': 'The open points here mark individual replicate samples underlying each arm\'s bar; this bar-plus-dots panel draws no legend for them on the image itself, so this caption, not the plate, is where a reader finds what they are and how each is computed. The same totals divided by the cells each fit used, per 1,000 cells. A second scale, not a correction: the quantity does not rise linearly with cell number, so dividing puts the arithmetic on the page rather than removing the dependence. {if (.decomposed) paste0( "Each open point is one animal\'s share of this arm\'s own fit, ", "credited by that animal\'s share of the arm\'s cells in the two ", "populations of each pair, half for sending, half for receiving. ", "That split is exact, so the bar is the cell-weighted mean of its ", "own points and a point may fall on either side of it. It is a ", "derived attribution rather than a quantity the method reports ", "directly: the fit uses the arm\'s pooled cells and says nothing ", "about which animal carried which edge. Each animal\'s independent ", "fit is the raw panel beside this one.") else paste0( "Each point is one sample\'s own fit divided by its own cells. A ", "pooled arm and a single sample are not comparable on this scale, ", "because a smaller fit finds proportionally more; the points are ", "comparable against each other and not against the bar.")}',
             },
             {
-                'id': 'estimationNumCluster',
+                'id': 'estimationNumCluster_renamed',
                 'kind': 'other',
                 'drawn_by': 'tool',
                 'fn': 'netClustering',
@@ -1805,7 +1805,7 @@ ngrp <- length(groups)
 
 .draw("native_circle_weight")
 .draw("native_heatmap_count")
-.draw("native_signalingRole_scatter")
+.draw("native_signalingRole_scatter_renamed")
 .draw("native_signalingRole_heatmap_out")
 
 # per-pathway, on the strongest pathway this unit has - `netVisual_aggregate` and
@@ -4089,7 +4089,7 @@ def run(ctx):
                           int(C["min_cells"]), floor_why, n_sentinel_cells)
     drew_perm = _fig_permutation(ctx, df, int(C["nboot"]), float(C["thresh"]))
     _fig_network(ctx, df, names)
-    drew_dot = _fig_dotplot(ctx, df, int(C["dotplot_n"]), int(C["nboot"]), float(C["thresh"]))
+    drew_dot = _fig_dotplot(ctx, df, int(C["dotplot_n_x"]), int(C["nboot"]), float(C["thresh"]))
     # THE PATHWAY-LEVEL PANELS. `_edges_to_arrays` is computed once and shared: five panels each
     # rebuilding the pathway array is five chances to disagree about which pathways exist and in
     # what order, and that order is a ranking every "top N" below indexes into.
