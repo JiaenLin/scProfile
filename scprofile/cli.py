@@ -2082,6 +2082,11 @@ def _plan(a):
             if k.reference_organisms() and org \
                     and str(org).lower() not in k.reference_organisms():
                 need["reference data"] = False        # a species it cannot serve: BLOCKED
+            elif not a.references and not refs.needs_directory(k, org):
+                # BUNDLED OR FETCHED AT RUN TIME: present by construction, no directory to
+                # check (harness ADR-0026, the open items - CellChatDB read as UNRESOLVED).
+                need["reference data"] = True
+                _refs_state[k.name] = "present"
             elif not a.references:
                 need["reference data"] = None         # NOT DETERMINED - nowhere was checked
                 _refs_state[k.name] = "unknown"
@@ -2249,13 +2254,25 @@ def _plan(a):
             print(f"    {_n:<12} fetches {', '.join(_r)} on first use")
 
     fixable = PL.fixable_builds(verdicts)
-    pend = [v for v in verdicts if v.readiness]
+    # THE INSTALLATION'S SENTENCE FOR THE INSTALLATION'S KINDS (harness ADR-0026, the open
+    # items): 'not ready in this installation' is what a ladder accepts as a refusal of the
+    # environment, and it was printed for references nobody had checked over a verdict that
+    # had refused the DATA - so an unchecked shape read as a correct refusal.
+    _env_kinds = ("no_wrapper", "env_missing", "env_stale", "env_unknown")
+    pend = [v for v in verdicts if v.readiness and v.readiness.get("kind") in _env_kinds]
+    pend_refs = [v for v in verdicts if v.readiness and v.readiness.get("kind") not in _env_kinds]
     if pend and not getattr(a, "build", False):
         print(f"\n  PREPARATION: {len(pend)} plugin(s) are not ready in this installation.")
         print("  None of this is a limitation of your project - every one of them is planned")
         print("  above against your data. Run `scprofile plan ... --build` and this command will")
         print("  do the work it can and tell you precisely what is left:")
         for v in pend:
+            mark = "auto" if (v.readiness or {}).get("fixable") else "you"
+            print(f"    [{mark:>4}] {v.plugin:<12} {v.readiness['fix']}")
+    if pend_refs and not getattr(a, "build", False):
+        print(f"\n  REFERENCES: {len(pend_refs)} plugin(s) whose reference data was not checked "
+              f"or is missing here:")
+        for v in pend_refs:
             mark = "auto" if (v.readiness or {}).get("fixable") else "you"
             print(f"    [{mark:>4}] {v.plugin:<12} {v.readiness['fix']}")
     if fixable and getattr(a, "build", False):
@@ -3802,7 +3819,28 @@ def _promised(run):
                 own |= {str(x) for x in _v}
         # A PROMISE IS KEPT BY A FILE OF ANY FIGURE FORMAT: the rank-estimation plate is a PDF
         # the tool writes itself, and asking the PNGs alone reported it never drawn.
-        gaps = _N.undrawn(declared, allf)
+        # AND A PROMISE ON AN AXIS THIS DESIGN HAS NO OCCURRENCE OF IS WAIVED (harness ADR-0026,
+        # the open items): the fixture's one-factor design launches no interaction phase, and
+        # the plate `compareInteractions` draws there was read as never drawn. The run's own
+        # directories say which axes occurred - a unit directory, `compare/<contrast>`,
+        # `compare/_across_arms` for the interaction - and the entry's `axis` says which it needs.
+        cmp_dir = d / "compare"
+        axes_present = {"unit", "sample", "group", "cohort"}
+        if cmp_dir.is_dir():
+            if any(q.is_dir() and q.name != "_across_arms" for q in cmp_dir.iterdir()):
+                axes_present.add("contrast")
+            if (cmp_dir / "_across_arms").is_dir():
+                axes_present.add("interaction")
+        axis_of = {}
+        for _e in (((k.spec or {}).get("report") or {}).get("figures") or []):
+            if isinstance(_e, dict) and _e.get("fn") and _e.get("axis"):
+                axis_of.setdefault(str(_e["fn"]).strip(), set()).add(str(_e["axis"]))
+        waived = {fn: ax for fn, ax in axis_of.items()
+                  if fn in declared and ax and not (ax & axes_present)}
+        gaps = [(f, use) for f, use in _N.undrawn(declared, allf) if f not in waived]
+        for fn, ax in sorted(waived.items()):
+            print(f"  {d.name}: {fn} draws per {', '.join(sorted(ax))}, an axis this design "
+                  f"has no occurrence of - not promised on this run")
         rows.append((d.name, len(declared), len(names), gaps, declared, allf, own))
     if not looked:
         print("no plugin in this run declares any upstream plot, so none was promised")

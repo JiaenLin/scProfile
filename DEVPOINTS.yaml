@@ -21,8 +21,16 @@ fixture:
     # --prefix is where a kernel's environment WOULD go. Without it `plan` plans everything
     # correctly and then exits 2 saying the plugin is not prepared in this installation, which
     # is the tool being right and the declaration being incomplete.
+    # THE PLAN IS TOLD THE ROLES AS THE RUN IS (found by PBS 712313, shape b): without them the
+    # plan guessed the sample column, could not key shape b's design on `library_id`, refused
+    # for the DATA, and the tier accepted the words that followed. Shape b is the test that
+    # nothing knows a column by heart - the plan included.
     - ["{python}", "-m", "scprofile.cli", "plan", "--h5ad", "{observations}",
-       "--kernel", "{name}", "--design", "{design}", "--prefix", "{prefix}"]
+       "--kernel", "{name}", "--design", "{design}", "--prefix", "{prefix}",
+       "--label-key", "{role_cell_type}", "--sample-key", "{role_sample}",
+       "--batch-key", "{role_batch}", "--counts-layer", "{role_counts}",
+       "--lognorm-layer", "lognorm", "--embedding", "X_pca", "--organism", "human",
+       "--assay", "cell", "--factor", "{role_condition}"]
     # THE PLUGIN RUNS ON THE FIXTURE (harness ADR-0026, the open items). Every ladder before
     # this planned and refused - `{out}/prefix` was a fresh directory, so "not ready in this
     # installation" was the whole tier, and no plugin of this repository had ever been executed

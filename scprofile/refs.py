@@ -117,6 +117,16 @@ def _declared_bytes(spec):
     return 0
 
 
+def needs_directory(kernel, organism=None) -> bool:
+    """Whether any reference this kernel declares for `organism` is a FILE this tool puts on
+    disk - so a `--references` directory is needed to say whether it is present. A plugin whose
+    references all ship inside a package or are fetched by the wrapped tool at run time needs
+    none, and was reported UNRESOLVED for want of one (harness ADR-0026, the open items):
+    CellChatDB is bundled, and the fixture's plan called it 'not ready in this installation'."""
+    return any(tier_of(spec) not in ("bundled", "runtime")
+               for spec in kernel.references(organism).values())
+
+
 def status(kernel, dest, organism=None, verify=False):
     """{name: (state, path, detail)} — present / MISSING / WRONG SIZE / CORRUPT.
 

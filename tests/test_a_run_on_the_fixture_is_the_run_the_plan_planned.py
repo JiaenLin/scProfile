@@ -97,6 +97,73 @@ ck("`run` and `plan` take --factor", src.count('add_argument("--factor"') >= 2, 
 ck("and pass it to the design", src.count("factors=getattr(a, \"factor\"") >= 4,
    str(src.count("factors=getattr(a, \"factor\"")))
 
+print("\n'not ready in this installation' is the environment's sentence, and bundled references need no directory")
+# THE SECOND JOB'S SHAPE B (PBS 712313): `plan`, given no --references, marked cellchat's
+# reference data UNRESOLVED - CellChatDB ships inside the package - and printed 'PREPARATION:
+# 1 plugin(s) are not ready in this installation' over a verdict that had refused for the
+# DATA (no sample key was passed to the fixture's plan); the tier accepted the phrase and the
+# cohort ran over an unchecked shape. Two rules: a plugin whose references for the organism
+# are all bundled or fetched at run time is not 'unknown' for want of a directory; and the
+# installation's sentence is printed for the installation's kinds alone.
+from scprofile import refs as RF, planner as PL, kernels as K                   # noqa: E402
+
+class _K:
+    name = "demo"
+    def __init__(self, tiers):
+        self._tiers = tiers
+    def references(self, organism=None):
+        return {f"r{i}": ({"tier": t, "organism": organism or "human", "role": "x"} if t != "fetch"
+                          else {"url": "https://x/y.bin", "sha256": "0" * 64, "size": 1,
+                                "organism": organism or "human", "role": "x"})
+                for i, t in enumerate(self._tiers)}
+
+ck("bundled and runtime references need no directory", not RF.needs_directory(_K(["bundled", "runtime"]), "human"))
+ck("a fetched file does", RF.needs_directory(_K(["bundled", "fetch"]), "human"))
+ck("no references, no directory", not RF.needs_directory(_K([]), "human"))
+src = (ROOT / "scprofile" / "cli.py").read_text(encoding="utf-8")
+ck("plan reads it before calling references unknown", "refs.needs_directory(" in src)
+_plan_say = [i for i in range(len(src)) if src.startswith("PREPARATION: {len(pend)} plugin(s) are not ready", i)]
+ck("the installation's sentence is keyed on the installation's kinds",
+   len(_plan_say) == 1 and "_env_kinds" in src[_plan_say[0] - 1500:_plan_say[0]], str(_plan_say))
+ck("references not checked have their own sentence", "reference data was not checked" in src)
+
+print("\na promise on an axis the design has no occurrence of is not a promise of that run")
+# THE SECOND JOB'S SHAPE A (PBS 712313): cellchat ran on the fixture's one-factor design, drew
+# the units and the one contrast, and `--promised` failed the tier on `compareInteractions` -
+# a plate on the `interaction` axis, the cross of two factors, which a one-factor design
+# never launches. The native accounting promised it whatever the design; the run's own
+# directories say which axes occurred (units; `compare/<contrast>`; `compare/_across_arms`
+# for the interaction), and a promise on an absent axis is waived and said.
+import os
+with tempfile.TemporaryDirectory() as td:
+    d = Path(td)
+    kdir = d / "kernels"
+    kdir.mkdir()
+    (kdir / "demo.py").write_text(
+        'PLUGIN = {"name": "demo", "api": 1, "version": "0.1.0", "summary": "s",\n'
+        '          "report": {"figures": [\n'
+        '    {"id": "native_ring", "fn": "ringPlot", "drawn_by": "tool", "axis": "unit", "legend": "a"},\n'
+        '    {"id": "nativecmp_pair", "fn": "pairPlot", "drawn_by": "tool", "axis": "contrast", "legend": "b"},\n'
+        '    {"id": "nativecmp_cross", "fn": "crossPlot", "drawn_by": "tool", "axis": "interaction", "legend": "c"},\n'
+        '  ]}}\n\ndef run(ctx):\n    return None\n')
+    run = d / "run"
+    (run / "kernels" / "demo" / "U1" / "figures").mkdir(parents=True)
+    (run / "kernels" / "demo" / "U1" / "figures" / "native_ring.png").write_bytes(b"x")
+    (run / "kernels" / "demo" / "compare" / "cond" / "figures").mkdir(parents=True)
+    (run / "kernels" / "demo" / "compare" / "cond" / "figures" / "nativecmp_pair.png").write_bytes(b"x")
+    env = dict(os.environ, PYTHONPATH=str(ROOT), SCPROFILE_KERNELS=str(kdir))
+    p = subprocess.run([sys.executable, "-m", "scprofile.cli", "capacity", "--out", str(run), "--promised"],
+                       cwd=str(ROOT), capture_output=True, text=True, env=env)
+    out = p.stdout + p.stderr
+    ck("a one-factor run keeps its promise: the interaction plate is waived, not owed",
+       p.returncode == 0 and "crossPlot" in out and "interaction" in out and "NEVER DRAWN" not in out, out[-700:])
+    (run / "kernels" / "demo" / "compare" / "_across_arms" / "figures").mkdir(parents=True)
+    p = subprocess.run([sys.executable, "-m", "scprofile.cli", "capacity", "--out", str(run), "--promised"],
+                       cwd=str(ROOT), capture_output=True, text=True, env=env)
+    out = p.stdout + p.stderr
+    ck("with the interaction phase present and the plate absent, the promise is owed",
+       p.returncode != 0 and "crossPlot" in out and "NEVER DRAWN" in out, out[-700:])
+
 print("\n`run` refuses at its door, in the plan's words, a plugin whose environment is not built")
 try:
     import anndata  # noqa: F401
