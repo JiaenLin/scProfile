@@ -153,6 +153,9 @@ the tool. The tool was fine. The shortcut was not.*
     ...write...                                       # against .claude/skills/result-section
     scprofile paper   --out <run> --plugin <p> --write <file>   # carry it back into the run
     scprofile paper   --out <run> --plugin <p> --render         # and render it beside its figures
+    scprofile review  --out <run> --plugin <p> --adopt          # the looks this run reads from its
+                                                                # siblings, into its own ledger,
+                                                                # before the layer is sent to be sealed
 
 ### Under a scheduler, the figures are not where you are
 

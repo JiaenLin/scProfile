@@ -256,6 +256,76 @@ def read_answers(out, plugin=""):
     return seen
 
 
+def adopt(out, plugin=""):
+    """Append the looks and answers this run relies on from its siblings to its OWN ledger.
+
+    THE CARRY IS A VIEW, AND A VIEW DOES NOT TRAVEL (harness ADR-0025, found by the writing seal):
+    a run's status read every look on an unchanged image from the sibling ledgers beside it, and
+    the same run's replay, sealed on another machine with no sibling beside it, read the same
+    looks as never taken - `looked_at` and `audited` owed on a run that was fully looked at. A
+    run's own ledger has to stand on its own. Each adopted record is the sibling's, re-keyed to
+    this run's path for the image, with `carried_from` naming the run it came from; a record
+    already adopted, or taken here, is not appended again. {looks, answers} counts what was
+    appended.
+    """
+    root = Path(out)
+    own_looks = read_ledger(out, plugin)
+    own_answers = _own_answers(out, plugin)
+    carried = read_carried(out, plugin)
+    n_looks = n_answers = 0
+    ledger = ledger_path(root, plugin)
+    for rel in figures(out):
+        if plugin and not rel.startswith(f"kernels/{plugin}/"):
+            continue
+        now = digest(root / rel)
+        if not now:
+            continue
+        rec = carried.get(now)
+        if rec and rel not in own_looks:
+            new = dict(rec, figure=rel, carried_from=str(rec.get("run") or ""))
+            new.pop("run", None)
+            _append_line(ledger, json.dumps(new))
+            n_looks += 1
+    by_sha = {}
+    for run in sibling_runs(out):
+        for _rel, rec in _own_answers(run, plugin).items():
+            sha = str(rec.get("sha256") or "")
+            if sha:
+                by_sha.setdefault(sha, dict(rec, run=run.name))
+    for rel in figures(out):
+        if plugin and not rel.startswith(f"kernels/{plugin}/"):
+            continue
+        if rel in own_answers:
+            continue
+        now = digest(root / rel)
+        rec = by_sha.get(now) if now else None
+        if rec:
+            new = dict(rec, figure=rel, carried_from=str(rec.get("run") or ""))
+            new.pop("run", None)
+            _append_line(ledger, json.dumps(new))
+            n_answers += 1
+    return {"looks": n_looks, "answers": n_answers}
+
+
+def _own_answers(run, plugin=""):
+    """{relpath: latest answer record} from ONE run's own ledger, no carry."""
+    f = ledger_path(run, plugin)
+    got = {}
+    if not f.exists():
+        return got
+    for line in f.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(rec, dict) and rec.get("figure") and rec.get("answer"):
+            got[str(rec["figure"])] = rec
+    return got
+
+
 class Refused(Exception):
     """A note that does not evidence a look. Raised, never returned - see the module docstring."""
 

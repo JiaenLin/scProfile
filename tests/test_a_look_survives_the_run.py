@@ -19,6 +19,7 @@ contract test creating a run under /tmp caught it on the first execution.
 Checked on real files with real digests, because the whole mechanism is about bytes.
 """
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -91,6 +92,34 @@ with tempfile.TemporaryDirectory() as td:
           "the look was not recorded in the run it was taken in")
     check([d.name for d in R.sibling_runs(b)] == ["runA"],
           "run B does not see run A as a sibling run, so nothing can carry")
+
+    # A RUN'S OWN LEDGER CAN ADOPT WHAT IT RELIES ON (harness ADR-0025, found by the writing
+    # seal): the carry is a read-time view across siblings, and a run whose written layer is
+    # sealed elsewhere - a replay on another machine, with no sibling beside it - reads every
+    # carried look as never taken. `adopt` appends each carried look and stated answer to the
+    # run's own ledger, naming the run it came from, so the ledger stands on its own.
+    R.answer(a, "kernels/p/figures/same.png",
+             "the shared panel is right as the upstream draws it, by its own design", by="x",
+             plugin="p")
+    got = R.adopt(b, "p")
+    check(got.get("looks") == 1 and got.get("answers") == 1,
+          f"adopt did not take the sibling's look and answer: {got}")
+    own = R.read_ledger(b, "p")
+    check("kernels/p/figures/same.png" in own
+          and own["kernels/p/figures/same.png"].get("carried_from") == "runA",
+          "the adopted look is not in run B's own ledger, named for the run it came from")
+    lone2 = Path(td) / "alone" / "runB2"
+    _mkfig(lone2, "kernels/p/figures/same.png", b"IDENTICAL-BYTES")
+    (lone2 / "report.json").write_text("{}", encoding="utf-8")
+    shutil.copy(R.ledger_path(b, "p"), R.ledger_path(lone2, "p"))
+    st4 = dict((r, s_) for r, s_, _w in R.status(lone2, "p"))
+    check(st4.get("kernels/p/figures/same.png") == R.REVIEWED,
+          "the adopted look does not count once the run stands alone: %r"
+          % (st4.get("kernels/p/figures/same.png"),))
+    check(R.adopt(b, "p") == {"looks": 0, "answers": 0},
+          "adopting twice appends the same records again")
+    check(not any("kernels/p/figures/redrawn.png" == k for k in own if own[k].get("carried_from")),
+          "a look on different bytes was adopted")
 
     # AND A DIRECTORY THAT IS NOT A RUN CARRIES NOTHING, whatever it holds.
     lone = Path(td) / "elsewhere" / "runC"

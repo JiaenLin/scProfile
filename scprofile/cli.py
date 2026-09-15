@@ -3128,6 +3128,12 @@ def _review(a):
     if not out.is_dir():
         print(f"scprofile: no such run directory: {out}", file=sys.stderr)
         return REFUSE
+    if getattr(a, "adopt", False):
+        got = RV.adopt(out, a.plugin or "")
+        print(f"adopted into this run's own ledger: {got['looks']} look(s) and {got['answers']} "
+              f"answer(s) taken on identical images in sibling runs, each named for the run it "
+              f"came from. The ledger now stands on its own: send it with the written layer.")
+        return 0
     if getattr(a, "worksheet", False):
         print(RV.worksheet(out, a.plugin or ""))
         return 0
@@ -4364,6 +4370,11 @@ def main(argv=None):
     rv.add_argument("--worksheet", action="store_true",
                     help="print the audit's worksheet: every open finding by kind, its owner, "
                          "the plan entry or code site, the eye's words, and the two answers")
+    rv.add_argument("--adopt", action="store_true",
+                    help="append the looks and answers this run reads from its sibling runs "
+                         "(identical images) to its OWN ledger, named for the run they came "
+                         "from - before the written layer is sent to be sealed where no sibling "
+                         "is beside it")
     rv.add_argument("--defect", action="store_true",
                     help="with --figure and --note: this look says the panel MUST CHANGE. The "
                          "audit stage counts it, the agenda's write task waits on it, and a "
