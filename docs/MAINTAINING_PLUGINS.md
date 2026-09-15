@@ -96,6 +96,27 @@ python version going out of support — and prove it.
 6. **Note it in the plugin's docstring** if the result changes. A user comparing two runs across
    a bump needs to know the difference is the tool and not their data.
 
+### Editing the declaration: one verb per change
+
+The declaration is a Python literal, and the maker beside this repository edits it by source
+span (harness ADR-0026): `sch dev edit --root <this repo> --point kernel --name <plugin>
+--python <interp> --set report.figures[<id>].at_most=2` (also `--legend`, `--rename`,
+`--remove`, `--add`, `--duplicate`, `--swap`, `--delete`, `--list-add`, `--list-remove`,
+`--rename-key`; `--dry` for the diff; `--run <a run>` for what the edit unbinds and whether the
+saved objects will be reused). One call, one `version` bump, every comment untouched, and the
+followers this repository declares under `plan.after_edit` in `DEVPOINTS.yaml` run in order -
+`validate`, `scaffold --force`, the plan baseline re-recorded, the vocabulary guard - stopping
+at the first that refuses. Edit the file by hand only where the verb has no action for the
+change, and say so in the commit.
+
+Three declarations a plugin owes the maker's readings: `produces` in the grammar its readers
+read (a table by name, `slot[name]`, a trailing `?` for an optional output); `cache` naming the
+span of source that determines a saved object and the config parameters in its key, so
+`scprofile cache --forecast` can say before a job whether the next run re-infers; and, beside
+the file, `<plugin>.signatures.json` - the wrapped tool's exports and signatures, recorded once
+where the tool is installed by `sch dev convert inventory --rscript <R> --record` - against
+which the validator holds every entry's named arguments.
+
 ---
 
 ## The rules a plugin must keep
