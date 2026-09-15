@@ -764,7 +764,12 @@ class Context(FigureContextReader):
             if self.design:
                 try:
                     from . import inputs
-                    tab, _key, factors = inputs.read_design(self.design)
+                    # KEYED ON THE SAMPLE COLUMN THE RUN WAS TOLD, as the host keys it: a
+                    # table named some other way read here as unreadable and the plugin's
+                    # design-aware parts saw no design on one shape of the fixture and a
+                    # design on the other (harness ADR-0026, the open items).
+                    tab, _key, factors = inputs.read_design(
+                        self.design, sample_col=self.keys.get("sample"))
                     self._design_cache = dict(tab)
                     self._design_factors = list(factors)
                 except Exception as e:                                # noqa: BLE001

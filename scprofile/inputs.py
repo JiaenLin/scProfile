@@ -740,11 +740,17 @@ def read_design(path, samples=None, sample_col=None, factors=None):
         raise Refuse(f"{path} has no rows")
 
     cols = list(rows[0])
-    key = sample_col or next(
+    # THE RUN IS TOLD THE SAMPLE COLUMN (harness ADR-0026, the open items): `sample_col` is the
+    # run's --sample-key, and a table that has that column is keyed on it; the name list is
+    # the fallback for a table that names its samples some other way. The fixture's shape b
+    # keys its table on `library_id`, which no list knows and every run is told.
+    key = (sample_col if sample_col and sample_col in cols else None) or next(
         (c for c in cols if c.lower() in ("sample", "sample_id", "library", "batch", "donor")),
         None)
     if key is None:
-        raise Refuse(f"{path}: no sample column found among {cols}. Pass --design-sample-col.")
+        raise Refuse(f"{path}: no sample column found among {cols} - neither --sample-key "
+                     f"({sample_col!r}) nor a name this tool knows (sample, sample_id, library, "
+                     f"batch, donor). Name the table's sample column with --sample-key.")
 
     table = {str(r[key]): {c: r[c] for c in cols if c != key} for r in rows}
     if factors:
@@ -753,6 +759,12 @@ def read_design(path, samples=None, sample_col=None, factors=None):
             raise Refuse(f"{path}: --factor names {missing}, not a column of the table; it has "
                          f"{[c for c in cols if c != key]}")
         factors = [str(f) for f in factors]
+        # THE ROWS TOO: the unit resolver reads the table's columns, not this list, so a row
+        # that kept batch, subject and age beside the named factor still resolved nine marginal
+        # pools and five arms - twenty units for nine (found by the first job's fixture run).
+        # What a run is about is the table it is given; the panels that state confounds read
+        # the design file itself, in the plugin's process, and see every column there.
+        table = {s: {c: r[c] for c in factors} for s, r in table.items()}
     else:
         factors = [c for c in cols if c != key]
 
@@ -940,7 +952,7 @@ def design_or_derive(path, adata=None, sample_key=None, samples=None, *, quiet=F
     derived design must be visible as derived.
     """
     if path:
-        tab, key, factors = read_design(path, samples, factors=factors)
+        tab, key, factors = read_design(path, samples, sample_col=sample_key, factors=factors)
         return tab, key, factors, "table"
     if adata is not None and sample_key:
         try:

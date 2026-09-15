@@ -42,9 +42,19 @@ with tempfile.TemporaryDirectory() as td:
        factors == ["condition", "batch", "subject", "age_weeks"], str(factors))
     tab, key, factors = I.read_design(p, factors=["condition"])
     ck("the named factor is the only factor", factors == ["condition"], str(factors))
-    ck("the row keeps the other columns for the panels that state confounds",
-       tab["S1"] == {"condition": "ctrl", "batch": "chipA", "subject": "D1", "age_weeks": "51.0"},
-       str(tab["S1"]))
+    # THE ROWS TOO (found by the first job's fixture run): the unit resolver reads the table's
+    # columns, not the factors list, so a table that kept batch, subject and age beside the
+    # named factor still resolved nine marginal pools and five arms - twenty units for nine.
+    # What a run is about is the table it is given; the panels that state confounds read the
+    # design file itself, in the plugin's process, and see every column there.
+    ck("the row carries the named factor only",
+       tab["S1"] == {"condition": "ctrl"}, str(tab["S1"]))
+    from scprofile import units as U
+    plan, _why = U.resolve(tab, sample_key=key, samples=sorted(tab))
+    ck("so the units resolve over that factor alone",
+       all(set(p_.get("factors") or [p_.get("factor")] or []) <= {"condition", None}
+           for p_ in plan) and not any("age" in str(p_) or "D1" in str(p_) for p_ in plan),
+       str(plan)[:300])
     try:
         I.read_design(p, factors=["arm"])
         ck("a factor the table lacks is refused by name", False, "no refusal")
@@ -52,6 +62,35 @@ with tempfile.TemporaryDirectory() as td:
         ck("a factor the table lacks is refused by name", "arm" in str(e) and "condition" in str(e), str(e))
     tab, key, factors, src = I.design_or_derive(p, factors=["condition"])
     ck("design_or_derive passes it through", factors == ["condition"] and src == "table", str(factors))
+
+print("\nthe table's sample column is the run's --sample-key when the table has it")
+# SHAPE B PASSED IN TWO SECONDS (found by the first job's fixture run): the table's sample
+# column is `library_id`, the guess list did not know it, `plan` reported the design NOT
+# AVAILABLE and pointed at a `--design-sample-col` that does not exist, and the tier accepted
+# the refusal that followed. The run is TOLD the sample column (`--sample-key`); a table that
+# has that column is keyed on it, and one that has neither it nor a name the list knows is
+# refused naming --sample-key.
+with tempfile.TemporaryDirectory() as td:
+    p = Path(td) / "design.csv"
+    p.write_text("library_id,arm,chip\nS1,ctrl,chipA\nS2,treated,chipB\n")
+    tab, key, factors = I.read_design(p, sample_col="library_id")
+    ck("keyed on the column the run names", key == "library_id" and factors == ["arm", "chip"], f"{key} {factors}")
+    tab, key, factors, src_ = I.design_or_derive(p, sample_key="library_id")
+    ck("design_or_derive passes the run's sample key as the table's when the table has it",
+       key == "library_id" and src_ == "table", f"{key} {src_}")
+    p.write_text("sample,arm\nS1,ctrl\nS2,treated\n")
+    tab, key, factors, src_ = I.design_or_derive(p, sample_key="library_id")
+    ck("and falls back to the names the list knows when the table lacks it", key == "sample", key)
+    p.write_text("mouse,arm\nS1,ctrl\nS2,treated\n")
+    try:
+        I.design_or_derive(p, sample_key="library_id")
+        ck("neither: refused naming --sample-key", False, "no refusal")
+    except I.Refuse as e:
+        ck("neither: refused naming --sample-key", "--sample-key" in str(e) and "design-sample-col" not in str(e), str(e))
+
+psrc = (ROOT / "scprofile" / "plugin.py").read_text(encoding="utf-8")
+ck("the plugin-side reading is keyed the same way",
+   'read_design(\n                        self.design, sample_col=self.keys.get("sample"))' in psrc)
 
 src = (ROOT / "scprofile" / "cli.py").read_text(encoding="utf-8")
 ck("`run` and `plan` take --factor", src.count('add_argument("--factor"') >= 2, str(src.count('add_argument("--factor"')))
