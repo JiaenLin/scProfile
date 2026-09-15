@@ -506,12 +506,27 @@ def answer(out, figure, why, *, by="", plugin="", stated=False, plugin_file=None
     return rec
 
 
-def stated_answers(out, plugin=""):
-    """{relpath: answer record} - stated answers on the figure's current bytes that no later
-    look has re-marked. These CLOSE the finding (see `answer`)."""
+def stated_answers(out, plugin="", plugin_file=None):
+    """{relpath: answer record} - stated answers whose words the entry's legend still carries,
+    on the figure's current bytes or - by entry - on any rendering, that no later look has
+    re-marked. These CLOSE the finding (see `answer`).
+
+    A DISCLOSURE IS A SENTENCE IN THE LEGEND, WHATEVER THE BYTES (harness ADR-0026): closure by
+    bytes alone let 33 findings sleep through a legend rewrite until the next run redrew the
+    plates, and the maker read `audited done` over them. With the words gone from the
+    declaration in this tree, the finding is open before any run; a declaration this tree
+    cannot read leaves the old closure by bytes."""
     root = Path(out)
     looks = read_ledger(out, plugin)
     out_ = {}
+    words_by_kind = {}
+
+    def _words(rel):
+        kind = kind_of(rel)
+        if kind not in words_by_kind:
+            words_by_kind[kind] = _norm(declared_text(plugin, rel, plugin_file=plugin_file,
+                                                      out=root)[1])
+        return words_by_kind[kind]
     # EVERY STATED RECORD THIS RUN OR ITS SIBLINGS HOLD, BY ENTRY - not by bytes, which is how
     # answers otherwise carry; the by-entry carry below re-checks each against the declaration.
     by_kind = {}
@@ -525,7 +540,7 @@ def stated_answers(out, plugin=""):
             except ValueError:
                 continue
             if isinstance(rec, dict) and rec.get("stated") is True and rec.get("figure"):
-                by_kind[kind_of(str(rec["figure"]))] = rec
+                by_kind.setdefault(kind_of(str(rec["figure"])), []).append(rec)
     for rel, rec in read_answers(out, plugin).items():
         if rec.get("stated") is not True:
             continue
@@ -535,26 +550,31 @@ def stated_answers(out, plugin=""):
         look = looks.get(rel) or {}
         if look.get("defect") is True and str(look.get("at") or "") > str(rec.get("at") or ""):
             continue                       # the eye marked it again after the disclosure
+        w = _words(rel)
+        if w and _norm(rec.get("answer")) not in w:
+            continue                       # the legend no longer says it
         out_[rel] = rec
     # AND BY THE ENTRY, TO ANY RENDERING (harness ADR-0022): seventeen plates of one scan set
     # render differently on every run, so a disclosure bound to bytes reopened with nothing
     # changed but the pixels. The disclosure is about the entry's drawing by the upstream's
     # design; it holds for every rendering while the legend carries the words, and that is
     # checked against the declaration in this tree, not the image.
-    words_by_kind = {}
     for rel in figures(out):
         if rel in out_ or (plugin and not rel.startswith(f"kernels/{plugin}/")):
             continue
         kind = kind_of(rel)
-        rec = by_kind.get(kind)
-        if rec is None:
+        recs = by_kind.get(kind) or []
+        if not recs:
             continue
         # ONE READ OF THE DECLARATION PER KIND: read per figure, the worksheet took two minutes
-        # on 945 figures, loading the plugin's file for each.
-        if kind not in words_by_kind:
-            words_by_kind[kind] = _norm(declared_text(plugin, rel, out=root)[1])
-        words = words_by_kind[kind]
-        if words and _norm(rec.get("answer")) in words:
+        # on 945 figures, loading the plugin's file for each. THE RECORD THAT FITS, LATEST FIRST
+        # (harness ADR-0026): a kind stated twice - once in a legend's old words, once in its
+        # new - carries by the record whose words the legend still holds, not by whichever a
+        # sibling's ledger happened to list last.
+        words = _words(rel)
+        rec = next((r for r in sorted(recs, key=lambda r: str(r.get("at") or ""), reverse=True)
+                    if words and _norm(r.get("answer")) in words), None)
+        if rec is not None:
             out_[rel] = dict(rec, figure=rel, carried_by="entry")
     return out_
 
@@ -690,7 +710,7 @@ def status(out, plugin=""):
     return rows
 
 
-def defects(out, plugin=""):
+def defects(out, plugin="", plugin_file=None):
     """[(relpath, note, reviewer, run)] - looks marked a defect whose image is unchanged.
 
     THE EYE'S VERDICT, MACHINE-READABLE (harness ADR-0018). Fifty-eight of one run's 139 notes
@@ -716,13 +736,13 @@ def defects(out, plugin=""):
         if rec.get("defect") is True:
             out_.append((rel, str(rec.get("note", "")), str(rec.get("reviewer", "")), run_name))
     # A STATED ANSWER CLOSES THE FINDING (harness ADR-0022): the declaration carries the words.
-    closed = stated_answers(out, plugin)
+    closed = stated_answers(out, plugin, plugin_file=plugin_file)
     if closed:
         out_ = [x for x in out_ if x[0] not in closed]
     return out_
 
 
-def open_findings(out, plugin=""):
+def open_findings(out, plugin="", plugin_file=None):
     """{relpath: [finding]} - the machine's residue after repair and the eye's open defects.
 
     ONE LIST FOR EVERY READER (harness ADR-0018): the audit stage, the agenda's write task, the
@@ -746,7 +766,7 @@ def open_findings(out, plugin=""):
                     found.setdefault(rel, []).append(
                         f"machine: {a.get('code')}: {a.get('detail')}")
     ans = answered(out, plugin)
-    for rel, note, who, run_name in defects(out, plugin):
+    for rel, note, who, run_name in defects(out, plugin, plugin_file=plugin_file):
         found.setdefault(rel, []).append(
             f"eye ({who or 'unnamed'}{', on ' + run_name if run_name else ''}): {note}"
             + (f"; answered by {ans[rel].get('by')}: {ans[rel].get('answer')}" if rel in ans
@@ -790,7 +810,7 @@ def worksheet(out, plugin, plugin_file=None):
     from . import declare as _DC
     from . import native as _NAT
     root = Path(out)
-    of = open_findings(out, plugin)
+    of = open_findings(out, plugin, plugin_file=plugin_file)
     ans = read_answers(out, plugin)
     try:
         doc = _json.loads((root / RUN_MARKER).read_text(encoding="utf-8"))
@@ -869,8 +889,43 @@ def worksheet(out, plugin, plugin_file=None):
     # DISCLOSED, AND THE EYE SAYS MORE (harness ADR-0022, found by a looker): a stated answer
     # closes its kind for every rendering, so a later look that finds more than the legend
     # states reaches no count. Printed apart, uncounted, so the author reads it.
-    closed = stated_answers(out, plugin)
+    closed = stated_answers(out, plugin, plugin_file=plugin_file)
     led = read_ledger(out, plugin)
+    # A DISCLOSURE THE LEGEND NO LONGER CARRIES (harness ADR-0026): the stated records on this
+    # run and its siblings whose words are not in the entry's legend in this tree, named with
+    # their words, so the author re-states them in the new legend or restores the sentence -
+    # before a run, not after the next redraw reopened them.
+    stated_by_kind = {}
+    for run_ in [root] + list(sibling_runs(out)):
+        f_ = ledger_path(run_, plugin)
+        if not f_.exists():
+            continue
+        for line in f_.read_text(encoding="utf-8").splitlines():
+            try:
+                rec = _json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(rec, dict) and rec.get("stated") is True and rec.get("figure"):
+                stated_by_kind.setdefault(kind_of(str(rec["figure"])), []).append(rec)
+    gone = {}
+    for kind, recs in stated_by_kind.items():
+        words = _norm(declared_text(plugin, str(recs[0]["figure"]), plugin_file=plugin_file,
+                                    out=root)[1])
+        if not words:
+            continue
+        # A KIND STATED MORE THAN ONCE STANDS IF ANY OF ITS RECORDS DOES: a sibling's older
+        # record in a legend's old words is not a disclosure lost.
+        if not any(_norm(r.get("answer")) in words for r in recs):
+            latest = max(recs, key=lambda r: str(r.get("at") or ""))
+            gone[kind] = str(latest.get("answer") or "")
+    if gone:
+        L += [f"# STATED, AND THE LEGEND NO LONGER SAYS IT: {len(gone)} kind(s) carry a stated "
+              f"disclosure whose words are not in the entry's legend in this tree - the finding "
+              f"it closed is open again above; put the sentence back, or state it again in the "
+              f"new words:"]
+        for kind, words in sorted(gone.items()):
+            L += [f"   - {kind}: \"{words[:160]}\""]
+        L.append("")
     more = [(rel, led[rel]) for rel in sorted(closed)
             if led.get(rel, {}).get("defect") is True
             and str(led[rel].get("at") or "") > str(closed[rel].get("at") or "")]

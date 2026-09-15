@@ -198,6 +198,22 @@ with tempfile.TemporaryDirectory() as td:
         hidden = str(e)
     ck("a sentence anywhere but the legend does not count", "legend" in hidden, hidden[:160])
     ck("the finding is closed", F_TOOL not in R.open_findings(run, PLUG), str(R.open_findings(run, PLUG)))
+    # A DISCLOSURE IS A SENTENCE IN THE LEGEND; REWRITE THE LEGEND AND IT IS GONE, whatever the
+    # bytes (harness ADR-0026). Closure by bytes alone let 33 findings sleep through a legend
+    # rewrite until the next run redrew the plates; the maker read `audited done` over them.
+    plug_file.write_text("PLUGIN = {\n    'report': {'figures': [\n"
+                         "        {'id': 'native_ring', 'fn': 'drawRing', 'legend': 'the ring, said again'},\n"
+                         "    ]}}\n\ndef run(ctx):\n    pass\n")
+    ck("with the words gone from the legend the finding is open again, same bytes",
+       F_TOOL in R.open_findings(run, PLUG, plugin_file=plug_file),
+       str(R.open_findings(run, PLUG, plugin_file=plug_file)))
+    ws_gone = R.worksheet(run, PLUG, plugin_file=plug_file)
+    ck("and the worksheet says which disclosure no longer stands, with its words",
+       "NO LONGER SAYS IT" in ws_gone and STATED[:40] in ws_gone, ws_gone[:400])
+    plug_file.write_text("PLUGIN = {\n    'report': {'figures': [\n"
+                         "        {'id': 'native_ring', 'fn': 'drawRing', 'legend': 'the ring. "
+                         + STATED.replace("'", "\\'") + "'},\n    ]}}\n\ndef run(ctx):\n    pass\n")
+    ck("the words back, it is closed again", F_TOOL not in R.open_findings(run, PLUG, plugin_file=plug_file))
     st = {r: s_ for r, s_, _w in R.status(run, PLUG)}
     ck("and the figure reads reviewed, not awaiting a look", st.get(F_TOOL) == R.REVIEWED, str(st.get(F_TOOL)))
     ck("and it is not outstanding", F_TOOL not in dict(R.outstanding(run, PLUG)))
@@ -207,8 +223,13 @@ with tempfile.TemporaryDirectory() as td:
     st2 = {r: s_ for r, s_, _w in R.status(run, PLUG)}
     ck("a redraw reopens it as it reopens every look", st2.get(F_TOOL) != R.REVIEWED, str(st2.get(F_TOOL)))
     R.record(run, F_TOOL, NOTE_2, reviewer="looker-1", plugin=PLUG, defect=True)
-    ck("the worksheet names the stated answer as the third way",
-       "--stated" in R.worksheet(run, PLUG, plugin_file=plug_file), "no --stated in the worksheet")
+    # WITH THE DECLARATION READABLE, the disclosure carries to the redrawn rendering by entry
+    # and the later look is printed apart, uncounted (the trait ADR-0025 recorded). This
+    # check read `--stated` here only because the fake plugin had no file to read.
+    carried = R.stated_answers(run, PLUG, plugin_file=plug_file)
+    ck("the disclosure carries to the redrawn plate by entry, and the kind is not open",
+       carried.get(F_TOOL, {}).get("carried_by") == "entry"
+       and F_TOOL not in R.open_findings(run, PLUG, plugin_file=plug_file), str(carried)[:300])
 
 print("\na host panel is stated against the caption the page prints under it")
 # THE HOST'S OWN PANELS HAVE NO PLAN ENTRY (harness ADR-0023): the one finding left after the

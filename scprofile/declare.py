@@ -317,6 +317,12 @@ def _check_plan_entry(f, at, out) -> None:
                              f"`at_most`. A computed file stem is one panel per something, and "
                              f"a family drawn per something has a ceiling or draws without "
                              f"bound."))
+    if f.get("generated") is False and any(f.get(k) for k in ("args", "expr", "items", "device")):
+        # A CALL ON AN ENTRY WITH NO SITE (harness ADR-0026): `generated: False` means the
+        # companion draws no site for it, so its `args` reach nothing and an author editing
+        # them changes nothing and learns it from a run.
+        out.append(("WARN", f"{at} declares `generated: False` and a call ({', '.join(k for k in ('args', 'expr', 'items', 'device') if f.get(k))}); "
+                            f"no site is generated for it, so the call reaches nothing"))
     if f.get("generated") is not None and not isinstance(f.get("generated"), bool):
         out.append(("ERROR", f"{at} declares `generated` as {type(f.get('generated')).__name__}; "
                              f"it is True, or False for a file the tool writes as a side effect "
@@ -377,6 +383,18 @@ def _check_report(spec, out) -> None:
     if not isinstance(block, dict):
         out.append(("ERROR", f"`report` must be a mapping, got {type(block).__name__}"))
         return
+    # THE WRITING TEMPLATE IS A FILE (harness ADR-0026): `report.writing_template` names one
+    # under the result-section skill's templates, and the brief sends the writer to it by
+    # that name after the run; a name that matches no file passed every stage.
+    tmpl = block.get("writing_template")
+    if tmpl is not None:
+        from pathlib import Path as _P
+        tdir = _P(__file__).resolve().parent.parent / ".claude" / "skills" / "result-section" / "templates"
+        if not isinstance(tmpl, str) or not (tdir / f"{tmpl}.md").is_file():
+            have = sorted(p.stem for p in tdir.glob("*.md") if p.stem != "README") if tdir.is_dir() else []
+            out.append(("ERROR", f"report.writing_template names {tmpl!r} and no template "
+                                 f"`{tmpl}.md` exists under .claude/skills/result-section/templates; "
+                                 f"the templates are: {', '.join(have) or 'none'}"))
     # WHICH OF THE HOST'S OWN PANELS THIS PLUGIN'S PAGES CARRY (harness ADR-0024): a list of
     # the kinds `panels.IMPLEMENTED` names, or absent for every kind. An unknown name would be
     # a panel nobody draws, silently.
@@ -718,9 +736,14 @@ def check(spec, name="<plugin>"):
         if c["type"] not in _TYPES:
             out.append(("ERROR", f"config {key!r} has unknown type {c['type']!r}; "
                                  f"one of {', '.join(sorted(_TYPES))}"))
-        if "default" not in c:
-            out.append(("WARN", f"config {key!r} has no default, so a run that does not set it "
-                                f"has no defined behaviour"))
+        if "default" not in c and not c.get("required"):
+            # AN ERROR, NOT A WARNING (harness ADR-0026): `resolve_config` raises on the cluster
+            # at the start of every instance for a parameter with no default and no value, and
+            # the maker's defaults stage read `done` over it. A parameter a run must be given
+            # says so with `required: True`.
+            out.append(("ERROR", f"config {key!r} has no default: every instance of a run that "
+                                 f"does not set it refuses at start (`resolve_config`). Declare "
+                                 f"a `default`, or `required: True` for a value a run must give."))
         if not c.get("help"):
             out.append(("WARN", f"config {key!r} has no help. A parameter nobody can explain is "
                                 f"a parameter nobody should set."))
