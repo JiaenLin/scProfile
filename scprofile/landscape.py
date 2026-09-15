@@ -239,3 +239,119 @@ def verified_fields(rec):
     """
     checked = [f for f in ("input_size", "input_mtime") if rec.get(f) is not None]
     return checked, [f for f in DETERMINING if f not in checked]
+
+
+# ------------------------------------------------------------------------------ the forecast
+def _spec_of_source(src):
+    """The PLUGIN literal of a plugin's source, read and never imported."""
+    import ast
+    tree = ast.parse(src)
+    node = next((n for n in tree.body if isinstance(n, ast.Assign)
+                 and any(isinstance(t, ast.Name) and t.id == "PLUGIN" for t in n.targets)), None)
+    return ast.literal_eval(node.value) if node is not None else {}
+
+
+def _span_of(src, markers):
+    """The lines between the two markers, or None when either is missing."""
+    a, b = str(markers[0]), str(markers[1])
+    lines = src.splitlines()
+    ia = next((i for i, ln in enumerate(lines) if ln.startswith(a)), None)
+    ib = next((i for i, ln in enumerate(lines) if ln.startswith(b)), None)
+    if ia is None or ib is None or ib <= ia:
+        return None
+    return "\n".join(lines[ia:ib + 1])
+
+
+def cache_forecast(root, plugin, run):
+    """{hit: True|False|None, reasons: [...], commit} - whether the next run of `plugin` from
+    the tree at `root` will reuse the objects the run at `run` left, read from the declaration
+    (harness ADR-0026).
+
+    A plugin that keeps a fitted object declares under `cache` what keys it: `span`, the two
+    marker lines of the source that determines the object, and `keyed_on`, the config parameters
+    in the key. The forecast compares the working tree with the tool commit the run recorded -
+    the span's text and each keyed parameter's effective value (what the run was given, else the
+    default) - and says HIT or MISS with the reason. The environment (the wrapped tool's own
+    version) is assumed the same; nothing here can read it.
+    """
+    import json as _json
+    import subprocess
+    root = Path(root)
+    run = Path(run)
+    f = root / "kernels" / f"{plugin}.py"
+    out = {"hit": None, "reasons": [], "commit": None}
+    if not f.is_file():
+        out["reasons"].append(f"no plugin file at {f}")
+        return out
+    src_now = f.read_text(encoding="utf-8")
+    try:
+        spec_now = _spec_of_source(src_now)
+    except (SyntaxError, ValueError) as e:
+        out["reasons"].append(f"the plugin's declaration does not read: {e}")
+        return out
+    decl = spec_now.get("cache")
+    if not isinstance(decl, dict) or not decl.get("span"):
+        out["reasons"].append(f"{plugin} declares no `cache` (span, keyed_on), so nothing here "
+                              f"can say whether the run will re-infer")
+        return out
+    try:
+        commit = str(_json.loads((run / "report.json").read_text(encoding="utf-8")).get("tool_commit") or "")
+    except (OSError, ValueError):
+        commit = ""
+    if not commit:
+        out["reasons"].append(f"{run.name} records no tool_commit")
+        return out
+    out["commit"] = commit
+    r = subprocess.run(["git", "-C", str(root), "show", f"{commit}:kernels/{plugin}.py"],
+                       capture_output=True, text=True)
+    if r.returncode:
+        out["reasons"].append(f"the tree at {root} cannot show {commit}: {r.stderr.strip()[:120]}")
+        return out
+    src_then = r.stdout
+    try:
+        spec_then = _spec_of_source(src_then)
+    except (SyntaxError, ValueError):
+        spec_then = {}
+    markers = list(decl.get("span") or [])
+    span_now, span_then = _span_of(src_now, markers), _span_of(src_then, markers)
+    if span_now is None:
+        out["reasons"].append(f"the span markers {markers} are not both in the file now")
+        return out
+    reasons = []
+    if span_then is None or span_now != span_then:
+        import difflib
+        n = sum(1 for ln in difflib.unified_diff((span_then or "").splitlines(),
+                                                 span_now.splitlines(), n=0, lineterm="")
+                if ln[:1] in "+-" and ln[:3] not in ("+++", "---"))
+        reasons.append(f"the inference span changed since {commit} ({n} line(s) differ): every "
+                       f"unit re-infers")
+    # THE EFFECTIVE VALUE OF EACH KEYED PARAMETER: what the run was given, else the default.
+    given = {}
+    for inp in sorted((run / "kernels" / plugin).glob("*/in.json")):
+        try:
+            given = dict(_json.loads(inp.read_text(encoding="utf-8")).get("params") or {})
+            break
+        except (OSError, ValueError):
+            continue
+
+    def _effective(spec, key):
+        if key in given:
+            return given[key]
+        c = ((spec.get("config") or {}).get(key) or {})
+        return c.get("default") if isinstance(c, dict) else None
+    for key in (decl.get("keyed_on") or []):
+        then_, now_ = _effective(spec_then, key), _effective(spec_now, key)
+        if then_ != now_:
+            reasons.append(f"keyed parameter {key} {then_!r} -> {now_!r}: every unit re-infers")
+    out["hit"] = not reasons
+    out["reasons"] = reasons or [f"the inference span and the keyed parameters are those of the "
+                                 f"run at {commit}; the saved objects are reused (assuming the "
+                                 f"same environment)"]
+    return out
+
+
+def format_forecast(plugin, fc):
+    if fc.get("hit") is None:
+        return f"  CACHE FORECAST for {plugin}: cannot say - " + "; ".join(fc.get("reasons") or [])
+    word = "HIT" if fc["hit"] else "MISS"
+    return f"  CACHE FORECAST for {plugin}: {word} - " + "; ".join(fc.get("reasons") or [])

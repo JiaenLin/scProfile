@@ -35,8 +35,14 @@ def check(ok, msg):
         FAILURES.append(msg)
 
 
-a = SRC.find("# --- RECIPE START ---")
-b = SRC.find("# --- RECIPE END ---")
+# AT A LINE'S START, as the R's own `grep("^# --- RECIPE START ---")` reads it (harness
+# ADR-0026): the plugin now names its markers in its `cache` declaration too, on one line, and
+# a search anywhere in the file found that line first and read the whole recipe as outside.
+import re as _re
+_ma = _re.search(r"^# --- RECIPE START ---", SRC, _re.M)
+_mb = _re.search(r"^# --- RECIPE END ---", SRC, _re.M)
+a = _ma.start() if _ma else -1
+b = _mb.start() if _mb else -1
 check(a > 0, "no RECIPE START marker; the stamp cannot name what makes the object")
 check(b > a, "no RECIPE END marker after the start")
 

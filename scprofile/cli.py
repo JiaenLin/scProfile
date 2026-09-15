@@ -3927,7 +3927,19 @@ def _cache(a):
     with no way to see what was in it or to remove it except by knowing where it lives. It is
     disposable by construction - everything in it is rebuildable and rebuilding is the only cost
     of deleting it - which is exactly why it needs a stated size rather than silent growth.
+
+    `--forecast` (harness ADR-0026): whether the NEXT run will reuse what the cache holds, said
+    before the job from the plugin's `cache` declaration against the run's tool commit.
     """
+    if getattr(a, "forecast", False):
+        from . import landscape as _L
+        if not getattr(a, "plugin", None):
+            print("scprofile cache --forecast: name the plugin with --plugin", file=sys.stderr)
+            return REFUSE
+        root = Path(getattr(a, "root", None) or Path(__file__).resolve().parent.parent)
+        fc = _L.cache_forecast(root, a.plugin, Path(a.out))
+        print(_L.format_forecast(a.plugin, fc))
+        return 0
     import shutil
     import time as _t
 
@@ -4309,6 +4321,14 @@ def main(argv=None):
                          "and rebuilding is the only thing this costs.")
     ca.add_argument("--older-than", type=int, metavar="DAYS",
                     help="with --clear, keep entries touched within this many days")
+    ca.add_argument("--forecast", action="store_true",
+                    help="instead: whether the NEXT run of --plugin from this tree will reuse "
+                         "the objects the run at --out left - HIT or MISS with the reason, read "
+                         "from the plugin's `cache` declaration against the run's tool commit "
+                         "(harness ADR-0026)")
+    ca.add_argument("--plugin", default=None, help="with --forecast: the plugin")
+    ca.add_argument("--root", default=None,
+                    help="with --forecast: the tool's tree (default: this package's own)")
     ca.set_defaults(fn=_cache)
 
     p = sub.add_parser("report", help="[agent] rebuild the documents from report.json")

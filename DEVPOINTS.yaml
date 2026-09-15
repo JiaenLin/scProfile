@@ -50,6 +50,11 @@ run:
   # reproduced it re-inferred every unit. This repository names its own flag; the emitter drops
   # it on a redraw and says so in the job's header.
   redraw_drops: ["--no-cache"]
+  # WHAT TO READ BEFORE A JOB (harness ADR-0026): whether the next run will reuse the saved
+  # objects the reference run left, from the plugin's `cache` declaration against the run's tool
+  # commit. `sch dev edit --run` prints it after an edit; `sch dev job` puts it in the header.
+  forecast: ["{python}", "-m", "scprofile.cli", "cache", "--out", "{run}", "--forecast",
+             "--plugin", "{name}", "--root", "{root}"]
 
 # THE RULES OF THIS DEVELOPMENT ROUND. `sch dev rules --root . --since REF` checks them; without
 # this block it has nothing to check and says so rather than passing.
@@ -402,6 +407,11 @@ points:
             - ["{python}", "-m", "scprofile.cli", "validate", "{name}"]
             - ["{python}", "-m", "scprofile.cli", "scaffold", "{name}", "--force"]
             - ["{python}", "tests/test_the_figure_plan_is_the_same_plan.py", "--record"]
+            # THE VOCABULARY GUARD, LAST (harness ADR-0026): a cohort word in a legend passed the
+            # verb, the validator and the build status; only the portability suite refuses it,
+            # and only when somebody runs it. About nine seconds; SCPROFILE_FORBIDDEN_TERMS in
+            # the environment adds the site's own terms.
+            - ["{python}", "tests/test_portability.py"]
           finished_by: >
             `sch dev convert plan --root . --point kernel --name <plugin>` prints every entry
             with what it lacks and, given `--python`, the upstream function's parameters beside

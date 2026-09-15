@@ -647,6 +647,25 @@ def check(spec, name="<plugin>"):
     # declaration and nothing anywhere compared it with what the plugin produced. The host now
     # renders the per-arm view from any per-cell column a plugin writes, so the claim is
     # structurally possible exactly when there is such a column to split.
+    # WHAT KEYS THE FITTED OBJECT A PLUGIN KEEPS (harness ADR-0026): `cache.span`, the two
+    # marker lines of the source that determines it, and `cache.keyed_on`, config parameters in
+    # the key. Read by `scprofile cache --forecast` before a job; a plugin that keeps nothing
+    # declares nothing.
+    cache = spec.get("cache")
+    if cache is not None:
+        if not isinstance(cache, dict):
+            out.append(("ERROR", "`cache` must be a mapping {span: [start, end], keyed_on: [...]}"))
+        else:
+            span = cache.get("span")
+            if not (isinstance(span, (list, tuple)) and len(span) == 2
+                    and all(isinstance(x, str) and x.strip() for x in span)):
+                out.append(("ERROR", "`cache.span` must be the two marker lines, start and end, "
+                                     "that bound the source determining the saved object"))
+            keyed = cache.get("keyed_on") or []
+            unknown = [k for k in keyed if k not in (spec.get("config") or {})]
+            if unknown:
+                out.append(("ERROR", f"`cache.keyed_on` names config parameter(s) the plugin does "
+                                     f"not declare: {', '.join(map(str, unknown))}"))
     # THE GRAMMAR OF `produces` IS THE ONE ITS READERS READ (harness ADR-0026): a table by its
     # name (`edges.csv`, or `tables/edges.csv`), a slot form (`obs[phase]`, `objects[fit.rds]`),
     # a trailing `?` for an output only some runs make. A plugin wrote `[optional] objects/x.rds`
