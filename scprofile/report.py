@@ -947,7 +947,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
     # FROM HERE ON THE PLUGIN HAS THE PHASE, so the phase exists and gets a record whatever
     # happens next - including the case where every pair turns out to be unlaunchable, which is
     # a fact about the design and was previously indistinguishable from the phase not existing.
-    _launches, _considered, _unlaunchable = [], 0, []
+    _launches, _considered, _unlaunchable, _pending = [], 0, [], []
     _version = str(((_k.spec if _k is not None else None) or {}).get("version") or "")
     if timeout is None:
         # THE SAME SENTENCE THE RUN PHASE PRINTS, because it is now the same policy. A 3600s
@@ -977,6 +977,16 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
               f"the shell exports (a job script's OMP_NUM_THREADS=$NCPUS reaches it). Rebuild "
               f"from a report.json that records `cores`, or cap the threads in the environment.")
     udir = {str(u.get("unit")): u.get("dir") for u in (units or []) if u.get("unit")}
+    # THE SHARE EACH LAUNCH RUNS UNDER, AND HOW MANY RUN AT ONCE (harness ADR-0026). Seven
+    # launches of ~72 s each ran one after another on a 64-core node, each handed the whole
+    # budget and using one core: 505 s of R, 13.5 minutes of phase, in every rerun. The run
+    # phase already schedules its instances by the plugin's declared `cores` under the run's
+    # budget; this phase launches the same plugin and takes the same share. A plugin declaring
+    # no `cores` keeps the old shape - one launch at a time under the whole budget - because
+    # nothing says what it can be split to.
+    _declared = int((((_k.spec if _k is not None else None) or {}).get("cores")) or 0)
+    share = min(int(cores), _declared) if (cores and _declared) else (int(cores) if cores else None)
+    at_once = max(1, int(cores) // share) if (cores and share and _declared) else 1
 
     # A CONTRAST SIDE IS A SET OF SAMPLES, NOT A UNIT NAME. `arm_pairs` returns factor LEVELS,
     # and the first version looked those up in a dict keyed by unit, so nothing ever matched and
@@ -1032,7 +1042,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             # THE SHARE THIS LAUNCH RUNS UNDER, on the spec as on the per-unit in.json (harness
             # ADR-0021): the environment was capped to it and the launch record carried it, and
             # the plugin's own context could not read it.
-            "resources": {"cores": int(cores or 1)},
+            "resources": {"cores": int(share or 1)},
             # THE SAME BLOCK THE PER-UNIT SIDE GETS. Wiring the colour map and the stamp into the
             # per-unit script alone left three mutually inconsistent palettes in one run - the
             # per-unit natives, the comparison bars, and the host's own F-series - which is the
@@ -1047,10 +1057,18 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             "plugin_spec": ((_k.spec or {}) if _k is not None else {}),
         }
         cdir = kdir / _RS.COMPARE_DIRNAME / str(label)
-        _rec_ = _launch_or_record(
+        _pending.append((str(label), lo, hi, cdir, dict(
             exe=exe, entry=entry, plugin_file=plugin_file, cdir=cdir, spec=spec_json,
             kernel=name, version=_version, kind="arm_pair", label=str(label),
-            cores=cores, timeout=timeout)
+            cores=share, timeout=timeout)))
+
+    # THE LAUNCHES, AT ONCE UNDER THE POOL; THE RECORDS AND THE PANELS IN THE PAIRS' OWN ORDER
+    # (harness ADR-0026). Each launch writes only its own compare/<label>/; the phase record and
+    # the page read the results in the order the pairs were enumerated, whichever finished first.
+    import concurrent.futures as _cf
+    with _cf.ThreadPoolExecutor(max_workers=max(1, min(at_once, len(_pending) or 1))) as _ex:
+        _results = list(_ex.map(lambda t: _launch_or_record(**t[4]), _pending))
+    for (label, lo, hi, cdir, _kw_), _rec_ in zip(_pending, _results):
         # A FIGURE THE HOST DRAWS AND NEVER PLACES CANNOT BE CITED. These were written into
         # compare/<contrast>/figures/ and left there - absent from the page, from panels.json,
         # from the review ledger and therefore from every writing brief, so a manuscript could
@@ -1202,7 +1220,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             "members": _mem,
             "unit_values": _vals,
             "out_dir": str(cdir),
-            "resources": {"cores": int(cores or 1)},
+            "resources": {"cores": int(share or 1)},
             # THE SAME BLOCK THE PER-UNIT SIDE GETS. Wiring the colour map and the stamp into the
             # per-unit script alone left three mutually inconsistent palettes in one run - the
             # per-unit natives, the comparison bars, and the host's own F-series - which is the
@@ -1215,7 +1233,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         _rec_ = _launch_or_record(
             exe=exe, entry=entry, plugin_file=plugin_file, cdir=cdir, spec=spec_json,
             kernel=name, version=_version, kind="across_arms", label=_COHORT_COMPARE,
-            cores=cores, timeout=timeout)
+            cores=share, timeout=timeout)
         # NO LABEL. A panel drawn over every arm answers its question for EVERY contrast,
         # so it is not filed under one of them - the same rule the host's own cohort panels
         # already follow, and the consumers match an unlabelled panel against any contrast.
@@ -1248,6 +1266,10 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         # `test_the_compare_phase_is_recorded` sections 8, 10 and 12 pinned them, the last
         # against the honest `null` a rebuild with no core share must still write.
         "cores": cores, "timeout": timeout,
+        # THE SHARE EACH LAUNCH RAN UNDER AND HOW MANY AT ONCE (harness ADR-0026): equal to
+        # `cores` and 1 for a plugin that declares no `cores`, the plugin's declaration and the
+        # budget divided by it otherwise.
+        "share": share, "at_once": at_once,
         "across_arms_gate": _across_gate,
         "cardinality": {"considered": _considered,
                         "launched": len(_launches),

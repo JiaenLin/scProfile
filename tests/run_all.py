@@ -13,7 +13,7 @@ module and called its `test_*` functions. That was the wrong mechanism twice ove
 This is that, callable from a workstation, so the gate a change is checked against and the gate
 the cluster runs are the same gate.
 
-WHY `--jobs` EXISTS, AND WHY IT DEFAULTS TO 1
+WHY `--jobs` EXISTS, AND WHY IT DEFAULTS TO 4 NOW
 
 One subprocess per suite is the point of this runner and is not negotiable: an exit code is then
 a fact about one file. But ISOLATION AND SERIALISATION ARE INDEPENDENT, and this ran them one at
@@ -22,9 +22,15 @@ imports repeated once per suite.
 
 `--jobs N` runs N of those subprocesses at once. Each is still its own process with its own exit
 code, and results are collected in SORTED order rather than completion order, so the report is
-identical to the serial one. It defaults to 1 because suites sharing a temporary path would
+identical to the serial one. It defaulted to 1 because suites sharing a temporary path would
 collide, and that is a property of the suites rather than of the runner - the default may only be
 raised for a suite set MEASURED to give the same result both ways.
+
+MEASURED (harness ADR-0026, step 1, 2026-09-15): the 98-suite set green serially in 138 s and
+green with `--jobs 4` on three consecutive runs in 49 s each, the same verdict every time. The
+commit gate had passed `--jobs 4` since ADR-0023; the default stayed at 1, so every author's
+prompt and the cluster's own step 0 ran the serial form - 2.3 minutes per exchange for a result
+the gate already had in 50 s. The default follows the measurement.
 """
 import argparse
 import glob
@@ -73,7 +79,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--pattern", default=None)
     ap.add_argument("--python", default=None)
-    ap.add_argument("--jobs", type=int, default=1,
+    ap.add_argument("--jobs", type=int, default=4,
                     help="run this many suites at once; each is still its own process")
     ap.add_argument("--tail", type=int, default=12, help="lines of output per failing suite")
     a = ap.parse_args(argv)

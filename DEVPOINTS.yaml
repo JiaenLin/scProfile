@@ -38,11 +38,18 @@ baseline_dir: tests/baselines
 # (`sch dev job`) so a rerun of the loop renders its pages and reads its own status without
 # anybody retyping the commands; `{python}` and `{run}` are filled by the emitter.
 run:
+  # `report` is not among them: `run` ends by writing the report, the README, the section and
+  # the capacity record, and the job log of every rerun showed the pages built twice (harness
+  # ADR-0026).
   after:
-    - ["{python}", "-m", "scprofile.cli", "report", "--out", "{run}"]
     - ["{python}", "-m", "scprofile.cli", "status", "--out", "{run}"]
     - ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--promised"]
     - ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{run}", "--memory"]
+  # WHAT A REDRAW MUST NOT CARRY (harness ADR-0026). The emitter copies the reference's argv
+  # verbatim; an audit reference rules the cache out with `--no-cache`, and every redraw that
+  # reproduced it re-inferred every unit. This repository names its own flag; the emitter drops
+  # it on a redraw and says so in the job's header.
+  redraw_drops: ["--no-cache"]
 
 # THE RULES OF THIS DEVELOPMENT ROUND. `sch dev rules --root . --since REF` checks them; without
 # this block it has nothing to check and says so rather than passing.
