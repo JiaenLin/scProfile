@@ -67,6 +67,21 @@ ck("warned, by the entry's id and the key",
    warns(spec, "native_a") and any("args" in m for m in warns(spec, "native_a")),
    str(D.check(spec, "demo"))[:300])
 
+print("\na ceiling above one on an entry the companion draws once is refused")
+# THE PLAN COUNTED FILES THE COMPANION CANNOT DRAW (harness ADR-0026, K-m): `at_most: 2` on a
+# single-file entry - no `items`, no `file` rule - made the plan count twelve plates a run of
+# six contrasts holds six of, and the layout read the axis as over budget on nothing.
+spec = base()
+spec["report"]["figures"][0]["at_most"] = 2
+found = [m for lvl, m in D.check(spec, "demo") if lvl == "ERROR" and "at_most" in m and "native_a" in m]
+ck("refused, naming the entry and what a ceiling needs", found and "items" in found[0], str(D.check(spec, "demo"))[:300])
+spec["report"]["figures"][0]["items"] = 'c("in", "out")'
+ck("with items to count over, the ceiling stands", not [m for lvl, m in D.check(spec, "demo") if lvl == "ERROR" and "at_most" in m and "native_a" in m])
+spec = base()
+spec["report"]["figures"][0]["at_most"] = 2
+spec["report"]["figures"][0]["generated"] = False
+ck("a side-effect entry's ceiling is accounting and stands", not [m for lvl, m in D.check(spec, "demo") if lvl == "ERROR" and "at_most" in m and "native_a" in m])
+
 print("\nan argument the wrapped function has not got is refused against the recorded signatures")
 import json
 import tempfile

@@ -340,6 +340,21 @@ def _check_plan_entry(f, at, out) -> None:
         except (TypeError, ValueError):
             out.append(("ERROR", f"{at} declares at_most={f.get('at_most')!r}; it must be a "
                                  f"positive integer, the files per occurrence of the axis"))
+    # A CEILING ABOVE ONE NEEDS SOMETHING TO COUNT OVER (harness ADR-0026, K-m): the companion
+    # draws a tool entry once per occurrence of its axis unless `items` or a `file` rule makes
+    # it a family, so `at_most: 2` on a single-file entry made the plan count twelve plates of
+    # which a run held six, and the layout read the axis as over budget on nothing. A
+    # side-effect entry's ceiling is accounting for files the tool writes itself and stands.
+    try:
+        _ceiling = int(f.get("at_most") or 1)
+    except (TypeError, ValueError):
+        _ceiling = 1
+    if _ceiling > 1 and str(by or "") == "tool" and f.get("generated") is not False \
+            and not str(f.get("items") or "").strip() and not str(f.get("file") or "").strip():
+        out.append(("ERROR", f"{at} declares at_most={_ceiling} and neither `items` nor a `file` "
+                             f"rule: the companion draws it once per occurrence, so the plan "
+                             f"would count {_ceiling - 1} file(s) per occurrence no run holds. "
+                             f"Set at_most to 1, or declare the items it is drawn once per."))
     if str(by or "") == "tool" and on_plan(f) and not str(f.get("fn") or "").strip() \
             and not str(f.get("expr") or "").strip():
         out.append(("ERROR", f"{at} is drawn by the tool and names no `fn` (nor an `expr`). An "
