@@ -202,6 +202,14 @@ host bug, or you are about to reintroduce one of the bugs that lived in the wrap
 
 ---
 
+## The whole run, dissected
+
+`docs/ANATOMY_OF_A_RUN.md` is every layer of one run - the declaration, the job, the fixture
+gate, `scprofile run` step by step, one instance inside, the comparison phase, the record and the
+pages, the readers, the store, the agentic loop, the costs and the open limits - read from the
+code and measured on a real run. Read it before touching a run you did not make; when the code
+moves, that file moves with it.
+
 ## Checking your work
 
 ```
