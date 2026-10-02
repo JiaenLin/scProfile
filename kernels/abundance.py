@@ -1515,9 +1515,24 @@ def run(ctx):
     # ------------------------------------------------------------------------------ the fits
     fits = []
     sccoda = pt.tl.Sccoda()
+    # THE CONTROL IS THE BASELINE (harness ADR-0027, P2). `formula=term` takes the baseline from
+    # the column's level order, and a plain string column orders alphabetically - so a study
+    # whose control sorts last (WT after Mut) had every effect here measured from the treated
+    # arm, the other way round from the host's panels. The host's control per term arrives in the
+    # plan's contrast decision; the column is built with it as the first category.
+    controls = dict((ctx.params.get("contrast") or {}).get("controls") or {})
+    by_sort, ignored = [], []
     for term in terms:
+        col = tab[term].astype(str)
+        lv = sorted(set(col))
+        ctl = controls.get(term)
+        if ctl in lv:
+            cats = [ctl] + [x for x in lv if x != ctl]
+        else:
+            cats = lv
+            by_sort.append(term)
         adata = ad.AnnData(tab[pops].to_numpy().astype(float),
-                           obs=pd.DataFrame({term: tab[term].to_numpy()},
+                           obs=pd.DataFrame({term: pd.Categorical(col.to_numpy(), categories=cats)},
                                             index=tab.index.astype(str)),
                            var=pd.DataFrame(index=pd.Index(pops, name="population")))
         mdata = (sccoda.load(adata, type="sample_level", covariate_obs=[term])
@@ -1535,10 +1550,23 @@ def run(ctx):
         else:
             cred = sccoda.credible_effects(model, est_fdr=float(C["fdr"]))
         fit = _read_fit(ctx, sccoda, model, term, ref, cred, np, pd)
+        # ASKED, NOT ASSUMED: a covariate named `<term>[T.<control>]` means the library made
+        # something else the baseline despite the category order, and the page must say so.
+        if ctl in lv and any(f"[T.{ctl}]" in str(c) for c in (fit.get("covariates") or [])):
+            ignored.append(term)
         fits.append(fit)
         n_this = int(np.asarray(cred).astype(bool).sum())
         ctx.log(f"  {term}: {n_this} credible effect(s), threshold {fit['threshold']:.3f}, "
                 f"acceptance {fit['accept']:.3f}")
+
+    if by_sort:
+        ctx.caveat(f"The baseline of {', '.join(by_sort)} is the level that SORTS FIRST, because no "
+                   f"control for it reached this plugin; effects run against that level. Declare "
+                   f"one with `--control <factor>=<level>`.")
+    if ignored:
+        ctx.caveat(f"For {', '.join(ignored)} the fitted covariate names the CONTROL as a non-baseline "
+                   f"level: the tool did not take the control as its baseline, so these effects "
+                   f"run against another level. Read the `covariate` column of the effect table.")
 
     # ------------------------------------------------------------------------- what came back
     parts = [f["effects"] for f in fits if f["effects"] is not None]

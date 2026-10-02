@@ -75,14 +75,17 @@ class Verdict:
                 "units": self.units, "searched": self.searched, "evidence": self.evidence}
 
 
-def design_facts(design, factors, sample_key, units):
+def design_facts(design, factors, sample_key, units, controls=None):
     """What the DESIGN can and cannot support. Numbers, not conclusions.
 
     Everything here is derived from the table the user supplied and the units present in the
     object. No shape is assumed - not 2x2, not paired, not a time course, not a minimum n.
     """
     f = {"has_design": bool(design), "sample_key": sample_key,
-         "n_units": len(units or []), "factors": {}}
+         "n_units": len(units or []), "factors": {},
+         # `--control factor=level`, as given. Resolved per factor by `decisions_for`, which is
+         # where the plan and the run must agree.
+         "declared_controls": dict(controls or {})}
     if not design:
         return f
     for name in sorted(factors or []):
@@ -342,6 +345,21 @@ def decisions_for(kernel, facts):
         d["contrast"] = {"kind": "main effects", "terms": list(facts["testable"]),
                          "formula": "~ " + " + ".join(facts["testable"]),
                          "why": "no two factors are crossed with replication in every cell"}
+    # THE CONTROL OF EVERY TERM TRAVELS WITH THE CONTRAST (harness ADR-0027, P1). The host has
+    # resolved a control per factor since alphabetical order put a study's treated levels in the
+    # baseline - but resolved it for its own panels only. A plugin handed `terms` alone fell back
+    # on sort order, so the DE table ran WT/Mut while every panel beside it ran Mut/WT. Same
+    # resolver, same declaration, one decision: the plan prints it and the run delivers it.
+    if "contrast" in d:
+        from .design_panel import control_for
+        declared = facts.get("declared_controls") or {}
+        ctl, basis = {}, {}
+        for t in d["contrast"]["terms"]:
+            lv = list(((facts.get("factors") or {}).get(t) or {}).get("levels") or {})
+            if lv:
+                ctl[t], basis[t] = control_for(lv, declared=declared.get(t))
+        d["contrast"]["controls"] = ctl
+        d["contrast"]["control_basis"] = basis
     takes = (set(getattr(kernel, "injects_required", []) or [])
              | set(getattr(kernel, "injects_optional", []) or []))
     return {k: v for k, v in d.items() if k in takes}

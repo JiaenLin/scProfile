@@ -569,7 +569,8 @@ def _run(a):
         _dtab, _dkey, _dfactors, _dsrc = inputs.design_or_derive(
             a.design, A, sample_key, samples or [], quiet=True, factors=getattr(a, "factor", None))
         if _dfactors:
-            _run_facts = _PL.design_facts(_dtab, _dfactors, sample_key, units or [])
+            _run_facts = _PL.design_facts(_dtab, _dfactors, sample_key, units or [],
+                                          controls=_controls_from(a))
             if _dsrc == "object":
                 print(f"  design DERIVED FROM THE OBJECT: {', '.join(_dfactors)} "
                       f"(no --design was given)")
@@ -1977,7 +1978,7 @@ def _plan(a):
             _pmem.setdefault(str(_u), list(_m))
     units = sorted(_pmem) or samples
 
-    facts = PL.design_facts(dtab, dfactors, keys["sample"][0], units)
+    facts = PL.design_facts(dtab, dfactors, keys["sample"][0], units, controls=_controls_from(a))
     facts["units"] = units
 
     # ---- design defects: the ONLY legitimate reason to skip a plugin ------------------------

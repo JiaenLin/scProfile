@@ -593,6 +593,29 @@ def _quiet_minor_ticks(ax):
     ax.tick_params(which="minor", length=1.0, width=0.3, color="#8C8C8C")
 
 
+def _reference_order(levels, control=None):
+    """One term's levels with the CONTROL first: {levels, numerator, reference, middle, basis}.
+
+    THE REFERENCE WAS WHICHEVER LEVEL SORTED FIRST. The host had resolved a control for every
+    factor since a two-factor study came out backwards on both (`design_panel.control_for`, and
+    tests/test_control_is_the_reference.py) - and this kernel never received it: it contrasted
+    `sorted(levels)[-1]` against `[0]`, so a study whose control sorts last (WT after Mut,
+    untreated after treated) had every fold change in this table the other way round from every
+    comparison panel on the same page, with a correctly-labelled `contrast` column hiding it.
+    Found by a second cohort (single-cell-harness ADR-0027, P1).
+
+    `control` is the host's, delivered in the plan's contrast decision. Absent, or not a level of
+    this term, the old order stands and `basis` says it was sort order, so a caveat can.
+    """
+    lv = sorted({str(x) for x in levels})
+    if control is not None and str(control) in lv:
+        rest = [x for x in lv if x != str(control)]
+        return {"levels": [str(control)] + rest, "numerator": rest[-1], "reference": str(control),
+                "middle": rest[:-1], "basis": "the run's control"}
+    return {"levels": lv, "numerator": lv[-1], "reference": lv[0], "middle": lv[1:-1],
+            "basis": "sort order: no control reached this plugin for this term"}
+
+
 def _contrast_label(term, contrast):
     """`term: HI vs LO` for a level contrast, `term: interaction coefficient` for the other kind.
 
@@ -1242,6 +1265,10 @@ def run(ctx):
 
     terms = list((ctx.params.get("contrast") or {}).get("terms")
                  or ctx.testable_factors() or [])
+    # THE RUN'S CONTROL FOR EACH TERM, resolved once by the host (`design_panel.control_for`,
+    # `--control` first) and delivered in the plan's contrast decision. See `_reference_order`.
+    controls = dict((ctx.params.get("contrast") or {}).get("controls") or {})
+    by_sort = set()
     if not terms:
         return ctx.refuse("differential expression",
                           "no factor in the design has two levels with replication in each. A "
@@ -1365,6 +1392,19 @@ def run(ctx):
         # factors that is a KeyError from inside the library, raised per population after the fit
         # has already been paid for; on two it looked correct, which is why it shipped. The
         # interaction is now ADDED to the formula, never substituted for it.
+        # THE CONTROL IS THE BASE LEVEL OF THE FIT, not the level that sorts first (harness
+        # ADR-0027, P1). The main-effect contrasts below name their levels, so they only needed
+        # the right names in the right order; the INTERACTION coefficient is read off the design
+        # matrix, and its sign follows each factor's base level. Measured on PyDESeq2 0.5.2 /
+        # formulaic 1.2.2: plain strings make the base whichever level sorts first, and a 2x2
+        # whose control sorts last returned the interaction with its sign reversed (-1.97 for
+        # +1.97); a categorical with the control first returned it the right way round.
+        order = {}
+        for t_ in use:
+            order[t_] = _reference_order(sorted({str(x) for x in sub_obs[t_]}), controls.get(t_))
+            if order[t_]["basis"] != "the run's control":
+                by_sort.add(t_)
+            sub_obs[t_] = pd.Categorical(sub_obs[t_].astype(str), categories=order[t_]["levels"])
         formula = "~ " + " + ".join(use)
         if len(use) >= 2 and (ctx.params.get("contrast") or {}).get("kind") == "interaction":
             # ASKED, NOT ASSUMED. See `_interaction_estimable`: the main effects are rank-tested
@@ -1391,16 +1431,16 @@ def run(ctx):
 
         first_res = None
         for term in use:
-            levels = sorted(sub_obs[term].unique())
+            o_ = order[term]
+            levels = o_["levels"]
             # ONE CONTRAST PER TERM, WHATEVER ITS NUMBER OF LEVELS. A three-level factor is
             # fitted whole - its middle levels move every coefficient - and then only its first
             # and last are compared, which is a defensible default and an indefensible silence:
             # `contrast` in the result table names the pair taken, and nothing named the pairs
             # NOT taken. Recorded here so the caveat can name them.
             if len(levels) > 2:
-                multi_level[(pop, term)] = (str(levels[-1]), str(levels[0]),
-                                            [str(x) for x in levels[1:-1]])
-            st = DeseqStats(dds, contrast=[term, levels[-1], levels[0]],
+                multi_level[(pop, term)] = (o_["numerator"], o_["reference"], list(o_["middle"]))
+            st = DeseqStats(dds, contrast=[term, o_["numerator"], o_["reference"]],
                             alpha=C["alpha"],
                             cooks_filter=bool(C["cooks_filter"]),
                             independent_filter=bool(C["independent_filter"]),
@@ -1408,7 +1448,7 @@ def run(ctx):
             st.summary()
             r = st.results_df.copy()
             r["population"], r["term"] = pop, term
-            r["contrast"] = f"{levels[-1]} vs {levels[0]}"
+            r["contrast"] = f"{o_['numerator']} vs {o_['reference']}"
             r["gene"] = r.index
             out.append(r)
             if first_res is None:
@@ -1455,7 +1495,7 @@ def run(ctx):
             lfc = np.asarray(r["log2FoldChange"], dtype=float)
             sig = tested & (pa < C["alpha"])
             hit_rows.append({
-                "population": pop, "term": term, "contrast": f"{levels[-1]} vs {levels[0]}",
+                "population": pop, "term": term, "contrast": f"{o_['numerator']} vs {o_['reference']}",
                 "n_up": int((sig & (lfc > 0)).sum()), "n_down": int((sig & (lfc < 0)).sum()),
                 "n_tested": int(tested.sum()), "tested": True, "why_not": ""})
 
@@ -1671,6 +1711,12 @@ def run(ctx):
             + "; ".join(f"`{f}` for {len(ps)} population(s)"
                         for f, ps in sorted(formulas.items()))
             + ". The headline names the terms tested, not one model.")
+    if by_sort:
+        ctx.caveat(
+            f"The reference level of {', '.join(sorted(by_sort))} was chosen by SORT ORDER, "
+            f"because no control for it reached this plugin - so its fold changes run against "
+            f"whichever level sorts first, which may not be the control. Declare one with "
+            f"`--control <factor>=<level>`; the `contrast` column names the pair taken.")
     if multi_level:
         items = sorted(multi_level.items())
         ctx.caveat(

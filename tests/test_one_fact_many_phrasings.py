@@ -23,7 +23,7 @@ more specific claim. Redundancy across audiences is not the defect.
 
 WHAT IS A DEFECT IS THAT NOTHING CAN ASK THE QUESTION. A reader can be told; a checker cannot
 find out. An external check of "does this page warn about the confound" has to know all four
-wordings and their capitalisation, and one written against the SAMBO run got it wrong three
+wordings and their capitalisation, and one written against the first cohort's run got it wrong three
 times in a row - reporting the four pages that carry the strongest form of the sentence as
 silent, twice writing that up as a defect in the tool. A property stated four ways is a property
 with no single name, and a fact no consumer can test for is one that can quietly stop being

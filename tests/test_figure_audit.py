@@ -327,7 +327,7 @@ print("\nthe host's own stamp sits below everything, whatever the ticks do")
 # then reached further below the box. Placed from the rendered box, after the fit, it cannot.
 import tempfile as _tmp                                                          # noqa: E402
 with _tmp.TemporaryDirectory() as _td:
-    _ctx = _P.Context(None, keys={}, out=_td, unit="Aging1", unit_members=["Aging1"])
+    _ctx = _P.Context(None, keys={}, out=_td, unit="S1", unit_members=["S1"])
     _fig, _ax = plt.subplots(figsize=(3.3, 2.4))
     _ax.bar(range(6), [1, 2, 3, 2, 1, 2])
     _ax.set_xticks(range(6))
