@@ -125,6 +125,17 @@ covariate against the terms a subset can carry, so a population whose terms are 
 a covariate that varies within the term the fit keeps (`~ fa + weight`, not `~ fa`). de's record
 replays under the tightened admission unchanged, byte for byte; no answer had to be re-recorded.
 
+**Fix-up 4.** The admission held only where someone ran `--replay-into`, and nothing that gates a
+commit did: a hand edit in no site (the cut of the hit counts) with an entry appended to the
+record - the right digests, a site it does not touch - passed the suite, `scprofile check`,
+`scprofile design` and the maker's status. The record now verifies itself wherever it is read, from
+the shipped file alone: every diff undone, last first, to the first answer's `before`, each admitted
+again with the sites it records; a forged entry, an inadmissible one, or a file changed outside its
+declaration with no entry makes the `design` stage owe and the suite fail. Each answer keeps the
+declaration it left, so the maker's verb may still edit the declaration afterwards. de's answers
+were re-recorded through the mechanism to carry it: the same diffs, digests and sites, and the
+same file byte for byte. What it does not guarantee, exactly: the content of a site line is not judged - a loop header binding a design name is a site line, so its iterable can change, and a side effect written into a design line or a caveat (`C.update(alpha=0.5)`) is admitted and recorded; the call's other arguments are held as syntax only, so their values can still move through such a side effect; a design definition can be deleted; and the declaration (`PLUGIN = {...}`) is the maker's verb's, not this record's. Review therefore reads every answer's diff in the record.
+
 ### What the next plugin (abundance) should test, blind
 
 - `scprofile design abundance` before anything changes: does the stage name its fitting sites and
