@@ -136,6 +136,31 @@ declaration it left, so the maker's verb may still edit the declaration afterwar
 were re-recorded through the mechanism to carry it: the same diffs, digests and sites, and the
 same file byte for byte. What it does not guarantee, exactly: the content of a site line is not judged - a loop header binding a design name is a site line, so its iterable can change, and a side effect written into a design line or a caveat (`C.update(alpha=0.5)`) is admitted and recorded; the call's other arguments are held as syntax only, so their values can still move through such a side effect; a design definition can be deleted; and the declaration (`PLUGIN = {...}`) is the maker's verb's, not this record's. Review therefore reads every answer's diff in the record.
 
+**Fix-up 5.** The chain had no fixed end: the verifier pushed the same hand edit (the up-count
+cut, `lfc > 1`) under answer 1, re-derived every digest, and the record undid from the shipped file
+to a doctored `before` and passed the suite, `scprofile check` and `scprofile design`; an empty
+record returned ok, so a hand edit made before the first answer would have become the record's
+base; run-time code inside `PLUGIN = {...}` passed; and a declaration the host could not load read
+"not design-aware". Under the threat model stated for it - a builder with ordinary commit rights
+making forward commits; rewriting history or moving the anchor is a diff review reads - the
+chain's end is now anchored: DEVPOINTS `rules.held_out.spent` names the commit each spent
+plugin's blind record was taken at (`de: f5175ea...`, the whole hash), and the first answer's
+`before`, or with no answer the shipped file, must equal the plugin at that commit everywhere
+outside its declaration, read with `git show` or, on a node with no `git` (the cluster's compute
+nodes), from the checkout's own object store - loose objects and packs with their deltas, a linked
+worktree's `.git` file, alternates. Where the commit cannot be read - a shallow checkout, no
+repository - the base is not established and the check fails. `--answer` refuses a plugin with no
+anchor and a first answer on a file that differs from it. The declaration must be a pure literal;
+one that is not, or that the host cannot load, makes the stage owe by name. The suite's "the last
+answer made the file that ships" compares outside the declaration, so the maker's verb may edit it
+after the answers (proved with `sch dev edit` on a copy: the stage and the suite pass; a hand edit
+outside the declaration fails both). The fixture's `execution_record` (harness W019) is declared
+here too: the fourteen globs of fields a run records about its own execution - the resources given,
+the process tree's measured use, the core budget and the models fitted to them, the resource
+declaration as the run read it, the scheduled shares - which `agree` and the baseline report and
+never judge; no DE number is among them. de's record and `kernels/de.py` are unchanged, and the 21
+verb calls on `f5175ea` plus `--replay-into` still rebuild the shipped file byte for byte.
+
 ### What the next plugin (abundance) should test, blind
 
 - `scprofile design abundance` before anything changes: does the stage name its fitting sites and
