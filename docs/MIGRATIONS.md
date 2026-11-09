@@ -55,7 +55,7 @@ caveat that says the interaction "is not contrasted" while the code contrasts it
 | nothing asked a design-aware plugin how it orders a factor or what it adjusts for | the maker (DEVPOINTS) | a build stage `design`: `scprofile design <plugin>` names each site where a model is built or a contrast taken, and what is owed there | `test_the_maker_demands_the_design.py` |
 | the host's control never reached a plugin; the plan had no `--control` | `planner.decisions_for`, `cli` | the contrast decision carries each term's control, its basis and the level order; `plan` takes `--control` | `test_the_contrast_is_read_against_the_declared_control.py` |
 | a `--control` the design does not have was recorded and resolved to nothing | `cli`, `design_panel.control_for` | refused by name in plan and run (`planner.declared_problems`) | the same |
-| no word for a covariate: dropped by `--factor`, or read as a factor | `inputs`, `planner`, `cli` | `--covariate`, resolved per contrast: modelled, or refused with the reason; other design columns named as not in the model | `test_a_covariate_is_modelled_or_refused_by_name.py` |
+| no word for a covariate: dropped by `--factor`, or read as a factor | `inputs`, `planner`, `cli` | `--covariate`, resolved per contrast: modelled, or refused with the reason; every other column of the design table named as not in the model - under `--factor` only since the fix-up below, which found the columns it leaves out still dropped without a word | `test_a_covariate_is_modelled_or_refused_by_name.py` |
 | a numeric column was dummy-coded, one coefficient per value | `inputs._term_columns` | a float column is one centred column | the same |
 | a plugin ordered levels itself | no accessor existed | `ctx.levels(term, present)`, `ctx.model_frame(obs, terms)`; the design's sentences said once by the host | both |
 | the fixture handed shape b shape a's control (`=ctrl`) and no covariate | DEVPOINTS `fixture` | `{control}` and `--covariate {role_covariate}` in plan and run | `test_the_maker_demands_the_design.py` |
@@ -83,10 +83,34 @@ half of the maker, so not fixable in this repository:
   execution measurements wherever no baseline names them. A baseline recorded on a workstation is
   also the wrong machine for the cluster, so none is committed: the dev suite records it.
 
+### The verifier's FAIL, and the fix-up (2026-11-09)
+
+A fresh verifier replayed the 21 verb calls on `f5175ea` and diffed the result against the
+branch: five hunks were the `design` worksheet's answers at the sites it named, and one was not -
+the runtime caveat that had said the interaction was "not contrasted" was rewritten at a site no
+verb and no worksheet named, under a comment claiming the worksheet had asked. It also found
+`--factor` dropping every other column without a word, and a population with no sample at the
+control contrasted between two other levels. Fixed in the maker, then answered through it:
+
+| defect | where it was | the fix | the suite |
+|---|---|---|---|
+| a sentence about the design was answerable only by hand (GAP-C47) | the `design` worksheet | it names every `ctx.caveat`/`ctx.refuse` carrying a design word; `--answer` applies a change only where a site is named and records the diff, `--confirm` binds a true sentence to the digest of its syntax, `--replay-into` rebuilds the plugin from the record | `test_the_maker_demands_the_design.py` |
+| `--factor` left the other columns unnamed | `planner`, `inputs`, `cli` | the design table's columns are recorded and every one outside the model is named | `test_a_covariate_is_modelled_or_refused_by_name.py` |
+| no sample at the control read `mid vs alpha` (GAP-C48) | the host's frame | the control stays as an empty level, so the replication check refuses the contrast, by name | `test_the_contrast_is_read_against_the_declared_control.py` |
+
+`de` then answered the worksheet's 16 statements: three changed (the interaction caveat, the
+not-interacted caveat - false of a fitted interaction spread over several coefficients - and the
+multi-level caveat, which now names the control), thirteen confirmed with their reasons. The 21
+verb calls replayed on `f5175ea`, then `scprofile design de --replay-into`, give the shipped
+`kernels/de.py` byte for byte.
+
 ### What the next plugin (abundance) should test, blind
 
 - `scprofile design abundance` before anything changes: does the stage name its fitting sites and
   the three debts, and does its migration answer them the way this one did?
+- its sentences about the design: does the worksheet name every one that states what was or was
+  not contrasted or modelled, and miss none a reader would take as such - the vocabulary is the
+  maker's guess, and this is its first plugin it was not written against?
 - the fixture with the plugin's environment: does `agree` now see a reference taken by a formula
   library's alphabetical default (the second way to choose a reference, not the first)?
 - `--covariate` and the interaction: a plugin that fits one factor at a time must model the

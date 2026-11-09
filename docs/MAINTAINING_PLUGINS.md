@@ -188,7 +188,11 @@ category is the run's control and adds every covariate the plan modelled, typed;
 levels[0]` is `<level> vs <control>` - and declares `covariates` in `inject` to be handed them.
 Choosing the reference itself is how a table came out with every sign reversed on a design whose
 control sorts last; `scprofile design <name>` names every site where it builds a model or takes a
-contrast and what it still owes there, and the maker's `design` stage runs it.
+contrast and what it still owes there, and the maker's `design` stage runs it. A sentence the
+plugin writes about the design - a `ctx.caveat` or `ctx.refuse` saying what was or was not
+contrasted or modelled - is a site too: it agrees with the host's decision, and it is answered
+through the worksheet, changed with `scprofile design <name> --answer <file> --why "..."` or
+confirmed with `--confirm <line> --why "..."`, both recorded in `kernels/<name>.design.json`.
 
 **Refuse rather than return something empty.** `ctx.refuse(what, why)` is a result the host
 records. A plugin that returns an empty answer produces a result-shaped hole nobody can tell from
