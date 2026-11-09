@@ -292,6 +292,90 @@ if _arrays():
         ck("with one declared, the other is still named", "MODELLED age (numeric)" in out
            and "not in the model: site" in out, out[-1200:])
 
+
+print("\n8. a covariate is tested against the terms a subset can carry, not every term that varies")
+# FOUND BY W013's VERIFIER (fix-up 3): in a population where fa and fb split the samples alike,
+# the host tested `weight` against fa + fb, called it collinear and dropped it - though it varies
+# within each level of fa, the term the fit keeps - so the population was fitted `~ fa` where it
+# had been `~ fa + weight`.
+CONF = {"X1": ("c", "x", 50.0), "X2": ("c", "x", 55.0), "X3": ("t", "y", 60.0),
+        "X4": ("t", "y", 70.0)}
+if _arrays():
+    import pandas as pd
+    from scprofile.plugin import Context
+    params8 = {"contrast": {"kind": "interaction", "terms": ["fa", "fb"],
+                            "controls": {"fa": "c", "fb": "x"},
+                            "levels": {"fa": ["c", "t"], "fb": ["x", "y"]}},
+               "covariates": {"modelled": [{"name": "weight", "kind": "numeric",
+                                            "values": {k: str(v[2]) for k, v in CONF.items()}}],
+                              "refused": [], "not_modelled": []}}
+    with tempfile.TemporaryDirectory() as td:
+        ctx8 = Context(None, keys={}, out=Path(td), cores=1, params=params8,
+                       log=lambda *a, **k: None)
+        obs8 = pd.DataFrame({"sample": list(CONF), "fa": [v[0] for v in CONF.values()],
+                             "fb": [v[1] for v in CONF.values()]})
+        try:
+            _fr, covs8 = ctx8.model_frame(obs8, ["fa", "fb"], subset="popX")
+        except TypeError as e:                   # before fix-up 2 there was no `subset`
+            covs8 = repr(e)
+        ck("weight is kept where fa and fb are confounded and it varies within fa",
+           covs8 == ["weight"], (covs8, [c[:120] for c in ctx8.caveats if "COVARIATE" in c]))
+
+try:
+    import pydeseq2  # noqa: F401
+    _have8 = _arrays()
+except Exception:                                                            # noqa: BLE001
+    _have8 = False
+if _have8:
+    import anndata as ad
+    import matplotlib
+    import numpy as np
+    import pandas as pd
+    matplotlib.use("Agg")
+    from scprofile import declare
+    from scprofile.kernels import discover
+    from scprofile.plugin import Context
+    D8 = {f"S{i}{j}": {"fa": a, "fb": b} for i, (a, b) in
+          enumerate([("c", "x"), ("c", "y"), ("t", "x"), ("t", "y")]) for j in (1, 2)}
+    W8 = {s_: str(40.0 + 3 * i + (i % 3)) for i, s_ in enumerate(sorted(D8))}
+    with tempfile.TemporaryDirectory() as td:
+        rng = np.random.default_rng(13)
+        rows, smp, pop = [], [], []
+        for s_, r_ in sorted(D8.items()):
+            for p_ in ("popA", "popX"):
+                if p_ == "popX" and (r_["fa"], r_["fb"]) not in (("c", "x"), ("t", "y")):
+                    continue                     # popX: fa and fb split its samples alike
+                rows.append(rng.poisson(rng.uniform(5, 20, 40), size=(20, 40)))
+                smp += [s_] * 20
+                pop += [p_] * 20
+        X = np.vstack(rows).astype(np.float32)
+        A8 = ad.AnnData(X=X)
+        A8.var_names = [f"g{j}" for j in range(40)]
+        A8.obs_names = [f"c{i}" for i in range(A8.n_obs)]
+        A8.obs["sample"] = pd.Categorical(smp)
+        A8.obs["cell_type"] = pd.Categorical(pop)
+        A8.layers["counts"] = X.copy()
+        dsn8 = Path(td) / "design.csv"
+        dsn8.write_text("sample,fa,fb,weight\n" + "".join(
+            f"{k_},{v_['fa']},{v_['fb']},{W8[k_]}\n" for k_, v_ in sorted(D8.items())),
+            encoding="utf-8")
+        fx8 = PL.design_facts(D8, ["fa", "fb"], "sample", sorted(D8),
+                              controls={"fa": "c", "fb": "x"}, covariates={"weight": W8})
+        k8 = discover()["de"]
+        p8 = PL.decisions_for(k8, fx8)
+        spec8 = importlib.util.spec_from_file_location("de_kernel_c8", ROOT / "kernels" / "de.py")
+        de8 = importlib.util.module_from_spec(spec8)
+        spec8.loader.exec_module(de8)
+        ctx8 = Context(A8, keys={"counts": "counts", "label": "cell_type", "sample": "sample"},
+                       out=Path(td) / "out", cores=1, params=p8, design=str(dsn8),
+                       config=declare.resolve_config(de8.PLUGIN, p8, "de"),
+                       log=lambda *a, **k: None)
+        de8.run(ctx8)
+        text8 = " ".join(ctx8.caveats)
+        ck("DE fits the confounded population `~ fa + weight`, as it did before the host owned "
+           "the covariates", "`~ fa + weight` for 1 population(s)" in text8,
+           [c[:240] for c in ctx8.caveats if "FITTED PER POPULATION" in c])
+
 print()
 if FAILS:
     print(f"{len(FAILS)} FAILED")

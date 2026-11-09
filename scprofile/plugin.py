@@ -760,6 +760,11 @@ class Context(FigureContextReader):
         from . import inputs
         varying = [str(t) for t in (terms or []) if str(t) in out.columns
                    and out[str(t)].astype(str).nunique() >= 2]
+        # AGAINST THE TERMS THE SUBSET CAN CARRY, as a plugin will fit them: tested against every
+        # varying term, a covariate in a subset where two terms are confounded was "collinear with
+        # fa + fb" and dropped, though it varies within each level of the term the fit keeps -
+        # fitted `~ fa` where it had been `~ fa + weight` (W013's verifier, fix-up 3).
+        varying = inputs.drop_inestimable(out, varying)[0] if varying else []
         for c in (cov or {}).get("modelled") or []:
             name = str(c.get("name") or "")
             if not name or name in (terms or []) or sample not in out.columns:

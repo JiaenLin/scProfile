@@ -376,9 +376,11 @@ points:
             inject.optional="covariates"`) - and every runtime statement (`ctx.caveat`,
             `ctx.refuse`) of what was contrasted or modelled. Answer through it: `scprofile
             design <plugin> --answer <the whole file> --why "..."` applies a change only inside
-            a named site - a fit call's statement and the lines that define the names its
-            arguments read, or a statement and the comment block directly above it - inserting
-            only strictly inside one, raises `version` and records the diff; `--confirm <line>
+            a named site - a fit call's statement and the lines that define the names its DESIGN
+            arguments read, two hops back, or a statement and the comment block directly above
+            it - inserting only strictly inside one, never a fit call's other arguments, never an
+            added statement binding a new name, never a file carrying a character another reader
+            takes as a line break; it raises `version` and records the diff; `--confirm <line>
             --why "..."` records a statement true as it stands, by the digest of its syntax;
             `--replay-into <copy>` rebuilds the plugin from the record, admitting every diff
             again. Then re-run this status

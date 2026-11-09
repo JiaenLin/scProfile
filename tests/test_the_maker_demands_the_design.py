@@ -289,6 +289,78 @@ else:
            V.design_replay(k, copy, log=out.append) == 1
            and copy.read_text(encoding="utf-8") == before, out)
 
+
+print("\n8. one line model; design arguments only, two hops; no added binding (W013 fix-up 3)")
+# THE VERIFIER'S ROUTES AT af0f560, against a copy of the shipped plugin. Eleven form feeds (or
+# line separators) in an admitted comment shifted every later index of the diff against the `ast`
+# line numbers its sites are counted in; a fit site's names came from every argument, so the
+# configuration, the gene mask, `refit_cooks` and `alpha` were all answerable; and a statement
+# added beside a site line rode in with it. And the other way: two design answers two hops from
+# the call - the terms a formula is built from, the column an interaction is picked by - were
+# refused.
+if hasattr(V, "design_answer"):
+    with tempfile.TemporaryDirectory() as td:
+        de_copy = Path(td) / "de.py"
+        shutil.copyfile(ROOT / "kernels" / "de.py", de_copy)
+        kd = Stub(de_copy, _de.spec)
+        shipped = de_copy.read_text(encoding="utf-8")
+
+        def verdict(name, edit):
+            prop = Path(td) / f"{name}.py"
+            with open(prop, "w", encoding="utf-8", newline="") as fh:
+                fh.write(edit(shipped))
+            out = []
+            rc = V.design_answer(kd, prop, "x", log=out.append)
+            admitted = rc == 0
+            de_copy.write_text(shipped, encoding="utf-8")         # each probe on the shipped file
+            rec = V.design_record_path(kd)
+            if rec.exists():
+                rec.unlink()
+            return admitted, " ".join(out)
+
+        def swap(old, new):
+            def edit(t):
+                assert old in t, old
+                return t.replace(old, new, 1)
+            return edit
+
+        CONFIG = "    C = ctx.config\n"
+        for ch, what in (("\x0c", "form feeds"), ("\u2028", "line separators")):
+            ok_, out = verdict("lb", swap(CONFIG, "    C = ctx.config  # " + ch * 11 + "\n"))
+            ck(f"eleven {what} in a comment are refused, by name", not ok_
+               and "U+" in out, out[-300:])
+        ok_, out = verdict("cr", lambda t: t.replace("\n", "\r\n"))
+        ck("carriage returns are refused, by name", not ok_ and "carriage return" in out,
+           out[-200:])
+        _lm = getattr(V, "_lines", None)
+        ck("one line model: a line is what `ast` counts", _lm is not None
+           and _lm("a\x0cb\nc\u2028d\n") == ["a\x0cb\n", "c\u2028d\n"])
+        for name, edit in (
+                ("config", swap(CONFIG, '    C = dict(ctx.config, min_counts=2 * '
+                                        'ctx.config["min_counts"])\n')),
+                ("mask", swap("counts_df = pd.DataFrame(np.rint(sub[:, keep]).astype(int),",
+                              'counts_df = pd.DataFrame(np.rint(sub[:, keep & (sub.sum(axis=0) '
+                              '>= 2 * C["min_counts"])]).astype(int),')),
+                ("refit", swap("refit_cooks=True, min_replicates",
+                               "refit_cooks=False, min_replicates")),
+                ("alpha", swap('                            alpha=C["alpha"],\n',
+                               '                            alpha=0.5,\n')),
+                ("added", swap("terms, subset=pop)\n",
+                               "terms, subset=pop)  # the host's frame\n"
+                               "        C = dict(C, alpha=0.5)\n"))):
+            ok_, out = verdict(name, edit)
+            ck(f"not a design answer, refused: {name}", not ok_, out[-300:])
+        for name, edit in (
+                ("terms", swap("use, aliased = _identifiable(ctx, sub_obs, terms)",
+                               "use, aliased = _identifiable(ctx, sub_obs, terms + covs)")),
+                ("hits", swap('hits = [c for c in cols if ":" in c and a_ in c and b_ in c]',
+                              'hits = [c for c in cols if ":" in c and f"{a_}[" in c '
+                              'and f"{b_}[" in c]'))):
+            ok_, out = verdict(name, edit)
+            ck(f"a design answer two hops from the call is admitted: {name}", ok_, out[-300:])
+        ck("the depth is stated", getattr(V, "DESIGN_DEPTH", None) == 2
+           and "metadata" in getattr(V, "DESIGN_ARGUMENTS", ()))
+
 print()
 if FAILS:
     print(f"{len(FAILS)} FAILED")
