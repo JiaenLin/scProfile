@@ -30,7 +30,8 @@ fixture:
        "--label-key", "{role_cell_type}", "--sample-key", "{role_sample}",
        "--batch-key", "{role_batch}", "--counts-layer", "{role_counts}",
        "--lognorm-layer", "lognorm", "--embedding", "X_pca", "--organism", "human",
-       "--assay", "cell", "--factor", "{role_condition}"]
+       "--assay", "cell", "--factor", "{role_condition}",
+       "--control", "{role_condition}={control}", "--covariate", "{role_covariate}"]
     # THE PLUGIN RUNS ON THE FIXTURE (harness ADR-0026, the open items). Every ladder before
     # this planned and refused - `{out}/prefix` was a fresh directory, so "not ready in this
     # installation" was the whole tier, and no plugin of this repository had ever been executed
@@ -47,7 +48,14 @@ fixture:
        "--batch-key", "{role_batch}", "--counts-layer", "{role_counts}",
        "--lognorm-layer", "lognorm", "--embedding", "X_pca", "--organism", "human",
        "--assay", "cell", "--timeout", "1200", "--factor", "{role_condition}",
-       "--control", "{role_condition}=ctrl"]
+       # THE SHAPE'S OWN CONTROL, NOT SHAPE A'S (autodev W013, the blind record of de). This was
+       # `{role_condition}=ctrl`: shape b's control is `untreated`, which sorts LAST, so on b the
+       # run was told a control the design does not have, recorded it, and refused nothing - and
+       # the value axis built to catch a contrast taken in sort order (harness ADR-0027) could
+       # not tell a plugin that takes the control from one that sorts. `{control}` is the
+       # ladder's value for the shape. The covariate is the fixture's own covariate column, so
+       # every design-aware plugin is asked to model it or refuse it by name (GAP-040).
+       "--control", "{role_condition}={control}", "--covariate", "{role_covariate}"]
     - ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{out}/run", "--promised"]
   products: []
   timeout: 1800
@@ -343,6 +351,30 @@ points:
           phase: build
           fills: [inject, produces]
           why: what the method is given and what it leaves behind
+        # THE DESIGN IS THE HOST'S, AND THE PLUGIN TAKES IT (autodev W013; GAP-039, GAP-040).
+        # Found by the blind record of the first held-out plugin migrated: it chose a contrast's
+        # reference by sort order and fitted no covariate the user could name, the host's
+        # declared control never reached it, and every build stage read done over both - nothing
+        # asked a design-aware plugin how it orders a factor. A BUILD stage: it reads the
+        # plugin's source, and names each site where a model is built or a contrast is taken.
+        - name: design
+          phase: build
+          fills: []
+          command: ["{python}", "-m", "scprofile.cli", "design", "{name}"]
+          finished_by: >
+            `scprofile design <plugin>` prints the worksheet: every site where the plugin builds
+            a model or takes a contrast (a call carrying `design=`, `formula=`, `contrast=` ...),
+            and what it owes the host there - the fit's metadata from `ctx.model_frame(obs,
+            terms)`, each term's levels from `ctx.levels(term, present)` ([0] is the control),
+            and `covariates` in `inject` (the maker's verb: `sch dev edit --list-add
+            inject.optional="covariates"`). Answer each where it is named, raise `version`, and
+            re-run this status
+          why: >
+            WHICH LEVEL A CONTRAST IS READ AGAINST AND WHAT THE MODEL ADJUSTS FOR are decisions
+            about the design, made once by the host from `--control` and `--covariate` and printed
+            in the plan. A plugin that makes them itself makes them by whatever it reached for,
+            and both wrong answers return a full table: a fold change with its sign reversed on a
+            design whose control sorts last, and a fit without the covariate the user named
         - name: defaults
           phase: build
           fills: [config]
@@ -364,6 +396,19 @@ points:
           # PRESENT IS NOT FINISHED. A wrapper part-way through declares some entries AND an
           # admission naming what is left; without this the field's presence read as done.
           outstanding_if: wraps.plots_unreviewed
+          # HOW IT IS FINISHED, which nothing said (the blind record of `de`, docs/MIGRATIONS.md
+          # 1: the maker's status printed "NOTHING DECLARES HOW TO FINISH THIS" over the admission,
+          # so the stage stayed part-way through whoever read it).
+          finished_by: >
+            `sch dev convert inventory --root . --point kernel --name <plugin> --python <the
+            plugin's own interpreter>` lists the wrapped tool's plotting functions, and with
+            `--record kernels/<plugin>.signatures.json` writes their signatures beside the
+            plugin; `sch dev convert account` prints every one as a ruling to make - an entry of
+            `report.figures` that uses it, or a skip in `report.skips` from the closed vocabulary
+            of scprofile/native.py. Then the admission goes, through the maker's verb:
+            `sch dev edit --root . --point kernel --name <plugin> --delete wraps.plots_unreviewed`.
+            If no extractor could look, that is not an empty inventory: build the plugin's
+            environment and ask again, and if it still cannot look the extractor is the defect
           why: >
             what the wrapped tool already draws. cellchat used 1 of 30 until somebody looked; after
             the accounting it uses 32 of 35

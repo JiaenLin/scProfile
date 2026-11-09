@@ -356,3 +356,108 @@ def report(kernel, findings, log=print):
             if x.detail:
                 log(f"             {x.detail}")
     return errs
+
+
+# ------------------------------------------------- does a design-aware plugin take the host's model
+
+#: The keywords by which a Python modelling library is told WHAT TO FIT or WHAT TO COMPARE. A call
+#: carrying one of them is a site where a plugin turns the design into a model, and the site
+#: where the reference level and the covariates are decided, whichever library it is.
+FIT_KEYWORDS = ("design", "formula", "contrast", "design_factors", "ref_level", "reference")
+
+#: What the host hands a design-aware plugin for those sites (`plugin.Context`).
+HOST_MODEL = {"model_frame": "the fit's metadata: each term a categorical whose FIRST category "
+                             "is the run's control, and every covariate the plan modelled, typed",
+              "levels": "a term's levels in the order a contrast reads them - [0] is the "
+                        "control - over the levels a subset actually has"}
+
+
+def design_sites(kernel):
+    """{design_aware, sites, missing, owes} - where a plugin fits a model, and what it owes.
+
+    THE HOST DECIDES THE DESIGN AND THE PLUGIN FITS IT (GAP-039, GAP-040). A plugin that chooses
+    a contrast's reference itself chooses it by whatever it reached for - `sorted(levels)[0]`,
+    a formula library's alphabetical default - and on a design whose control sorts last its
+    table runs the other way from every panel on the page; a plugin that builds its formula from
+    the terms alone fits without the covariates the user named. Neither failure raises.
+
+    READ FROM THE SOURCE, NOT FROM A RUN, so it is a build question: does the plugin ask the
+    host for the frame (`model_frame`) and the order (`levels`), and does it declare that it can
+    receive covariates? Each site where a model is built or a contrast taken is named with its
+    line, as the place the answer goes. It cannot see a plugin that asks the host and then
+    reorders anyway; the two-shape fixture, whose control sorts last on one shape, is the check
+    that can (`agree` in the harness's ladder).
+    """
+    import ast
+    spec = kernel.spec or {}
+    inj = spec.get("inject") or {}
+    takes = (set(inj.get("required") or []) | set(inj.get("optional") or [])
+             if isinstance(inj, dict) else set())
+    out = {"design_aware": bool(takes & {"design", "contrast"}), "sites": [], "missing": [],
+           "owes": False, "takes": sorted(takes)}
+    path = Path(kernel.path)
+    if not out["design_aware"] or not path.is_file():
+        return out
+    src = path.read_text(encoding="utf-8")
+    try:
+        tree = ast.parse(src)
+    except SyntaxError as e:                                              # pragma: no cover
+        out["missing"].append(("parse", f"the source does not parse: {e}"))
+        out["owes"] = True
+        return out
+    called = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        fn = node.func
+        name = (fn.attr if isinstance(fn, ast.Attribute) else
+                fn.id if isinstance(fn, ast.Name) else "")
+        if isinstance(fn, ast.Attribute):
+            called.add(fn.attr)
+        kws = [k.arg for k in node.keywords if k.arg in FIT_KEYWORDS]
+        if kws:
+            out["sites"].append((node.lineno, name or "<call>", kws))
+    out["sites"].sort()
+    if not out["sites"]:
+        return out
+    for acc, what in HOST_MODEL.items():
+        if acc not in called:
+            out["missing"].append((acc, what))
+    if "covariates" not in takes:
+        out["missing"].append(("covariates", "the covariates the user named: `inject` names no "
+                                             "`covariates`, so none can be handed to it"))
+    out["owes"] = bool(out["missing"])
+    return out
+
+
+def design_report(kernel, log=print):
+    """Print `design_sites` as a worksheet. Returns 0 when nothing is owed, 1 otherwise."""
+    d = design_sites(kernel)
+    rel = Path(kernel.path).name
+    if not d["design_aware"]:
+        log(f"  ok   {kernel.name:<12} not design-aware (inject names neither `design` nor "
+            f"`contrast`): nothing to answer")
+        return 0
+    if not d["sites"]:
+        log(f"  ok   {kernel.name:<12} design-aware, and no call here fits a model or takes a "
+            f"contrast ({', '.join(FIT_KEYWORDS)}): nothing to answer")
+        return 0
+    log(f"  {'OWES' if d['owes'] else 'ok  '} {kernel.name:<12} design-aware; "
+        f"{len(d['sites'])} site(s) where a model is built or a contrast taken:")
+    for line, name, kws in d["sites"]:
+        log(f"         kernels/{rel}:{line}  {name}({', '.join(k + '=' for k in kws)}...)")
+    if not d["owes"]:
+        log("       it takes the frame and the order from the host and declares `covariates`")
+        return 0
+    log("       WHAT IT OWES THE HOST - answer each at the sites above:")
+    for acc, what in d["missing"]:
+        if acc == "covariates":
+            log(f"         inject `covariates`: {what}. The maker's verb: "
+                f"sch dev edit --root . --point kernel --name {kernel.name} "
+                f"--list-add inject.optional=\"covariates\"")
+        else:
+            log(f"         ctx.{acc}(...): {what}")
+    log("       A reference chosen by sort order, or a formula built from the terms alone, "
+        "returns a full table either way: the direction and the adjustment are the host's to "
+        "decide and the plugin's to take.")
+    return 1

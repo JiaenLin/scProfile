@@ -779,6 +779,54 @@ def read_design(path, samples=None, sample_col=None, factors=None):
     return table, key, factors
 
 
+def covariate_values(path, adata=None, sample_key=None, names=()):
+    """{covariate: {sample: value}} for every `--covariate`, read where the design is read.
+
+    FROM THE DESIGN TABLE WHEN ONE IS GIVEN, every column of it - `read_design(factors=...)`
+    keeps only the factors a run is about in the rows the unit resolver reads, and a covariate
+    must not become an arm. Without a table, from the object: a column whose value is constant
+    within every sample, taken once per sample. A name found in neither is returned EMPTY, so the
+    plan and the run can refuse it by name (`planner.declared_problems`) rather than lose it.
+    Values are strings, as a CSV holds them; the planner decides numeric or categorical.
+    """
+    names = [str(n) for n in (names or []) if str(n).strip()]
+    if not names:
+        return {}
+    out = {n: {} for n in names}
+    if path:
+        import csv
+        with open(path, newline="", encoding="utf-8") as fh:
+            sample = fh.read(4096)
+            fh.seek(0)
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=",\t;")
+            except csv.Error:
+                dialect = csv.excel
+            rows = list(csv.DictReader(fh, dialect=dialect))
+        cols = list(rows[0]) if rows else []
+        key = (sample_key if sample_key and sample_key in cols else None) or next(
+            (c for c in cols if c.lower() in ("sample", "sample_id", "library", "batch",
+                                              "donor")), None)
+        for n in names:
+            if key and n in cols and n != key:
+                out[n] = {str(r[key]): str(r[n] if r[n] is not None else "") for r in rows}
+        return out
+    if adata is not None and sample_key and sample_key in adata.obs:
+        smp = [str(v) for v in adata.obs[sample_key]]
+        for n in names:
+            if n not in adata.obs.columns:
+                continue
+            vals, constant = {}, True
+            for s_, v in zip(smp, (str(x) for x in adata.obs[n])):
+                if s_ in vals and vals[s_] != v:
+                    constant = False
+                    break
+                vals.setdefault(s_, v)
+            if constant:
+                out[n] = vals
+    return out
+
+
 # ------------------------------------------------------- what a design can and cannot estimate
 
 def _term_columns(obs, term, np, pd):
@@ -801,6 +849,17 @@ def _term_columns(obs, term, np, pd):
         f = str(f).strip()
         if not f or f not in obs.columns:
             return None
+        # A NUMERIC COVARIATE IS ONE COLUMN, NOT ONE DUMMY PER VALUE (GAP-040). Every column was
+        # dummy-coded, so a continuous age with eight values asked for seven coefficients and an
+        # estimable covariate read as inestimable. A float column is what the host builds for a
+        # covariate it resolved as numeric (`Context.model_frame`); a design factor arrives as
+        # strings and is coded as before. Centred, so the intercept column stays its own.
+        if getattr(getattr(obs[f], "dtype", None), "kind", "O") == "f":
+            v = np.asarray(obs[f], dtype=float).reshape(-1, 1)
+            if not np.all(np.isfinite(v)) or float(np.ptp(v)) == 0.0:
+                return None                    # missing, or one value: nothing to estimate
+            blocks.append(v - v.mean())
+            continue
         d = pd.get_dummies(obs[f].astype(str), drop_first=True).to_numpy(dtype=float)
         if d.shape[1] == 0:                    # a factor with one level contributes nothing
             return None

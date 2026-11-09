@@ -492,6 +492,11 @@ class Context(FigureContextReader):
         self._contradictions = []
         #: So `populations()` says what it set aside ONCE however many tables a plugin writes.
         self._said_populations = False
+        #: So the design's own sentences - each term's reference and its basis, each covariate
+        #: modelled or refused - are said ONCE however many populations a plugin fits.
+        self._said_design = False
+        #: The terms `levels()` was asked about in this instance.
+        self.design_asked = set()
         #: Every directory `source_layers()` walked, so a refusal can name where it looked -
         #: and whether the walk FINISHED, because a search that gave up and a project that has
         #: nothing return the same empty list, and only one of them is a fact about the data.
@@ -666,6 +671,109 @@ class Context(FigureContextReader):
         """
         from . import inputs
         return inputs.drop_inestimable(obs, terms)
+
+    def levels(self, term, present=None):
+        """A design term's levels in the order a contrast reads them: THE CONTROL FIRST.
+
+        `levels[0]` is the reference and `levels[-1]` the numerator of a two-level contrast, and
+        a model built from `model_frame` takes the same first level as its base. The order is the
+        plan's decision (`planner.decisions_for`: `--control` first, then a level whose name is
+        a control by convention, then sort order, with the basis said), delivered in
+        `params["contrast"]["levels"]`. GAP-039: a plugin that ordered levels itself took
+        `sorted(levels)[0]` as the reference, so on a design whose control sorts last every
+        fold change in its table ran the other way from every panel on the page.
+
+        `present` limits the answer to the levels a subset actually has (one population of
+        several); a present level the decision never saw sorts after the ones it did. With no
+        decision delivered - a plugin run without the plan's contrast - the host's own resolver
+        decides here, and the caveat says that no control reached the plugin.
+        """
+        t = str(term)
+        self.design_asked.add(t)
+        con = self.params.get("contrast") if isinstance(self.params.get("contrast"), dict) else {}
+        order = [str(x) for x in ((con or {}).get("levels") or {}).get(t) or []]
+        pres = (sorted({str(x) for x in present}) if present is not None else None)
+        if not order:
+            from .planner import control_level
+            lv = pres if pres is not None else sorted(
+                {str(r.get(t, "")) for r in self.design_table().values()} - {""})
+            if not lv:
+                return []
+            ctl, basis = control_level(lv)
+            order = [ctl] + [x for x in lv if x != ctl]
+            self.caveat(f"THE REFERENCE OF {t!r} WAS CHOSEN HERE, not by the plan: no contrast "
+                        f"decision reached this plugin, so the host's resolver chose {ctl!r} "
+                        f"({basis}). Declare it with `--control {t}=<level>`.")
+        if pres is None:
+            return list(order)
+        return [x for x in order if x in pres] + [x for x in pres if x not in order]
+
+    def model_frame(self, obs, terms, *, sample="sample"):
+        """`(frame, covariates)`: `obs` ready for a model formula, and the covariates added.
+
+        Each term becomes a categorical whose FIRST category is the control (`levels`, over the
+        levels this frame has), so a formula's treatment coding takes the control as its base -
+        measured on PyDESeq2 0.5.2 / formulaic 1.2.2, plain strings made the base whichever level
+        sorts first, and an interaction coefficient then came back with its sign reversed. Each
+        covariate the plan MODELLED (`params["covariates"]`) is added as a column keyed on
+        `obs[sample]`: a float for a numeric one, a categorical otherwise. A refused covariate is
+        not added, and the run says which and why, once (GAP-040).
+
+        `covariates` is the list of names added, in the decision's order, for the formula; a
+        plugin asks `drop_inestimable` about them per subset as it does about its terms.
+        """
+        import pandas as pd
+        out = obs.copy()
+        for t in terms or []:
+            t = str(t)
+            if t in out.columns:
+                vals = out[t].astype(str)
+                out[t] = pd.Categorical(vals, categories=self.levels(t, vals.unique()))
+        added = []
+        cov = self.params.get("covariates") if isinstance(self.params.get("covariates"),
+                                                           dict) else {}
+        for c in (cov or {}).get("modelled") or []:
+            name = str(c.get("name") or "")
+            if not name or name in (terms or []) or sample not in out.columns:
+                continue
+            values = c.get("values") or {}
+            col = [values.get(str(x)) for x in out[sample].astype(str)]
+            out[name] = (pd.to_numeric(pd.Series(col, index=out.index), errors="coerce")
+                         .astype(float) if c.get("kind") == "numeric"
+                         else pd.Categorical([str(v) for v in col]))
+            added.append(name)
+        self._say_design()
+        return out, added
+
+    def _say_design(self):
+        """The design's sentences, once per instance: references and covariates."""
+        if self._said_design:
+            return
+        self._said_design = True
+        con = self.params.get("contrast") if isinstance(self.params.get("contrast"), dict) else {}
+        ctl = (con or {}).get("controls") or {}
+        if ctl:
+            basis = (con or {}).get("control_basis") or {}
+            self.caveat("EACH CONTRAST IS READ AGAINST ITS CONTROL: "
+                        + "; ".join(f"{t} against {c!r} ({basis.get(t, 'the plan')})"
+                                    for t, c in sorted(ctl.items()))
+                        + ". A positive fold change is higher in the other level than in the "
+                          "control; the `contrast` column names the pair as `<level> vs "
+                          "<control>`.")
+        cov = self.params.get("covariates") if isinstance(self.params.get("covariates"),
+                                                           dict) else {}
+        if (cov or {}).get("modelled"):
+            self.caveat("COVARIATES IN THE MODEL: " + ", ".join(
+                f"{c['name']} ({c.get('kind')})" for c in cov["modelled"])
+                + ". Each is adjusted for, never contrasted; a subset in which one cannot be "
+                  "estimated drops it and names it with the terms dropped there.")
+        for c in (cov or {}).get("refused") or []:
+            self.caveat(f"COVARIATE REFUSED: {c['name']} is not in the model - {c['why']}.")
+        if (cov or {}).get("not_modelled"):
+            self.caveat("NOT IN THE MODEL: " + ", ".join(c["name"] for c in cov["not_modelled"])
+                        + " - columns of the design that are neither a term of this contrast "
+                          "nor a declared covariate. Name one with --covariate to adjust for "
+                          "it; nothing is adjusted for unless it is named.")
 
     def populations(self, role="label"):
         """The grouping a per-population result must use, and the caveat that goes with it.

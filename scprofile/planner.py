@@ -75,14 +75,24 @@ class Verdict:
                 "units": self.units, "searched": self.searched, "evidence": self.evidence}
 
 
-def design_facts(design, factors, sample_key, units):
+def design_facts(design, factors, sample_key, units, controls=None, covariates=None):
     """What the DESIGN can and cannot support. Numbers, not conclusions.
 
     Everything here is derived from the table the user supplied and the units present in the
     object. No shape is assumed - not 2x2, not paired, not a time course, not a minimum n.
+
+    `controls` is `--control factor=level` as given and `covariates` is `--covariate COLUMN` as
+    read (`{name: {sample: value}}`, from `inputs.covariate_values`). Both are RECORDED here and
+    RESOLVED in `decisions_for`, which the plan and the run both call - so the two cannot disagree
+    about which level is a contrast's reference or which covariate is in a model (harness
+    ADR-0027, P1; GAP-039 and GAP-040).
     """
     f = {"has_design": bool(design), "sample_key": sample_key,
-         "n_units": len(units or []), "factors": {}}
+         "n_units": len(units or []), "factors": {},
+         "declared_controls": {str(k): str(v) for k, v in (controls or {}).items()},
+         "covariates": {str(k): {str(s): ("" if v is None else str(v))
+                                 for s, v in (vals or {}).items()}
+                        for k, vals in (covariates or {}).items()}}
     if not design:
         return f
     for name in sorted(factors or []):
@@ -342,9 +352,205 @@ def decisions_for(kernel, facts):
         d["contrast"] = {"kind": "main effects", "terms": list(facts["testable"]),
                          "formula": "~ " + " + ".join(facts["testable"]),
                          "why": "no two factors are crossed with replication in every cell"}
+    # THE CONTROL OF EVERY TERM TRAVELS WITH THE CONTRAST (harness ADR-0027, P1; GAP-039). The
+    # host has resolved a control per factor since alphabetical order put a study's treated
+    # levels in the baseline - for its OWN panels only. A plugin handed `terms` alone chose its
+    # reference by sort order, so on a design whose control sorts last its table ran the other
+    # way round from every panel beside it, under a correctly-labelled `contrast` column. The
+    # same resolver, the same declaration, one decision: the plan prints it, the run delivers it,
+    # and `levels` is the order a contrast reads them in - the control first, then the rest.
+    if "contrast" in d:
+        ctl, basis, order = {}, {}, {}
+        declared = facts.get("declared_controls") or {}
+        for t in d["contrast"]["terms"]:
+            lv = sorted(((facts.get("factors") or {}).get(t) or {}).get("levels") or {})
+            if not lv:
+                continue
+            ctl[t], basis[t] = control_level(lv, declared.get(t))
+            order[t] = [ctl[t]] + [x for x in lv if x != ctl[t]]
+        d["contrast"]["controls"] = ctl
+        d["contrast"]["control_basis"] = basis
+        d["contrast"]["levels"] = order
+        # WHAT IS IN THE MODEL BESIDE THE TERMS, decided once. A plugin that declares it can
+        # receive covariates is handed the ones it models and the ones it may not, each refused BY
+        # NAME; every other column of the design that is not a term is named as not modelled, so a
+        # covariate is never in the table and silently absent from the fit.
+        d["covariates"] = resolve_covariates(facts, d["contrast"])
     takes = (set(getattr(kernel, "injects_required", []) or [])
              | set(getattr(kernel, "injects_optional", []) or []))
     return {k: v for k, v in d.items() if k in takes}
+
+
+def describe_covariates(cov):
+    """One line for a `covariates` decision: what is modelled, what is refused and why."""
+    cov = cov or {}
+    bits = []
+    if cov.get("modelled"):
+        bits.append("MODELLED " + ", ".join(f"{c['name']} ({c.get('kind')})"
+                                            for c in cov["modelled"]))
+    for c in cov.get("refused") or []:
+        bits.append(f"REFUSED {c['name']}: {c['why']}")
+    if cov.get("not_modelled"):
+        bits.append("not in the model: " + ", ".join(c["name"] for c in cov["not_modelled"]))
+    return "; ".join(bits) or "none declared, and no other column of the design"
+
+
+def covariates_not_taken(kernel, facts):
+    """The sentence for a design-aware plugin that CANNOT receive the covariates declared, or "".
+
+    A DECISION THE PLUGIN CANNOT RECEIVE IS NOT A DECISION (`decisions_for`), and a covariate
+    named on the command line and handed to nothing is an adjustment the user believes was made.
+    Said by name, per plugin, in the plan and in the run.
+    """
+    declared = sorted((facts or {}).get("covariates") or {})
+    if not declared or not getattr(kernel, "needs_design", False):
+        return ""
+    takes = (set(getattr(kernel, "injects_required", []) or [])
+             | set(getattr(kernel, "injects_optional", []) or []))
+    if "covariates" in takes:
+        return ""
+    return (f"NOT MODELLED by {getattr(kernel, 'name', 'this plugin')}: "
+            f"{', '.join(declared)} - it declares no `covariates` in `inject`, so it cannot be "
+            f"handed one and fits its model without them")
+
+
+def control_level(levels, declared=None):
+    """(level, basis) - the reference of one factor, by the host's own resolver.
+
+    `design_panel.control_for` is the one function every comparison panel already uses; this is
+    it, with one thing added: a DECLARED control that is not a level is named in the basis
+    rather than passed over in silence. The run refuses such a declaration before it starts
+    (`declared_problems`); this is for a caller that did not.
+    """
+    from .design_panel import control_for
+    lv = [str(x) for x in levels]
+    c, b = control_for(lv, declared=declared)
+    if declared and str(declared).lower() not in {x.lower() for x in lv}:
+        b = (f"--control named {declared!r}, which is not a level ({', '.join(lv)}); " + b)
+    return c, b
+
+
+def declared_problems(facts):
+    """Every `--control` and `--covariate` the design cannot honour, as sentences. [] if none.
+
+    A MISSPELT DECLARATION IS A MISSING ONE THAT LOOKS PRESENT. `--control arm=ctrl` on a design
+    whose levels are `treated` and `untreated` was recorded as the run's control and resolved to
+    nothing, and the contrast direction then came from a vocabulary hint or from sort order
+    while the run's record said it had been declared. Plan and run refuse these before anything
+    is computed, naming the factor, the level and what the design has.
+    """
+    out = []
+    fs = facts.get("factors") or {}
+    for f, lv in sorted((facts.get("declared_controls") or {}).items()):
+        if f not in fs:
+            out.append(f"--control {f}={lv}: {f!r} is not a factor of this run "
+                       f"(factors: {', '.join(sorted(fs)) or 'none'})")
+        elif str(lv).lower() not in {str(x).lower() for x in fs[f].get("levels") or {}}:
+            out.append(f"--control {f}={lv}: {f!r} has no level {lv!r} "
+                       f"(levels: {', '.join(sorted(fs[f].get('levels') or {}))})")
+    for c, vals in sorted((facts.get("covariates") or {}).items()):
+        if vals is None or not len(vals):
+            out.append(f"--covariate {c}: not a column of the design table")
+    return out
+
+
+def _is_number(v):
+    try:
+        float(str(v))
+        return str(v).strip() != ""
+    except (TypeError, ValueError):
+        return False
+
+
+def resolve_covariates(facts, contrast):
+    """{"modelled": [...], "refused": [...], "not_modelled": [...]} for one contrast.
+
+    A COVARIATE IS MODELLED OR REFUSED BY NAME, never dropped (GAP-040). Before this the host had
+    no word for one: a covariate column of the design table was either removed by `--factor`
+    without a sentence, or read as a factor - a numeric age became as many arms as it had
+    values. Now each `--covariate` is resolved against the contrast it would sit beside:
+
+      refused   not a column; a term of the contrast (a term is tested, a covariate adjusted
+                for); a value missing for a sample; one value over the samples; a categorical
+                with a different value for every sample (the sample under another name);
+                collinear with the terms and the covariates already accepted; or leaving the
+                model no residual degree of freedom
+      modelled  otherwise, numeric (every value a number) or categorical, with the per-sample
+                values - so the plugin needs no second reading of the table
+
+    Design factors that are neither a term nor a declared covariate are `not_modelled`, by name:
+    which covariates belong in a model is the user's decision, and an undeclared column is never
+    added on the user's behalf - it is said not to be there.
+    """
+    from . import inputs
+    terms = [str(t) for t in (contrast or {}).get("terms") or []]
+    fs = facts.get("factors") or {}
+    level_of = {t: {s: lv for lv, ss in (fs.get(t) or {}).get("levels", {}).items() for s in ss}
+                for t in terms}
+    # THE SAMPLES THE CONTRAST IS FITTED ON: those with a level of every term (`design_facts`
+    # already kept only the samples present in the object).
+    samples = sorted(set.intersection(*[set(m) for m in level_of.values()])
+                     if level_of else set())
+    model_terms = list(terms)
+    if (contrast or {}).get("kind") == "interaction" and len(terms) >= 2:
+        model_terms.append(f"{terms[0]}:{terms[1]}")
+    out = {"modelled": [], "refused": [], "not_modelled": []}
+    accepted = []
+    for name, vals in (facts.get("covariates") or {}).items():
+        why, kind = "", ""
+        got = {s: (vals or {}).get(s, "") for s in samples}
+        if not vals:
+            why = "it is not a column of the design table"
+        elif name in terms:
+            why = "it is a term of the contrast; a term is tested, a covariate is adjusted for"
+        elif any(str(v).strip() == "" for v in got.values()):
+            miss = sorted(s for s, v in got.items() if str(v).strip() == "")
+            why = f"it has no value for {len(miss)} sample(s): {', '.join(miss[:6])}"
+        elif len(set(got.values())) < 2:
+            why = "it takes one value over the samples, so it adds nothing a model can use"
+        else:
+            kind = "numeric" if all(_is_number(v) for v in got.values()) else "categorical"
+            if kind == "categorical" and len(set(got.values())) >= len(samples):
+                why = "it has a different value for every sample - it is the sample under " \
+                      "another name"
+        if not why:
+            try:
+                import pandas as pd
+                frame = pd.DataFrame({t: [level_of[t][s] for s in samples] for t in terms})
+                for a in accepted + [{"name": name, "kind": kind, "values": got}]:
+                    col = [a["values"][s] for s in samples]
+                    frame[a["name"]] = ([float(v) for v in col] if a["kind"] == "numeric"
+                                        else [str(v) for v in col])
+                want = model_terms + [a["name"] for a in accepted] + [name]
+                if not inputs.estimable(frame, want):
+                    why = ("it is collinear with " + " + ".join(model_terms + [a["name"] for a in
+                                                                               accepted])
+                           + " over these samples, so its coefficient and theirs cannot be told "
+                             "apart")
+                else:
+                    import numpy as np
+                    cols = [np.ones((len(frame), 1))] + [inputs._term_columns(frame, t, np, pd)
+                                                         for t in want]
+                    rank = int(np.linalg.matrix_rank(np.hstack(cols)))
+                    if len(frame) - rank < 1:
+                        why = (f"it leaves the model no residual degree of freedom "
+                               f"({len(frame)} samples, {rank} coefficients)")
+            except Exception as e:                                            # noqa: BLE001
+                why = f"its estimability could not be established: {e}"
+        if why:
+            out["refused"].append({"name": name, "why": why})
+        else:
+            rec = {"name": name, "kind": kind, "values": got}
+            accepted.append(rec)
+            out["modelled"].append(rec)
+    declared = set(facts.get("covariates") or {})
+    for f in sorted(fs):
+        if f not in terms and f not in declared:
+            out["not_modelled"].append(
+                {"name": f, "why": "a column of the design that is neither a term of this "
+                                   "contrast nor a declared covariate (--covariate), so it is "
+                                   "not in the model"})
+    return out
 
 
 def order_of_runs(names, available):

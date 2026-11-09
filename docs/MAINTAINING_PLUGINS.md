@@ -180,6 +180,16 @@ per-cell result still covers every cell; only the grouping excludes them.
 > of an array and raises. If those are the two things you want, they are on the object —
 > `p = ctx.populations()`, then `p.names` and `p.dropped`.
 
+**Take the design from the host.** A plugin that fits a model on the design (`inject` names
+`design` or `contrast`) asks the host for its frame and its level order -
+`frame, covariates = ctx.model_frame(obs, terms)` makes each term a categorical whose first
+category is the run's control and adds every covariate the plan modelled, typed;
+`ctx.levels(term, present)` is a term's levels with the control first, so `levels[-1] vs
+levels[0]` is `<level> vs <control>` - and declares `covariates` in `inject` to be handed them.
+Choosing the reference itself is how a table came out with every sign reversed on a design whose
+control sorts last; `scprofile design <name>` names every site where it builds a model or takes a
+contrast and what it still owes there, and the maker's `design` stage runs it.
+
 **Refuse rather than return something empty.** `ctx.refuse(what, why)` is a result the host
 records. A plugin that returns an empty answer produces a result-shaped hole nobody can tell from
 a real negative.

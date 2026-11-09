@@ -631,13 +631,23 @@ def _run(a):
         _dtab, _dkey, _dfactors, _dsrc = inputs.design_or_derive(
             a.design, A, sample_key, samples or [], quiet=True, factors=getattr(a, "factor", None))
         if _dfactors:
-            _run_facts = _PL.design_facts(_dtab, _dfactors, sample_key, units or [])
+            _run_facts = _PL.design_facts(
+                _dtab, _dfactors, sample_key, units or [], controls=_controls_from(a),
+                covariates=inputs.covariate_values(a.design, A, sample_key,
+                                                   _covariates_from(a)))
             if _dsrc == "object":
                 print(f"  design DERIVED FROM THE OBJECT: {', '.join(_dfactors)} "
                       f"(no --design was given)")
     except Exception as e:
         print(f"  WARNING: design table unreadable, so the plan's decisions cannot be made "
               f"or delivered: {e}")
+    # A DECLARATION THE DESIGN CANNOT HONOUR STOPS THE RUN HERE, BEFORE ANY INSTANCE (GAP-039,
+    # GAP-040): a misspelt control is a contrast direction chosen by somebody else, and a
+    # covariate that is not a column is an adjustment that silently did not happen.
+    _bad_decl = _PL.declared_problems(_run_facts) if _run_facts.get("has_design") else []
+    if _bad_decl:
+        raise SystemExit("scprofile run: refused - a declaration this design cannot honour:\n  "
+                         + "\n  ".join(_bad_decl))
     _decisions_said = set()
 
     def _params_for(name):
@@ -653,11 +663,19 @@ def _run(a):
         if dec and name not in _decisions_said:
             _decisions_said.add(name)
             for key, val in sorted(dec.items()):
-                shown = val.get("formula") if isinstance(val, dict) else val
+                shown = (_PL.describe_covariates(val) if key == "covariates"
+                         else val.get("formula") if isinstance(val, dict) else val)
                 if key in user:
                     print(f"  {name}: --params {key} OVERRIDES the plan's {shown}")
                 else:
                     print(f"  {name}: {key} {shown}  (decided from the design, by the planner)")
+                if key == "contrast" and isinstance(val, dict) and val.get("controls"):
+                    print(f"  {name}: reference " + "; ".join(
+                        f"{t}={c} ({(val.get('control_basis') or {}).get(t, '')})"
+                        for t, c in sorted(val["controls"].items())))
+            _untaken = _PL.covariates_not_taken(ks[name], _run_facts)
+            if _untaken:
+                print(f"  {name}: {_untaken}")
         return out
 
     # THE DOOR, IN THE PLAN'S WORDS (harness ADR-0026, the open items): a plugin whose
@@ -1605,6 +1623,42 @@ def _generated(a):
     return REFUSE if bad else 0
 
 
+def _design(a):
+    """Does a design-aware plugin take its model from the host? The maker's `design` stage.
+
+    Exits 0 when nothing is owed - the plugin is not design-aware, fits no model, or asks the
+    host for its frame and its level order and declares `covariates` - and 1 with the worksheet
+    otherwise: each site where a model is built or a contrast taken, and what is owed there.
+    """
+    from . import validate as V
+    from .kernels import discover
+    ks = discover()
+    names = _split(a.name or "") or sorted(ks)
+    bad = [n for n in names if n not in ks]
+    if bad:
+        print(f"scprofile: unknown plugin(s) {bad}", file=sys.stderr)
+        return REFUSE
+    print("does each design-aware plugin take its model from the host? (GAP-039, GAP-040)")
+    if len(names) > 1:
+        # ONE LINE PER PLUGIN, NO SITES, WHEN NONE IS NAMED. The worksheet shows a plugin's own
+        # source lines, and a plugin still held out is test material for the maker: its surface
+        # is read in its own migration, not in a survey of the family (the plugin-maker skill,
+        # "one plugin per conversion").
+        owing = 0
+        for n in names:
+            d = V.design_sites(ks[n])
+            verdict = ("OWES" if d["owes"] else "ok  ")
+            owing += bool(d["owes"])
+            print(f"  {verdict} {n:<12} "
+                  + ("not design-aware" if not d["design_aware"] else
+                     f"design-aware, {len(d['sites'])} fitting site(s), "
+                     f"{len(d['missing'])} owed"))
+        if owing:
+            print("  name one plugin for its worksheet: scprofile design <plugin>")
+        return 1 if owing else 0
+    return V.design_report(ks[names[0]])
+
+
 def _validate(a):
     """Static checks on plugins and their references. Runs nothing."""
     from . import validate as V
@@ -2039,8 +2093,19 @@ def _plan(a):
             _pmem.setdefault(str(_u), list(_m))
     units = sorted(_pmem) or samples
 
-    facts = PL.design_facts(dtab, dfactors, keys["sample"][0], units)
+    facts = PL.design_facts(dtab, dfactors, keys["sample"][0], units,
+                            controls=_controls_from(a),
+                            covariates=inputs.covariate_values(
+                                a.design, A, keys["sample"][0], _covariates_from(a)))
     facts["units"] = units
+    # REFUSED HERE AS THE RUN REFUSES IT (one function, `declared_problems`): a plan that
+    # accepted what the run will refuse is a preview of a different run.
+    _bad_decl = PL.declared_problems(facts) if facts.get("has_design") else []
+    if _bad_decl:
+        print("\nREFUSED - a declaration this design cannot honour:")
+        for _b in _bad_decl:
+            print(f"  {_b}")
+        return REFUSE
 
     # ---- design defects: the ONLY legitimate reason to skip a plugin ------------------------
     #
@@ -2297,6 +2362,11 @@ def _plan(a):
                     elif key == "contrast":
                         print(f"      {key:<14} {val['kind']}: {val['formula']}")
                         print(f"                     {val['why']}")
+                        for _t, _c in sorted((val.get("controls") or {}).items()):
+                            print(f"      {'reference':<14} {_t}={_c}: "
+                                  f"{(val.get('control_basis') or {}).get(_t, '')}")
+                    elif key == "covariates":
+                        print(f"      {key:<14} {PL.describe_covariates(val)}")
                     elif key == "references":
                         print(f"      {key:<14} {val['organism']}, declared for "
                               f"{', '.join(val['declared_for'])}")
@@ -2304,6 +2374,9 @@ def _plan(a):
                     print(f"      {key:<14} {val}")
             if v.why_not_higher:
                 print(f"      NOT FULL:      {v.why_not_higher}")
+            _untaken = PL.covariates_not_taken(ks[name], facts)
+            if _untaken:
+                print(f"      COVARIATES:    {_untaken}")
             for c in v.caveats:
                 print(f"      CAVEAT:        {c}")
             if v.readiness:
@@ -3488,6 +3561,16 @@ def _standard(a):
 
 
 
+def _covariates_from(a):
+    """[column, ...] from repeated `--covariate COLUMN`, in the order given, once each."""
+    out = []
+    for item in (getattr(a, "covariate", None) or []):
+        for c in str(item).split(","):
+            if c.strip() and c.strip() not in out:
+                out.append(c.strip())
+    return out
+
+
 def _controls_from(a):
     """{factor: level} from repeated `--control factor=level`. Empty when none was given."""
     out = {}
@@ -4257,7 +4340,13 @@ def main(argv=None):
     r.add_argument("--control", action="append", metavar="FACTOR=LEVEL",
                    help="the control level of a factor, e.g. --control <factor>=<level>. "
                         "Repeatable. "
-                        "Without it the tool recommends one and says on what basis.")
+                        "Without it the tool recommends one and says on what basis. A factor "
+                        "or a level the design does not have is refused, by name.")
+    r.add_argument("--covariate", action="append", default=None, metavar="COLUMN",
+                   help="a column of the design table to ADJUST for in a model, beside the "
+                        "contrast's terms (repeatable). Each is modelled, or refused by name with "
+                        "the reason, for every plugin that takes covariates; nothing is adjusted "
+                        "for unless it is named here")
     r.add_argument("--figures-for", metavar="AXIS[,AXIS]", default="",
                    help="draw per-unit figures only for units on these axes, e.g. "
                         "--figures-for group. Empty (the default) draws them for every axis, "
@@ -4370,6 +4459,11 @@ def main(argv=None):
     pl.add_argument("--prefix", default=None)
     pl.add_argument("--design", default=None)
     pl.add_argument("--factor", action="append", default=None, metavar="COLUMN")
+    # THE PLAN IS TOLD WHAT THE RUN IS TOLD (GAP-039). `--control` existed on `run` only, so the
+    # plan resolved every reference from a vocabulary hint or sort order and printed a direction
+    # the run, given the declaration, did not take.
+    pl.add_argument("--control", action="append", metavar="FACTOR=LEVEL")
+    pl.add_argument("--covariate", action="append", default=None, metavar="COLUMN")
     # THE SAME DEFAULT AS `run`, AND IT HAS TO BE. A hard-coded 8 made `plan` describe a machine
     # nobody was using: on PBS 679143 the plan printed `scenic[S1](8c)` and the run, given the
     # allocation, did `scenic[S1](16c)`. The plan is the document a person reads BEFORE
@@ -4408,6 +4502,10 @@ def main(argv=None):
                           "promises a different set of instances than the run creates.")
     pl.set_defaults(fn=_plan)
 
+    dz = sub.add_parser("design", help="[maintainer] does a design-aware plugin take its model "
+                                       "(reference levels, covariates) from the host")
+    dz.add_argument("name", nargs="?", default="")
+    dz.set_defaults(fn=_design)
     va = sub.add_parser("validate", help="[maintainer] static checks on plugins and their references")
     va.add_argument("name", nargs="?", default=None,
                     help="plugin name(s), comma-separated. Default: all")

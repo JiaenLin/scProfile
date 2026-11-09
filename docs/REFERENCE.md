@@ -33,7 +33,8 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | `scprofile doctor` | Reports which environments exist, which plugins resolve to them, whether each group is locked, and what is missing. |
 | `scprofile run` | Plans, runs the plugins, merges results into one object, writes the report and the run card. |
 | `scprofile report` | Re-renders the documents from an existing run's `report.json`. Draws no new analysis. |
-| `scprofile run --control FACTOR=LEVEL` | Declares which level of a factor is the control, so every contrast is measured against it. Repeatable. Without it the tool recommends one from a vocabulary of experimental role and prints the basis. |
+| `scprofile run --control FACTOR=LEVEL` | Declares which level of a factor is the control, so every contrast is measured against it. Repeatable; `plan` takes it too. Without it the tool recommends one from a vocabulary of experimental role and prints the basis. A factor or a level the design does not have is refused, by name, before anything runs. |
+| `scprofile run --covariate COLUMN` | A column of the design table to adjust for beside the contrast's terms. Repeatable; `plan` takes it too. Each is modelled (numeric or categorical) or refused with the reason, for every plugin that declares `covariates` in `inject`; a plugin that does not is said not to model it, and design columns that are neither a term nor a declared covariate are named as not in the model. |
 | `scprofile capacity` | What a run delivered, as counts measured from disk, and whether it delivered less than another run. The suites cannot catch a regression in output; this can. |
 | `scprofile cache` | Reports what the reuse cache holds — apparent size, and how much of it is shared with run directories by hard link — and clears it. Everything in it is rebuildable, so the only cost of clearing is rebuilding. |
 | `scprofile standard` | Measures a rendered report against the exit standard. |
@@ -48,6 +49,7 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | `scprofile paper` | The paper test: records a claim written from the figures and what each review round did to it. A claim is bound to the figures it cites, so a redraw makes it stale. `docs/PAPER_TEST.md`. |
 | `scprofile check` | One green/red line per element of scProfile. Exits non-zero if any is red. With `--out`, also checks what a run produced. |
 | `scprofile validate` | Checks a plugin declaration and its references without running anything. |
+| `scprofile design` | For a design-aware plugin (`inject` names `design` or `contrast`): names every site where it builds a model or takes a contrast, and exits 1 while it does not take its frame (`ctx.model_frame`) and level order (`ctx.levels`) from the host or does not declare `covariates`. Named, it prints that plugin's worksheet; unnamed, one verdict line per plugin. The maker's `design` stage runs it. |
 | `scprofile scaffold` | With `--new`, writes a new one-file plugin from the template. Without it, writes an already-declared plugin's build skeleton. |
 | `scprofile fetch` | Downloads a plugin's declared reference data. |
 | `scprofile selftest` | Runs one plugin's selftest in its environment. |

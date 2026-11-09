@@ -156,6 +156,15 @@ def write(out_dir, plan, *, filename="run_plan.html", kernels=None):
                 c = s["contrast"]
                 bits.append(f"<tr><td>contrast</td><td><code>{_e(c['formula'])}</code><br>"
                             f"<span class='sub'>{_e(c['why'])}</span></td></tr>")
+                # THE REFERENCE OF EACH TERM, AS THE TEXT PLAN PRINTS IT (GAP-039).
+                for t, ctl in sorted((c.get("controls") or {}).items()):
+                    bits.append(f"<tr><td>reference</td><td><code>{_e(t)}={_e(ctl)}</code><br>"
+                                f"<span class='sub'>{_e((c.get('control_basis') or {}).get(t, ''))}"
+                                f"</span></td></tr>")
+            if s.get("covariates"):
+                from .planner import describe_covariates
+                bits.append(f"<tr><td>covariates</td><td>"
+                            f"{_e(describe_covariates(s['covariates']))}</td></tr>")
             if s.get("references"):
                 r = s["references"]
                 bits.append(f"<tr><td>references</td><td>{_e(r['organism'] or 'not detected')}"

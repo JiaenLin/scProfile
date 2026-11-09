@@ -54,6 +54,12 @@ CAPABILITIES = {
     "design":       {"resolve": "design", "why": "a design table, for a contrast to exist"},
     "contrast":     {"resolve": "design", "why": "a testable factor: two levels, one of them "
                                                  "replicated"},
+    # A COVARIATE IS DECLARED BY THE USER AND RESOLVED BY THE HOST (GAP-040): a plugin that names
+    # this is handed the covariates it models and the ones refused, each by name with the reason
+    # (`planner.resolve_covariates`); a plugin that does not is said, in the plan and the run, to
+    # fit without them.
+    "covariates":   {"resolve": "design", "why": "design columns to adjust for, named with "
+                                                 "--covariate; each modelled or refused by name"},
     "ordering":     {"resolve": "derived", "why": "a pseudotime or trajectory ordering, from "
                                                   "whichever plugin provides one"},
     "velocity":     {"resolve": "derived", "why": "a fitted velocity field"},

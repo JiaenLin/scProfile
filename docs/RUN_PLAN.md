@@ -176,6 +176,19 @@ A verdict of RUN is not a plan. For every plugin that runs, the plan states:
 - **the contrast, at the richest the design permits** — an interaction where two factors are
   crossed with replication in every cell, because that is usually the question the study was
   designed to ask; main effects otherwise, and it says which;
+- **the reference of every term** — `--control <factor>=<level>` (on `plan` and on `run`), else a
+  level whose name reads as a control, else sort order, printed with its basis. The decision
+  carries the order a contrast reads the levels in, control first, and a design-aware plugin
+  takes it from the host (`ctx.levels`, `ctx.model_frame`): a fold change is `<level> vs
+  <control>`. A `--control` naming a factor or a level the design does not have is REFUSED, by
+  name, in the plan and in the run;
+- **the covariates** — `--covariate <column>` names a column of the design table to adjust for.
+  Each is MODELLED (numeric or categorical) or REFUSED with the reason: not a column, a term of
+  the contrast, a value missing, one value, a different value for every sample, collinear with
+  the terms, or no residual degree of freedom left. A plugin that declares `covariates` in
+  `inject` receives the decision; one that does not is said not to model them. Columns of the
+  design that are neither a term nor a declared covariate are named as not in the model -
+  nothing is adjusted for unless it is named;
 - **the units** — a `per_unit` plugin is told the key and every unit it will fan out over;
 - **the order** — waves derived from `needs_kernels`, so a plugin that reads another's output runs
   after it. A plan that lists both without saying so leaves the ordering to be discovered from a
