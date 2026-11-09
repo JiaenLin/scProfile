@@ -35,6 +35,22 @@ from scprofile import network_panels as NP                                      
 FAIL = []
 
 
+def _renderer(fig):
+    """The figure's renderer - through an Agg canvas when the figure no longer has one.
+
+    `figure.save` closes the figure after writing it, and from matplotlib 3.11 `plt.close`
+    swaps the canvas for a bare FigureCanvasBase, which has no renderer: every geometry check
+    below then raised AttributeError, on the cluster and on any fresh environment, before it
+    measured anything (found 2026-10-02, single-cell-harness ADR-0027). The drawing is the same
+    drawing; only the canvas that measures it is re-attached.
+    """
+    c = fig.canvas
+    if not hasattr(c, "get_renderer"):
+        from matplotlib.backends.backend_agg import FigureCanvasAgg
+        c = FigureCanvasAgg(fig)
+    return c.get_renderer()
+
+
 def ck(name, cond, detail=""):
     print(f"  {'ok  ' if cond else 'FAIL'} {name}" + (f" — {detail}" if not cond else ""))
     if not cond:
@@ -344,7 +360,7 @@ def pipeline(fig, stamp="arm A   ·   2 samples pooled"):
 
 
 def label_boxes(ax):
-    r = ax.figure.canvas.get_renderer()
+    r = _renderer(ax.figure)
     return [(t, t.get_window_extent(r)) for t in ax.texts if str(t.get_text()).strip()]
 
 

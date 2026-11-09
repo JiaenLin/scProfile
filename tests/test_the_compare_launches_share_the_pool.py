@@ -3,7 +3,7 @@ the plugin declares, as many at once as the run's budget holds (harness ADR-0026
 
 MEASURED ON THE CLUSTER. Seven launches of about 72 s each, one after another, each handed all
 64 cores and using one: 505 s of R and 13.5 minutes of phase, in every thirty-minute rerun. The
-run phase already schedules its instances by permits - `cellchat[Aging1](2c)` eighteen at once
+run phase already schedules its instances by permits - `cellchat[<unit>](2c)` eighteen at once
 under a budget of 64 - and the compare phase launched the same plugin with the whole budget,
 serially. A plugin that declares no `cores` keeps today's shape: one launch at a time under the
 whole budget, and every earlier pin on the phase record holds unchanged.

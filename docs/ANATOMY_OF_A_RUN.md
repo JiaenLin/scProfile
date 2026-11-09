@@ -4,7 +4,7 @@
 
 ## 1. The map: one run directory
 
-A run is a directory under `~/projects/SAMBO/runs/scprofile/04_profile/` named by its key `<stamp>__scprofile-<tool commit>__04_profile__<kind>` (`rerun`, `written`, `audit`). Four trees are the run's own; everything else at the top is written by a job, and every reader that walks a run now walks only the four (`manifest.OWN_TREES`).
+A run is a directory under `<project>/runs/scprofile/04_profile/` named by its key `<stamp>__scprofile-<tool commit>__04_profile__<kind>` (`rerun`, `written`, `audit`). Four trees are the run's own; everything else at the top is written by a job, and every reader that walks a run now walks only the four (`manifest.OWN_TREES`).
 
 ```
 <run>/
