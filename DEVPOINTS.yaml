@@ -132,8 +132,14 @@ rules:
   # they are spent the moment they are touched - including by fixing them. abundance's
   # pertpy/statsmodels ImportError and de's unsatisfiable `pydeseq2 >=0.5,<0.6` STAY BROKEN;
   # pseudotime's undeclared `scipy` stays undeclared. "liana sits at 8 of 12" is a RESULT.
+  #
+  # SPENT, ONE AT A TIME, EACH AS A BLIND TEST OF THE MAKER (harness ADR-0029: a plugin's freeze
+  # ends when its own migration starts, and it is then repaired through the maker, never kept
+  # broken). The maker's output on the unchanged plugin is recorded in docs/MIGRATIONS.md BEFORE
+  # the maker changes, and the plugin leaves this list in the commit after that record.
+  #   de         spent 2026-11-09 (autodev W013); blind record at f5175ea, docs/MIGRATIONS.md 1
   held_out:
-    names: [abundance, cellcycle, de, decoupler, liana, pseudotime, scenic, velocity]
+    names: [abundance, cellcycle, decoupler, liana, pseudotime, scenic, velocity]
     means: >
       the held-out set is the maker's test set. A repair to one of these fits the maker to it, and
       the next unseen tool is then the first real test with the evidence already spent
