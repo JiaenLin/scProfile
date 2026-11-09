@@ -1,0 +1,188 @@
+# scProfile environment lock: every package of one group, at one exact version, for one platform.
+# Written by `scprofile lock`. Change a plugin's `requires`, or constraints.txt, and re-run it; never edit this file.
+# members: abundance cellchat cellcycle de decoupler liana pseudotime
+# platform: x86_64-manylinux_2_17
+# python: 3.12
+# resolver: uv 0.12.5
+# written: 2026-11-09
+# requirement-digest: 437240ed59fb
+# requirement: python <3.13,>=3.10
+# requirement: requires anndata <0.13,>=0.12
+# requirement: requires cellrank <3,>=2.0
+# requirement: requires decoupler <1.9,>=1.8
+# requirement: requires filelock >=3
+# requirement: requires liana <2,>=1.3
+# requirement: requires matplotlib <4,>=3.6,>=3.7
+# requirement: requires mudata <0.4
+# requirement: requires numpy <2,<3,>=1.24
+# requirement: requires omnipath >=1.0
+# requirement: requires pandas <3,>=2.0
+# requirement: requires pertpy <2,>=0.9
+# requirement: requires pydeseq2 <0.6,>=0.5
+# requirement: requires scanpy <1.11,>=1.10
+# requirement: requires scipy >=1.10
+# requirement: requires umap-learn <0.6,>=0.5
+# requirement: constraint numpyro<0.22
+# requirement: constraint pertpy<1.0.5
+# requirement: constraint statsmodels<0.15
+absl-py==2.5.1            # via optax, orbax-checkpoint
+adjusttext==1.4.0         # via pertpy
+aiofiles==25.1.0          # via orbax-checkpoint
+aiohappyeyeballs==2.7.1   # via aiohttp
+aiohttp==3.14.5           # via gcsfs
+aiosignal==1.4.0          # via aiohttp
+anndata==0.12.19          # via cellrank, liana, mudata, pydeseq2, scanpy, scvelo, -r requirements.in
+array-api-compat==1.16.0  # via anndata
+arviz==0.23.4             # via pertpy
+attrs==26.1.0             # via aiohttp, omnipath
+blitzgsea==1.3.54         # via pertpy
+cellrank==2.1.0           # via -r requirements.in
+certifi==2026.10.23       # via requests
+cffi==2.1.1               # via cryptography
+charset-normalizer==3.5.2  # via requests
+click==8.5.1              # via loompy
+cloudpickle==3.1.2        # via joblib
+contourpy==1.3.3          # via matplotlib
+cryptography==50.0.2      # via google-auth
+cycler==0.12.1            # via matplotlib
+decorator==5.3.1          # via gcsfs
+decoupler==1.8.0          # via -r requirements.in
+docrep==0.3.2             # via cellrank, liana, omnipath, pygpcca
+donfig==0.8.1.post1       # via zarr
+equinox==0.13.0           # via lineax
+et-xmlfile==2.0.0         # via openpyxl
+etils==1.15.0             # via orbax-checkpoint
+fast-array-utils==1.2.3   # via pertpy
+filelock==4.2.9           # via pertpy, -r requirements.in
+flax==0.11.2              # via pertpy
+fonttools==4.68.0         # via matplotlib
+formulaic==1.2.2          # via formulaic-contrasts, pydeseq2
+formulaic-contrasts==1.0.0  # via pydeseq2
+frozenlist==1.8.0         # via aiohttp, aiosignal
+fsspec==2026.9.0          # via etils, gcsfs
+funsor==0.4.8             # via pertpy
+gcsfs==2026.10.1          # via etils
+google-api-core==2.44.0   # via google-cloud-core, google-cloud-storage, google-cloud-storage-control
+google-auth==2.62.1       # via gcsfs, google-api-core, google-auth-oauthlib, google-cloud-core, google-cloud-storage, google-cloud-storage-control
+google-auth-oauthlib==1.5.0  # via gcsfs
+google-cloud-core==2.8.0  # via google-cloud-storage
+google-cloud-storage==3.17.1  # via gcsfs
+google-cloud-storage-control==1.17.0  # via gcsfs
+google-crc32c==1.9.0      # via google-cloud-storage, google-resumable-media, zarr
+google-resumable-media==2.11.0  # via google-cloud-storage
+googleapis-common-protos==1.76.0  # via google-api-core, grpc-google-iam-v1, grpcio-status
+grpc-google-iam-v1==0.14.6  # via google-cloud-storage-control
+grpcio==1.85.1            # via google-api-core, google-cloud-storage-control, googleapis-common-protos, grpc-google-iam-v1, grpcio-status
+grpcio-status==1.85.1     # via google-api-core
+h5netcdf==1.8.2           # via arviz
+h5py==3.16.0              # via anndata, arviz, loompy, mudata, scanpy
+humanize==4.16.0          # via orbax-checkpoint
+idna==3.20                # via requests, yarl
+inflect==7.6.0            # via omnipath
+interface-meta==2.0.1     # via formulaic
+jaraco-functools==4.6.0   # via inflect
+jax==0.7.0                # via equinox, flax, jaxopt, lineax, numpyro, optax, orbax-checkpoint, ott-jax
+jaxlib==0.7.0             # via jax, jaxopt, numpyro, optax
+jaxopt==0.8.5             # via ott-jax
+jaxtyping==0.3.11         # via equinox, lineax
+jinja2==3.0.3             # via pygpcca
+joblib==1.6.0             # via cellrank, pynndescent, scanpy, scikit-learn
+kiwisolver==1.5.1         # via matplotlib
+legacy-api-wrap==1.5      # via anndata, scanpy
+liana==1.10.0             # via -r requirements.in
+lineax==0.1.0             # via ott-jax
+llvmlite==0.43.0          # via numba, pynndescent
+loompy==3.0.8             # via scvelo
+makefun==1.16.0           # via funsor
+markdown-it-py==4.2.0     # via rich
+markupsafe==3.0.4         # via jinja2
+matplotlib==3.11.2        # via adjusttext, arviz, blitzgsea, cellrank, plotnine, pydeseq2, scanpy, scvelo, seaborn, -r requirements.in
+mdurl==0.1.2              # via markdown-it-py
+mizani==0.14.6            # via plotnine
+ml-dtypes==0.5.4          # via jax, jaxlib, tensorstore
+more-itertools==11.2.1    # via inflect, jaraco-functools
+mpmath==1.4.1             # via blitzgsea
+msgpack==1.2.4            # via flax, orbax-checkpoint
+mudata==0.3.10            # via liana, pertpy, -r requirements.in
+multidict==7.2.1          # via aiohttp, yarl
+multipledispatch==1.0.0   # via funsor, numpyro
+narwhals==2.28.0          # via formulaic, scikit-learn
+natsort==8.4.0            # via anndata, scanpy
+networkx==3.7             # via cellrank, scanpy
+numba==0.60.0             # via cellrank, decoupler, fast-array-utils, liana, loompy, pynndescent, scanpy, scvelo, umap-learn
+numcodecs==0.16.6         # via zarr
+numpy==1.26.4             # via adjusttext, anndata, arviz, blitzgsea, cellrank, contourpy, decoupler, fast-array-utils, flax, formulaic, funsor, h5netcdf, h5py, jax, jaxlib, jaxopt, loompy, matplotlib, mizani, ml-dtypes, mudata, numba, numcodecs, numpy-groupies, numpyro, optax, orbax-checkpoint, ott-jax, pandas, patsy, plotnine, pydeseq2, pygam, pygpcca, scanpy, scikit-learn, scikit-misc, scipy, scvelo, seaborn, sparsecca, statsmodels, tensorstore, treescope, umap-learn, xarray, xarray-einstats, zarr, -r requirements.in
+numpy-groupies==0.16.3    # via loompy
+numpyro==0.21.0           # via pertpy, -c constraints.txt
+oauthlib==4.0.1           # via requests-oauthlib
+omnipath==1.0.12          # via -r requirements.in
+openpyxl==3.1.5           # via pertpy
+opentelemetry-api==1.45.2  # via google-api-core
+opt-einsum==3.4.0         # via funsor, jax
+optax==0.2.8              # via flax, ott-jax
+orbax-checkpoint==0.12.9  # via flax
+ott-jax==0.6.0            # via pertpy
+packaging==26.3           # via anndata, arviz, h5netcdf, matplotlib, omnipath, patsy, scanpy, statsmodels, xarray, zarr
+pandas==2.3.3             # via anndata, arviz, blitzgsea, cellrank, decoupler, formulaic, formulaic-contrasts, liana, mizani, mudata, omnipath, plotnine, pydeseq2, scanpy, scvelo, seaborn, sparsecca, statsmodels, xarray, -r requirements.in
+patsy==1.0.3              # via scanpy, statsmodels
+pertpy==1.0.4             # via -c constraints.txt, -r requirements.in
+pillow==13.0.0            # via matplotlib
+platformdirs==4.14.5      # via arviz
+plotnine==0.15.9          # via liana
+progressbar2==4.7.0       # via pygam
+prometheus-client==0.26.0  # via orbax-checkpoint
+propcache==0.5.4          # via aiohttp, yarl
+proto-plus==1.29.0        # via google-api-core, google-cloud-storage-control
+protobuf==7.36.2          # via google-api-core, google-cloud-storage-control, googleapis-common-protos, grpc-google-iam-v1, grpcio-status, orbax-checkpoint, proto-plus
+psutil==7.2.2             # via orbax-checkpoint
+pubchempy==1.0.5          # via pertpy
+pyarrow==26.0.1           # via pertpy
+pyasn1==0.6.5             # via pyasn1-modules
+pyasn1-modules==0.4.2     # via google-auth
+pycparser==3.12           # via cffi
+pydeseq2==0.5.2           # via -r requirements.in
+pygam==0.12.0             # via cellrank
+pygments==2.21.0          # via rich
+pygpcca==1.0.4            # via cellrank
+pynndescent==0.7.0        # via scanpy, umap-learn
+pyomo==6.10.1             # via sparsecca
+pyparsing==3.3.3          # via matplotlib
+python-dateutil==4.0.0    # via matplotlib, pandas
+python-utils==4.2.0       # via progressbar2
+pytz==2026.6              # via pandas
+pyyaml==6.0.3             # via donfig, flax, orbax-checkpoint
+requests==2.34.2          # via gcsfs, google-api-core, google-cloud-storage, omnipath, pertpy, requests-oauthlib
+requests-oauthlib==2.0.0  # via google-auth-oauthlib
+rich==15.0.0              # via flax, pertpy
+scanpy==1.10.4            # via cellrank, liana, pertpy, scvelo, -r requirements.in
+scikit-learn==1.9.1       # via blitzgsea, cellrank, pertpy, pydeseq2, pynndescent, scanpy, scvelo, umap-learn
+scikit-misc==0.5.3        # via pertpy
+scipy==1.16.3             # via adjusttext, anndata, arviz, cellrank, fast-array-utils, formulaic, jax, jaxlib, jaxopt, loompy, mizani, mudata, plotnine, pydeseq2, pygam, pygpcca, pynndescent, scanpy, scikit-learn, scvelo, statsmodels, umap-learn, xarray-einstats, -r requirements.in
+scvelo==0.3.4             # via cellrank
+scverse-misc==0.1.1       # via anndata, mudata
+seaborn==0.13.2           # via cellrank, scanpy
+session-info==1.0.1       # via formulaic-contrasts, scanpy
+session-info2==0.4.2      # via liana, mudata, scverse-misc
+setuptools==84.2.1        # via arviz, loompy
+simplejson==4.2.0         # via orbax-checkpoint
+six==1.17.0               # via docrep
+sparsecca==0.3.1          # via pertpy
+statsmodels==0.14.6       # via blitzgsea, plotnine, scanpy, sparsecca, -c constraints.txt
+stdlib-list==0.12.0       # via session-info
+tensorstore==0.1.86       # via flax, orbax-checkpoint
+threadpoolctl==3.8.0      # via scikit-learn
+tqdm==4.70.1              # via blitzgsea, decoupler, liana, numpyro, omnipath, scanpy, umap-learn
+treescope==0.1.10         # via flax
+typeguard==4.6.0          # via inflect
+typing-extensions==4.16.0  # via aiohttp, aiosignal, arviz, decoupler, equinox, etils, flax, formulaic, funsor, grpcio, lineax, numcodecs, omnipath, opentelemetry-api, orbax-checkpoint, python-utils, scverse-misc, typeguard, zarr
+tzdata==2026.6            # via pandas, python-dateutil
+umap-learn==0.5.12        # via scanpy, scvelo, -r requirements.in
+urllib3==2.8.0            # via omnipath, requests
+uvloop==0.23.0            # via orbax-checkpoint
+wadler-lindig==0.1.8      # via equinox, jaxtyping
+wrapt==2.5.2              # via cellrank, formulaic, omnipath
+xarray==2026.9.0          # via arviz, xarray-einstats
+xarray-einstats==0.9.1    # via arviz
+yarl==1.25.1              # via aiohttp
+zarr==3.1.5               # via anndata
+zipp==4.1.2               # via etils

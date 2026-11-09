@@ -1,6 +1,7 @@
 """scprofile — profile an annotated single-cell or single-nucleus dataset.
 
     scprofile doctor  [--prefix DIR]
+    scprofile lock    <kernel> [--platform TAG]       (a maintainer, on a machine with uv)
     scprofile install <kernel> --prefix DIR [--force]
     scprofile fetch   <kernel> --to DIR
     scprofile run --h5ad IN.h5ad --out DIR --kernel a,b,c  [--all]
@@ -135,6 +136,67 @@ def _install(a):
         except Exception as e:                                            # noqa: BLE001
             print(f"  FAILED: {e}", file=sys.stderr)
             return 1
+    return 0
+
+
+def _lock(a):
+    """Resolve the group a plugin belongs to ONCE, with uv, and record every version it chose.
+
+    The group is resolved from its members' merged ranges under the host's constraints
+    (`setup/locks/constraints.txt`), for ONE platform and ONE interpreter, and the answer is
+    written to `setup/locks/<platform>/<members>.txt`. `install` then applies it with `pip
+    --no-deps` and resolves nothing - the resolve PBS 720377 could not finish is answered here,
+    on a machine with uv, and never again on the cluster.
+
+    THE PLATFORM IS THE BUILDING MACHINE'S, NOT THIS ONE'S. A lock written on a laptop for a linux
+    cluster names the cluster's platform with --platform; the default, this machine, is right only
+    when the machine writing the lock is the one that will build from it.
+    """
+    import shutil as _sh
+    from . import lock as LK
+    from . import resolve as RS
+    ks = _kernels()
+    names = _split(a.kernel)
+    bad = [n for n in names if n not in ks]
+    if bad:
+        print(f"scprofile: no plugin {bad}. Known: {', '.join(sorted(ks))}", file=sys.stderr)
+        return REFUSE
+    uv = a.uv or _sh.which("uv")
+    if not uv:
+        print("scprofile lock: no `uv` on PATH, and no --uv given. The lock is resolved by uv "
+              "because pip could not finish this resolve (PBS 720377). Install it "
+              "(https://docs.astral.sh/uv/) or pass --uv PATH.", file=sys.stderr)
+        return REFUSE
+    platform = a.platform or LK.machine_platform()
+    if not a.platform:
+        print(f"  --platform not given: locking for THIS machine, {platform}")
+    groups = RS.group_by_compatibility(list(ks.values()))
+    done = set()
+    for name in names:
+        g = next((x for x in groups if name in x.members), None)
+        if g is None:
+            print(f"{name}: declares no environment requirement, so there is nothing to lock")
+            continue
+        if tuple(g.members) in done:
+            continue
+        done.add(tuple(g.members))
+        py = a.python or RS.concrete_python(g.python)
+        print(f"{name}: the environment shared by {', '.join(g.members)}", flush=True)
+        try:
+            lk = LK.compile_lock(g, platform=platform, python=py, uv=uv, log=print)
+        except Exception as e:                                            # noqa: BLE001
+            print(f"  FAILED: {e}", file=sys.stderr)
+            return 1
+        print(f"  wrote {lk.where()}: {len(lk.pins)} package(s) for {platform}, python {py}, "
+              f"{lk.resolver}")
+    # AS THE BUILDING MACHINE WILL SEE IT, which is not this one when the lock is for a cluster.
+    regrouped = LK.attach(RS.group_by_compatibility(list(ks.values())), machine=platform)
+    for gone in LK.prune(platform, regrouped):
+        print(f"  removed {gone.name}: every plugin it named is now in a group with a current lock")
+    for g in regrouped:
+        if tuple(g.members) in done:
+            print(f"  on {platform} this group builds as {g.name}" if g.lock is not None else
+                  f"  NOTE: on {platform} the lock is NOT applied: {g.lock_state[1]}")
     return 0
 
 
@@ -4153,6 +4215,19 @@ def main(argv=None):
                         "resolver proves the DECLARED constraints do not contradict each other; "
                         "only a real resolve proves their transitive closure installs")
     i.set_defaults(fn=_install)
+
+    lo = sub.add_parser("lock", help="[maintainer] resolve a plugin's environment group once, "
+                                     "with uv, and record every version for one platform")
+    lo.add_argument("kernel", help="plugin name(s), comma-separated; each locks its whole group")
+    lo.add_argument("--platform", default=None,
+                    help="the platform of the machine that will BUILD from this lock, as uv names "
+                         "it (e.g. x86_64-manylinux_2_17 for linux with glibc >= 2.17). Default: "
+                         "this machine")
+    lo.add_argument("--python", default=None,
+                    help="the interpreter version to resolve for. Default: the one `install` "
+                         "would build, from the group's merged range")
+    lo.add_argument("--uv", default=None, help="the uv executable. Default: `uv` on PATH")
+    lo.set_defaults(fn=_lock)
 
     f = sub.add_parser("fetch", help="[agent] download and verify a kernel's declared references")
     f.add_argument("kernel")

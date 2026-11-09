@@ -28,8 +28,9 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | command | what it does |
 |---|---|
 | `scprofile plan` | Reads the object, reports what would run and why the rest would not. Writes nothing and computes nothing. |
-| `scprofile install` | Resolves every selected plugin's requirements into as few environments as satisfy them, builds those, and runs each plugin's selftest. A shared environment is not considered built until every plugin resolving to it passes. |
-| `scprofile doctor` | Reports which environments exist, which plugins resolve to them, and what is missing. |
+| `scprofile install` | Groups the selected plugins' requirements into as few environments as satisfy them, and builds the group the plugin belongs to. A group that has a current lock for this machine is built from that lock with `pip --no-deps`, so nothing is resolved, and the result is checked against the lock. A lock that no longer matches is refused. Then each member's selftest runs, and its verdict is recorded per member. |
+| `scprofile lock` | Resolves a plugin's whole environment group once, with uv, under `setup/locks/constraints.txt`, for one platform (`--platform`, the building machine's) and one interpreter. It writes every version to `setup/locks/<platform>/<members>.txt`. A maintainer runs it after changing a plugin's `requires`. |
+| `scprofile doctor` | Reports which environments exist, which plugins resolve to them, whether each group is locked, and what is missing. |
 | `scprofile run` | Plans, runs the plugins, merges results into one object, writes the report and the run card. |
 | `scprofile report` | Re-renders the documents from an existing run's `report.json`. Draws no new analysis. |
 | `scprofile run --control FACTOR=LEVEL` | Declares which level of a factor is the control, so every contrast is measured against it. Repeatable. Without it the tool recommends one from a vocabulary of experimental role and prints the basis. |
@@ -307,13 +308,37 @@ plugin declares `unit_network`.
 
 ## Environments
 
-`scprofile install` resolves every selected plugin's requirements into the fewest environments
-that satisfy them. Environments are content-addressed: the directory name is a hash of the
-resolved requirement set, so a changed declaration is a different environment and no run can
-silently use the old one.
+`scprofile install` groups every selected plugin's requirements into the fewest environments that
+satisfy them. A plugin declares ranges. What those ranges resolve to on one platform is recorded
+once, by `scprofile lock`, in `setup/locks/<platform>/<members>.txt`. Each lock file carries:
 
-A shared environment is not considered built until every plugin resolving to it passes its
-selftest. `install` reports which members passed and refuses the environment otherwise.
+- every package of the group's closure, at one exact version;
+- the platform it was resolved for (for example `x86_64-manylinux_2_17`, meaning linux x86_64 with
+  glibc 2.17 or newer);
+- the interpreter version;
+- the resolver;
+- the ranges and host constraints (`setup/locks/constraints.txt`) it was resolved from.
+
+On a machine whose platform a lock covers, a group is in one of three states:
+
+| state | when | what `install` does |
+|---|---|---|
+| locked | a lock exists for exactly these members and today's requirement | Applies it with `pip install --no-deps`, so nothing is resolved. Then checks that every installed version is the locked one; a difference is a failed build with no stamp. |
+| stale | a lock names a member of this group, but its members or its requirement changed | Refuses before anything is built. The refusal names what changed and the `scprofile lock` command. A stale lock is never bypassed by resolving the ranges instead. |
+| unlocked | no lock for this platform names any member | Resolves the ranges at install time, as before, and says so. |
+
+Every build writes `.scprofile_resolved.txt` beside the environment: the pip and conda versions it
+actually holds. Locks cover the pip half; the conda half (`requires.conda`, e.g. `r-base=4.3`) and
+the R pins are applied as declared.
+
+Environments are content-addressed. A locked group's directory name is a hash of its pins, its
+interpreter, its platform and its conda, channel and R specs. An unlocked group's name is a hash of
+its requirement set. So a changed pin or declaration is a different environment, no run can silently
+use the old one, and rewording a lock's comments renames nothing.
+
+The build is shared and the proof is per member. `install` proves the plugin it was asked about,
+plus every member with no standing record. Each verdict is recorded beside the environment, and
+`run` and `plan` refuse a plugin whose own record is absent, stale or failed.
 
 ---
 

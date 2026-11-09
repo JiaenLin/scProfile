@@ -3,6 +3,42 @@
 Defects and open items that reached a run, with what found them and what would close them.
 A record is kept even after the fix, because the way it escaped is the lesson.
 
+## The shared environment could not be built from `main` — FIXED by a host-level lock, 2026-11-09
+
+The seven plugins that share one environment (abundance, cellchat, cellcycle, de, decoupler,
+liana, pseudotime) declare ranges. Nothing recorded what those ranges had resolved to, and the
+environment's name hashed the ranges. So a fresh prefix had to resolve the ranges, and on the
+cluster pip could not: `resolution-too-deep`, backtracking through pertpy's arviz 1.x split
+(harness ADR-0027, PBS 720377).
+
+Measured on the workstation: uv solves the same ranges in 25 s. The group can only hold pertpy
+1.0.x, because pertpy 1.1-1.4 need numpy 2 through arviz-base and four members cap numpy below 2,
+and pertpy 1.5 needs Python 3.13. Even that solution cannot run abundance, for three reasons:
+
+- pertpy 1.0.5 with statsmodels 0.15 raises ImportError;
+- pertpy 1.0.5 imports a scanpy 1.11 name, and the group caps scanpy below 1.11;
+- numpyro 0.22 cannot initialise scCODA.
+
+Fixed in the host, with no plugin edited:
+
+- `scprofile lock` resolves the group once, under three measured host constraints
+  (`setup/locks/constraints.txt`).
+- `setup/locks/x86_64-manylinux_2_17/` records 161 exact versions.
+- `install` applies them with `pip --no-deps`, checks the result, and refuses a stale lock.
+
+On an exact macOS replica of those 161 versions, the selftests of de, abundance, cellcycle,
+decoupler, liana and pseudotime pass. The acceptance check is a fresh-prefix build of the group on
+the cluster, followed by every member's selftest: harness `autodev/waves/W002.md`.
+
+## The conda half of an environment is not locked — OPEN, 2026-11-09
+
+A lock pins the pip closure only. The conda specs a plugin declares, such as cellchat's `r-base=4.3`
+and its fifty unversioned `r-*` packages, are still solved when the environment is built, so two
+builds months apart can hold different R packages or BLAS. Every build now writes
+`.scprofile_resolved.txt` beside the environment, with its `conda list --export`. The difference can
+therefore be read after the fact, but it is not prevented. Closing it needs an explicit conda lock
+per platform, for example from micromamba or conda-lock, applied by `install`.
+
 ## The network layout is not seeded — OPEN, measured 2026-09-06
 
 Two `cellchat` runs on identical inputs, the same `seed.use = 1L`, and identical numeric tables

@@ -1,0 +1,24 @@
+# Host constraints, applied when `scprofile lock` resolves a group. They are NOT plugin
+# requirements. Each line is a fact about two upstream packages that their own metadata does not
+# state, and the measurement is written beside it. A line constrains every group whose closure holds
+# that package. No plugin's `requires` is edited to carry it, and editing this file makes every
+# lock that recorded it stale until `scprofile lock` is run again.
+#
+# Measured 2026-11-09 on an exact replica of the seven-member group, with the versions uv resolves
+# for linux x86_64 and python 3.12: each package was imported, and each plugin's own selftest was run.
+
+# pertpy <= 1.0.6 imports `multipletests` from `statsmodels.sandbox.stats.multicomp`. statsmodels
+# 0.15 removed it, so with 0.15.0 `import pertpy` raises ImportError. pertpy declares statsmodels
+# with no ceiling.
+statsmodels<0.15
+
+# pertpy 1.0.5 imports `check_use_raw` from `scanpy._utils`. scanpy 1.10.4 has only
+# `_check_use_raw`, so `import pertpy` raises ImportError with any scanpy 1.10, and four members of
+# the group cap scanpy below 1.11. pertpy 1.0.0-1.0.4 import `_check_use_raw`. pertpy declares
+# scanpy with no floor.
+pertpy<1.0.5
+
+# numpyro 0.22.0 cannot initialise the scCODA model that pertpy 1.0.4 builds: `run_nuts` raises
+# "Cannot find valid initial parameters", twice with the same rng_key. numpyro 0.20.0, 0.20.1 and
+# 0.21.0 run it, and the selftest recovers its planted effect.
+numpyro<0.22

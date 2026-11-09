@@ -309,8 +309,9 @@ points:
             Add each to `requires` - the interval there is evidence for, not the version that
             happens to be installed - and re-run this status
           why: >
-            what this kernel needs, declared by this kernel. `Group.name` hashes the UNION of a
-            group's members' requirements, so a kernel that borrows from its neighbours resolves
+            what this kernel needs, declared by this kernel. `Group.name` hashes what a group is
+            built from - its lock, resolved from the UNION of its members' requirements, or that
+            union where no lock applies - so a kernel that borrows from its neighbours resolves
             to a DIFFERENT environment the day it is alone - and that day is the deployment, not
             the development
         # THE REUSE KEY, AND WHETHER IT KEPT UP WITH THE CODE. Also a command with no stage until

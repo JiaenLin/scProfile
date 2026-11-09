@@ -131,16 +131,31 @@ def build_spec(group, log=None):
     The group is built WHOLE, including the members that were not asked for. A shared environment
     is not divisible: building one member's slice into it would leave a directory whose name
     claims to satisfy four requirements and satisfies one.
+
+    A LOCKED GROUP HANDS PIP ITS LOCK. The pip items are then every package of the closure at one
+    exact version and the interpreter is the one the lock was resolved for, so pip has nothing to
+    decide - which is the point: the resolve that PBS 720377 could not finish is not asked again
+    on the cluster, it was answered once on the machine that wrote the lock (`scprofile.lock`).
     """
     from . import resolve as RS
-    py = RS.concrete_python(group.python)
+    lk = getattr(group, "lock", None)
+    if lk is not None:
+        py = lk.python
+        if group.python and not RS.satisfies(py, RS.parse(group.python)):
+            raise ValueError(f"{group.name}: its lock was resolved for python {py}, which the "
+                             f"group's own range {group.python} excludes. Re-lock it.")
+        pip = [f"{n}=={v}" for n, v in sorted(lk.pins.items())]
+    else:
+        py = RS.concrete_python(group.python)
+        pip = [f"{n}{c}" for n, c in sorted(group.packages.items())]
     spec = {"python": py,
             "channels": list(group.channels) or ["conda-forge"],
             # VERBATIM. conda's grammar is not pip's; see resolve.Group.conda.
             "conda": [f"{n}={v}" if str(v).strip() else n
                       for n, v in sorted(group.conda.items())],
-            "pip": [f"{n}{c}" for n, c in sorted(group.packages.items())],
-            "r": list(group.r)}
+            "pip": pip,
+            "r": list(group.r),
+            "lock": lk}
     if spec["r"] and not any(c.split("=", 1)[0].strip() == "r-base" for c in spec["conda"]):
         raise ValueError(
             f"{group.name}: its requirement names R packages and pins no `r-base`. R is the "
@@ -153,7 +168,9 @@ def build_spec(group, log=None):
     if log:
         log(f"  requirement: python {group.python or 'unconstrained'} -> "
             + (f"python {py}" if py else "no python (another language's environment)")
-            + f", {len(spec['pip'])} pip, {len(spec['conda'])} conda, {len(spec['r'])} r")
+            + f", {len(spec['pip'])} pip"
+            + (" (locked, exact)" if lk is not None else " (ranges, resolved at install time)")
+            + f", {len(spec['conda'])} conda, {len(spec['r'])} r")
     return spec
 
 
@@ -244,6 +261,11 @@ def state_at(p, kernel, group, prefix):
     """
     exe = p / "bin" / ("Rscript" if kernel.language == "r" else "python")
     if not exe.exists():
+        st = getattr(group, "lock_state", None) if group is not None else None
+        if st and st[0] == "stale":
+            # THE FIX IS THE LOCK, NOT THE INSTALL: an install would refuse this group, so naming
+            # it here sends the reader to a command that cannot help.
+            return ("missing", f"nothing at {p}, and its lock is stale: {st[1]}", st[2])
         return ("missing", f"nothing at {p}",
                 f"scprofile install {kernel.name} --prefix {prefix}")
     want = env_fingerprint(kernel, group)
@@ -852,6 +874,82 @@ def _conda_solve(cmd: list, mgr: str, n_conda: int, *, log=print) -> None:
     _timed(cmd, f"the solve and create ({n_conda} conda packages)")
 
 
+#: Asked of an environment's OWN interpreter, because the host's would describe the host. The
+#: marker on its first line is how a stand-in interpreter in the tests recognises this question.
+_INSTALLED_PROBE = ("# SCPROFILE_INSTALLED_VERSIONS\n"
+                    "import importlib.metadata as m\n"
+                    "for d in m.distributions():\n"
+                    "    try:\n"
+                    "        n = d.metadata['Name']\n"
+                    "    except Exception:\n"
+                    "        n = None\n"
+                    "    if n:\n"
+                    "        print(str(n) + '==' + str(d.version))\n")
+
+#: What a build leaves beside the environment: the versions it actually holds, pip and conda.
+RECEIPT_NAME = ".scprofile_resolved.txt"
+
+
+def installed_versions(p):
+    """{canonical name: set of versions} the environment at `p` holds, read by its own python."""
+    from . import lock as LK
+    exe = Path(p) / "bin" / "python"
+    if not exe.exists():
+        return {}
+    r = subprocess.run([str(exe), "-c", _INSTALLED_PROBE], capture_output=True, text=True,
+                       timeout=600, env=with_env_bin(exe))
+    out = {}
+    for line in (r.stdout or "").splitlines():
+        if "==" in line:
+            n, v = line.strip().split("==", 1)
+            out.setdefault(LK.canon(n), set()).add(v.strip())
+    return out
+
+
+def _conda_list(mgr, p):
+    """The conda half of an environment, as its manager lists it; a sentence when it cannot."""
+    for argv in ([mgr, "list", "-p", str(p), "--export"], [mgr, "list", "-p", str(p)]):
+        try:
+            r = subprocess.run(argv, capture_output=True, text=True, timeout=600)
+        except (OSError, subprocess.SubprocessError) as e:
+            return [f"# {Path(mgr).name} list could not run: {e}"]
+        if r.returncode == 0:
+            return [ln.rstrip() for ln in (r.stdout or "").splitlines() if ln.strip()]
+    return [f"# {Path(mgr).name} list exited {r.returncode}"]
+
+
+def write_receipt(p, group, mgr, *, complete, log=print):
+    """Write what the environment HOLDS, read from it after the build. Never raises.
+
+    NOTHING RECORDED WHAT A GROUP RESOLVED TO (harness ADR-0027, PBS 720377), so a build that
+    worked could not be repeated and one that failed could not be compared with one that had not.
+    A lock answers that for pip; this answers it for everything the build put there - the conda
+    half included, which no lock here covers - and for unlocked builds, whose ranges resolved to
+    whatever the index offered that day.
+    """
+    try:
+        lk = getattr(group, "lock", None) if group is not None else None
+        got = installed_versions(p)
+        lines = ["# What this environment holds, read from it after `scprofile install` built it.",
+                 f"# environment: {Path(p).name}",
+                 f"# build: {'complete' if complete else 'INCOMPLETE - see the install log'}",
+                 "# lock: " + (lk.where() if lk is not None
+                               else "none - resolved from ranges at install time"),
+                 f"# when: {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}",
+                 "[pip]"]
+        lines += [f"{n}=={v}" for n in sorted(got) for v in sorted(got[n])]
+        if mgr:
+            lines += ["[conda]"] + _conda_list(mgr, p)
+        f = Path(p) / RECEIPT_NAME
+        f.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        log(f"  receipt: {f} ({len(got)} python distribution(s)"
+            + (", and the conda list" if mgr else "") + ")")
+        return f
+    except Exception as e:                                                # noqa: BLE001
+        log(f"  note: no receipt written beside {p}: {e}")
+        return None
+
+
 def install(kernel, prefix, *, force=False, log=print, dry_run=False):
     """Build the environment this plugin RESOLVES TO, then prove it with every member's selftest.
 
@@ -902,6 +1000,18 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
         log(f"      shared by: {', '.join(members)}"
             + ("" if len(members) > 1 else "   (alone: " + (grp.why_alone or "it is the only "
                "plugin declaring a requirement") + ")"))
+        lst = getattr(grp, "lock_state", ("unlocked", "", ""))
+        log(f"  lock: {lst[0]} - {lst[1]}")
+        # A STALE LOCK STOPS A BUILD HERE, BEFORE ANYTHING IS TOUCHED. A lock for this platform
+        # that no longer matches the group's requirement means a range moved or a member came or
+        # went since the group was last resolved on purpose. Building anyway would mean resolving
+        # the ranges at install time - PBS 720377's resolve, the one this lock replaced - and an
+        # environment that exists and matches its stamp is not refused: it needs no resolve.
+        if lst[0] == "stale" and (force or not p.exists()):
+            raise RuntimeError(
+                f"{grp.name}: the lock for this group is STALE, so it is not built from it and "
+                f"not resolved from ranges in its place.\n  {lst[1]}.\n  Fix: {lst[2]}   (on a "
+                f"machine with uv; then commit the lock and install again)")
         spec = build_spec(grp, log=log)
     else:
         # NO RESOLVED GROUP. A plugin the host cannot discover - handed in directly, or living
@@ -1051,8 +1161,20 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
         # the job ended knowing nothing about any of them. That is one defect learned per job for
         # however many defects there are, which on a first build of eight plugins is the cycle.
         build_failure = None
+        locked = spec.get("lock")
         try:
-            if spec["pip"]:
+            if spec["pip"] and locked is not None:
+                # THE LOCK, APPLIED: every package at one exact version, `--no-deps`, so pip
+                # RESOLVES NOTHING. The closure was resolved once, on purpose, when the lock was
+                # written; here it is only installed. The pins are written beside the environment
+                # first, so what was applied is on disk next to what it built.
+                pinfile = p / ".scprofile_pip_lock.txt"
+                pinfile.write_text("".join(x + "\n" for x in spec["pip"]), encoding="utf-8")
+                log(f"  applying {len(spec['pip'])} locked package(s) with --no-deps - nothing "
+                    f"is resolved here: {locked.where()}")
+                subprocess.run([str(pip), "install", "--no-input", "--no-deps", "-r",
+                                str(pinfile)], check=True)
+            elif spec["pip"]:
                 # ONE resolve, all pins together. Installing them in sequence lets a later
                 # package quietly downgrade an earlier pin, and the environment then does not
                 # match the lock that the fingerprint says it was built from.
@@ -1060,6 +1182,19 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
                 subprocess.run([str(pip), "install", "--no-input"] + spec["pip"], check=True)
             if spec["r"]:
                 _install_r(p, spec["r"], log=log)
+            if locked is not None:
+                # AND THE RESULT IS CHECKED AGAINST THE LOCK, because an installer reporting
+                # success is not an environment holding what was asked. A conda package that pip
+                # could not replace, or a second dist-info shadowing the first, leaves a different
+                # version importable while every command above exited 0.
+                from . import lock as _LK
+                drift = _LK.verify_installed(locked.pins, installed_versions(p))
+                if drift:
+                    raise RuntimeError(
+                        f"the environment does not hold what its lock pins ({len(drift)} "
+                        f"package(s)): " + "; ".join(drift[:8])
+                        + ("; ..." if len(drift) > 8 else ""))
+                log(f"  every one of the {len(locked.pins)} locked versions is the one installed")
         except Exception as e:                                            # noqa: BLE001
             build_failure = e
             log(f"\n  BUILD FAILED: {e}")
@@ -1068,6 +1203,7 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
                 "half of this environment can prove is worth more than a second job to find out.")
         else:
             (p / ".scprofile_lock").write_text(env_fingerprint(kernel, grp), encoding="utf-8")
+        write_receipt(p, grp, mgr, complete=build_failure is None, log=log)
 
     # PROVE THE MEMBER THAT WAS ASKED FOR, AND ANY MEMBER NOTHING HAS PROVED YET.
     #

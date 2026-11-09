@@ -87,6 +87,15 @@ python version going out of support — and prove it.
    somebody else's selftest failing. That is the mechanism working: it is the failure that would
    otherwise have happened inside a user's run. `scprofile install <name> --prefix <dir>
    --dry-run` shows which environment you land in and who is in it, without building anything.
+
+   **If your group is locked, re-lock it.** A changed range makes the group's lock in
+   `setup/locks/<platform>/` stale. `install` then refuses to build that group rather than resolve
+   the ranges, and `tests/test_an_environment_is_built_from_its_lock.py` fails until the shipped
+   lock matches again. Re-lock on a machine with uv, for the platform that builds, and commit the
+   lock with the change:
+   `scprofile lock <name> --platform x86_64-manylinux_2_17`. A version an upstream's metadata
+   allows but that does not work goes in `setup/locks/constraints.txt`, with the measurement beside
+   it. It never goes in your plugin's ranges, unless it is a fact about your plugin.
 3. **Read the changelog against your `upstream` record.** Every entry in `defaults_changed` is a
    claim about the old version. A default that was wrong may now be right, or the reverse, and
    the record must say what is true of the version you pinned.
@@ -214,7 +223,8 @@ moves, that file moves with it.
 
 ```
 scprofile validate <name>                          # the declaration
-scprofile install <name> --prefix <dir> --dry-run  # which environment, shared with whom
+scprofile lock <name> --platform <building machine> # after a range changed, if the group is locked
+scprofile install <name> --prefix <dir> --dry-run  # which environment, shared with whom, and its lock
 scprofile install <name> --prefix <dir>            # builds it, and runs every member's selftest
 python tests/test_contract.py                      # the rules above
 ```

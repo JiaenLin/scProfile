@@ -144,19 +144,29 @@ scprofile install scenic --prefix ~/envs --dry-run  # which environment, shared 
 scprofile install scenic --prefix ~/envs
 ```
 
-Each method declares the versions it needs. The builder resolves them together and builds as few
-environments as satisfy them all — sharing where that is provably safe, isolating where it is
-not, and telling you which and why.
+Each method declares the versions it needs, as ranges. The builder groups the methods into as few
+environments as satisfy them all. It shares where that is provably safe, isolates where it is not,
+and tells you which and why.
+
+What a group's ranges resolve to is recorded once, as a **lock**: every package at one exact
+version, for one platform, in `setup/locks/<platform>/<members>.txt`. Where this machine has a
+current lock, `install` applies it with `pip --no-deps` and checks the result, so nothing is
+resolved at install time. Without one, it resolves the ranges, as before. If a range changes after a
+lock was written, `install` refuses that lock until it is redone:
 
 ```
-scprofile install decoupler --prefix ~/envs --dry-run
-  environment scprofile-env-3cd799b82e
-      shared by: decoupler, liana, pseudotime, velocity
+scprofile install de --prefix ~/envs --dry-run
+  environment scprofile-env-<digest of the lock>
+      shared by: abundance, cellchat, cellcycle, de, decoupler, liana, pseudotime
+  lock: locked - setup/locks/x86_64-manylinux_2_17/abundance+...+pseudotime.txt (161 packages, ...)
+
+scprofile lock de --platform x86_64-manylinux_2_17   # a maintainer, on a machine with uv
 ```
 
-Installing builds the environment and runs the selftest of **every** method in it — a real
-computation, not a set of imports. Point at environments you already have with
-`SCPROFILE_<METHOD>_PYTHON`.
+Installing builds the environment and runs the selftest of the method you asked for, and of every
+method in it that nothing has proved yet. This is a real computation, not a set of imports. The
+build also leaves `.scprofile_resolved.txt` beside the environment, listing what it actually holds.
+Point at environments you already have with `SCPROFILE_<METHOD>_PYTHON`.
 
 The host itself needs only numpy and pandas; `[run]` adds anndata and scanpy. Method
 environments are built with conda, mamba or micromamba.

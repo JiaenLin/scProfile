@@ -201,6 +201,10 @@ class Group:
         #: Empty when this group holds more than one plugin. When a plugin is alone, this says
         #: WHICH package and WHICH two constraints forced it - never just "incompatible".
         self.why_alone = why_alone
+        #: The recorded resolution this group is built from on this machine (`scprofile.lock`),
+        #: or None. Set by `group_by_compatibility`, with `lock_state` saying why either way.
+        self.lock = None
+        self.lock_state = ("unlocked", "lock state not read", "")
 
     @property
     def name(self):
@@ -213,15 +217,29 @@ class Group:
         EVERYTHING THAT DECIDES WHAT GETS BUILT IS IN THE KEY. A name covering only the pip pins
         would give one directory to two groups differing in their conda packages or their
         channels - and the second would silently find the first's environment already there.
+
+        A LOCKED GROUP IS NAMED FOR ITS PINS. Its ranges no longer decide what is built - the lock
+        does - so they leave the key, and the pins, the interpreter and the platform the lock was
+        resolved for enter it. A pin that moves is a new directory; a comment, a date or a line
+        order is not; a range re-locked to the same pins is the same environment, with nothing to
+        rebuild. An unlocked group keeps the key it always had, so no existing directory moves.
         """
-        key = repr((self.python, sorted(self.packages.items()), sorted(self.conda.items()),
-                    sorted(self.channels), sorted(self.r)))
+        lk = getattr(self, "lock", None)
+        if lk is not None:
+            key = repr(("lock", lk.platform, lk.python, sorted(lk.pins.items()),
+                        sorted(self.conda.items()), sorted(self.channels), sorted(self.r)))
+        else:
+            key = repr((self.python, sorted(self.packages.items()), sorted(self.conda.items()),
+                        sorted(self.channels), sorted(self.r)))
         return "scprofile-env-" + hashlib.sha256(key.encode()).hexdigest()[:10]
 
     def as_dict(self):
+        lk = getattr(self, "lock", None)
         return {"name": self.name, "python": self.python, "packages": self.packages,
                 "conda": self.conda, "channels": self.channels, "r": self.r,
-                "members": self.members, "why_alone": self.why_alone}
+                "members": self.members, "why_alone": self.why_alone,
+                "lock": (lk.where() if lk is not None else None),
+                "lock_state": self.lock_state[0]}
 
     def __repr__(self):
         return f"<Group {self.name} python={self.python} {len(self.members)} member(s)>"
@@ -383,6 +401,12 @@ def group_by_compatibility(kernels, log=None):
             placed.members = sorted(placed.members + [k.name])
             placed.why_alone = ""
             say(f"  {k.name}: shares with {', '.join(n for n in placed.members if n != k.name)}")
+    # WHAT EACH GROUP IS BUILT FROM ON THIS MACHINE: its lock, where a current one exists. Asked
+    # once, here, so that every caller - `install`, `doctor`, `env_state`, the proof records - sees
+    # the same name for the same group. Grouping itself never reads a lock: which plugins can
+    # share is a question about their requirements, and a lock is only the answer to one.
+    from . import lock as LK
+    LK.attach(groups)
     return groups
 
 
@@ -477,3 +501,6 @@ def report(groups, log=print):
         log(f"      shared by: {', '.join(g.members)}")
         if len(g.members) == 1 and g.why_alone:
             log(f"      ALONE because {g.why_alone}")
+        st = getattr(g, "lock_state", None)
+        if st:
+            log(f"      lock: {st[0]} - {st[1]}" + (f"  (fix: {st[2]})" if st[0] == "stale" else ""))
