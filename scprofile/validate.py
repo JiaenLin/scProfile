@@ -430,10 +430,15 @@ def _sha(text):
 def _scan(src):
     """(fit sites, statement sites, attribute names called) of one plugin's source.
 
-    A FIT site is a call carrying a `FIT_KEYWORDS` argument; it is answered inside the innermost
-    loop around it (or its function), which is where a model's frame and levels are built. A
-    STATEMENT site is a `ctx.caveat(...)` or `ctx.refuse(...)` whose literal words are design words;
-    it is answered on its own lines and the comment block directly above them.
+    A FIT site is a call carrying a `FIT_KEYWORDS` argument. Its SPANS are the call's statement
+    and the lines that define the names its arguments read - `formula = ...` for `design=formula`,
+    `levels = ...` for `contrast=[term, levels[-1], levels[0]]`, the loop header binding `term` -
+    in the function it is in: where a fit's frame, formula and levels are decided, and nothing
+    else. It was the whole loop or function around the call, so an answer could change a filter
+    threshold three lines away, or a selftest's gate, and be recorded as a design answer (W013's
+    verifier, fix-up 2). A STATEMENT site is a `ctx.caveat(...)` or `ctx.refuse(...)` whose
+    literal words are design words; its span is the statement and the comment block directly
+    above it.
     """
     import ast
     import hashlib
@@ -443,24 +448,75 @@ def _scan(src):
         for ch in ast.iter_child_nodes(node):
             par[ch] = node
     lines = src.splitlines()
+    compound = (ast.For, ast.AsyncFor, ast.While, ast.If, ast.With, ast.AsyncWith, ast.Try,
+                ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
 
-    def fit_span(node):
-        cur = par.get(node)
-        while cur is not None:
-            if isinstance(cur, (ast.For, ast.AsyncFor, ast.While, ast.FunctionDef,
-                                ast.AsyncFunctionDef)):
-                return cur.lineno, cur.end_lineno
-            cur = par.get(cur)
-        return node.lineno, node.end_lineno
+    def stmt_of(node):
+        st = node
+        while par.get(st) is not None and not isinstance(st, ast.stmt):
+            st = par[st]
+        return st
+
+    def header_end(st):
+        """A compound statement's header lines only; a simple statement whole."""
+        body = getattr(st, "body", None)
+        if isinstance(st, compound) and body:
+            return max(st.lineno, body[0].lineno - 1)
+        return st.end_lineno
+
+    def bound(st):
+        """The names a statement binds: its targets, and the object a target mutates."""
+        if isinstance(st, (ast.Import, ast.ImportFrom)):
+            return {(a.asname or a.name).split(".")[0] for a in st.names}
+        targets = (st.targets if isinstance(st, ast.Assign) else
+                   [st.target] if isinstance(st, (ast.AugAssign, ast.AnnAssign, ast.For,
+                                                  ast.AsyncFor)) else
+                   [i.optional_vars for i in st.items if i.optional_vars is not None]
+                   if isinstance(st, (ast.With, ast.AsyncWith)) else [])
+        out, todo = set(), list(targets)
+        while todo:
+            t = todo.pop()
+            if isinstance(t, (ast.Tuple, ast.List)):
+                todo.extend(t.elts)
+                continue
+            while isinstance(t, (ast.Attribute, ast.Subscript, ast.Starred)):
+                t = t.value
+            if isinstance(t, ast.Name):
+                out.add(t.id)
+        return out
+
+    def fit_spans(node):
+        st = stmt_of(node)
+        keep = set(range(st.lineno, st.end_lineno + 1))
+        reads = {n.id for a in list(node.args) + [k.value for k in node.keywords]
+                 for n in ast.walk(a) if isinstance(n, ast.Name)}
+        scope = par.get(st)
+        while scope is not None and not isinstance(scope, (ast.FunctionDef,
+                                                           ast.AsyncFunctionDef)):
+            scope = par.get(scope)
+        if scope is not None:
+            # A PARAMETER IS GIVEN, NOT DEFINED HERE: `ctx` is read by `n_cpus=ctx.cores`, and
+            # every `ctx.headline = ...` would otherwise count as a line defining it.
+            a = scope.args
+            reads -= {x.arg for x in (a.posonlyargs + a.args + a.kwonlyargs
+                                      + [v for v in (a.vararg, a.kwarg) if v])}
+        for t in ast.walk(scope if scope is not None else tree):
+            if isinstance(t, ast.stmt) and t is not scope and bound(t) & reads:
+                keep |= set(range(t.lineno, header_end(t) + 1))
+        runs = []
+        for ln in sorted(keep):
+            if runs and ln == runs[-1][1] + 1:
+                runs[-1][1] = ln
+            else:
+                runs.append([ln, ln])
+        return [tuple(r) for r in runs]
 
     def statement_span(node):
-        stmt = node
-        while par.get(stmt) is not None and not isinstance(stmt, ast.stmt):
-            stmt = par[stmt]
-        a = stmt.lineno
+        st = stmt_of(node)
+        a = st.lineno
         while a > 1 and lines[a - 2].strip().startswith("#"):
             a -= 1
-        return a, stmt.end_lineno
+        return a, st.end_lineno
 
     fits, stmts, called = [], [], set()
     for node in ast.walk(tree):
@@ -474,7 +530,7 @@ def _scan(src):
         kws = [k.arg for k in node.keywords if k.arg in FIT_KEYWORDS]
         if kws:
             fits.append({"line": node.lineno, "call": name or "<call>", "kws": kws,
-                         "span": fit_span(node)})
+                         "spans": fit_spans(node)})
         if isinstance(fn, ast.Attribute) and fn.attr in STATEMENT_CALLS:
             consts = [n for a in list(node.args) + [k.value for k in node.keywords]
                       for n in ast.walk(a)
@@ -490,6 +546,40 @@ def _scan(src):
     fits.sort(key=lambda d: d["line"])
     stmts.sort(key=lambda d: d["line"])
     return fits, stmts, called
+
+
+def _admit(before, after):
+    """(ops, sites, outside, after with before's version) - may `before` become `after` as an
+    answer to the worksheet?
+
+    Every changed line must lie inside ONE span of a site the worksheet names in `before`, and an
+    insertion strictly inside one - between two of its lines, never at its edge: inserted after
+    a loop's last line, a statement belongs to no site however close it sits (W013's verifier,
+    fix-up 2). The `version` line is the maker's and is not an answer's change. `sites` names
+    every site an answer touches; `outside` every change no site holds.
+    """
+    import difflib
+    _vl, vold = _version_node(before)
+    norm = _set_version(after, vold) if vold else after
+    fits, stmts, _c = _scan(before)
+    spans = ([(f"fit:{f['line']}", a, b) for f in fits for a, b in f["spans"]]
+             + [(f"statement:{x['line']}", x["span"][0], x["span"][1]) for x in stmts])
+    b, a = before.splitlines(keepends=True), norm.splitlines(keepends=True)
+    ops = [o for o in difflib.SequenceMatcher(None, b, a, autojunk=False).get_opcodes()
+           if o[0] != "equal"]
+    sites, outside = set(), []
+    for _tag, i1, i2, _j1, _j2 in ops:
+        if i2 > i1:              # lines i1+1..i2 replaced or removed: all inside one span
+            hold = [n for n, sa, sb in spans if sa <= i1 + 1 and i2 <= sb]
+            where = f"{i1 + 1}-{i2}"
+        else:                    # an insertion between lines i1 and i1+1: strictly inside one
+            hold = [n for n, sa, sb in spans if sa <= i1 and i1 + 1 <= sb]
+            where = f"after {i1}"
+        if hold:
+            sites.update(hold)
+        else:
+            outside.append(where)
+    return ops, sorted(sites), outside, norm
 
 
 def design_sites(kernel):
@@ -528,6 +618,7 @@ def design_sites(kernel):
         out["owes"] = True
         return out
     out["sites"] = [(f["line"], f["call"], f["kws"]) for f in fits]
+    out["spans"] = {f["line"]: f["spans"] for f in fits}
     answered = _read_record(kernel)["statements"]
     for s in stmts:
         s["answered"] = answered.get(s["digest"])
@@ -561,7 +652,10 @@ def design_report(kernel, log=print):
     log(f"  {'OWES' if d['owes'] else 'ok  '} {kernel.name:<12} design-aware; "
         f"{len(d['sites'])} site(s) where a model is built or a contrast taken:")
     for line, name, kws in d["sites"]:
-        log(f"         kernels/{rel}:{line}  {name}({', '.join(k + '=' for k in kws)}...)")
+        sp = ", ".join(f"{a}" if a == b else f"{a}-{b}"
+                       for a, b in d.get("spans", {}).get(line, []))
+        log(f"         kernels/{rel}:{line}  {name}({', '.join(k + '=' for k in kws)}...)"
+            + (f"  its site: lines {sp}" if sp else ""))
     log(f"       {len(d['statements'])} statement(s) of what was contrasted or modelled:")
     for s in d["statements"]:
         a = s.get("answered")
@@ -586,7 +680,9 @@ def design_report(kernel, log=print):
         log(f"         the statements at line(s) {', '.join(owed)}: {STATEMENT_OWES}")
     log(f"       HOW AN ANSWER IS MADE, and recorded in kernels/{design_record_path(kernel).name}:"
         f" change the file and hand it in whole - `scprofile design {kernel.name} --answer <file>"
-        f" --why \"...\"` applies it only where a site above is named and records the diff - or,"
+        f" --why \"...\"` applies it only inside a site above - a fit call's statement and the"
+        f" lines defining what its arguments read, or a statement and its comment - and records"
+        f" the diff - or,"
         f" for a statement true as it stands, `scprofile design {kernel.name} --confirm <line> "
         f"--why \"...\"`.")
     return 1
@@ -640,29 +736,22 @@ def design_answer(kernel, proposed, why, *, as_version=None, log=print):
         return 1
     path = Path(kernel.path)
     before = path.read_text(encoding="utf-8")
-    text = Path(proposed).read_text(encoding="utf-8")
-    _vl, vold = _version_node(before)
-    text = _set_version(text, vold) if vold else text     # the version line is not the author's
-    fits, stmts, _c = _scan(before)
-    spans = [tuple(f["span"]) for f in fits] + [tuple(s["span"]) for s in stmts]
-    b, a = before.splitlines(keepends=True), text.splitlines(keepends=True)
-    ops = [o for o in difflib.SequenceMatcher(None, b, a, autojunk=False).get_opcodes()
-           if o[0] != "equal"]
+    try:
+        ops, sites, outside, text = _admit(before, Path(proposed).read_text(encoding="utf-8"))
+    except SyntaxError as e:
+        log(f"  refused: a file does not parse ({e})")
+        return 1
     if not ops:
         log("  refused: the file handed in is the file as it stands - nothing to answer")
         return 1
-    outside = []
-    for tag, i1, i2, j1, j2 in ops:
-        if i2 > i1:              # lines i1+1..i2 replaced or removed: all of them inside one site
-            if not any(sa <= i1 + 1 and i2 <= sb for sa, sb in spans):
-                outside.append(f"{i1 + 1}-{i2}")
-        # an insertion sits between lines i1 and i1+1: at a site's edge or inside it
-        elif not any(sa <= i1 + 1 <= sb or sa <= i1 <= sb for sa, sb in spans):
-            outside.append(f"after {i1}")
     if outside:
         log(f"  refused: line(s) {', '.join(outside)} of kernels/{path.name} are in no site the "
             f"worksheet names - an answer is made where the maker asks, or it is a hand edit")
         return 1
+    if not sites:
+        log("  refused: the answer names no site of the worksheet")
+        return 1
+    _vl, vold = _version_node(before)
     new_version = as_version or _bump(vold)
     after = _set_version(text, new_version) if vold else text
     try:
@@ -673,15 +762,13 @@ def design_answer(kernel, proposed, why, *, as_version=None, log=print):
     rec = _read_record(kernel)
     n = len(rec["answers"]) + 1
     touched = [(j1 + 1, max(j2, j1 + 1)) for _t, _i1, _i2, j1, j2 in ops]
-    hit = [s for s in stmts2 if any(not (hi < s["span"][0] or lo > s["span"][1])
+    hit = [x for x in stmts2 if any(not (hi < x["span"][0] or lo > x["span"][1])
                                     for lo, hi in touched)]
-    for s in hit:
-        rec["statements"][s["digest"]] = {"site": f"statement:{s['line']}",
+    for x in hit:
+        rec["statements"][x["digest"]] = {"site": f"statement:{x['line']}",
                                           "how": f"answer {n}", "why": str(why)}
-    sites = sorted({f"fit:{f['line']}" for f in fits for _t, i1, i2, _j1, _j2 in ops
-                    if f["span"][0] <= i1 + 1 <= f["span"][1]}
-                   | {f"statement:{s['line']}" for s in hit})
-    diff = "".join(difflib.unified_diff(b, after.splitlines(keepends=True),
+    diff = "".join(difflib.unified_diff(before.splitlines(keepends=True),
+                                        after.splitlines(keepends=True),
                                         f"a/kernels/{path.name}", f"b/kernels/{path.name}", n=3))
     rec["answers"].append({"n": n, "why": str(why), "sites": sites, "version": new_version,
                            "before": _sha(before), "after": _sha(after), "diff": diff})
@@ -764,10 +851,21 @@ def design_replay(kernel, target, log=print):
                 f"({_sha(text)} != {ans['before']})")
             return 1
         try:
-            text = _apply_unified(text, ans["diff"])
+            new = _apply_unified(text, ans["diff"])
         except ValueError as e:
             log(f"  answer {ans['n']}: {e}")
             return 1
+        # THE RECORD IS NOT TRUSTED: each diff is admitted again against the sites of the file
+        # it meets, as `--answer` admitted it, so a record edited to carry a change outside every
+        # site does not replay (W013's verifier, fix-up 2).
+        _ops, sites, outside, _n = _admit(text, new)
+        if outside or not sites or sites != sorted(ans.get("sites") or []):
+            log(f"  answer {ans['n']}: refused on replay - "
+                + (f"line(s) {', '.join(outside)} are in no site the worksheet names"
+                   if outside else f"it names {sites or 'no site'}, the record says "
+                                   f"{ans.get('sites')}"))
+            return 1
+        text = new
         if _sha(text) != ans["after"]:
             log(f"  answer {ans['n']}: applied, and the result is not the file it made")
             return 1

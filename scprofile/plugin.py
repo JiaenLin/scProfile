@@ -499,6 +499,8 @@ class Context(FigureContextReader):
         self.design_asked = set()
         #: The terms whose control was missing from a subset `model_frame` built, said once each.
         self._control_absent = set()
+        #: {covariate: [subsets it was dropped from, with why]}, and where its one sentence sits.
+        self._dropped_covs, self._dropped_caveat = {}, None
         #: Every directory `source_layers()` walked, so a refusal can name where it looked -
         #: and whether the walk FINISHED, because a search that gave up and a project that has
         #: nothing return the same empty list, and only one of them is a fact about the data.
@@ -712,7 +714,7 @@ class Context(FigureContextReader):
             return list(order)
         return [x for x in order if x in pres] + [x for x in pres if x not in order]
 
-    def model_frame(self, obs, terms, *, sample="sample"):
+    def model_frame(self, obs, terms, *, sample="sample", subset=None):
         """`(frame, covariates)`: `obs` ready for a model formula, and the covariates added.
 
         Each term becomes a categorical whose FIRST category is the control (`levels`, over the
@@ -723,8 +725,11 @@ class Context(FigureContextReader):
         `obs[sample]`: a float for a numeric one, a categorical otherwise. A refused covariate is
         not added, and the run says which and why, once (GAP-040).
 
-        `covariates` is the list of names added, in the decision's order, for the formula; a
-        plugin asks `drop_inestimable` about them per subset as it does about its terms.
+        `covariates` is the list of names this frame can carry, in the decision's order, ready
+        for the formula: one that takes a single value in this frame, or is collinear with the
+        terms that vary here and the covariates kept before it, is DROPPED HERE and named, with
+        `subset` (a population, say) in the sentence. The host owns the covariates, so it owns
+        the subset where one cannot be estimated - a plugin adds what it is handed to its terms.
         """
         import pandas as pd
         out = obs.copy()
@@ -752,6 +757,9 @@ class Context(FigureContextReader):
         added = []
         cov = self.params.get("covariates") if isinstance(self.params.get("covariates"),
                                                            dict) else {}
+        from . import inputs
+        varying = [str(t) for t in (terms or []) if str(t) in out.columns
+                   and out[str(t)].astype(str).nunique() >= 2]
         for c in (cov or {}).get("modelled") or []:
             name = str(c.get("name") or "")
             if not name or name in (terms or []) or sample not in out.columns:
@@ -761,9 +769,34 @@ class Context(FigureContextReader):
             out[name] = (pd.to_numeric(pd.Series(col, index=out.index), errors="coerce")
                          .astype(float) if c.get("kind") == "numeric"
                          else pd.Categorical([str(v) for v in col]))
+            # ESTIMABLE IN THIS FRAME, or dropped here and named: the plan resolved it over every
+            # sample, and a subset can hold one value of it, or split as a term does.
+            if not inputs.estimable(out, varying + added + [name]):
+                why = ("one value here" if out[name].astype(str).nunique() < 2 else
+                       "collinear with " + " + ".join(varying + added or ["the intercept"]))
+                out = out.drop(columns=[name])
+                self._covariate_dropped(name, subset, why)
+                continue
             added.append(name)
         self._say_design()
         return out, added
+
+    def _covariate_dropped(self, name, subset, why):
+        """One sentence, kept current, naming every subset a covariate was dropped from."""
+        where = "a subset" if subset is None else str(subset)
+        self._dropped_covs.setdefault(name, []).append(f"{where} ({why})")
+        # WHAT THE HOST KNOWS, AND NO MORE: it handed the frame; whether a subset was then fitted
+        # at all - a population can still fail its replication check - is the plugin's to say.
+        text = ("COVARIATE LEFT OUT WHERE IT CANNOT BE ESTIMATED: "
+                + "; ".join(f"{n} in {', '.join(w)}"
+                            for n, w in sorted(self._dropped_covs.items()))
+                + ". Every other subset this plugin asked for was handed it; the formula fitted in "
+                  "each subset is the plugin's to state.")
+        if self._dropped_caveat is None:
+            self._dropped_caveat = len(self.caveats)
+            self.caveat(text)
+        else:
+            self.caveats[self._dropped_caveat] = text
 
     def _control_of(self, term):
         """A term's control: the plan's decision, else the host's resolver over the design."""

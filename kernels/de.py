@@ -26,7 +26,7 @@ which genes left the answer before it was computed. The result comes after them.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.4.0",
+    "version": "0.5.0",
     "state_version": 2,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "which genes change, per cell type, across the design",
     "when_to_use": "you have a design table with replicates and want differential expression",
@@ -1308,11 +1308,11 @@ def run(ctx):
 
     for pop in sorted(set(obs["population"])):
         m = obs["population"].to_numpy() == pop
-        # THE HOST'S FRAME (`scprofile design de`, the worksheet): each term a categorical whose
-        # first category is the run's control over the levels this population has, and every
-        # covariate the plan modelled, typed. The fit's base level and the covariates are the
-        # host's decisions, not this plugin's (GAP-039, GAP-040).
-        sub_obs, covs = ctx.model_frame(obs[m].reset_index(drop=True), terms)
+        # THE HOST'S FRAME (the design worksheet's fit site, recorded in kernels/de.design.json):
+        # each term a categorical whose first category is the run's control, over the levels this
+        # population has, and every covariate the plan modelled that this population can carry,
+        # typed - one it cannot is dropped and named by the host (GAP-039, GAP-040).
+        sub_obs, covs = ctx.model_frame(obs[m].reset_index(drop=True), terms, subset=pop)
         # EVERY LEVEL NEEDS REPLICATION, not just the population overall. A population with six
         # samples in one arm and one in the other supports no test of that contrast, and a mean
         # n hides exactly that.
@@ -1328,11 +1328,8 @@ def run(ctx):
 
         # IDENTIFIABLE FIRST. Otherwise the fit raises `Singular matrix` from inside numpy,
         # which is a true statement about linear algebra and tells the user nothing.
-        # The covariates are asked about AFTER the terms, so one collinear with a term is the
-        # one dropped - and named - and the term, which is the question, stays.
-        use, aliased = _identifiable(ctx, sub_obs, terms + covs)
-        fit = [u for u in use if u in terms]          # what is contrasted; a covariate never is
-        if not fit:
+        use, aliased = _identifiable(ctx, sub_obs, terms)
+        if not use:
             why = [t for t, _w in aliased]
             skipped.append((pop, int(m.sum()), why))
             hit_rows.append({"population": pop, "term": "", "contrast": "",
@@ -1366,16 +1363,18 @@ def run(ctx):
         # factors that is a KeyError from inside the library, raised per population after the fit
         # has already been paid for; on two it looked correct, which is why it shipped. The
         # interaction is now ADDED to the formula, never substituted for it.
-        formula = "~ " + " + ".join(use)
-        if len(fit) >= 2 and (ctx.params.get("contrast") or {}).get("kind") == "interaction":
+        # THE TERMS THAT CAN BE ESTIMATED HERE, THEN THE COVARIATES THE HOST HANDED THIS
+        # POPULATION (the fit site's answer): a covariate is adjusted for, never contrasted.
+        formula = "~ " + " + ".join(use + covs)
+        if len(use) >= 2 and (ctx.params.get("contrast") or {}).get("kind") == "interaction":
             # ASKED, NOT ASSUMED. See `_interaction_estimable`: the main effects are rank-tested
             # and the interaction was not, so a population with an empty cell of the a-by-b
             # table took down the entire plugin instead of dropping one term.
-            if _interaction_estimable(ctx, sub_obs, fit[0], fit[1]):
-                formula += f" + {fit[0]}:{fit[1]}"
-                interacted[pop] = (fit[0], fit[1])
+            if _interaction_estimable(ctx, sub_obs, use[0], use[1]):
+                formula += f" + {use[0]}:{use[1]}"
+                interacted[pop] = (use[0], use[1])
             else:
-                not_interacted[pop] = (fit[0], fit[1])
+                not_interacted[pop] = (use[0], use[1])
         formulas.setdefault(formula, []).append(pop)
         dds = DeseqDataSet(counts=counts_df, metadata=sub_obs, design=formula,
                            refit_cooks=True, min_replicates=int(C["min_replicates"]),
@@ -1386,14 +1385,15 @@ def run(ctx):
         # below min_replicates samples in a level, at which point a Cook's outlier is dropped
         # from the answer rather than replaced. Measured per population, because the answer
         # differs per population as soon as the design is unbalanced.
-        widest = max(int(sub_obs[t].value_counts().max()) for t in fit)
+        widest = max(int(sub_obs[t].value_counts().max()) for t in use)
         if widest < int(C["min_replicates"]):
             thin_refit.append((pop, widest))
 
         first_res = None
-        for term in fit:
-            # THE HOST'S ORDER: [0] is the control, so the contrast below is `levels[-1] vs
-            # <control>`. This was `sorted(...)`, the reference whichever level sorted first.
+        for term in use:
+            # THE HOST'S ORDER (the fit site's answer): [0] is the control, so the contrast
+            # below is `levels[-1] vs <control>`. This was `sorted(...)`, the reference whichever
+            # level sorted first.
             levels = ctx.levels(term, sub_obs[term])
             # ONE CONTRAST PER TERM, WHATEVER ITS NUMBER OF LEVELS. A three-level factor is
             # fitted whole - its middle levels move every coefficient - and then only its first
@@ -1676,16 +1676,16 @@ def run(ctx):
             + ". The headline names the terms tested, not one model.")
     if multi_level:
         items = sorted(multi_level.items())
-        # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in
-        # kernels/de.design.json): the pair taken is the factor's last level against its
-        # CONTROL, in the host's order, where "first and last" had meant the levels that sorted
-        # first and last.
         ctx.caveat(
             f"ONE CONTRAST PER FACTOR, AND {len(items)} population-term combination(s) have a "
             f"factor with MORE THAN TWO LEVELS: "
             + "; ".join(f"{p} / {t}: {hi} vs {lo}, never contrasted {', '.join(mid)}"
                         for (p, t), (hi, lo, mid) in items[:6])
             + (", and others" if len(items) > 6 else "")
+            # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in
+            # kernels/de.design.json): the pair taken is the factor's last level against its
+            # CONTROL, in the host's order, where "first and last" had meant the levels that
+            # sorted first and last.
             + ". The factor is fitted whole, so every level moves the coefficients, but only its "
               "last level is compared, against its CONTROL, and its other levels are never "
               "contrasted. A population with no sample at the control is not contrasted on that "
@@ -1695,11 +1695,11 @@ def run(ctx):
               "tables/de_by_population.csv.")
     if not_interacted:
         pairs_ni = sorted(set(not_interacted.values()))
-        # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in
-        # kernels/de.design.json): it said these populations "were fitted on main effects
-        # instead", which is false of the second way into this list - an interaction that was
-        # fitted and spreads over several coefficients, which one contrast cannot test.
         ctx.caveat(
+            # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in
+            # kernels/de.design.json): it said these populations "were fitted on main effects
+            # instead", which is false of the second way into this list - an interaction that
+            # was fitted and spreads over several coefficients, which one contrast cannot test.
             f"THE PLAN ASKED FOR AN INTERACTION THAT {len(not_interacted)} POPULATION(S) DO NOT "
             f"CONTRAST: "
             + "; ".join(
@@ -1715,12 +1715,13 @@ def run(ctx):
               "population is in the caveat above.")
     if interacted:
         pairs = sorted({v for v in interacted.values()})
-        # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in
-        # kernels/de.design.json; GAP-C47): it said the interaction "IS NOT TESTED HERE" beside
-        # the row this plugin writes for it, and that each main effect was conditional on "the
-        # reference level" of the other factor - the level that sorted first. The interaction is
-        # contrasted, and each main-effect row is the effect at the other factor's CONTROL.
         ctx.caveat(
+            # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in
+            # kernels/de.design.json; GAP-C47): it said the interaction "IS NOT TESTED HERE"
+            # beside the row this plugin writes for it, and that each main effect was conditional
+            # on "the reference level" of the other factor - the level that sorted first. The
+            # interaction is contrasted, and each main-effect row is the effect at the other
+            # factor's CONTROL.
             "AN INTERACTION IS IN THE MODEL AND IS CONTRASTED, AS ITS OWN ROW. "
             + ", ".join(f"`{a}:{b}`" for a, b in pairs)
             + f" was added to the design for {len(interacted)} population(s) because the plan "

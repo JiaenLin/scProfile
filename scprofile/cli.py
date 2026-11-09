@@ -1642,8 +1642,9 @@ def _design(a):
     acts = [x for x in ("answer", "confirm", "replay_into") if getattr(a, x, None)]
     if acts:
         # THE WORKSHEET IS ANSWERED THROUGH THE MAKER, AND THE MAKER RECORDS IT (GAP-C47): an
-        # answer is applied only where a site is named, a confirmation is bound to the digest of
-        # the sentence it confirms, and the record replays onto a copy rebuilt from the base.
+        # answer is applied only inside a named site (`validate._admit`), a confirmation is bound
+        # to the digest of the sentence it confirms, and the record replays onto a copy rebuilt
+        # from the base, every diff admitted again.
         if len(names) != 1 or len(acts) > 1:
             print("scprofile design: --answer, --confirm and --replay-into take ONE plugin, one "
                   "at a time", file=sys.stderr)

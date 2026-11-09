@@ -200,7 +200,7 @@ else:
         rec = json.loads(V.design_record_path(k).read_text(encoding="utf-8"))
         ans = rec["answers"][0] if rec["answers"] else {}
         ck("the record carries the diff, the reason and the sites",
-           ans.get("sites") == ["statement:14"] and ans.get("why") == "it is contrasted"
+           ans.get("sites") == ["statement:13"] and ans.get("why") == "it is contrasted"
            and "+        # the interaction is contrasted" in ans.get("diff", ""), ans)
         copy = Path(td) / "copy.py"
         copy.write_text(base, encoding="utf-8")
@@ -231,6 +231,63 @@ if hasattr(V, "design_record_path"):
     ck("the last answer made the file that ships", bool(rec["answers"])
        and rec["answers"][-1]["after"] == V._sha(
            (ROOT / "kernels" / "de.py").read_text(encoding="utf-8")))
+
+
+print("\n7. an answer cannot carry a hand edit: narrow fit sites, insertions strictly inside, "
+      "the record re-checked on replay (W013 fix-up 2)")
+# THE VERIFIER'S THREE PROBES, run against a copy of the shipped plugin. A fit site spanned its
+# whole loop or function - 334 of run()'s 532 lines and all of selftest - so a doubled filter
+# threshold and a zeroed selftest gate were recorded as a design answer; an insertion just after
+# the loop was accepted naming no site; and the replay trusted any diff whose digests matched.
+import shutil                                                                 # noqa: E402
+if not hasattr(V, "design_answer"):
+    ck("the answer mechanism exists", False, "no design_answer")
+else:
+    with tempfile.TemporaryDirectory() as td:
+        de_copy = Path(td) / "de.py"
+        shutil.copyfile(ROOT / "kernels" / "de.py", de_copy)
+        kd = Stub(de_copy, _de.spec)
+        shipped = de_copy.read_text(encoding="utf-8")
+
+        def refused(name, edit):
+            prop = Path(td) / f"{name}.py"
+            prop.write_text(edit(shipped), encoding="utf-8")
+            out = []
+            rc = V.design_answer(kd, prop, "x", log=out.append)
+            return rc == 1 and de_copy.read_text(encoding="utf-8") == shipped, out
+
+        ok_, out = refused("threshold", lambda t: t.replace(
+            'keep = sub.sum(axis=0) >= C["min_counts"]',
+            'keep = sub.sum(axis=0) >= 2 * C["min_counts"]', 1))
+        ck("a filter threshold three lines from a fit call is not a fit site: refused",
+           ok_ and any("hand edit" in x for x in out), out)
+        ok_, out = refused("gate", lambda t: t.replace("assert found >= 15, (",
+                                                      "assert found >= 0, (", 1))
+        ck("a selftest's gate is not a fit site: refused", ok_, out)
+        anchor = ('        ctx.log(f"  {pop}: {int(m.sum())} pseudobulk samples, '
+                  '{int(keep.sum()):,} genes tested")\n')
+        ck("(the probe's anchor is in the shipped plugin)", anchor in shipped)
+        ok_, out = refused("edge", lambda t: t.replace(anchor, anchor + "    out = out[:1]\n", 1))
+        ck("an insertion just after a site's last line is refused", ok_, out)
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "stated.py"
+        f.write_text(STATED, encoding="utf-8")
+        k = Stub2(f, {"inject": {"required": ["design"], "optional": ["contrast", "covariates"]}})
+        before = STATED
+        after = STATED.replace('"version": "1.0.0", ', '"version": "1.0.0", "x": 1, ')
+        import difflib
+        tampered = {"plugin": "stated", "statements": {}, "answers": [{
+            "n": 1, "why": "x", "sites": ["fit:10"], "version": "1.0.0",
+            "before": V._sha(before), "after": V._sha(after),
+            "diff": "".join(difflib.unified_diff(before.splitlines(keepends=True),
+                                                 after.splitlines(keepends=True), "a", "b"))}]}
+        V.design_record_path(k).write_text(json.dumps(tampered), encoding="utf-8")
+        copy = Path(td) / "copy.py"
+        copy.write_text(before, encoding="utf-8")
+        out = []
+        ck("a record whose diff changes a line outside every site does not replay",
+           V.design_replay(k, copy, log=out.append) == 1
+           and copy.read_text(encoding="utf-8") == before, out)
 
 print()
 if FAILS:
