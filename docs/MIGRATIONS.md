@@ -94,7 +94,7 @@ control contrasted between two other levels. Fixed in the maker, then answered t
 
 | defect | where it was | the fix | the suite |
 |---|---|---|---|
-| a sentence about the design was answerable only by hand (GAP-C47) | the `design` worksheet | it names every `ctx.caveat`/`ctx.refuse` carrying a design word; `--answer` records the diff, `--confirm` binds a true sentence to the digest of its syntax, `--replay-into` rebuilds the plugin from the record. As first shipped (`35c6225`) a fit site was its whole loop or function, an insertion at a span's edge was admitted, and the replay trusted the record - the verifier laundered a doubled filter threshold, a zeroed selftest gate and an `out = out[:1]` through it. Since fix-up 2 `--answer` applies a change only inside a named site - a fit call's statement and the lines that define the names its arguments read, or a statement and the comment block directly above it - inserting only strictly inside one, and refuses an answer that names no site, and the replay admits every diff again | `test_the_maker_demands_the_design.py` |
+| a sentence about the design was answerable only by hand (GAP-C47) | the `design` worksheet | it names every `ctx.caveat`/`ctx.refuse` carrying a design word; `--answer` records the diff, `--confirm` binds a true sentence to the digest of its syntax, `--replay-into` rebuilds the plugin from the record. As first shipped (`35c6225`) a fit site was its whole loop or function, an insertion at a span's edge was admitted, and the replay trusted the record - the verifier laundered a doubled filter threshold, a zeroed selftest gate and an `out = out[:1]` through it. Since fix-up 2 `--answer` applies a change only inside a named site - a fit call's statement and the lines that define the names its DESIGN arguments read (`design`, `formula`, `contrast`, `design_factors`, `ref_level`, `reference`, `levels`, `metadata`), two hops back and above the line that reads them, or a statement and the comment block directly above it - inserting only strictly inside one; it refuses an answer that names no site, changes a fit call's other arguments, adds a statement binding a name the replaced lines did not bind as a design name, or carries a character another reader takes as a line break, and the replay admits every diff again | `test_the_maker_demands_the_design.py` |
 | `--factor` left the other columns unnamed | `planner`, `inputs`, `cli` | the design table's columns are recorded and every one outside the model is named | `test_a_covariate_is_modelled_or_refused_by_name.py` |
 | no sample at the control read `mid vs alpha` (GAP-C48) | the host's frame | the control stays as an empty level, so the replication check refuses the contrast, by name | `test_the_contrast_is_read_against_the_declared_control.py` |
 
@@ -111,6 +111,19 @@ naming a covariate a population cannot carry), the formula (the estimable terms 
 covariates) and each term's levels (`ctx.levels`) - where it had changed five regions of the loop;
 answer 2 carries its comments inside the three statements. The table on a 2x2 rehearsal is
 byte-identical to the one before, and the replay still rebuilds the shipped file byte for byte.
+
+**Fix-up 3.** The verifier's next pass still got hand edits through, more narrowly: eleven form
+feeds (or line separators) in an admitted comment shifted the diff's line indices against the
+`ast` line numbers the sites are counted in, and an edit in no site was admitted; a fit site
+followed every argument's names, so the configuration, the gene mask, `refit_cooks` and `alpha`
+were answerable; a statement added beside a site line rode in with it. And two real design answers
+two hops from the call were refused. Now: one line model (split on "\n" alone) and those
+characters refused; only the design arguments' names, two hops back, each definition above the
+line reading it, never a name the call reads as another argument; a fit call's other arguments
+unchanged; an added statement binds only design names the replaced lines bound. The host tests a
+covariate against the terms a subset can carry, so a population whose terms are confounded keeps
+a covariate that varies within the term the fit keeps (`~ fa + weight`, not `~ fa`). de's record
+replays under the tightened admission unchanged, byte for byte; no answer had to be re-recorded.
 
 ### What the next plugin (abundance) should test, blind
 
