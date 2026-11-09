@@ -65,6 +65,34 @@ fixture:
   # accepted, and `refusal_says` is what makes it a refusal rather than a crash.
   accepts_refusal: true
   refusal_says: "are not ready in this installation"
+  # WHAT A RUN RECORDS OF ITS OWN EXECUTION (harness autodev W019): `agree` and the baseline
+  # report these and never judge them; every other field is judged, whatever it is called. Each
+  # is a fact about the machine and the moment, never a result of the method:
+  #   in.json resources            the cores and memory the host GAVE the instance
+  #   out.json measured.cores_*,   what the instance's process tree USED, sampled each second -
+  #     cpu_s, wall_s, peak_rss_gb   they move with the node, the load and the clock
+  #   report.json cores            the run's core budget, from the allocation
+  #   cores_/cost_/memory_model    fits of those measurements, so they move with them
+  #   kernels.*.spec.cores,        the plugin's resource declaration as the run read it: what
+  #     .memory_gb_per_100k,         the scheduler is told to give, which `capacity --declare`
+  #     .executor.*                  rewrites from measurements, not what the method computes
+  #   schedule[*][*].cores         the share each instance was scheduled with
+  # A DE number - a fold change, a p-value, a contrast's name - is in none of them.
+  execution_record:
+    - "run/kernels/*/in.json::resources.*"
+    - "run/kernels/*/out.json::measured.cores_*"
+    - "run/kernels/*/out.json::measured.cpu_s"
+    - "run/kernels/*/out.json::measured.wall_s"
+    - "run/kernels/*/out.json::measured.peak_rss_gb"
+    - "run/report.json::cores"
+    - "run/report.json::cores_model.*"
+    - "run/report.json::cost_model.*"
+    - "run/report.json::memory_model.*"
+    - "run/report.json::kernels.*.spec.cores"
+    - "run/report.json::kernels.*.spec.memory_gb_per_100k"
+    - "run/report.json::kernels.*.spec.executor.cores"
+    - "run/report.json::kernels.*.spec.executor.memory_gb_per_100k"
+    - "run/report.json::schedule[*][*].cores"
 
 baseline_dir: tests/baselines
 
@@ -148,6 +176,14 @@ rules:
   #   de         spent 2026-11-09 (autodev W013); blind record at f5175ea, docs/MIGRATIONS.md 1
   held_out:
     names: [abundance, cellcycle, decoupler, liana, pseudotime, scenic, velocity]
+    # THE COMMIT EACH SPENT PLUGIN'S BLIND RECORD WAS TAKEN AT - the anchor of its design record
+    # (`scprofile design`, W013 fix-up 5). The record's first answer must have been made on this
+    # commit's file, outside its declaration, read from git and never from the record, so the
+    # record cannot move its own anchor and a hand edit made before the first answer does not
+    # become its base. Moving an entry is a diff of this file that review reads.
+    # The whole hash, so the name cannot become ambiguous as the history grows.
+    spent:
+      de: f5175ea13752f58257df20407dcb6f4c6faab861
     means: >
       the held-out set is the maker's test set. A repair to one of these fits the maker to it, and
       the next unseen tool is then the first real test with the evidence already spent
@@ -383,9 +419,13 @@ points:
             takes as a line break; it raises `version` and records the diff; `--confirm <line>
             --why "..."` records a statement true as it stands, by the digest of its syntax;
             `--replay-into <copy>` rebuilds the plugin from the record, admitting every diff
-            again. The record verifies itself here too, from the shipped file alone: every diff
-            undone, last first, and admitted again with its recorded sites - a forged or
-            inadmissible entry, or a change outside the declaration with no entry, owes. Then
+            again. The record verifies itself here too, from the shipped file alone: the
+            declaration a pure literal; every diff undone, last first, and admitted again with
+            its recorded sites; and the chain's end, outside the declaration, the plugin at the
+            commit its blind record was taken at (`rules.held_out.spent`, read from git or the
+            repository's own object store, never from the record) - a forged or inadmissible
+            entry, a doctored first file, a change outside the declaration with no entry, or a
+            base that cannot be read, owes. A declaration the host cannot load owes too. Then
             re-run this status
           why: >
             WHICH LEVEL A CONTRAST IS READ AGAINST AND WHAT THE MODEL ADJUSTS FOR are decisions

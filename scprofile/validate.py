@@ -709,6 +709,255 @@ def _admit(before, after):
     return ops, sorted(sites), refusals, norm
 
 
+def _git_show(root, commit, relpath):
+    """(text, how) of `relpath` at `commit` in the repository at `root`, or (None, why).
+
+    The `git` binary first; where there is none - the cluster's compute nodes have none - the
+    repository's own object store is read directly (loose objects, and packs with their deltas),
+    so a checkout that carries its history can always be asked. A checkout without its history
+    cannot, and says so: the base of a design record is then not established, and nothing passes.
+    """
+    import os
+    import subprocess
+    # THE REPOSITORY AT `root`, AND NO OTHER: git exports GIT_INDEX_FILE (relative), and may
+    # export GIT_DIR, to whatever runs under a hook - the commit gate runs the suite under one.
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    try:
+        r = subprocess.run(["git", "-C", str(root), "show", f"{commit}:{relpath}"],
+                           capture_output=True, timeout=60, env=env)
+        if r.returncode == 0:
+            try:
+                return r.stdout.decode("utf-8"), f"git show {commit}:{relpath}"
+            except UnicodeDecodeError as e:
+                return None, f"git show {commit}:{relpath} is not UTF-8 text ({e})"
+        why = r.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or ["git failed"]
+        git_says = f"git show {commit}:{relpath}: {why[0]}"
+    except (OSError, subprocess.SubprocessError) as e:
+        git_says = f"no git here ({type(e).__name__})"
+    try:
+        return _ObjectStore(root).show(commit, relpath), (f"{commit}:{relpath}, read from the "
+                                                          f"repository's object store")
+    except (OSError, ValueError, KeyError, IndexError) as e:
+        return None, f"{git_says}; and the object store could not give {commit}:{relpath}: {e}"
+
+
+class _ObjectStore:
+    """Read-only access to a git object store with nothing but the standard library."""
+
+    def __init__(self, root):
+        g = Path(root) / ".git"
+        if g.is_file():                                   # a linked worktree, or a submodule
+            g = (Path(root) / g.read_text().split("gitdir:", 1)[1].strip()).resolve()
+        if (g / "commondir").is_file():
+            g = (g / (g / "commondir").read_text().strip()).resolve()
+        self.objects = g / "objects"
+        if not self.objects.is_dir():
+            raise ValueError(f"no object store under {root}")
+        # A CLONE MADE WITH --reference OR --shared keeps its objects in another store, named in
+        # `objects/info/alternates` one directory per line.
+        self.stores = [self.objects]
+        alt = self.objects / "info" / "alternates"
+        if alt.is_file():
+            for row in alt.read_text(encoding="utf-8").split("\n"):
+                row = row.strip()
+                if row and not row.startswith("#"):
+                    d = (self.objects / row).resolve()
+                    if d.is_dir() and d not in self.stores:
+                        self.stores.append(d)
+        self.packs = []
+        for store in self.stores:
+            for idx in sorted((store / "pack").glob("*.idx")):
+                self.packs.append((idx.with_suffix(".pack"), self._index(idx)))
+
+    @staticmethod
+    def _index(idx):
+        import struct
+        b = idx.read_bytes()
+        if b[:4] != b"\377tOc" or struct.unpack(">I", b[4:8])[0] != 2:
+            raise ValueError(f"{idx.name}: not a version-2 pack index")
+        n = struct.unpack(">I", b[8 + 255 * 4:8 + 256 * 4])[0]
+        shas = 8 + 256 * 4
+        offs = shas + 20 * n + 4 * n
+        large = offs + 4 * n
+        out = {}
+        for i in range(n):
+            sha = b[shas + 20 * i:shas + 20 * (i + 1)].hex()
+            o = struct.unpack(">I", b[offs + 4 * i:offs + 4 * (i + 1)])[0]
+            if o & 0x80000000:
+                k = o & 0x7FFFFFFF
+                o = struct.unpack(">Q", b[large + 8 * k:large + 8 * (k + 1)])[0]
+            out[sha] = o
+        return out
+
+    def resolve(self, ref):
+        ref = str(ref).lower()
+        if not re.fullmatch(r"[0-9a-f]{4,40}", ref):
+            raise KeyError(f"{ref!r} is not a commit's hash")
+        found = {sha for _p, ix in self.packs for sha in ix if sha.startswith(ref)}
+        for store in self.stores:
+            d = store / ref[:2]
+            if d.is_dir():
+                found |= {ref[:2] + f.name for f in d.iterdir()
+                          if (ref[:2] + f.name).startswith(ref)}
+        if len(found) != 1:
+            raise KeyError(f"{ref} names {len(found)} object(s) here")
+        return found.pop()
+
+    def read(self, sha):
+        import zlib
+        for store in self.stores:
+            loose = store / sha[:2] / sha[2:]
+            if loose.is_file():
+                raw = zlib.decompress(loose.read_bytes())
+                head, _, body = raw.partition(b"\0")
+                return ({b"commit": 1, b"tree": 2, b"blob": 3, b"tag": 4}[head.split(b" ")[0]],
+                        body)
+        for pack, ix in self.packs:
+            if sha in ix:
+                return self._packed(pack, ix[sha])
+        raise KeyError(f"object {sha} is not in the store")
+
+    def _packed(self, pack, offset):
+        import zlib
+        with open(pack, "rb") as fh:
+            fh.seek(offset)
+            c = fh.read(1)[0]
+            typ = (c >> 4) & 7
+            while c & 0x80:
+                c = fh.read(1)[0]
+            base = None
+            if typ == 6:                                  # a delta against an earlier offset
+                c = fh.read(1)[0]
+                back = c & 0x7F
+                while c & 0x80:
+                    c = fh.read(1)[0]
+                    back = ((back + 1) << 7) | (c & 0x7F)
+                base = self._packed(pack, offset - back)
+            elif typ == 7:                                # a delta against a named object
+                base = self.read(fh.read(20).hex())
+            d, out = zlib.decompressobj(), b""
+            while not d.eof:
+                chunk = fh.read(65536)
+                if not chunk:
+                    raise ValueError("a truncated pack")
+                out += d.decompress(chunk)
+        if base is None:
+            return typ, out
+        return base[0], self._undelta(base[1], out)
+
+    @staticmethod
+    def _undelta(src, delta):
+        i = 0
+
+        def varint():
+            nonlocal i
+            v = shift = 0
+            while True:
+                c = delta[i]
+                i += 1
+                v |= (c & 0x7F) << shift
+                shift += 7
+                if not c & 0x80:
+                    return v
+        varint()
+        varint()
+        out = bytearray()
+        while i < len(delta):
+            op = delta[i]
+            i += 1
+            if op & 0x80:
+                off = size = 0
+                for k in range(4):
+                    if op & (1 << k):
+                        off |= delta[i] << (8 * k)
+                        i += 1
+                for k in range(3):
+                    if op & (1 << (4 + k)):
+                        size |= delta[i] << (8 * k)
+                        i += 1
+                out += src[off:off + (size or 0x10000)]
+            else:
+                out += delta[i:i + op]
+                i += op
+        return bytes(out)
+
+    def show(self, commit, relpath):
+        typ, body = self.read(self.resolve(commit))
+        while typ == 4:                                   # an annotated tag
+            typ, body = self.read(body.split(b"\n", 1)[0].split()[1].decode())
+        if typ != 1:
+            raise ValueError(f"{commit} is not a commit")
+        sha = body.split(b"\n", 1)[0].split()[1].decode()
+        for part in str(relpath).split("/"):
+            typ, tree = self.read(sha)
+            if typ != 2:
+                raise ValueError(f"{part}: not in a tree")
+            j, found = 0, None
+            while j < len(tree):
+                sp = tree.index(b" ", j)
+                nul = tree.index(b"\0", sp)
+                if tree[sp + 1:nul].decode() == part:
+                    found = tree[nul + 1:nul + 21].hex()
+                    break
+                j = nul + 21
+            if found is None:
+                raise KeyError(f"{relpath} is not in {commit}")
+            sha = found
+        typ, blob = self.read(sha)
+        if typ != 3:
+            raise ValueError(f"{relpath} at {commit} is not a file")
+        return blob.decode("utf-8")
+
+
+def _spent_commit(root, name):
+    """The commit `name`'s blind record was taken at, as DEVPOINTS `rules.held_out.spent`
+    declares it - never as the record says, so the record cannot move its own anchor."""
+    f = Path(root) / "DEVPOINTS.yaml"
+    if not f.is_file():
+        return None
+    # READ AS TEXT, as every suite here reads DEVPOINTS (the host depends on numpy and pandas
+    # only), and by its path: `rules:` -> `held_out:` -> `spent:` -> `<name>: <commit>`.
+    path, want = [], ["rules", "held_out", "spent"]
+    for raw in f.read_text(encoding="utf-8").split("\n"):
+        line = raw.split("#", 1)[0].rstrip()
+        if not line.strip() or line.lstrip().startswith("- "):
+            continue
+        ind = len(line) - len(line.lstrip())
+        while path and path[-1][0] >= ind:
+            path.pop()
+        k, _, v = line.strip().partition(":")
+        k, v = k.strip(), v.strip().strip("'\"")
+        if [p for _i, p in path] == want and k == name:
+            return v or None
+        if not v:
+            path.append((ind, k))
+    return None
+
+
+def _outside_declaration(src):
+    """`src` with its `PLUGIN = {...}` lines folded into one placeholder: its CODE."""
+    span = _declaration(src)
+    if span is None:
+        return src
+    lines = _lines(src)
+    return "".join(lines[:span[0] - 1]) + "PLUGIN = ...  # the declaration\n" + \
+        "".join(lines[span[1]:])
+
+
+def _declaration_literal(src):
+    """None when `PLUGIN = {...}` is a pure literal, or why it is not."""
+    import ast
+    for n in ast.parse(src).body:
+        if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "PLUGIN"
+                                             for t in n.targets):
+            try:
+                v = ast.literal_eval(n.value)
+            except ValueError as e:
+                return f"`PLUGIN = {{...}}` is not a pure literal - run-time code inside it ({e})"
+            return None if isinstance(v, dict) else "`PLUGIN` is not a dict"
+    return "there is no `PLUGIN = {...}` declaration"
+
+
 def _declaration(src):
     """(first line, last line) of the `PLUGIN = {...}` assignment, or None: the declaration, which
     the maker's verb `sch dev edit` changes and nothing else does."""
@@ -750,57 +999,95 @@ def _reverse_diff(diff):
     return "".join(out)
 
 
-def design_record_check(kernel):
+def design_record_check(kernel, root=None):
     """(ok, sentence) - does the worksheet's record account for the plugin as it ships?
 
-    THE RECORD VERIFIES ITSELF WHEREVER IT IS READ (W013's verifier, fix-up 4). Checked only on
-    `--replay-into`, whose starting file is not in the repository, a hand edit with a forged entry
-    - the right digests, a site it does not touch - passed the suite, `scprofile check`, this
-    command and the maker's status. So, from the SHIPPED file alone: every recorded diff is undone,
-    last first, each landing exactly on the file it was made against, back to the first answer's
-    `before`; and each is then admitted again, forward, with `_admit` and the sites it records. A
-    file changed outside its declaration since the last answer - a hand edit with no entry - does
-    not meet the record and fails the same way. The declaration (`PLUGIN = {...}`) is the maker's
-    verb's to change after an answer, and is set back to the last answer's before the undo.
+    THE RECORD VERIFIES ITSELF WHEREVER IT IS READ (W013's verifier, fix-ups 4 and 5), from the
+    repository alone:
+      1. the declaration is a pure literal - `ast.literal_eval` - so no run-time code hides in it;
+      2. the shipped file, its declaration set back to the last answer's, is the file the last
+         answer made; every recorded diff is then undone, last first, each landing exactly on the
+         file it was made against, and admitted again, forward, at the sites it records;
+      3. THE CHAIN'S END IS ANCHORED: the first answer's `before` - or, with no answer yet, the
+         shipped file - is, outside its declaration, the plugin at the commit its blind record was
+         taken at, as DEVPOINTS `rules.held_out.spent` declares it and git keeps it. A record
+         rewritten to start from a doctored file, or a hand edit before the first answer, does not
+         meet it. Where that commit cannot be read the base is not established, and this fails.
+    The declaration is the maker's verb's to change after an answer; it is compared nowhere but
+    in step 1.
     """
+    path = Path(kernel.path)
+    root = Path(root) if root else path.parent.parent
+    shipped = path.read_text(encoding="utf-8")
+    try:
+        bad = _declaration_literal(shipped)
+    except SyntaxError as e:
+        return False, f"kernels/{path.name} does not parse ({e})"
+    if bad:
+        return False, bad
     rec = _read_record(kernel)
     if rec.get("unreadable"):
         return False, f"the record {rec['unreadable']} does not parse"
     answers = rec.get("answers") or []
+    anchor = _spent_commit(root, kernel.name)
+    if not answers and anchor is None:
+        return True, ("no answer recorded, and not spent: DEVPOINTS names no blind-record commit "
+                      f"for {kernel.name}")
+    if anchor is None:
+        return False, (f"a record with no anchor: DEVPOINTS `rules.held_out.spent` names no "
+                       f"blind-record commit for {kernel.name}")
+    cur = shipped
+    if answers:
+        last = answers[-1]
+        if _sha(cur) != last.get("after") and last.get("after_declaration"):
+            cur = _swap_declaration(shipped, last["after_declaration"])
+        if _sha(cur) != last.get("after"):
+            return False, (f"kernels/{path.name} is not the file its last recorded answer "
+                           f"({last.get('n')}) made, outside its declaration: changed since by "
+                           f"hand, or by an answer the worksheet did not record")
+        for ans in reversed(answers):
+            if _sha(cur) != ans.get("after"):
+                return False, f"answer {ans.get('n')} did not make the file the next answer met"
+            try:
+                prev = _apply_unified(cur, _reverse_diff(ans.get("diff") or ""))
+            except ValueError as e:
+                return False, f"answer {ans.get('n')} does not undo from the shipped file: {e}"
+            if _sha(prev) != ans.get("before"):
+                return False, (f"answer {ans.get('n')} undone is not the file it records it was "
+                               f"made on")
+            try:
+                _ops, sites, refusals, _n = _admit(prev, cur)
+            except SyntaxError as e:
+                return False, f"answer {ans.get('n')}: a file in the record does not parse ({e})"
+            if refusals or not sites or sites != sorted(ans.get("sites") or []):
+                return False, (f"answer {ans.get('n')} is not admissible as recorded: "
+                               + ("; ".join(refusals) if refusals else
+                                  f"it touches {sites or 'no site'}, the record says "
+                                  f"{ans.get('sites')}"))
+            cur = prev
+    base, how = _git_show(root, anchor, f"kernels/{path.name}")
+    if base is None:
+        return False, (f"the base cannot be established: the plugin at its blind-record commit "
+                       f"{anchor} could not be read ({how})")
+    try:
+        same = _outside_declaration(cur) == _outside_declaration(base)
+    except SyntaxError as e:
+        return False, f"the base or the record's first file does not parse ({e})"
+    if not same:
+        return False, ((f"answer 1 was made on a file whose code differs from the plugin at its "
+                        f"blind-record commit {anchor}, outside the declaration")
+                       if answers else
+                       (f"kernels/{path.name} has changed outside its declaration since its "
+                        f"blind-record commit {anchor}, and no answer records it"))
     if not answers:
-        return True, "no answer recorded"
-    shipped = Path(kernel.path).read_text(encoding="utf-8")
-    cur, last = shipped, answers[-1]
-    if _sha(cur) != last.get("after") and last.get("after_declaration"):
-        cur = _swap_declaration(shipped, last["after_declaration"])
-    if _sha(cur) != last.get("after"):
-        return False, (f"kernels/{Path(kernel.path).name} is not the file its last recorded answer "
-                       f"({last.get('n')}) made, outside its declaration: changed since by hand, "
-                       f"or by an answer the worksheet did not record")
-    for ans in reversed(answers):
-        if _sha(cur) != ans.get("after"):
-            return False, f"answer {ans.get('n')} did not make the file the next answer met"
-        try:
-            prev = _apply_unified(cur, _reverse_diff(ans.get("diff") or ""))
-        except ValueError as e:
-            return False, f"answer {ans.get('n')} does not undo from the shipped file: {e}"
-        if _sha(prev) != ans.get("before"):
-            return False, f"answer {ans.get('n')} undone is not the file it records it was made on"
-        try:
-            _ops, sites, refusals, _n = _admit(prev, cur)
-        except SyntaxError as e:
-            return False, f"answer {ans.get('n')}: a file in the record does not parse ({e})"
-        if refusals or not sites or sites != sorted(ans.get("sites") or []):
-            return False, (f"answer {ans.get('n')} is not admissible as recorded: "
-                           + ("; ".join(refusals) if refusals else
-                              f"it touches {sites or 'no site'}, the record says "
-                              f"{ans.get('sites')}"))
-        cur = prev
-    return True, (f"{len(answers)} answer(s) undo from the shipped file and are admitted again "
-                  f"at the sites they record")
+        return True, (f"no answer recorded, and outside its declaration kernels/{path.name} is the "
+                      f"plugin at its blind-record commit {anchor}")
+    return True, (f"{len(answers)} answer(s) undo from the shipped file to the plugin at its "
+                  f"blind-record commit {anchor}, and each is admitted again at the sites it "
+                  f"records")
 
 
-def design_sites(kernel):
+def design_sites(kernel, root=None):
     """{design_aware, sites, statements, missing, owes} - where a plugin fits a model, where it
     STATES what was contrasted or modelled, and what it owes the host at each.
 
@@ -827,6 +1114,18 @@ def design_sites(kernel):
     out = {"design_aware": bool(takes & {"design", "contrast"}), "sites": [], "statements": [],
            "missing": [], "owes": False, "takes": sorted(takes)}
     path = Path(kernel.path)
+    # A DECLARATION THAT DOES NOT LOAD IS NOT "NOT DESIGN-AWARE" (fix-up 5): the host reads an
+    # empty spec from a `PLUGIN` that is not a pure literal, and this read "nothing to answer"
+    # over a plugin whose import runs whatever the declaration hides.
+    if path.is_file() and path.suffix == ".py":
+        try:
+            why = _declaration_literal(path.read_text(encoding="utf-8"))
+        except SyntaxError as e:
+            why = f"the file does not parse ({e})"
+        if why or not spec:
+            out["missing"].append(("declaration", why or "the host loaded no declaration"))
+            out["owes"] = True
+            return out
     if not out["design_aware"] or not path.is_file():
         return out
     try:
@@ -851,7 +1150,7 @@ def design_sites(kernel):
     for s in stmts:
         if not s["answered"]:
             out["missing"].append((f"statement:{s['line']}", STATEMENT_OWES))
-    ok, why = design_record_check(kernel)
+    ok, why = design_record_check(kernel, root=root)
     out["record"] = (ok, why)
     if not ok:
         out["missing"].append(("record", why))
@@ -859,10 +1158,14 @@ def design_sites(kernel):
     return out
 
 
-def design_report(kernel, log=print):
+def design_report(kernel, log=print, root=None):
     """Print `design_sites` as a worksheet. Returns 0 when nothing is owed, 1 otherwise."""
-    d = design_sites(kernel)
+    d = design_sites(kernel, root=root)
     rel = Path(kernel.path).name
+    if any(m == "declaration" for m, _w in d["missing"]):
+        log(f"  OWES {kernel.name:<12} its declaration does not load: "
+            + "; ".join(w for m, w in d["missing"] if m == "declaration"))
+        return 1
     if not d["design_aware"]:
         log(f"  ok   {kernel.name:<12} not design-aware (inject names neither `design` nor "
             f"`contrast`): nothing to answer")
@@ -945,7 +1248,7 @@ def _bump(v):
         return str(v)
 
 
-def design_answer(kernel, proposed, why, *, as_version=None, log=print):
+def design_answer(kernel, proposed, why, *, as_version=None, log=print, root=None):
     """Apply an author's answer to the design worksheet, by the sites it names, and record it.
 
     `proposed` is the whole plugin file as the author would have it. Every line it changes must
@@ -959,7 +1262,14 @@ def design_answer(kernel, proposed, why, *, as_version=None, log=print):
         log("  refused: --why is the answer's reason, and a recorded answer carries one")
         return 1
     path = Path(kernel.path)
-    ok, why_not = design_record_check(kernel)
+    # THE FIRST ANSWER IS MADE ON THE PLUGIN AS IT WAS BLIND (fix-up 5): the record's chain must
+    # end at a commit DEVPOINTS names, and a file changed outside its declaration since then is
+    # refused before anything is admitted - a hand edit does not become the base of the record.
+    if _spent_commit(Path(root) if root else path.parent.parent, kernel.name) is None:
+        log(f"  refused: DEVPOINTS `rules.held_out.spent` names no blind-record commit for "
+            f"{kernel.name}, so a record of its answers would have no anchor")
+        return 1
+    ok, why_not = design_record_check(kernel, root=root)
     if not ok:
         log(f"  refused: the record does not meet kernels/{path.name} as it stands - {why_not}")
         return 1

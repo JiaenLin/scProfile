@@ -1668,7 +1668,9 @@ def _design(a):
             verdict = ("OWES" if d["owes"] else "ok  ")
             owing += bool(d["owes"])
             print(f"  {verdict} {n:<12} "
-                  + ("not design-aware" if not d["design_aware"] else
+                  + ("its declaration does not load"
+                     if any(m == "declaration" for m, _w in d["missing"]) else
+                     "not design-aware" if not d["design_aware"] else
                      f"design-aware, {len(d['sites'])} fitting site(s), "
                      f"{len(d['missing'])} owed"))
         if owing:

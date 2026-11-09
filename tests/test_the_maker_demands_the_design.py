@@ -26,6 +26,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+# EVERY `git` HERE IS ASKED ABOUT THE REPOSITORY IT NAMES: the commit gate runs this suite under
+# git's pre-commit hook, which exports GIT_INDEX_FILE=.git/index (relative), so a git run here in
+# another repository would read - or write - an index that is not its own.
+import os                                                                    # noqa: E402
+GITENV = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
 FAILS = []
 
 
@@ -86,6 +92,36 @@ HOST = ('    obs, covs = ctx.model_frame(ctx.design_frame(), terms)',
 class Stub:
     def __init__(self, path, spec):
         self.path, self.spec, self.name = str(path), spec, Path(path).stem
+
+
+def rooted(fn, *a, **kw):
+    """`fn(..., root=ROOT)` where it takes the repository's root - the anchor of a design record
+    is read there (W013 fix-up 5) - and as it was called before, where it does not."""
+    import inspect
+    if "root" in inspect.signature(fn).parameters:
+        kw["root"] = ROOT
+    return fn(*a, **kw)
+
+
+def anchored(td, name, text):
+    """`<td>/kernels/<name>.py`, committed in a repository of its own whose DEVPOINTS names that
+    commit as the plugin's blind record: an answer needs an anchor, as de's does (fix-up 5)."""
+    kdir = Path(td) / "kernels"
+    kdir.mkdir()
+    f = kdir / f"{name}.py"
+    f.write_text(text, encoding="utf-8")
+    g = ["git", "-C", str(td), "-c", "user.name=t", "-c", "user.email=t@t",
+         "-c", "commit.gpgsign=false"]
+    subprocess.run(["git", "init", "-q", str(td)], check=True, capture_output=True, env=GITENV)
+    subprocess.run(g + ["add", f"kernels/{name}.py"], check=True, capture_output=True,
+                   env=GITENV)
+    subprocess.run(g + ["commit", "-q", "-m", "blind"], check=True, capture_output=True,
+                   env=GITENV)
+    sha = subprocess.run(["git", "-C", str(td), "rev-parse", "HEAD"], check=True,
+                         capture_output=True, text=True, env=GITENV).stdout.strip()
+    (Path(td) / "DEVPOINTS.yaml").write_text(
+        f"rules:\n  held_out:\n    spent:\n      {name}: {sha}\n", encoding="utf-8")
+    return f
 
 
 if not hasattr(V, "design_sites"):
@@ -162,8 +198,7 @@ if not hasattr(V, "design_answer"):
        "no answer mechanism in scprofile/validate.py")
 else:
     with tempfile.TemporaryDirectory() as td:
-        f = Path(td) / "stated.py"
-        f.write_text(STATED, encoding="utf-8")
+        f = anchored(td, "stated", STATED)
         k = Stub2(f, {"inject": {"required": ["design"], "optional": ["contrast", "covariates"]}})
         base = f.read_text(encoding="utf-8")
         ck("a confirmation needs a reason", V.design_confirm(k, 13, "", log=lambda *a: None) == 1)
@@ -228,9 +263,15 @@ if hasattr(V, "design_record_path"):
     ck("its record holds the answers that changed it, each with a reason and a diff",
        len(rec["answers"]) >= 2 and all(a.get("why") and a.get("diff") for a in rec["answers"]),
        len(rec["answers"]))
-    ck("the last answer made the file that ships", bool(rec["answers"])
-       and rec["answers"][-1]["after"] == V._sha(
-           (ROOT / "kernels" / "de.py").read_text(encoding="utf-8")))
+    # OUTSIDE THE DECLARATION (fix-up 5): the declaration is the maker's verb's to edit after an
+    # answer, and a whole-file comparison failed exactly that; the record's self-check below
+    # covers the rest.
+    _ship = (ROOT / "kernels" / "de.py").read_text(encoding="utf-8")
+    _last = rec["answers"][-1] if rec["answers"] else {}
+    _swap = getattr(V, "_swap_declaration", None)
+    ck("the last answer made the file that ships, outside its declaration", bool(_last)
+       and _last["after"] == V._sha(_swap(_ship, _last.get("after_declaration", ""))
+                                    if _swap and _last.get("after_declaration") else _ship))
     _chk = getattr(V, "design_record_check", None)
     ck("the record undoes from the shipped file, and every answer is admitted again at the "
        "sites it records", _chk is not None and _chk(_de)[0], _chk(_de) if _chk else None)
@@ -249,6 +290,7 @@ else:
     with tempfile.TemporaryDirectory() as td:
         de_copy = Path(td) / "de.py"
         shutil.copyfile(ROOT / "kernels" / "de.py", de_copy)
+        shutil.copyfile(V.design_record_path(_de), Path(td) / "de.design.json")
         kd = Stub(de_copy, _de.spec)
         shipped = de_copy.read_text(encoding="utf-8")
 
@@ -256,7 +298,7 @@ else:
             prop = Path(td) / f"{name}.py"
             prop.write_text(edit(shipped), encoding="utf-8")
             out = []
-            rc = V.design_answer(kd, prop, "x", log=out.append)
+            rc = rooted(V.design_answer, kd, prop, "x", log=out.append)
             return rc == 1 and de_copy.read_text(encoding="utf-8") == shipped, out
 
         ok_, out = refused("threshold", lambda t: t.replace(
@@ -305,6 +347,7 @@ if hasattr(V, "design_answer"):
     with tempfile.TemporaryDirectory() as td:
         de_copy = Path(td) / "de.py"
         shutil.copyfile(ROOT / "kernels" / "de.py", de_copy)
+        shutil.copyfile(V.design_record_path(_de), Path(td) / "de.design.json")
         kd = Stub(de_copy, _de.spec)
         shipped = de_copy.read_text(encoding="utf-8")
 
@@ -313,12 +356,10 @@ if hasattr(V, "design_answer"):
             with open(prop, "w", encoding="utf-8", newline="") as fh:
                 fh.write(edit(shipped))
             out = []
-            rc = V.design_answer(kd, prop, "x", log=out.append)
+            rc = rooted(V.design_answer, kd, prop, "x", log=out.append)
             admitted = rc == 0
             de_copy.write_text(shipped, encoding="utf-8")         # each probe on the shipped file
-            rec = V.design_record_path(kd)
-            if rec.exists():
-                rec.unlink()
+            shutil.copyfile(V.design_record_path(_de), V.design_record_path(kd))  # and its record
             return admitted, " ".join(out)
 
         def swap(old, new):
@@ -379,12 +420,14 @@ if hasattr(V, "design_answer"):
         shutil.copyfile(V.design_record_path(_de), Path(td) / "de.design.json")
         kd = Stub(de_copy, _de.spec)
         shipped = de_copy.read_text(encoding="utf-8")
-        check = getattr(V, "design_record_check", None)
-        ck("(the shipped copy and its record agree)", check is not None and check(kd)[0])
+        _check = getattr(V, "design_record_check", None)
+        check = (lambda k: rooted(_check, k)) if _check else None
+        ck("(the shipped copy and its record agree)", check is not None and check(kd)[0],
+           check(kd) if check else None)
         ck("(the probe's line is in the shipped plugin)", CUT in shipped)
         edited = shipped.replace(CUT, 'sig = tested & (pa < 0.5)', 1)
         de_copy.write_text(edited, encoding="utf-8")
-        d = V.design_sites(kd)
+        d = rooted(V.design_sites, kd)
         ck("a hand edit with no record entry: the design stage owes",
            d["owes"] and any(m == "record" for m, _w in d["missing"]), d["missing"][-1:])
         rec = json.loads(V.design_record_path(kd).read_text(encoding="utf-8"))
@@ -395,7 +438,7 @@ if hasattr(V, "design_answer"):
             "diff": "".join(difflib.unified_diff(V._lines(shipped), V._lines(edited), "a", "b")),
             "after_declaration": rec["answers"][-1].get("after_declaration", "")})
         V.design_record_path(kd).write_text(json.dumps(rec), encoding="utf-8")
-        d = V.design_sites(kd)
+        d = rooted(V.design_sites, kd)
         ck("the same edit with a forged entry claiming a site: the design stage owes",
            d["owes"] and any(m == "record" for m, _w in d["missing"]), d["missing"][-1:])
         ck("and the check names the entry as not admissible",
@@ -408,8 +451,185 @@ if hasattr(V, "design_answer"):
             '"summary": "which genes change, per cell type, across the design, per population"', 1),
             encoding="utf-8")
         ck("a change to the declaration alone - the verb's to make - still meets the record",
-           check is not None and check(kd)[0] and not V.design_sites(kd)["owes"],
+           check is not None and check(kd)[0] and not rooted(V.design_sites, kd)["owes"],
            check(kd) if check else None)
+
+
+print("\n10. the record's chain is anchored at the blind-record commit; the declaration is a pure "
+      "literal (W013 fix-up 5)")
+# THE VERIFIER'S ROUTES AT e63104c: a hand edit outside every site (the up-count cut), with the
+# record rewritten so its chain ends on a doctored answer-1 `before`, passed `scprofile design`,
+# the suite and `scprofile check`; an empty record returned ok, so a hand edit before the first
+# answer would become its base; run-time code inside `PLUGIN = {...}` passed; a declaration that
+# does not load read "not design-aware".
+if hasattr(V, "design_answer"):
+    import difflib
+    UP = '"n_up": int((sig & (lfc > 0)).sum())'
+    UP2 = '"n_up": int((sig & (lfc > 1)).sum())'
+
+    def sites_of(k):
+        return rooted(V.design_sites, k)
+
+    def check_of(k):
+        fn = getattr(V, "design_record_check", None)
+        return None if fn is None else rooted(fn, k)
+
+    shipped = (ROOT / "kernels" / "de.py").read_text(encoding="utf-8")
+    record = json.loads(V.design_record_path(_de).read_text(encoding="utf-8"))
+    with tempfile.TemporaryDirectory() as td:
+        de_copy = Path(td) / "de.py"
+        kd = Stub(de_copy, _de.spec)
+        rp = V.design_record_path(kd)
+        # 1. THE DOCTORED BASE: the hand edit pushed under answer 1, every digest recomputed
+        # (from the file the last answer made: the verb may have edited the declaration since)
+        texts = [V._swap_declaration(shipped, record["answers"][-1]["after_declaration"])]
+        for ans in reversed(record["answers"]):
+            texts.append(V._apply_unified(texts[-1], V._reverse_diff(ans["diff"])))
+        cur, forged = texts[-1].replace(UP, UP2, 1), json.loads(json.dumps(record))
+        for ans in forged["answers"]:
+            nxt = V._apply_unified(cur, ans["diff"])
+            ans["before"], ans["after"] = V._sha(cur), V._sha(nxt)
+            ans["after_declaration"] = V._declaration_text(nxt)
+            cur = nxt
+        de_copy.write_text(cur, encoding="utf-8")
+        rp.write_text(json.dumps(forged), encoding="utf-8")
+        r = check_of(kd)
+        ck("a record rewritten to start from a doctored base does not meet the blind-record "
+           "commit", r is not None and not r[0] and "blind-record commit" in r[1], r)
+        ck("and the design stage owes", sites_of(kd)["owes"])
+        # 2. AN EMPTY RECORD AND A HAND EDIT: the plugin as it was blind, edited outside the sites
+        # (read with git here, so the check is what is tested, at any commit)
+        g = subprocess.run(["git", "-C", str(ROOT), "show", "f5175ea:kernels/de.py"],
+                           capture_output=True, text=True, env=GITENV)
+        base_text = g.stdout if g.returncode == 0 else None
+        ck("(the blind-record commit can be read here)", base_text is not None, g.stderr[-200:])
+        if base_text is not None:
+            ck("(the probe's line is in the plugin as it was blind)", UP in base_text)
+            empty = json.dumps({"plugin": "de", "answers": [], "statements": {}})
+            de_copy.write_text(base_text.replace(UP, UP2, 1), encoding="utf-8")
+            rp.write_text(empty, encoding="utf-8")
+            r = check_of(kd)
+            ck("with no answer yet, a hand edit before the first answer fails, against the "
+               "blind-record commit", r is not None and not r[0], r)
+            de_copy.write_text(base_text, encoding="utf-8")
+            r = check_of(kd)
+            ck("(and the plugin as it was blind, unedited, passes)", r is not None and r[0], r)
+            # THE FIRST ANSWER: answer 1 as recorded, handed in whole over the plugin as it was
+            # blind, is admitted; the same answer over the hand-edited plugin is refused, so a hand
+            # edit made before the first answer does not become the record's base.
+            first = Path(td) / "first.py"
+            first.write_text(V._swap_declaration(texts[-2], V._declaration_text(base_text)),
+                             encoding="utf-8")
+            out = []
+            rc = rooted(V.design_answer, kd, first, "x", log=out.append)
+            ck("(answer 1, handed in over the plugin as it was blind, is admitted)", rc == 0, out)
+            de_copy.write_text(base_text.replace(UP, UP2, 1), encoding="utf-8")
+            rp.write_text(empty, encoding="utf-8")
+            first.write_text(first.read_text(encoding="utf-8").replace(UP, UP2, 1),
+                             encoding="utf-8")
+            out = []
+            rc = rooted(V.design_answer, kd, first, "x", log=out.append)
+            ck("the same answer over a hand-edited plugin is refused, naming the blind-record "
+               "commit", rc == 1 and "blind-record commit" in " ".join(out)
+               and de_copy.read_text(encoding="utf-8") == base_text.replace(UP, UP2, 1), out)
+        # 3. RUN-TIME CODE INSIDE THE DECLARATION
+        de_copy.write_text(shipped.replace(
+            '    "api": 1,\n', '    "api": (globals().__setitem__("PVALUE_BINS", 5), 1)[1],\n', 1),
+            encoding="utf-8")
+        rp.write_text(json.dumps(record), encoding="utf-8")
+        r = check_of(kd)
+        ck("a declaration that is not a pure literal fails the record's check",
+           r is not None and not r[0] and "literal" in r[1], r)
+        d = sites_of(kd)
+        ck("and the design stage owes, naming the declaration", d["owes"]
+           and any(m == "declaration" for m, _w in d["missing"]), d["missing"][:2])
+        # 4. A DECLARATION THE HOST CANNOT LOAD IS NOT "NOT DESIGN-AWARE"
+        from scprofile.kernels import FileKernel
+        kernels_dir = Path(td) / "kernels"
+        kernels_dir.mkdir()
+        bad = kernels_dir / "de.py"
+        bad.write_text(de_copy.read_text(encoding="utf-8"), encoding="utf-8")
+        fk = FileKernel(bad)
+        d = V.design_sites(fk)
+        ck("a plugin whose declaration does not load: the design stage owes",
+           d["owes"] and not fk.spec.get("inject"), (fk.spec.get("inject"), d["missing"][:1]))
+        # 5. THE MAKER'S VERB EDITS THE DECLARATION AFTER THE ANSWERS: it still meets the record
+        # (a value and the version changed, as `sch dev edit --set summary=...` changes them)
+        import re
+        verb = re.sub(r'("summary": "[^"]*)"', r'\1, by population"', shipped, count=1)
+        verb = re.sub(r'("version": ")(\d+)\.(\d+)\.(\d+)"',
+                      lambda m: f'{m.group(1)}{m.group(2)}.{int(m.group(3)) + 1}.0"', verb, count=1)
+        ck("(the edit is to the declaration, and only to it)", verb != shipped
+           and V._swap_declaration(verb, V._declaration_text(shipped)) == shipped)
+        de_copy.write_text(verb, encoding="utf-8")
+        rp.write_text(json.dumps(record), encoding="utf-8")
+        d = sites_of(kd)
+        ck("a verb's edit of the declaration after the answers still meets the record",
+           not d["owes"], d["missing"][:2])
+
+print("\n11. the base is read where there is no git; where the history is not there, it is not "
+      "established (W013 fix-up 5)")
+# THE CLUSTER'S COMPUTE NODES HAVE NO `git` (harness ADR-0027), and the stage-4 job's first step
+# is `scprofile design de` on the tool's checkout, under `set -e`: there the base is read from the
+# checkout's own object store. A checkout that does not hold the blind-record commit - shallow, or
+# no repository at all - cannot establish the base, and the check fails rather than passing.
+if not hasattr(V, "_git_show"):
+    ck("the record's base can be read where there is no git (validate._git_show)", False,
+       "no reader of the blind-record commit in scprofile/validate.py")
+else:
+    import shutil
+    anchor = V._spent_commit(ROOT, "de")
+    want = subprocess.run(["git", "-C", str(ROOT), "show", f"{anchor}:kernels/de.py"],
+                          capture_output=True, text=True, env=GITENV).stdout
+    ck("(DEVPOINTS names de's blind-record commit, and git gives its plugin)",
+       bool(anchor) and "PLUGIN = {" in want, anchor)
+    with tempfile.TemporaryDirectory() as td:
+        td = Path(td)
+        clone, shallow, plain = td / "clone", td / "shallow", td / "plain"
+        subprocess.run(["git", "clone", "-q", "--no-local", str(ROOT), str(clone)], check=True,
+                       capture_output=True, env=GITENV)
+        subprocess.run(["git", "clone", "-q", "--depth", "1", f"file://{ROOT}", str(shallow)],
+                       check=True, capture_output=True, env=GITENV)
+        subprocess.run(["git", "-C", str(clone), "worktree", "add", "-q", "--detach",
+                        str(td / "linked")], check=True, capture_output=True, env=GITENV)
+        # each holds the plugin, its record and DEVPOINTS as they stand here
+        for d in (clone, shallow, plain):
+            (d / "kernels").mkdir(parents=True, exist_ok=True)
+            for rel in ("DEVPOINTS.yaml", "kernels/de.py", "kernels/de.design.json"):
+                shutil.copyfile(ROOT / rel, d / rel)
+        nogit = td / "bin-without-git"
+        nogit.mkdir()
+        path0 = os.environ.get("PATH", "")
+        os.environ["PATH"] = str(nogit)
+        try:
+            here = V._git_show(ROOT, anchor, "kernels/de.py")
+            fresh = V._git_show(clone, anchor, "kernels/de.py")
+            short = V._git_show(clone, anchor[:7], "kernels/de.py")
+            linked = V._git_show(td / "linked", anchor, "kernels/de.py")
+            gone = V._git_show(shallow, anchor, "kernels/de.py")
+            node = V.design_record_check(Stub(clone / "kernels" / "de.py", _de.spec), root=clone)
+            cut = V.design_record_check(Stub(shallow / "kernels" / "de.py", _de.spec),
+                                        root=shallow)
+            bare = V.design_record_check(Stub(plain / "kernels" / "de.py", _de.spec), root=plain)
+            cli = subprocess.run([sys.executable, "-m", "scprofile.cli", "design", "de"],
+                                 cwd=str(clone), capture_output=True, text=True, timeout=300,
+                                 env=dict(GITENV, PATH=str(nogit), PYTHONPATH=str(clone)))
+        finally:
+            os.environ["PATH"] = path0
+        ck("with no git, this repository's object store gives the plugin at the blind-record "
+           "commit, byte for byte", here[0] == want and "object store" in here[1], here[1])
+        ck("and so does a fresh clone's - one pack, its deltas", fresh[0] == want, fresh[1])
+        ck("by an abbreviated name too", short[0] == want, short[1])
+        ck("and a linked worktree's, through its `.git` file", linked[0] == want, linked[1])
+        ck("a shallow clone, which lacks the commit, cannot give it", gone[0] is None, gone[1])
+        ck("with no git, the design record's check passes on a checkout that has the history",
+           node[0], node)
+        ck("on a shallow checkout: the base cannot be established, and it fails",
+           not cut[0] and "base cannot be established" in cut[1], cut)
+        ck("in a directory that is no repository: the same", not bare[0]
+           and "base cannot be established" in bare[1], bare)
+        ck("the job's first step, `scprofile design de`, on a checkout, with no git on PATH: "
+           "exit 0", cli.returncode == 0, (cli.stdout + cli.stderr)[-600:])
 
 print()
 if FAILS:
