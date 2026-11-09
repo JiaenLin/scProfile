@@ -47,3 +47,49 @@ host's declared control never reached it); covariates (no part of the host knew 
 covariate column was either dropped by `--factor` or read as a factor); the plan's axis, position and
 legend per figure; the accounting of the tool's own three plots; a fresh `version`; a baseline; and a
 caveat that says the interaction "is not contrasted" while the code contrasts it.
+
+### What the maker lacked, and the fixes (each with a suite that fails at `f5175ea`)
+
+| defect | where it was | the fix | the suite |
+|---|---|---|---|
+| nothing asked a design-aware plugin how it orders a factor or what it adjusts for | the maker (DEVPOINTS) | a build stage `design`: `scprofile design <plugin>` names each site where a model is built or a contrast taken, and what is owed there | `test_the_maker_demands_the_design.py` |
+| the host's control never reached a plugin; the plan had no `--control` | `planner.decisions_for`, `cli` | the contrast decision carries each term's control, its basis and the level order; `plan` takes `--control` | `test_the_contrast_is_read_against_the_declared_control.py` |
+| a `--control` the design does not have was recorded and resolved to nothing | `cli`, `design_panel.control_for` | refused by name in plan and run (`planner.declared_problems`) | the same |
+| no word for a covariate: dropped by `--factor`, or read as a factor | `inputs`, `planner`, `cli` | `--covariate`, resolved per contrast: modelled, or refused with the reason; other design columns named as not in the model | `test_a_covariate_is_modelled_or_refused_by_name.py` |
+| a numeric column was dummy-coded, one coefficient per value | `inputs._term_columns` | a float column is one centred column | the same |
+| a plugin ordered levels itself | no accessor existed | `ctx.levels(term, present)`, `ctx.model_frame(obs, terms)`; the design's sentences said once by the host | both |
+| the fixture handed shape b shape a's control (`=ctrl`) and no covariate | DEVPOINTS `fixture` | `{control}` and `--covariate {role_covariate}` in plan and run | `test_the_maker_demands_the_design.py` |
+| the inventory stage said nothing about how it is finished | DEVPOINTS | `finished_by` | read by the status |
+
+**The plugin's answers**, all through the maker: `sch dev edit` for `inject` (`covariates`),
+`state_version` 2, the corrected limit, and the figure plan (axis `cohort` - the plugin runs once
+over the cohort - position and legend for all six entries; followers green every time); and the
+`design` worksheet answered at the sites it named. On the two-shape fixture, with the plugin's
+interpreter given, the shapes now agree on every number DE writes (`treated vs ctrl`, `treated vs
+untreated`; the covariate modelled on both). Run on a synthetic 2x2 whose controls both sort last,
+the plugin's table is bit-identical to the unmerged hand edit that first attempted this, on one
+interpreter, and is the base fit reparametrised exactly as treatment coding predicts.
+
+**Build 7 of 10** (blind: 5 of 9, the `design` stage added since). Still owed, all in the harness
+half of the maker, so not fixable in this repository:
+- the python extractor cannot see a tool whose plots are class methods or live in a submodule
+  (`sch/dev/extract/python_package.py`), so `inventory` and `plan` stay part-way on the admission;
+- the layout charges the host's own kinds to every plugin's budget, though the host draws them only
+  for a plugin declaring `report.unit_network`, and requires every plugin's `host_panels` to equal
+  the layout's list (`sch/dev/layout.py`): a pooled plugin's six plates are over the cohort budget
+  by construction, and the trim would drop all of them, so it was not applied;
+- the ladder's baseline tier fails a fixture run that was an accepted refusal (no products), and
+  fingerprints a product's byte count, which moves with the digits of a timing; `agree` compares
+  execution measurements wherever no baseline names them. A baseline recorded on a workstation is
+  also the wrong machine for the cluster, so none is committed: the dev suite records it.
+
+### What the next plugin (abundance) should test, blind
+
+- `scprofile design abundance` before anything changes: does the stage name its fitting sites and
+  the three debts, and does its migration answer them the way this one did?
+- the fixture with the plugin's environment: does `agree` now see a reference taken by a formula
+  library's alphabetical default (the second way to choose a reference, not the first)?
+- `--covariate` and the interaction: a plugin that fits one factor at a time must model the
+  covariate or be named as not modelling it, and the plan must say which.
+- whether a plugin whose own guard refuses the fixture's covariate is told apart from one whose
+  model ignores it.
