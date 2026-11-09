@@ -94,7 +94,7 @@ control contrasted between two other levels. Fixed in the maker, then answered t
 
 | defect | where it was | the fix | the suite |
 |---|---|---|---|
-| a sentence about the design was answerable only by hand (GAP-C47) | the `design` worksheet | it names every `ctx.caveat`/`ctx.refuse` carrying a design word; `--answer` applies a change only where a site is named and records the diff, `--confirm` binds a true sentence to the digest of its syntax, `--replay-into` rebuilds the plugin from the record | `test_the_maker_demands_the_design.py` |
+| a sentence about the design was answerable only by hand (GAP-C47) | the `design` worksheet | it names every `ctx.caveat`/`ctx.refuse` carrying a design word; `--answer` records the diff, `--confirm` binds a true sentence to the digest of its syntax, `--replay-into` rebuilds the plugin from the record. As first shipped (`35c6225`) a fit site was its whole loop or function, an insertion at a span's edge was admitted, and the replay trusted the record - the verifier laundered a doubled filter threshold, a zeroed selftest gate and an `out = out[:1]` through it. Since fix-up 2 `--answer` applies a change only inside a named site - a fit call's statement and the lines that define the names its arguments read, or a statement and the comment block directly above it - inserting only strictly inside one, and refuses an answer that names no site, and the replay admits every diff again | `test_the_maker_demands_the_design.py` |
 | `--factor` left the other columns unnamed | `planner`, `inputs`, `cli` | the design table's columns are recorded and every one outside the model is named | `test_a_covariate_is_modelled_or_refused_by_name.py` |
 | no sample at the control read `mid vs alpha` (GAP-C48) | the host's frame | the control stays as an empty level, so the replication check refuses the contrast, by name | `test_the_contrast_is_read_against_the_declared_control.py` |
 
@@ -103,6 +103,14 @@ not-interacted caveat - false of a fitted interaction spread over several coeffi
 multi-level caveat, which now names the control), thirteen confirmed with their reasons. The 21
 verb calls replayed on `f5175ea`, then `scprofile design de --replay-into`, give the shipped
 `kernels/de.py` byte for byte.
+
+**Fix-up 2.** The verifier then laundered three hand edits through `--answer` (above). With the
+sites narrowed, de's answers were re-recorded from the post-verb file: answer 1 now changes only
+three lines that define what the fit reads - the frame (`ctx.model_frame`, the host dropping and
+naming a covariate a population cannot carry), the formula (the estimable terms plus those
+covariates) and each term's levels (`ctx.levels`) - where it had changed five regions of the loop;
+answer 2 carries its comments inside the three statements. The table on a 2x2 rehearsal is
+byte-identical to the one before, and the replay still rebuilds the shipped file byte for byte.
 
 ### What the next plugin (abundance) should test, blind
 
