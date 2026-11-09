@@ -709,6 +709,97 @@ def _admit(before, after):
     return ops, sorted(sites), refusals, norm
 
 
+def _declaration(src):
+    """(first line, last line) of the `PLUGIN = {...}` assignment, or None: the declaration, which
+    the maker's verb `sch dev edit` changes and nothing else does."""
+    import ast
+    for n in ast.parse(src).body:
+        if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "PLUGIN"
+                                             for t in n.targets):
+            return n.lineno, n.end_lineno
+    return None
+
+
+def _swap_declaration(src, declaration):
+    """`src` with its `PLUGIN = {...}` lines replaced by `declaration`'s text."""
+    span = _declaration(src)
+    if span is None:
+        return src
+    lines = _lines(src)
+    return "".join(lines[:span[0] - 1]) + declaration + "".join(lines[span[1]:])
+
+
+def _declaration_text(src):
+    span = _declaration(src)
+    return "" if span is None else "".join(_lines(src)[span[0] - 1:span[1]])
+
+
+def _reverse_diff(diff):
+    """The inverse of a unified diff: what turns its `after` back into its `before`."""
+    out = []
+    for row in _lines(diff):
+        m = re.match(r"@@ -(\d+(?:,\d+)?) \+(\d+(?:,\d+)?) @@(.*)", row, re.S)
+        if m:
+            out.append(f"@@ -{m.group(2)} +{m.group(1)} @@{m.group(3)}")
+        elif row.startswith("+") and not row.startswith("+++"):
+            out.append("-" + row[1:])
+        elif row.startswith("-") and not row.startswith("---"):
+            out.append("+" + row[1:])
+        else:
+            out.append(row)
+    return "".join(out)
+
+
+def design_record_check(kernel):
+    """(ok, sentence) - does the worksheet's record account for the plugin as it ships?
+
+    THE RECORD VERIFIES ITSELF WHEREVER IT IS READ (W013's verifier, fix-up 4). Checked only on
+    `--replay-into`, whose starting file is not in the repository, a hand edit with a forged entry
+    - the right digests, a site it does not touch - passed the suite, `scprofile check`, this
+    command and the maker's status. So, from the SHIPPED file alone: every recorded diff is undone,
+    last first, each landing exactly on the file it was made against, back to the first answer's
+    `before`; and each is then admitted again, forward, with `_admit` and the sites it records. A
+    file changed outside its declaration since the last answer - a hand edit with no entry - does
+    not meet the record and fails the same way. The declaration (`PLUGIN = {...}`) is the maker's
+    verb's to change after an answer, and is set back to the last answer's before the undo.
+    """
+    rec = _read_record(kernel)
+    if rec.get("unreadable"):
+        return False, f"the record {rec['unreadable']} does not parse"
+    answers = rec.get("answers") or []
+    if not answers:
+        return True, "no answer recorded"
+    shipped = Path(kernel.path).read_text(encoding="utf-8")
+    cur, last = shipped, answers[-1]
+    if _sha(cur) != last.get("after") and last.get("after_declaration"):
+        cur = _swap_declaration(shipped, last["after_declaration"])
+    if _sha(cur) != last.get("after"):
+        return False, (f"kernels/{Path(kernel.path).name} is not the file its last recorded answer "
+                       f"({last.get('n')}) made, outside its declaration: changed since by hand, "
+                       f"or by an answer the worksheet did not record")
+    for ans in reversed(answers):
+        if _sha(cur) != ans.get("after"):
+            return False, f"answer {ans.get('n')} did not make the file the next answer met"
+        try:
+            prev = _apply_unified(cur, _reverse_diff(ans.get("diff") or ""))
+        except ValueError as e:
+            return False, f"answer {ans.get('n')} does not undo from the shipped file: {e}"
+        if _sha(prev) != ans.get("before"):
+            return False, f"answer {ans.get('n')} undone is not the file it records it was made on"
+        try:
+            _ops, sites, refusals, _n = _admit(prev, cur)
+        except SyntaxError as e:
+            return False, f"answer {ans.get('n')}: a file in the record does not parse ({e})"
+        if refusals or not sites or sites != sorted(ans.get("sites") or []):
+            return False, (f"answer {ans.get('n')} is not admissible as recorded: "
+                           + ("; ".join(refusals) if refusals else
+                              f"it touches {sites or 'no site'}, the record says "
+                              f"{ans.get('sites')}"))
+        cur = prev
+    return True, (f"{len(answers)} answer(s) undo from the shipped file and are admitted again "
+                  f"at the sites they record")
+
+
 def design_sites(kernel):
     """{design_aware, sites, statements, missing, owes} - where a plugin fits a model, where it
     STATES what was contrasted or modelled, and what it owes the host at each.
@@ -760,6 +851,10 @@ def design_sites(kernel):
     for s in stmts:
         if not s["answered"]:
             out["missing"].append((f"statement:{s['line']}", STATEMENT_OWES))
+    ok, why = design_record_check(kernel)
+    out["record"] = (ok, why)
+    if not ok:
+        out["missing"].append(("record", why))
     out["owes"] = bool(out["missing"])
     return out
 
@@ -801,6 +896,8 @@ def design_report(kernel, log=print):
             log(f"         inject `covariates`: {what}. The maker's verb: "
                 f"sch dev edit --root . --point kernel --name {kernel.name} "
                 f"--list-add inject.optional=\"covariates\"")
+        elif acc == "record":
+            log(f"         the record (kernels/{design_record_path(kernel).name}): {what}")
         elif not acc.startswith("statement:"):
             log(f"         ctx.{acc}(...): {what}")
     if owed:
@@ -862,6 +959,10 @@ def design_answer(kernel, proposed, why, *, as_version=None, log=print):
         log("  refused: --why is the answer's reason, and a recorded answer carries one")
         return 1
     path = Path(kernel.path)
+    ok, why_not = design_record_check(kernel)
+    if not ok:
+        log(f"  refused: the record does not meet kernels/{path.name} as it stands - {why_not}")
+        return 1
     before = path.read_text(encoding="utf-8")
     # READ AS IT IS ON DISK: universal newlines would turn a carriage return into a line break
     # before the admission could see it (fix-up 3).
@@ -900,7 +1001,10 @@ def design_answer(kernel, proposed, why, *, as_version=None, log=print):
     diff = "".join(difflib.unified_diff(_lines(before), _lines(after),
                                         f"a/kernels/{path.name}", f"b/kernels/{path.name}", n=3))
     rec["answers"].append({"n": n, "why": str(why), "sites": sites, "version": new_version,
-                           "before": _sha(before), "after": _sha(after), "diff": diff})
+                           "before": _sha(before), "after": _sha(after), "diff": diff,
+                           # THE DECLARATION IT LEFT, so the record still meets the plugin after
+                           # the maker's verb edits the declaration (`design_record_check`)
+                           "after_declaration": _declaration_text(after)})
     path.write_text(after, encoding="utf-8")
     _write_record(kernel, rec)
     log(f"  answer {n} applied to kernels/{path.name} at {', '.join(sites)}; version {vold} -> "

@@ -231,6 +231,9 @@ if hasattr(V, "design_record_path"):
     ck("the last answer made the file that ships", bool(rec["answers"])
        and rec["answers"][-1]["after"] == V._sha(
            (ROOT / "kernels" / "de.py").read_text(encoding="utf-8")))
+    _chk = getattr(V, "design_record_check", None)
+    ck("the record undoes from the shipped file, and every answer is admitted again at the "
+       "sites it records", _chk is not None and _chk(_de)[0], _chk(_de) if _chk else None)
 
 
 print("\n7. an answer cannot carry a hand edit: narrow fit sites, insertions strictly inside, "
@@ -360,6 +363,53 @@ if hasattr(V, "design_answer"):
             ck(f"a design answer two hops from the call is admitted: {name}", ok_, out[-300:])
         ck("the depth is stated", getattr(V, "DESIGN_DEPTH", None) == 2
            and "metadata" in getattr(V, "DESIGN_ARGUMENTS", ()))
+
+
+print("\n9. the record verifies itself wherever it is read (W013 fix-up 4)")
+# THE VERIFIER'S ROUTE AT 190fcf4: a hand edit in no site (the cut of the hit counts) with an
+# entry appended to the record claiming a site, with the right digests, passed the suite, the
+# check, `scprofile design` and the maker's status - only `--replay-into`, whose starting file is
+# not in the repository, refused it. And a hand edit with no entry at all read `ok` here.
+if hasattr(V, "design_answer"):
+    import difflib
+    CUT = 'sig = tested & (pa < C["alpha"])'
+    with tempfile.TemporaryDirectory() as td:
+        de_copy = Path(td) / "de.py"
+        shutil.copyfile(ROOT / "kernels" / "de.py", de_copy)
+        shutil.copyfile(V.design_record_path(_de), Path(td) / "de.design.json")
+        kd = Stub(de_copy, _de.spec)
+        shipped = de_copy.read_text(encoding="utf-8")
+        check = getattr(V, "design_record_check", None)
+        ck("(the shipped copy and its record agree)", check is not None and check(kd)[0])
+        ck("(the probe's line is in the shipped plugin)", CUT in shipped)
+        edited = shipped.replace(CUT, 'sig = tested & (pa < 0.5)', 1)
+        de_copy.write_text(edited, encoding="utf-8")
+        d = V.design_sites(kd)
+        ck("a hand edit with no record entry: the design stage owes",
+           d["owes"] and any(m == "record" for m, _w in d["missing"]), d["missing"][-1:])
+        rec = json.loads(V.design_record_path(kd).read_text(encoding="utf-8"))
+        rec["answers"].append({
+            "n": len(rec["answers"]) + 1, "why": "x", "sites": ["fit:1406"],
+            "version": rec["answers"][-1]["version"], "before": V._sha(shipped),
+            "after": V._sha(edited),
+            "diff": "".join(difflib.unified_diff(V._lines(shipped), V._lines(edited), "a", "b")),
+            "after_declaration": rec["answers"][-1].get("after_declaration", "")})
+        V.design_record_path(kd).write_text(json.dumps(rec), encoding="utf-8")
+        d = V.design_sites(kd)
+        ck("the same edit with a forged entry claiming a site: the design stage owes",
+           d["owes"] and any(m == "record" for m, _w in d["missing"]), d["missing"][-1:])
+        ck("and the check names the entry as not admissible",
+           check is not None and not check(kd)[0] and "not admissible" in check(kd)[1],
+           check(kd) if check else None)
+        de_copy.write_text(shipped, encoding="utf-8")
+        shutil.copyfile(V.design_record_path(_de), Path(td) / "de.design.json")
+        de_copy.write_text(shipped.replace(
+            '"summary": "which genes change, per cell type, across the design"',
+            '"summary": "which genes change, per cell type, across the design, per population"', 1),
+            encoding="utf-8")
+        ck("a change to the declaration alone - the verb's to make - still meets the record",
+           check is not None and check(kd)[0] and not V.design_sites(kd)["owes"],
+           check(kd) if check else None)
 
 print()
 if FAILS:
