@@ -26,8 +26,8 @@ which genes left the answer before it was computed. The result comes after them.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.2.0",
-    "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
+    "version": "0.3.0",
+    "state_version": 2,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "which genes change, per cell type, across the design",
     "when_to_use": "you have a design table with replicates and want differential expression",
     "wraps": {"tool": "pydeseq2",
@@ -118,7 +118,7 @@ PLUGIN = {
     },
 
     "inject": {"required": ["counts", "label", "sample", "design"],
-               "optional": ["contrast"]},
+               "optional": ["contrast", "covariates"]},
     "provides": [],
     "produces": ["tables/de_by_population.csv"],
 
@@ -207,14 +207,14 @@ PLUGIN = {
     # `shows` is the whole of the reporter's knowledge. It knows no id here and never will.
     "report": {
         "figures": [
-            {"id": "F1_replicates", "drawn_by": "plugin", "shows": "diagnostic", "required": True,
+            {"id": "F1_replicates", 'legend': 'Cells and counts summed into each pseudobulk sample, per population and level of the first contrasted factor, so an imbalance between the levels compared is visible before any result; a grey point is a population whose units fell below min_cells and formed no sample.', 'position': 'overview', 'axis': 'cohort', "drawn_by": "plugin", "shows": "diagnostic", "required": True,
              "question": "how many cells and how many counts went into each pseudobulk sample, "
                          "and is that balanced across the levels being compared?",
              "source": "figures/F1_replicates.csv"},
             # OPTIONAL BECAUSE THE ATTRIBUTE MOVED, not because the fit can fail. PyDESeq2 keeps
             # dispersions in `varm` on 0.4.x and in `var` on 0.5.x, and a reader has to be told
             # which of those happened rather than shown a gap.
-            {"id": "F2_dispersion", "drawn_by": "plugin", "shows": "diagnostic", "required": False,
+            {"id": "F2_dispersion", 'legend': 'Per-gene dispersion against mean count for the populations with the most tested genes - the gene-wise estimate, the fitted trend and the final value - so a reader can see whether the count model found a mean-variance trend at all.', 'position': 'overview', 'axis': 'cohort', "drawn_by": "plugin", "shows": "diagnostic", "required": False,
              "question": "did the count model find a mean-variance trend, or shrink every gene "
                          "onto a flat line?",
              "source": "figures/F2_dispersion.csv",
@@ -222,19 +222,19 @@ PLUGIN = {
                             "fitted length under either the `var` or the `varm` name, so the "
                             "model's own fit cannot be shown. Read every p-value below as "
                             "resting on a dispersion estimate nobody has looked at."},
-            {"id": "F3_pvalue_calibration", "shows": "diagnostic", "required": True,
+            {"id": "F3_pvalue_calibration", 'legend': 'Raw p-values in equal bins per population and term, against the count a bin would hold if every gene were null: flat with a spike at zero is a calibrated test, a slope or a hump is a misspecified one.', 'position': 'overview', 'axis': 'cohort', "shows": "diagnostic", "required": True,
              "drawn_by": "plugin",
              "question": "are these p-values calibrated, or is the model misspecified?",
              "source": "figures/F3_pvalue_calibration.csv"},
-            {"id": "F4_untested", "drawn_by": "plugin", "shows": "diagnostic", "required": True,
+            {"id": "F4_untested", 'legend': "Where every gene of the object went, per population and term: below min_counts, no counts, a Cook's outlier, withheld by independent filtering, or tested - the three routes that mean never tested kept apart from the answer.", 'position': 'overview', 'axis': 'cohort', "drawn_by": "plugin", "shows": "diagnostic", "required": True,
              "question": "which genes are absent from the answer, and for which of the "
                          "different reasons?",
              "source": "figures/F4_untested.csv"},
-            {"id": "F5_ma", "drawn_by": "plugin", "shows": "result", "required": True,
+            {"id": "F5_ma", 'legend': 'Unshrunken log2 fold change of each level against its control, against mean count, per population and term, significant genes coloured by direction; the fan at low counts is sampling noise and is drawn, not hidden.', 'position': 'contrast', 'axis': 'cohort', "drawn_by": "plugin", "shows": "result", "required": True,
              "question": "which genes change, at what expression level, and how far can a fold "
                          "change be trusted when no shrinkage was applied?",
              "source": "tables/de_by_population.csv"},
-            {"id": "F6_hits_by_population", "shows": "result", "required": True,
+            {"id": "F6_hits_by_population", 'legend': 'Genes below the adjusted-p threshold per population and contrast, split by direction against the control, with every population that was never tested marked and the reason given.', 'position': 'contrast', 'axis': 'cohort', "shows": "result", "required": True,
              "drawn_by": "plugin",
              "question": "which populations respond to the contrast, in which direction, and "
                          "which were never tested at all?",
@@ -266,13 +266,7 @@ PLUGIN = {
         "log2FoldChange is dominated by sampling noise and can be arbitrarily large. Rank on the "
         "test statistic or the adjusted p-value; a top-by-fold-change list from this table is a "
         "list of low-count genes.",
-        "ONE CONTRAST PER FACTOR IS REPORTED, AND NO INTERACTION COEFFICIENT IS. A factor with "
-        "more than two levels is fitted whole and then compared on its first and last levels "
-        "only, so a population reported as not responding was compared on one of that factor's "
-        "contrasts; the pair taken is named in the result's `contrast` column. Where the plan "
-        "asks for an interaction it is added to the design - which makes every main effect "
-        "conditional on the other factor's reference level - but the interaction term itself is "
-        "not contrasted, so no gene here is evidence for or against one.",
+        "ONE CONTRAST PER FACTOR IS REPORTED, READ AGAINST THE FACTOR'S CONTROL. The levels are taken in the order the host decided - the control the run declared first, then the rest - so a factor with more than two levels is fitted whole and then compared on its last level against the control only: a population reported as not responding was compared on one of that factor's contrasts, and the pair taken is named in the result's `contrast` column. Where the plan asks for an interaction it is added to the design AND contrasted, as its own row; every main-effect row is then the effect at the OTHER factor's control, not a marginal effect averaged over it.",
         "The p-value histogram checks CALIBRATION, not correctness. A uniform-plus-spike shape "
         "is consistent with a well-specified model; it is not evidence that the right covariates "
         "are in it, and no shape here can detect a confounder that is absent from the design "
@@ -1314,7 +1308,11 @@ def run(ctx):
 
     for pop in sorted(set(obs["population"])):
         m = obs["population"].to_numpy() == pop
-        sub_obs = obs[m].reset_index(drop=True)
+        # THE HOST'S FRAME (`scprofile design de`, the worksheet): each term a categorical whose
+        # first category is the run's control over the levels this population has, and every
+        # covariate the plan modelled, typed. The fit's base level and the covariates are the
+        # host's decisions, not this plugin's (GAP-039, GAP-040).
+        sub_obs, covs = ctx.model_frame(obs[m].reset_index(drop=True), terms)
         # EVERY LEVEL NEEDS REPLICATION, not just the population overall. A population with six
         # samples in one arm and one in the other supports no test of that contrast, and a mean
         # n hides exactly that.
@@ -1330,8 +1328,11 @@ def run(ctx):
 
         # IDENTIFIABLE FIRST. Otherwise the fit raises `Singular matrix` from inside numpy,
         # which is a true statement about linear algebra and tells the user nothing.
-        use, aliased = _identifiable(ctx, sub_obs, terms)
-        if not use:
+        # The covariates are asked about AFTER the terms, so one collinear with a term is the
+        # one dropped - and named - and the term, which is the question, stays.
+        use, aliased = _identifiable(ctx, sub_obs, terms + covs)
+        fit = [u for u in use if u in terms]          # what is contrasted; a covariate never is
+        if not fit:
             why = [t for t, _w in aliased]
             skipped.append((pop, int(m.sum()), why))
             hit_rows.append({"population": pop, "term": "", "contrast": "",
@@ -1366,15 +1367,15 @@ def run(ctx):
         # has already been paid for; on two it looked correct, which is why it shipped. The
         # interaction is now ADDED to the formula, never substituted for it.
         formula = "~ " + " + ".join(use)
-        if len(use) >= 2 and (ctx.params.get("contrast") or {}).get("kind") == "interaction":
+        if len(fit) >= 2 and (ctx.params.get("contrast") or {}).get("kind") == "interaction":
             # ASKED, NOT ASSUMED. See `_interaction_estimable`: the main effects are rank-tested
             # and the interaction was not, so a population with an empty cell of the a-by-b
             # table took down the entire plugin instead of dropping one term.
-            if _interaction_estimable(ctx, sub_obs, use[0], use[1]):
-                formula += f" + {use[0]}:{use[1]}"
-                interacted[pop] = (use[0], use[1])
+            if _interaction_estimable(ctx, sub_obs, fit[0], fit[1]):
+                formula += f" + {fit[0]}:{fit[1]}"
+                interacted[pop] = (fit[0], fit[1])
             else:
-                not_interacted[pop] = (use[0], use[1])
+                not_interacted[pop] = (fit[0], fit[1])
         formulas.setdefault(formula, []).append(pop)
         dds = DeseqDataSet(counts=counts_df, metadata=sub_obs, design=formula,
                            refit_cooks=True, min_replicates=int(C["min_replicates"]),
@@ -1385,13 +1386,15 @@ def run(ctx):
         # below min_replicates samples in a level, at which point a Cook's outlier is dropped
         # from the answer rather than replaced. Measured per population, because the answer
         # differs per population as soon as the design is unbalanced.
-        widest = max(int(sub_obs[t].value_counts().max()) for t in use)
+        widest = max(int(sub_obs[t].value_counts().max()) for t in fit)
         if widest < int(C["min_replicates"]):
             thin_refit.append((pop, widest))
 
         first_res = None
-        for term in use:
-            levels = sorted(sub_obs[term].unique())
+        for term in fit:
+            # THE HOST'S ORDER: [0] is the control, so the contrast below is `levels[-1] vs
+            # <control>`. This was `sorted(...)`, the reference whichever level sorted first.
+            levels = ctx.levels(term, sub_obs[term])
             # ONE CONTRAST PER TERM, WHATEVER ITS NUMBER OF LEVELS. A three-level factor is
             # fitted whole - its middle levels move every coefficient - and then only its first
             # and last are compared, which is a defensible default and an indefensible silence:
@@ -1699,16 +1702,20 @@ def run(ctx):
               "actually fitted per population is in the caveat above.")
     if interacted:
         pairs = sorted({v for v in interacted.values()})
+        # IT IS CONTRASTED, AND THIS SAID IT WAS NOT (GAP-040: the caveat denied an interaction
+        # the code above tests and writes as its own row). Answered with the design worksheet,
+        # because what it states is which level each main-effect row is conditional on - now the
+        # run's control, the host's decision, where it was whichever level sorted first.
         ctx.caveat(
-            "AN INTERACTION IS IN THE MODEL AND IS NOT TESTED HERE. "
+            "AN INTERACTION IS IN THE MODEL AND IS CONTRASTED, AS ITS OWN ROW. "
             + ", ".join(f"`{a}:{b}`" for a, b in pairs)
             + f" was added to the design for {len(interacted)} population(s) because the plan "
-              f"asked for it. Two consequences, and neither is visible in the table: the "
-              f"coefficient reported for each of its two main effects is CONDITIONAL - the "
-              f"effect at the reference level of the other factor, not a marginal effect "
-              f"averaged over it - so the same column name carries different numbers than it "
-              f"would without the interaction; and the interaction coefficient itself is not "
-              f"contrasted, so no gene here is reported as responding to it.")
+              f"asked for it, and its coefficient is reported under that term, named on the "
+              f"levels that are not the controls. One consequence is not visible in the table: "
+              f"the coefficient reported for each of its two main effects is CONDITIONAL - the "
+              f"effect at the CONTROL of the other factor, not a marginal effect averaged over "
+              f"it - so the same column name carries different numbers than it would without "
+              f"the interaction.")
     ctx.caveat("The unit of replication is the SAMPLE. Counts were summed per (sample, "
                "population) before testing, so no p-value here is inflated by cell count.")
     ctx.caveat(
