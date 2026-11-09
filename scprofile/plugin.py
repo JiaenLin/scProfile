@@ -497,6 +497,8 @@ class Context(FigureContextReader):
         self._said_design = False
         #: The terms `levels()` was asked about in this instance.
         self.design_asked = set()
+        #: The terms whose control was missing from a subset `model_frame` built, said once each.
+        self._control_absent = set()
         #: Every directory `source_layers()` walked, so a refusal can name where it looked -
         #: and whether the walk FINISHED, because a search that gave up and a project that has
         #: nothing return the same empty list, and only one of them is a fact about the data.
@@ -695,8 +697,10 @@ class Context(FigureContextReader):
         pres = (sorted({str(x) for x in present}) if present is not None else None)
         if not order:
             from .planner import control_level
-            lv = pres if pres is not None else sorted(
-                {str(r.get(t, "")) for r in self.design_table().values()} - {""})
+            # THE CONTROL IS A PROPERTY OF THE DESIGN, NOT OF A SUBSET: resolved over every level
+            # the table has, and only then narrowed to the subset's.
+            lv = sorted({str(r.get(t, "")) for r in self.design_table().values()} - {""}) \
+                or (pres or [])
             if not lv:
                 return []
             ctl, basis = control_level(lv)
@@ -728,7 +732,23 @@ class Context(FigureContextReader):
             t = str(t)
             if t in out.columns:
                 vals = out[t].astype(str)
-                out[t] = pd.Categorical(vals, categories=self.levels(t, vals.unique()))
+                cats = self.levels(t, vals.unique())
+                # A SUBSET WITH NO SAMPLE AT THE CONTROL HAS NO CONTRAST AGAINST IT (GAP-C48). Its
+                # levels were the ones it had, so `levels[-1] vs levels[0]` read one treated level
+                # against another - `mid vs alpha` - under a caveat saying every contrast is read
+                # against the control. The control stays, as an EMPTY category: a replication
+                # check refuses the contrast there, by name, and nothing reads it against another.
+                ctl = self._control_of(t)
+                if ctl is not None and ctl not in cats:
+                    cats = [ctl] + list(cats)
+                    if t not in self._control_absent:
+                        self._control_absent.add(t)
+                        self.caveat(
+                            f"THE CONTROL OF {t!r} ({ctl!r}) HAS NO SAMPLE IN A SUBSET THIS PLUGIN "
+                            f"FITTED. It is kept there as an empty level, so the subset's "
+                            f"contrast is refused rather than read between two other levels; "
+                            f"the subsets are named where this plugin says what it did not test.")
+                out[t] = pd.Categorical(vals, categories=cats)
         added = []
         cov = self.params.get("covariates") if isinstance(self.params.get("covariates"),
                                                            dict) else {}
@@ -744,6 +764,21 @@ class Context(FigureContextReader):
             added.append(name)
         self._say_design()
         return out, added
+
+    def _control_of(self, term):
+        """A term's control: the plan's decision, else the host's resolver over the design."""
+        con = self.params.get("contrast") if isinstance(self.params.get("contrast"), dict) else {}
+        c = ((con or {}).get("controls") or {}).get(str(term))
+        if c is not None:
+            return str(c)
+        order = ((con or {}).get("levels") or {}).get(str(term)) or []
+        if order:
+            return str(order[0])
+        lv = sorted({str(r.get(str(term), "")) for r in self.design_table().values()} - {""})
+        if not lv:
+            return None
+        from .planner import control_level
+        return control_level(lv)[0]
 
     def _say_design(self):
         """The design's sentences, once per instance: references and covariates."""

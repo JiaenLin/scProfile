@@ -254,6 +254,44 @@ else:
            sorted(set(t.term)) == ["f1"] and set(t.contrast) == {"treated vs untreated"},
            sorted(set(zip(t.term, t.contrast))))
 
+
+print("\n7. under --factor, every other column of the table is still NAMED as not in the model")
+# FOUND BY W013's VERIFIER: `--factor` narrows the run's factors, and the columns it left out
+# were neither modelled, refused nor named - the plan printed "none declared, and no other column
+# of the design" over a table that had them.
+try:
+    fx7 = PL.design_facts({s: {"f1": f} for s, f in zip(SAMPLES, F1)}, ["f1"], "sample",
+                          SAMPLES, controls={"f1": "untreated"},
+                          covariates={"age": COV["age"]}, columns=["f1", "age", "site", "batch"])
+    dec7 = PL.decisions_for(K(), fx7)
+except TypeError as e:                       # 0f4ff9e: design_facts records no columns
+    fx7, dec7 = None, {}
+    ck("design_facts records the design table's columns", False, repr(e))
+nm = [c["name"] for c in ((dec7 or {}).get("covariates") or {}).get("not_modelled") or []]
+ck("every column that is neither a term nor a declared covariate is named", nm == ["batch", "site"],
+   nm)
+ck("and the sentence claiming there is no other column is gone",
+   PL.describe_covariates({}) == "no covariate declared", PL.describe_covariates({}))
+if _arrays():
+    with tempfile.TemporaryDirectory() as td:
+        _a, h5, dsn = _write_object(td, F1, COV["age"], COV["site"])
+        base = [sys.executable, "-m", "scprofile.cli", "plan", "--h5ad", str(h5),
+                "--kernel", "de", "--design", str(dsn), "--prefix", str(Path(td) / "pfx"),
+                "--label-key", "cell_type", "--sample-key", "sample", "--factor", "f1",
+                "--counts-layer", "counts", "--organism", "human", "--assay", "cell"]
+        env = dict(os.environ, PYTHONPATH=str(ROOT))
+        r = subprocess.run(base, capture_output=True, text=True, env=env, cwd=str(ROOT),
+                           timeout=300)
+        out = r.stdout + r.stderr
+        ck("the plan names the columns --factor left out", "not in the model: age, site" in out,
+           out[-1200:])
+        ck("and never says there is no other column", "no other column of the design" not in out)
+        r = subprocess.run(base + ["--covariate", "age"], capture_output=True, text=True,
+                           env=env, cwd=str(ROOT), timeout=300)
+        out = r.stdout + r.stderr
+        ck("with one declared, the other is still named", "MODELLED age (numeric)" in out
+           and "not in the model: site" in out, out[-1200:])
+
 print()
 if FAILS:
     print(f"{len(FAILS)} FAILED")

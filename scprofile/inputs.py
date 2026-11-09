@@ -779,6 +779,31 @@ def read_design(path, samples=None, sample_col=None, factors=None):
     return table, key, factors
 
 
+def design_columns(path, sample_col=None):
+    """Every column of the design table except its sample key, or None without a table.
+
+    `--factor` narrows the rows a run reads to the factors it is about; the table still carries
+    its other columns, and a covariate the run does not model must be NAMED as not modelled
+    whichever of them it is (GAP-040: with `--factor` every other column dropped without a word).
+    The key is found as `read_design` finds it.
+    """
+    if not path:
+        return None
+    import csv
+    with open(path, newline="", encoding="utf-8") as fh:
+        head = fh.read(4096)
+        fh.seek(0)
+        try:
+            dialect = csv.Sniffer().sniff(head, delimiters=",\t;")
+        except csv.Error:
+            dialect = csv.excel
+        cols = next(csv.reader(fh, dialect), [])
+    key = (sample_col if sample_col and sample_col in cols else None) or next(
+        (c for c in cols if c.lower() in ("sample", "sample_id", "library", "batch", "donor")),
+        None)
+    return [c for c in cols if c and c != key]
+
+
 def covariate_values(path, adata=None, sample_key=None, names=()):
     """{covariate: {sample: value}} for every `--covariate`, read where the design is read.
 

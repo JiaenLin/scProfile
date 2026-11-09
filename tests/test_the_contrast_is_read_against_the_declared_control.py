@@ -237,6 +237,63 @@ else:
         ck("the run says which level each contrast is read against",
            any("READ AGAINST ITS CONTROL" in c for c in ctx.caveats))
 
+
+print("\n6. a subset with no sample at the control is not contrasted against another level "
+      "(GAP-C48)")
+# FOUND BY W013's VERIFIER: with three levels, a population lacking the declared control got its
+# own levels only, so `levels[-1] vs levels[0]` read `mid vs alpha` - under the host's caveat that
+# every contrast is read against the control. The host's frame now keeps the control as an empty
+# level there, and the population's replication check refuses the contrast, by name.
+if not _have_deseq:
+    print("  SKIP pydeseq2 is not importable in this interpreter")
+else:
+    import anndata as ad
+    import numpy as np
+    from scprofile import declare
+    from scprofile.kernels import discover
+    D3 = {f"T{lv}{j}": {"f1": lv} for lv in ("alpha", "mid", "ctl") for j in (1, 2)}
+    with tempfile.TemporaryDirectory() as td:
+        rng = np.random.default_rng(5)
+        rows, smp, pop = [], [], []
+        for s_, r_ in sorted(D3.items()):
+            for p_ in ("popA", "popB"):
+                if p_ == "popB" and r_["f1"] == "ctl":
+                    continue                       # popB has no sample at the control
+                rows.append(rng.poisson(rng.uniform(5, 20, 40), size=(20, 40)))
+                smp += [s_] * 20
+                pop += [p_] * 20
+        X = np.vstack(rows).astype(np.float32)
+        A3 = ad.AnnData(X=X)
+        A3.var_names = [f"g{j}" for j in range(40)]
+        A3.obs_names = [f"c{i}" for i in range(A3.n_obs)]
+        A3.obs["sample"] = pd.Categorical(smp)
+        A3.obs["cell_type"] = pd.Categorical(pop)
+        A3.layers["counts"] = X.copy()
+        dsn3 = Path(td) / "design.csv"
+        dsn3.write_text("sample,f1\n" + "".join(f"{k_},{v_['f1']}\n" for k_, v_ in
+                                                 sorted(D3.items())), encoding="utf-8")
+        fx3 = PL.design_facts(D3, ["f1"], "sample", sorted(D3), controls={"f1": "ctl"})
+        k3 = discover()["de"]
+        params3 = PL.decisions_for(k3, fx3)
+        spec3 = importlib.util.spec_from_file_location("de_kernel_c48", ROOT / "kernels" / "de.py")
+        de3 = importlib.util.module_from_spec(spec3)
+        spec3.loader.exec_module(de3)
+        ctx3 = Context(A3, keys={"counts": "counts", "label": "cell_type", "sample": "sample"},
+                       out=Path(td) / "out", cores=1, params=params3, design=str(dsn3),
+                       config=declare.resolve_config(de3.PLUGIN, params3, "de"),
+                       log=lambda *a, **k: None)
+        de3.run(ctx3)
+        t3 = pd.read_csv(Path(td) / "out" / "tables" / "de_by_population.csv")
+        got3 = sorted(set(map(tuple, t3[["population", "contrast"]].drop_duplicates().values)))
+        ck("the population with the control is read against it", got3 == [("popA", "mid vs ctl")],
+           got3)
+        ck("the one without it is not contrasted at all - no `mid vs alpha`",
+           "popB" not in set(t3.population), got3)
+        ck("and is named as not tested, with the host's reason",
+           any("Not tested" in c and "popB" in c for c in ctx3.caveats)
+           and any("HAS NO SAMPLE IN A SUBSET" in c for c in ctx3.caveats),
+           [c[:110] for c in ctx3.caveats])
+
 print()
 if FAILS:
     print(f"{len(FAILS)} FAILED")

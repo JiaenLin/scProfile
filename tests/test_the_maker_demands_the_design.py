@@ -120,6 +120,118 @@ r = subprocess.run([sys.executable, "-m", "scprofile.cli", "design", "de"], capt
                    text=True, cwd=str(ROOT), timeout=120)
 ck("scprofile design de exits 0", r.returncode == 0, (r.stdout + r.stderr)[-800:])
 
+
+print("\n5. every STATEMENT of what was contrasted or modelled is a site, answered through the "
+      "worksheet and recorded (GAP-C47)")
+# FOUND BY W013's VERIFIER: de's runtime caveat said an interaction was "not contrasted" beside
+# the row contrasting it, and the sentence was changed with no verb and no worksheet naming the
+# site. A plugin's sentence about the design is a claim about the host's decision.
+STATED = '''
+PLUGIN = {"version": "1.0.0", "inject": {"required": ["design"], "optional": ["contrast", "covariates"]}}
+
+def run(ctx):
+    import somelib
+    terms = ctx.params["contrast"]["terms"]
+    obs, covs = ctx.model_frame(ctx.design_frame(), terms)
+    for term in terms:
+        levels = ctx.levels(term, obs[term])
+        res = somelib.compare(contrast=[term, levels[-1], levels[0]])
+    ctx.caveat("the cells of every sample were summed before testing")
+    if terms:
+        ctx.caveat("THE INTERACTION IS IN THE MODEL AND IS NOT CONTRASTED here")
+'''
+
+
+class Stub2(Stub):
+    pass
+
+
+import json                                                                  # noqa: E402
+with tempfile.TemporaryDirectory() as td0:
+    f0 = Path(td0) / "stated.py"
+    f0.write_text(STATED, encoding="utf-8")
+    d0 = V.design_sites(Stub2(f0, {"inject": {"required": ["design"],
+                                              "optional": ["contrast", "covariates"]}}))
+    st0 = d0.get("statements") or []
+    ck("the sentence about the model is named as a statement site, the other is not",
+       [x["line"] for x in st0] == [13], [(x["line"], x.get("text")) for x in st0])
+    ck("and it is owed until it is answered", d0["owes"]
+       and [m for m, _w in d0["missing"]] == ["statement:13"], d0["missing"])
+if not hasattr(V, "design_answer"):
+    ck("validate.design_answer, design_confirm and design_replay exist", False,
+       "no answer mechanism in scprofile/validate.py")
+else:
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "stated.py"
+        f.write_text(STATED, encoding="utf-8")
+        k = Stub2(f, {"inject": {"required": ["design"], "optional": ["contrast", "covariates"]}})
+        base = f.read_text(encoding="utf-8")
+        ck("a confirmation needs a reason", V.design_confirm(k, 13, "", log=lambda *a: None) == 1)
+        ck("confirmed true, by the digest of its syntax, it is answered",
+           V.design_confirm(k, 13, "checked against the host", log=lambda *a: None) == 0
+           and not V.design_sites(k)["owes"])
+        rec = json.loads(V.design_record_path(k).read_text(encoding="utf-8"))
+        ck("the confirmation is in the worksheet's own record", any(
+            v.get("how") == "confirmed" and v.get("site") == "statement:13"
+            for v in rec["statements"].values()), rec)
+        f.write_text(base.replace("NOT CONTRASTED here", "not contrasted at all"), "utf-8")
+        ck("a sentence changed after it was confirmed owes again", V.design_sites(k)["owes"])
+        f.write_text(base, encoding="utf-8")
+        V.design_record_path(k).unlink()
+        outside = Path(td) / "outside.py"
+        outside.write_text(base.replace('"version": "1.0.0", ', '"version": "1.0.0", "x": 1, '),
+                           encoding="utf-8")
+        lines = []
+        ck("an answer changing a line no site names is refused, by line",
+           V.design_answer(k, outside, "why", log=lines.append) == 1
+           and f.read_text(encoding="utf-8") == base
+           and any("line(s) 2" in x and "hand edit" in x for x in lines), lines)
+        fixed = Path(td) / "fixed.py"
+        fixed.write_text(base.replace(
+            '        ctx.caveat("THE INTERACTION IS IN THE MODEL AND IS NOT CONTRASTED here")',
+            '        # the interaction is contrasted, as its own row\n'
+            '        ctx.caveat("THE INTERACTION IS IN THE MODEL AND IS CONTRASTED, as its own row")'),
+            encoding="utf-8")
+        ck("an answer at the statement is applied, and the version is the maker's to raise",
+           V.design_answer(k, fixed, "it is contrasted", log=lambda *a: None) == 0
+           and "IS CONTRASTED, as its own row" in f.read_text(encoding="utf-8")
+           and '"version": "1.1.0"' in f.read_text(encoding="utf-8"))
+        ck("and the statement it answered is answered", not V.design_sites(k)["owes"])
+        rec = json.loads(V.design_record_path(k).read_text(encoding="utf-8"))
+        ans = rec["answers"][0] if rec["answers"] else {}
+        ck("the record carries the diff, the reason and the sites",
+           ans.get("sites") == ["statement:14"] and ans.get("why") == "it is contrasted"
+           and "+        # the interaction is contrasted" in ans.get("diff", ""), ans)
+        copy = Path(td) / "copy.py"
+        copy.write_text(base, encoding="utf-8")
+        ck("replayed onto the file it was made against, the record rebuilds the plugin exactly",
+           V.design_replay(k, copy, log=lambda *a: None) == 0
+           and copy.read_text(encoding="utf-8") == f.read_text(encoding="utf-8"))
+        copy.write_text(base + "\n", encoding="utf-8")
+        ck("and refuses a file it was not made against",
+           V.design_replay(k, copy, log=lambda *a: None) == 1)
+
+
+print("\n6. the shipped de: every statement answered, and its record replays")
+from scprofile.kernels import discover                                      # noqa: E402
+_de = discover()["de"]
+ck("the worksheet keeps its own record beside the plugin", hasattr(V, "design_record_path")
+   and V.design_record_path(_de).is_file())
+if hasattr(V, "design_record_path"):
+    d = V.design_sites(_de)
+    ck("the worksheet names de's statements, and every one is answered",
+       len(d.get("statements") or []) >= 10
+       and all(x.get("answered") for x in d["statements"]), [
+           (x["line"], bool(x.get("answered"))) for x in d.get("statements") or []])
+    rec = json.loads(V.design_record_path(_de).read_text(encoding="utf-8")) \
+        if V.design_record_path(_de).is_file() else {"answers": []}
+    ck("its record holds the answers that changed it, each with a reason and a diff",
+       len(rec["answers"]) >= 2 and all(a.get("why") and a.get("diff") for a in rec["answers"]),
+       len(rec["answers"]))
+    ck("the last answer made the file that ships", bool(rec["answers"])
+       and rec["answers"][-1]["after"] == V._sha(
+           (ROOT / "kernels" / "de.py").read_text(encoding="utf-8")))
+
 print()
 if FAILS:
     print(f"{len(FAILS)} FAILED")

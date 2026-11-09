@@ -371,41 +371,98 @@ HOST_MODEL = {"model_frame": "the fit's metadata: each term a categorical whose 
               "levels": "a term's levels in the order a contrast reads them - [0] is the "
                         "control - over the levels a subset actually has"}
 
+#: How a plugin STATES something to its reader at run time: the host's two calls for a sentence.
+STATEMENT_CALLS = ("caveat", "refuse")
 
-def design_sites(kernel):
-    """{design_aware, sites, missing, owes} - where a plugin fits a model, and what it owes.
+#: The words by which such a sentence says what was or was not CONTRASTED or MODELLED (GAP-C47).
+#: Matched case-insensitively, as substrings, in the literal text of the call's arguments. Wide on
+#: purpose: a sentence named here that says nothing about the design costs one confirmation, and
+#: one missed is a claim about the design that nobody was asked to square with the host - which
+#: is how a caveat came to say an interaction was "not contrasted" beside the row contrasting it.
+DESIGN_WORDS = ("contrast", "interaction", "reference", "control", "covariate", "model",
+                "formula", "baseline", "tested", "term", "fitted", "factor", "design")
 
-    THE HOST DECIDES THE DESIGN AND THE PLUGIN FITS IT (GAP-039, GAP-040). A plugin that chooses
-    a contrast's reference itself chooses it by whatever it reached for - `sorted(levels)[0]`,
-    a formula library's alphabetical default - and on a design whose control sorts last its
-    table runs the other way from every panel on the page; a plugin that builds its formula from
-    the terms alone fits without the covariates the user named. Neither failure raises.
+#: What a statement owes the host.
+STATEMENT_OWES = ("the design is the host's: which level each term is read against (`ctx.levels`) "
+                  "and which covariates are modelled or refused (said once by `ctx.model_frame`). "
+                  "The sentence says only what this plugin computed, and agrees with that decision")
 
-    READ FROM THE SOURCE, NOT FROM A RUN, so it is a build question: does the plugin ask the
-    host for the frame (`model_frame`) and the order (`levels`), and does it declare that it can
-    receive covariates? Each site where a model is built or a contrast taken is named with its
-    line, as the place the answer goes. It cannot see a plugin that asks the host and then
-    reorders anyway; the two-shape fixture, whose control sorts last on one shape, is the check
-    that can (`agree` in the harness's ladder).
+
+def design_record_path(kernel):
+    """`kernels/<plugin>.design.json`: the design worksheet's own record, beside the plugin.
+
+    MAKER OUTPUT, written by `scprofile design --answer` and `--confirm` and by nothing else: every
+    answer's diff with its reason and the digests of the file it was applied to and produced, and
+    every statement taken as answered, by the digest of its syntax - so a sentence changed after
+    it was answered owes again, and the plugin can be rebuilt from its base by replaying the
+    maker's verb calls and then these answers (`--replay-into`).
+    """
+    p = Path(kernel.path)
+    return p.with_name(p.stem + ".design.json")
+
+
+def _read_record(kernel):
+    import json
+    p = design_record_path(kernel)
+    rec = {}
+    if p.is_file():
+        try:
+            rec = json.loads(p.read_text(encoding="utf-8"))
+        except ValueError:
+            rec = {"unreadable": str(p)}
+    rec.setdefault("plugin", kernel.name)
+    rec.setdefault("answers", [])
+    rec.setdefault("statements", {})
+    return rec
+
+
+def _write_record(kernel, rec):
+    import json
+    design_record_path(kernel).write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n",
+                                          encoding="utf-8")
+
+
+def _sha(text):
+    import hashlib
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def _scan(src):
+    """(fit sites, statement sites, attribute names called) of one plugin's source.
+
+    A FIT site is a call carrying a `FIT_KEYWORDS` argument; it is answered inside the innermost
+    loop around it (or its function), which is where a model's frame and levels are built. A
+    STATEMENT site is a `ctx.caveat(...)` or `ctx.refuse(...)` whose literal words are design words;
+    it is answered on its own lines and the comment block directly above them.
     """
     import ast
-    spec = kernel.spec or {}
-    inj = spec.get("inject") or {}
-    takes = (set(inj.get("required") or []) | set(inj.get("optional") or [])
-             if isinstance(inj, dict) else set())
-    out = {"design_aware": bool(takes & {"design", "contrast"}), "sites": [], "missing": [],
-           "owes": False, "takes": sorted(takes)}
-    path = Path(kernel.path)
-    if not out["design_aware"] or not path.is_file():
-        return out
-    src = path.read_text(encoding="utf-8")
-    try:
-        tree = ast.parse(src)
-    except SyntaxError as e:                                              # pragma: no cover
-        out["missing"].append(("parse", f"the source does not parse: {e}"))
-        out["owes"] = True
-        return out
-    called = set()
+    import hashlib
+    tree = ast.parse(src)
+    par = {}
+    for node in ast.walk(tree):
+        for ch in ast.iter_child_nodes(node):
+            par[ch] = node
+    lines = src.splitlines()
+
+    def fit_span(node):
+        cur = par.get(node)
+        while cur is not None:
+            if isinstance(cur, (ast.For, ast.AsyncFor, ast.While, ast.FunctionDef,
+                                ast.AsyncFunctionDef)):
+                return cur.lineno, cur.end_lineno
+            cur = par.get(cur)
+        return node.lineno, node.end_lineno
+
+    def statement_span(node):
+        stmt = node
+        while par.get(stmt) is not None and not isinstance(stmt, ast.stmt):
+            stmt = par[stmt]
+        a = stmt.lineno
+        while a > 1 and lines[a - 2].strip().startswith("#"):
+            a -= 1
+        return a, stmt.end_lineno
+
+    fits, stmts, called = [], [], set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -416,16 +473,75 @@ def design_sites(kernel):
             called.add(fn.attr)
         kws = [k.arg for k in node.keywords if k.arg in FIT_KEYWORDS]
         if kws:
-            out["sites"].append((node.lineno, name or "<call>", kws))
-    out["sites"].sort()
-    if not out["sites"]:
+            fits.append({"line": node.lineno, "call": name or "<call>", "kws": kws,
+                         "span": fit_span(node)})
+        if isinstance(fn, ast.Attribute) and fn.attr in STATEMENT_CALLS:
+            consts = [n for a in list(node.args) + [k.value for k in node.keywords]
+                      for n in ast.walk(a)
+                      if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+            consts.sort(key=lambda n: (n.lineno, n.col_offset))       # as the sentence reads
+            words = " ".join(n.value for n in consts)
+            hit = [w for w in DESIGN_WORDS if w in words.lower()]
+            if hit:
+                stmts.append({"line": node.lineno, "call": fn.attr, "words": hit,
+                              "digest": hashlib.sha256(ast.dump(node).encode()).hexdigest()[:16],
+                              "span": statement_span(node),
+                              "text": " ".join(words.split())[:96]})
+    fits.sort(key=lambda d: d["line"])
+    stmts.sort(key=lambda d: d["line"])
+    return fits, stmts, called
+
+
+def design_sites(kernel):
+    """{design_aware, sites, statements, missing, owes} - where a plugin fits a model, where it
+    STATES what was contrasted or modelled, and what it owes the host at each.
+
+    THE HOST DECIDES THE DESIGN AND THE PLUGIN FITS IT (GAP-039, GAP-040). A plugin that chooses
+    a contrast's reference itself chooses it by whatever it reached for - `sorted(levels)[0]`,
+    a formula library's alphabetical default - and on a design whose control sorts last its
+    table runs the other way from every panel on the page; a plugin that builds its formula from
+    the terms alone fits without the covariates the user named. Neither failure raises.
+
+    AND WHAT A PLUGIN SAYS ABOUT THE DESIGN IS A CLAIM ABOUT THE HOST'S DECISION (GAP-C47). A
+    caveat that an interaction "is not contrasted", printed beside the row contrasting it, is as
+    wrong as a reversed sign and as silent. Every runtime statement carrying a design word is
+    named, and owes until it is answered through the worksheet - changed (`--answer`) or
+    confirmed true as it stands (`--confirm`) - each recorded by the digest of its syntax.
+
+    READ FROM THE SOURCE, NOT FROM A RUN, so it is a build question. It cannot see a plugin that
+    asks the host and then reorders anyway; the two-shape fixture, whose control sorts last on
+    one shape, is the check that can (`agree` in the harness's ladder).
+    """
+    spec = kernel.spec or {}
+    inj = spec.get("inject") or {}
+    takes = (set(inj.get("required") or []) | set(inj.get("optional") or [])
+             if isinstance(inj, dict) else set())
+    out = {"design_aware": bool(takes & {"design", "contrast"}), "sites": [], "statements": [],
+           "missing": [], "owes": False, "takes": sorted(takes)}
+    path = Path(kernel.path)
+    if not out["design_aware"] or not path.is_file():
         return out
-    for acc, what in HOST_MODEL.items():
-        if acc not in called:
-            out["missing"].append((acc, what))
-    if "covariates" not in takes:
-        out["missing"].append(("covariates", "the covariates the user named: `inject` names no "
-                                             "`covariates`, so none can be handed to it"))
+    try:
+        fits, stmts, called = _scan(path.read_text(encoding="utf-8"))
+    except SyntaxError as e:                                              # pragma: no cover
+        out["missing"].append(("parse", f"the source does not parse: {e}"))
+        out["owes"] = True
+        return out
+    out["sites"] = [(f["line"], f["call"], f["kws"]) for f in fits]
+    answered = _read_record(kernel)["statements"]
+    for s in stmts:
+        s["answered"] = answered.get(s["digest"])
+    out["statements"] = stmts
+    if fits:
+        for acc, what in HOST_MODEL.items():
+            if acc not in called:
+                out["missing"].append((acc, what))
+        if "covariates" not in takes:
+            out["missing"].append(("covariates", "the covariates the user named: `inject` names "
+                                                 "no `covariates`, so none can be handed to it"))
+    for s in stmts:
+        if not s["answered"]:
+            out["missing"].append((f"statement:{s['line']}", STATEMENT_OWES))
     out["owes"] = bool(out["missing"])
     return out
 
@@ -438,26 +554,224 @@ def design_report(kernel, log=print):
         log(f"  ok   {kernel.name:<12} not design-aware (inject names neither `design` nor "
             f"`contrast`): nothing to answer")
         return 0
-    if not d["sites"]:
-        log(f"  ok   {kernel.name:<12} design-aware, and no call here fits a model or takes a "
-            f"contrast ({', '.join(FIT_KEYWORDS)}): nothing to answer")
+    if not d["sites"] and not d["statements"]:
+        log(f"  ok   {kernel.name:<12} design-aware, and no call here fits a model, takes a "
+            f"contrast or states one: nothing to answer")
         return 0
     log(f"  {'OWES' if d['owes'] else 'ok  '} {kernel.name:<12} design-aware; "
         f"{len(d['sites'])} site(s) where a model is built or a contrast taken:")
     for line, name, kws in d["sites"]:
         log(f"         kernels/{rel}:{line}  {name}({', '.join(k + '=' for k in kws)}...)")
+    log(f"       {len(d['statements'])} statement(s) of what was contrasted or modelled:")
+    for s in d["statements"]:
+        a = s.get("answered")
+        state = (f"answered ({a.get('how')}: {str(a.get('why') or '')[:60]})" if a else "OWES")
+        log(f"         kernels/{rel}:{s['line']}  ctx.{s['call']}(...)  [{', '.join(s['words'])}]"
+            f"  {state}")
+        log(f"             \"{s['text']}\"")
     if not d["owes"]:
-        log("       it takes the frame and the order from the host and declares `covariates`")
+        log("       it takes the frame and the order from the host, declares `covariates`, and "
+            "every statement is answered")
         return 0
-    log("       WHAT IT OWES THE HOST - answer each at the sites above:")
+    log("       WHAT IT OWES THE HOST - answer each where it is named:")
+    owed = [acc.split(":", 1)[1] for acc, _w in d["missing"] if acc.startswith("statement:")]
     for acc, what in d["missing"]:
         if acc == "covariates":
             log(f"         inject `covariates`: {what}. The maker's verb: "
                 f"sch dev edit --root . --point kernel --name {kernel.name} "
                 f"--list-add inject.optional=\"covariates\"")
-        else:
+        elif not acc.startswith("statement:"):
             log(f"         ctx.{acc}(...): {what}")
-    log("       A reference chosen by sort order, or a formula built from the terms alone, "
-        "returns a full table either way: the direction and the adjustment are the host's to "
-        "decide and the plugin's to take.")
+    if owed:
+        log(f"         the statements at line(s) {', '.join(owed)}: {STATEMENT_OWES}")
+    log(f"       HOW AN ANSWER IS MADE, and recorded in kernels/{design_record_path(kernel).name}:"
+        f" change the file and hand it in whole - `scprofile design {kernel.name} --answer <file>"
+        f" --why \"...\"` applies it only where a site above is named and records the diff - or,"
+        f" for a statement true as it stands, `scprofile design {kernel.name} --confirm <line> "
+        f"--why \"...\"`.")
     return 1
+
+
+def _version_node(src):
+    """(line, current value) of the PLUGIN dict's `version`, or (None, None)."""
+    import ast
+    tree = ast.parse(src)
+    for n in tree.body:
+        if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "PLUGIN"
+                                             for t in n.targets) and isinstance(n.value, ast.Dict):
+            for k, v in zip(n.value.keys, n.value.values):
+                if isinstance(k, ast.Constant) and k.value == "version" \
+                        and isinstance(v, ast.Constant):
+                    return v.lineno, str(v.value)
+    return None, None
+
+
+def _set_version(src, value):
+    line, old = _version_node(src)
+    if line is None:
+        return src
+    lines = src.splitlines(keepends=True)
+    lines[line - 1] = re.sub(r"""(["']version["']\s*:\s*)(["'])[^"']*(["'])""",
+                             lambda m: m.group(1) + m.group(2) + value + m.group(3),
+                             lines[line - 1], count=1)
+    return "".join(lines)
+
+
+def _bump(v):
+    parts = (str(v or "0.0.0").split(".") + ["0", "0", "0"])[:3]
+    try:
+        return f"{int(parts[0])}.{int(parts[1]) + 1}.0"
+    except ValueError:
+        return str(v)
+
+
+def design_answer(kernel, proposed, why, *, as_version=None, log=print):
+    """Apply an author's answer to the design worksheet, by the sites it names, and record it.
+
+    `proposed` is the whole plugin file as the author would have it. Every line it changes must
+    lie inside a site the worksheet names - a fit site's loop, or a statement and the comment
+    above it - or the answer is refused with the lines named: an answer is where the maker asked,
+    or it is a hand edit. The `version` line is the maker's, as with `sch dev edit`: the author's
+    copy keeps it, and the command raises it (the minor, or `as_version`). Returns 0 or 1.
+    """
+    import difflib
+    if not str(why or "").strip():
+        log("  refused: --why is the answer's reason, and a recorded answer carries one")
+        return 1
+    path = Path(kernel.path)
+    before = path.read_text(encoding="utf-8")
+    text = Path(proposed).read_text(encoding="utf-8")
+    _vl, vold = _version_node(before)
+    text = _set_version(text, vold) if vold else text     # the version line is not the author's
+    fits, stmts, _c = _scan(before)
+    spans = [tuple(f["span"]) for f in fits] + [tuple(s["span"]) for s in stmts]
+    b, a = before.splitlines(keepends=True), text.splitlines(keepends=True)
+    ops = [o for o in difflib.SequenceMatcher(None, b, a, autojunk=False).get_opcodes()
+           if o[0] != "equal"]
+    if not ops:
+        log("  refused: the file handed in is the file as it stands - nothing to answer")
+        return 1
+    outside = []
+    for tag, i1, i2, j1, j2 in ops:
+        if i2 > i1:              # lines i1+1..i2 replaced or removed: all of them inside one site
+            if not any(sa <= i1 + 1 and i2 <= sb for sa, sb in spans):
+                outside.append(f"{i1 + 1}-{i2}")
+        # an insertion sits between lines i1 and i1+1: at a site's edge or inside it
+        elif not any(sa <= i1 + 1 <= sb or sa <= i1 <= sb for sa, sb in spans):
+            outside.append(f"after {i1}")
+    if outside:
+        log(f"  refused: line(s) {', '.join(outside)} of kernels/{path.name} are in no site the "
+            f"worksheet names - an answer is made where the maker asks, or it is a hand edit")
+        return 1
+    new_version = as_version or _bump(vold)
+    after = _set_version(text, new_version) if vold else text
+    try:
+        _f2, stmts2, _c2 = _scan(after)
+    except SyntaxError as e:
+        log(f"  refused: the answer does not parse ({e})")
+        return 1
+    rec = _read_record(kernel)
+    n = len(rec["answers"]) + 1
+    touched = [(j1 + 1, max(j2, j1 + 1)) for _t, _i1, _i2, j1, j2 in ops]
+    hit = [s for s in stmts2 if any(not (hi < s["span"][0] or lo > s["span"][1])
+                                    for lo, hi in touched)]
+    for s in hit:
+        rec["statements"][s["digest"]] = {"site": f"statement:{s['line']}",
+                                          "how": f"answer {n}", "why": str(why)}
+    sites = sorted({f"fit:{f['line']}" for f in fits for _t, i1, i2, _j1, _j2 in ops
+                    if f["span"][0] <= i1 + 1 <= f["span"][1]}
+                   | {f"statement:{s['line']}" for s in hit})
+    diff = "".join(difflib.unified_diff(b, after.splitlines(keepends=True),
+                                        f"a/kernels/{path.name}", f"b/kernels/{path.name}", n=3))
+    rec["answers"].append({"n": n, "why": str(why), "sites": sites, "version": new_version,
+                           "before": _sha(before), "after": _sha(after), "diff": diff})
+    path.write_text(after, encoding="utf-8")
+    _write_record(kernel, rec)
+    log(f"  answer {n} applied to kernels/{path.name} at {', '.join(sites)}; version {vold} -> "
+        f"{new_version}; recorded in kernels/{design_record_path(kernel).name}")
+    log(f"  next: scprofile validate {kernel.name}, then scprofile design {kernel.name}")
+    return 0
+
+
+def design_confirm(kernel, line, why, log=print):
+    """Record a statement as true as it stands, by the digest of its syntax. Returns 0 or 1."""
+    if not str(why or "").strip():
+        log("  refused: --why is the confirmation's reason, and a recorded answer carries one")
+        return 1
+    _f, stmts, _c = _scan(Path(kernel.path).read_text(encoding="utf-8"))
+    s = next((x for x in stmts if x["line"] == int(line)), None)
+    if s is None:
+        log(f"  refused: no statement the worksheet names starts at line {line} "
+            f"(it names {', '.join(str(x['line']) for x in stmts) or 'none'})")
+        return 1
+    rec = _read_record(kernel)
+    rec["statements"][s["digest"]] = {"site": f"statement:{s['line']}", "how": "confirmed",
+                                      "why": str(why)}
+    _write_record(kernel, rec)
+    log(f"  statement:{s['line']} confirmed as it stands; recorded by its digest {s['digest']}")
+    return 0
+
+
+def _apply_unified(text, diff):
+    """`text` with one recorded unified diff applied, exactly: every context and removed line
+    must be the line it names, or ValueError says where it is not."""
+    src = text.splitlines(keepends=True)
+    lines = diff.splitlines(keepends=True)
+    out, i, k = [], 0, 0
+    while k < len(lines) and not lines[k].startswith("@@"):
+        k += 1
+    while k < len(lines):
+        m = re.match(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", lines[k])
+        if not m:
+            raise ValueError(f"not a hunk header: {lines[k]!r}")
+        k += 1
+        start = int(m.group(1)) - 1 if int(m.group(2) or 1) > 0 else int(m.group(1))
+        if start < i:
+            raise ValueError("hunks out of order")
+        out.extend(src[i:start])
+        i = start
+        while k < len(lines) and not lines[k].startswith("@@"):
+            row = lines[k]
+            k += 1
+            if row.startswith("\\"):
+                continue
+            tag, body = row[:1], row[1:]
+            if tag in (" ", "-"):
+                if i >= len(src) or src[i] != body:
+                    raise ValueError(f"line {i + 1} is not the line the answer was made against")
+                if tag == " ":
+                    out.append(src[i])
+                i += 1
+            elif tag == "+":
+                out.append(body)
+    out.extend(src[i:])
+    return "".join(out)
+
+
+def design_replay(kernel, target, log=print):
+    """Apply every recorded answer, in order, to `target` - a copy of the plugin rebuilt from its
+    base by the maker's verb calls. Each must meet the file it was made against (its `before`
+    digest) and leave the file it made (its `after` digest). Returns 0 or 1."""
+    rec = _read_record(kernel)
+    t = Path(target)
+    text = t.read_text(encoding="utf-8")
+    if not rec["answers"]:
+        log(f"  nothing to replay: kernels/{design_record_path(kernel).name} records no answer")
+        return 1
+    for ans in rec["answers"]:
+        if _sha(text) != ans["before"]:
+            log(f"  answer {ans['n']}: the target is not the file it was made against "
+                f"({_sha(text)} != {ans['before']})")
+            return 1
+        try:
+            text = _apply_unified(text, ans["diff"])
+        except ValueError as e:
+            log(f"  answer {ans['n']}: {e}")
+            return 1
+        if _sha(text) != ans["after"]:
+            log(f"  answer {ans['n']}: applied, and the result is not the file it made")
+            return 1
+        log(f"  answer {ans['n']} replayed at {', '.join(ans['sites'])} -> {ans['after']}")
+    t.write_text(text, encoding="utf-8")
+    log(f"  {len(rec['answers'])} answer(s) replayed into {t}")
+    return 0

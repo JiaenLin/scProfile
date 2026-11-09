@@ -75,7 +75,8 @@ class Verdict:
                 "units": self.units, "searched": self.searched, "evidence": self.evidence}
 
 
-def design_facts(design, factors, sample_key, units, controls=None, covariates=None):
+def design_facts(design, factors, sample_key, units, controls=None, covariates=None,
+                 columns=None):
     """What the DESIGN can and cannot support. Numbers, not conclusions.
 
     Everything here is derived from the table the user supplied and the units present in the
@@ -86,8 +87,14 @@ def design_facts(design, factors, sample_key, units, controls=None, covariates=N
     RESOLVED in `decisions_for`, which the plan and the run both call - so the two cannot disagree
     about which level is a contrast's reference or which covariate is in a model (harness
     ADR-0027, P1; GAP-039 and GAP-040).
+
+    `columns` is every column of the design table but its sample key (`inputs.design_columns`):
+    `--factor` narrows `factors` to what the run is about, and the columns it leaves out are
+    still named as not in the model rather than dropped without a word.
     """
     f = {"has_design": bool(design), "sample_key": sample_key,
+         "columns": sorted(({str(c) for c in (columns or [])}
+                            | {str(c) for c in (factors or [])}) - {str(sample_key)}),
          "n_units": len(units or []), "factors": {},
          "declared_controls": {str(k): str(v) for k, v in (controls or {}).items()},
          "covariates": {str(k): {str(s): ("" if v is None else str(v))
@@ -392,7 +399,7 @@ def describe_covariates(cov):
         bits.append(f"REFUSED {c['name']}: {c['why']}")
     if cov.get("not_modelled"):
         bits.append("not in the model: " + ", ".join(c["name"] for c in cov["not_modelled"]))
-    return "; ".join(bits) or "none declared, and no other column of the design"
+    return "; ".join(bits) or "no covariate declared"
 
 
 def covariates_not_taken(kernel, facts):
@@ -544,7 +551,9 @@ def resolve_covariates(facts, contrast):
             accepted.append(rec)
             out["modelled"].append(rec)
     declared = set(facts.get("covariates") or {})
-    for f in sorted(fs):
+    # EVERY COLUMN OF THE TABLE, NOT ONLY THE RUN'S FACTORS: under `--factor` the others were the
+    # ones that dropped without a word (GAP-040, found by W013's verifier).
+    for f in sorted(set(facts.get("columns") or []) | set(fs)):
         if f not in terms and f not in declared:
             out["not_modelled"].append(
                 {"name": f, "why": "a column of the design that is neither a term of this "

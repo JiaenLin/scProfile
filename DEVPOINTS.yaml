@@ -361,14 +361,24 @@ points:
           phase: build
           fills: []
           command: ["{python}", "-m", "scprofile.cli", "design", "{name}"]
+          # AND EVERY SENTENCE THE PLUGIN WRITES ABOUT THE DESIGN (GAP-C47, W013's verifier): a
+          # runtime caveat that an interaction was "not contrasted", beside the row contrasting
+          # it, was changed with no verb and no worksheet naming the site - so the worksheet now
+          # names every `ctx.caveat`/`ctx.refuse` that states what was contrasted or modelled, and
+          # its answers are applied and RECORDED by the maker (kernels/<plugin>.design.json), so
+          # the plugin is rebuilt from its base by the verb calls and then these answers.
           finished_by: >
             `scprofile design <plugin>` prints the worksheet: every site where the plugin builds
             a model or takes a contrast (a call carrying `design=`, `formula=`, `contrast=` ...),
             and what it owes the host there - the fit's metadata from `ctx.model_frame(obs,
             terms)`, each term's levels from `ctx.levels(term, present)` ([0] is the control),
             and `covariates` in `inject` (the maker's verb: `sch dev edit --list-add
-            inject.optional="covariates"`). Answer each where it is named, raise `version`, and
-            re-run this status
+            inject.optional="covariates"`) - and every runtime statement (`ctx.caveat`,
+            `ctx.refuse`) of what was contrasted or modelled. Answer through it: `scprofile
+            design <plugin> --answer <the whole file> --why "..."` applies a change only where a
+            site is named, raises `version` and records the diff; `--confirm <line> --why "..."`
+            records a statement true as it stands, by the digest of its syntax; `--replay-into
+            <copy>` rebuilds the plugin from the record. Then re-run this status
           why: >
             WHICH LEVEL A CONTRAST IS READ AGAINST AND WHAT THE MODEL ADJUSTS FOR are decisions
             about the design, made once by the host from `--control` and `--covariate` and printed

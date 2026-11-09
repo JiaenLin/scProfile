@@ -634,7 +634,8 @@ def _run(a):
             _run_facts = _PL.design_facts(
                 _dtab, _dfactors, sample_key, units or [], controls=_controls_from(a),
                 covariates=inputs.covariate_values(a.design, A, sample_key,
-                                                   _covariates_from(a)))
+                                                   _covariates_from(a)),
+                columns=inputs.design_columns(a.design, sample_key))
             if _dsrc == "object":
                 print(f"  design DERIVED FROM THE OBJECT: {', '.join(_dfactors)} "
                       f"(no --design was given)")
@@ -1638,7 +1639,23 @@ def _design(a):
     if bad:
         print(f"scprofile: unknown plugin(s) {bad}", file=sys.stderr)
         return REFUSE
-    print("does each design-aware plugin take its model from the host? (GAP-039, GAP-040)")
+    acts = [x for x in ("answer", "confirm", "replay_into") if getattr(a, x, None)]
+    if acts:
+        # THE WORKSHEET IS ANSWERED THROUGH THE MAKER, AND THE MAKER RECORDS IT (GAP-C47): an
+        # answer is applied only where a site is named, a confirmation is bound to the digest of
+        # the sentence it confirms, and the record replays onto a copy rebuilt from the base.
+        if len(names) != 1 or len(acts) > 1:
+            print("scprofile design: --answer, --confirm and --replay-into take ONE plugin, one "
+                  "at a time", file=sys.stderr)
+            return REFUSE
+        k = ks[names[0]]
+        if a.answer:
+            return V.design_answer(k, a.answer, a.why, as_version=a.as_version)
+        if a.confirm:
+            return V.design_confirm(k, a.confirm, a.why)
+        return V.design_replay(k, a.replay_into)
+    print("does each design-aware plugin take its model from the host? (GAP-039, GAP-040, "
+          "GAP-C47)")
     if len(names) > 1:
         # ONE LINE PER PLUGIN, NO SITES, WHEN NONE IS NAMED. The worksheet shows a plugin's own
         # source lines, and a plugin still held out is test material for the maker: its surface
@@ -2096,7 +2113,8 @@ def _plan(a):
     facts = PL.design_facts(dtab, dfactors, keys["sample"][0], units,
                             controls=_controls_from(a),
                             covariates=inputs.covariate_values(
-                                a.design, A, keys["sample"][0], _covariates_from(a)))
+                                a.design, A, keys["sample"][0], _covariates_from(a)),
+                            columns=inputs.design_columns(a.design, keys["sample"][0]))
     facts["units"] = units
     # REFUSED HERE AS THE RUN REFUSES IT (one function, `declared_problems`): a plan that
     # accepted what the run will refuse is a preview of a different run.
@@ -4505,6 +4523,18 @@ def main(argv=None):
     dz = sub.add_parser("design", help="[maintainer] does a design-aware plugin take its model "
                                        "(reference levels, covariates) from the host")
     dz.add_argument("name", nargs="?", default="")
+    dz.add_argument("--answer", metavar="FILE", default=None,
+                    help="the whole plugin file as the author would have it: applied only where a "
+                         "site of the worksheet is named, and recorded with --why")
+    dz.add_argument("--confirm", metavar="LINE", type=int, default=None,
+                    help="the statement starting at LINE is true as it stands; recorded by the "
+                         "digest of its syntax, with --why")
+    dz.add_argument("--why", default="", help="the answer's or the confirmation's reason")
+    dz.add_argument("--as-version", default=None,
+                    help="with --answer: the version the author states, instead of the minor bump")
+    dz.add_argument("--replay-into", metavar="FILE", default=None,
+                    help="apply every recorded answer, in order, to FILE - a copy of the plugin "
+                         "rebuilt from its base by the maker's verb calls")
     dz.set_defaults(fn=_design)
     va = sub.add_parser("validate", help="[maintainer] static checks on plugins and their references")
     va.add_argument("name", nargs="?", default=None,

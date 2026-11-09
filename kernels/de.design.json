@@ -1,0 +1,113 @@
+{
+ "answers": [
+  {
+   "after": "6280eb39e133d767",
+   "before": "786bd8e72ac1ca85",
+   "diff": "--- a/kernels/de.py\n+++ b/kernels/de.py\n@@ -26,7 +26,7 @@\n \n PLUGIN = {\n     \"api\": 1,\n-    \"version\": \"0.3.0\",\n+    \"version\": \"0.4.0\",\n     \"state_version\": 2,           # the NUMBERS, versioned: bump when the same inputs would give different output\n     \"summary\": \"which genes change, per cell type, across the design\",\n     \"when_to_use\": \"you have a design table with replicates and want differential expression\",\n@@ -1308,7 +1308,11 @@\n \n     for pop in sorted(set(obs[\"population\"])):\n         m = obs[\"population\"].to_numpy() == pop\n-        sub_obs = obs[m].reset_index(drop=True)\n+        # THE HOST'S FRAME (`scprofile design de`, the worksheet): each term a categorical whose\n+        # first category is the run's control over the levels this population has, and every\n+        # covariate the plan modelled, typed. The fit's base level and the covariates are the\n+        # host's decisions, not this plugin's (GAP-039, GAP-040).\n+        sub_obs, covs = ctx.model_frame(obs[m].reset_index(drop=True), terms)\n         # EVERY LEVEL NEEDS REPLICATION, not just the population overall. A population with six\n         # samples in one arm and one in the other supports no test of that contrast, and a mean\n         # n hides exactly that.\n@@ -1324,8 +1328,11 @@\n \n         # IDENTIFIABLE FIRST. Otherwise the fit raises `Singular matrix` from inside numpy,\n         # which is a true statement about linear algebra and tells the user nothing.\n-        use, aliased = _identifiable(ctx, sub_obs, terms)\n-        if not use:\n+        # The covariates are asked about AFTER the terms, so one collinear with a term is the\n+        # one dropped - and named - and the term, which is the question, stays.\n+        use, aliased = _identifiable(ctx, sub_obs, terms + covs)\n+        fit = [u for u in use if u in terms]          # what is contrasted; a covariate never is\n+        if not fit:\n             why = [t for t, _w in aliased]\n             skipped.append((pop, int(m.sum()), why))\n             hit_rows.append({\"population\": pop, \"term\": \"\", \"contrast\": \"\",\n@@ -1360,15 +1367,15 @@\n         # has already been paid for; on two it looked correct, which is why it shipped. The\n         # interaction is now ADDED to the formula, never substituted for it.\n         formula = \"~ \" + \" + \".join(use)\n-        if len(use) >= 2 and (ctx.params.get(\"contrast\") or {}).get(\"kind\") == \"interaction\":\n+        if len(fit) >= 2 and (ctx.params.get(\"contrast\") or {}).get(\"kind\") == \"interaction\":\n             # ASKED, NOT ASSUMED. See `_interaction_estimable`: the main effects are rank-tested\n             # and the interaction was not, so a population with an empty cell of the a-by-b\n             # table took down the entire plugin instead of dropping one term.\n-            if _interaction_estimable(ctx, sub_obs, use[0], use[1]):\n-                formula += f\" + {use[0]}:{use[1]}\"\n-                interacted[pop] = (use[0], use[1])\n+            if _interaction_estimable(ctx, sub_obs, fit[0], fit[1]):\n+                formula += f\" + {fit[0]}:{fit[1]}\"\n+                interacted[pop] = (fit[0], fit[1])\n             else:\n-                not_interacted[pop] = (use[0], use[1])\n+                not_interacted[pop] = (fit[0], fit[1])\n         formulas.setdefault(formula, []).append(pop)\n         dds = DeseqDataSet(counts=counts_df, metadata=sub_obs, design=formula,\n                            refit_cooks=True, min_replicates=int(C[\"min_replicates\"]),\n@@ -1379,13 +1386,15 @@\n         # below min_replicates samples in a level, at which point a Cook's outlier is dropped\n         # from the answer rather than replaced. Measured per population, because the answer\n         # differs per population as soon as the design is unbalanced.\n-        widest = max(int(sub_obs[t].value_counts().max()) for t in use)\n+        widest = max(int(sub_obs[t].value_counts().max()) for t in fit)\n         if widest < int(C[\"min_replicates\"]):\n             thin_refit.append((pop, widest))\n \n         first_res = None\n-        for term in use:\n-            levels = sorted(sub_obs[term].unique())\n+        for term in fit:\n+            # THE HOST'S ORDER: [0] is the control, so the contrast below is `levels[-1] vs\n+            # <control>`. This was `sorted(...)`, the reference whichever level sorted first.\n+            levels = ctx.levels(term, sub_obs[term])\n             # ONE CONTRAST PER TERM, WHATEVER ITS NUMBER OF LEVELS. A three-level factor is\n             # fitted whole - its middle levels move every coefficient - and then only its first\n             # and last are compared, which is a defensible default and an indefensible silence:\n",
+   "n": 1,
+   "sites": [
+    "fit:1373",
+    "fit:1397",
+    "fit:1474"
+   ],
+   "version": "0.4.0",
+   "why": "the fit sites: the fit's frame from ctx.model_frame (each term's base level the run's control, the plan's covariates added and typed); the terms rank-tested before the covariates, so a covariate collinear with a term is the one dropped and named; only the design's terms contrasted; each term's levels from ctx.levels, [0] the control (GAP-039, GAP-040)"
+  },
+  {
+   "after": "c63a8c51eb6b7ab9",
+   "before": "6280eb39e133d767",
+   "diff": "--- a/kernels/de.py\n+++ b/kernels/de.py\n@@ -1676,6 +1676,10 @@\n             + \". The headline names the terms tested, not one model.\")\n     if multi_level:\n         items = sorted(multi_level.items())\n+        # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in\n+        # kernels/de.design.json): the pair taken is the factor's last level against its\n+        # CONTROL, in the host's order, where \"first and last\" had meant the levels that sorted\n+        # first and last.\n         ctx.caveat(\n             f\"ONE CONTRAST PER FACTOR, AND {len(items)} population-term combination(s) have a \"\n             f\"factor with MORE THAN TWO LEVELS: \"\n@@ -1683,35 +1687,49 @@\n                         for (p, t), (hi, lo, mid) in items[:6])\n             + (\", and others\" if len(items) > 6 else \"\")\n             + \". The factor is fitted whole, so every level moves the coefficients, but only its \"\n-              \"first and last levels are compared. A population reported here as not responding \"\n-              \"was compared on ONE of that factor's contrasts, not on all of them; the pair \"\n-              \"taken is the `contrast` column of tables/de_by_population.csv.\")\n+              \"last level is compared, against its CONTROL, and its other levels are never \"\n+              \"contrasted. A population with no sample at the control is not contrasted on that \"\n+              \"factor at all, and is named with the populations not tested. A population \"\n+              \"reported here as not responding was compared on ONE of that factor's contrasts, \"\n+              \"not on all of them; the pair taken is the `contrast` column of \"\n+              \"tables/de_by_population.csv.\")\n     if not_interacted:\n         pairs_ni = sorted(set(not_interacted.values()))\n+        # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in\n+        # kernels/de.design.json): it said these populations \"were fitted on main effects\n+        # instead\", which is false of the second way into this list - an interaction that was\n+        # fitted and spreads over several coefficients, which one contrast cannot test.\n         ctx.caveat(\n-            f\"THE PLAN ASKED FOR AN INTERACTION THAT {len(not_interacted)} POPULATION(S) CANNOT \"\n-            f\"FIT, and those populations were fitted on main effects instead: \"\n+            f\"THE PLAN ASKED FOR AN INTERACTION THAT {len(not_interacted)} POPULATION(S) DO NOT \"\n+            f\"CONTRAST: \"\n             + \"; \".join(\n                 f\"{a}:{b} in \"\n                 + \", \".join(sorted(q for q, v in not_interacted.items() if v == (a, b)))\n                 for a, b in pairs_ni)\n-            + \". The term is dropped where the design matrix would not be full rank - a cell of \"\n-              \"the two factors' table has no sample in that population - so the model there \"\n-              \"estimates the same main effects and no interaction. A population reported here \"\n-              \"as not responding to the interaction was NOT TESTED for one; the formula \"\n-              \"actually fitted per population is in the caveat above.\")\n+            + \". Either the term could not be fitted - a cell of the two factors' table has no \"\n+              \"sample in that population, so the design matrix would not be full rank and the \"\n+              \"model there estimates the main effects alone - or it was fitted and spreads over \"\n+              \"more than one coefficient (a factor with more than two levels), which one \"\n+              \"contrast cannot test. Either way a population reported here as not responding to \"\n+              \"the interaction was NOT TESTED for one; the formula actually fitted per \"\n+              \"population is in the caveat above.\")\n     if interacted:\n         pairs = sorted({v for v in interacted.values()})\n+        # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in\n+        # kernels/de.design.json; GAP-C47): it said the interaction \"IS NOT TESTED HERE\" beside\n+        # the row this plugin writes for it, and that each main effect was conditional on \"the\n+        # reference level\" of the other factor - the level that sorted first. The interaction is\n+        # contrasted, and each main-effect row is the effect at the other factor's CONTROL.\n         ctx.caveat(\n-            \"AN INTERACTION IS IN THE MODEL AND IS NOT TESTED HERE. \"\n+            \"AN INTERACTION IS IN THE MODEL AND IS CONTRASTED, AS ITS OWN ROW. \"\n             + \", \".join(f\"`{a}:{b}`\" for a, b in pairs)\n             + f\" was added to the design for {len(interacted)} population(s) because the plan \"\n-              f\"asked for it. Two consequences, and neither is visible in the table: the \"\n-              f\"coefficient reported for each of its two main effects is CONDITIONAL - the \"\n-              f\"effect at the reference level of the other factor, not a marginal effect \"\n-              f\"averaged over it - so the same column name carries different numbers than it \"\n-              f\"would without the interaction; and the interaction coefficient itself is not \"\n-              f\"contrasted, so no gene here is reported as responding to it.\")\n+              f\"asked for it, and its coefficient is reported under that term, named on the \"\n+              f\"levels that are not the controls. One consequence is not visible in the table: \"\n+              f\"the coefficient reported for each of its two main effects is CONDITIONAL - the \"\n+              f\"effect at the CONTROL of the other factor, not a marginal effect averaged over \"\n+              f\"it - so the same column name carries different numbers than it would without \"\n+              f\"the interaction.\")\n     ctx.caveat(\"The unit of replication is the SAMPLE. Counts were summed per (sample, \"\n                \"population) before testing, so no p-value here is inflated by cell count.\")\n     ctx.caveat(\n",
+   "n": 2,
+   "sites": [
+    "statement:1683",
+    "statement:1702",
+    "statement:1723"
+   ],
+   "version": "0.4.0",
+   "why": "three statements of what was contrasted, squared with the host's decision: the multi-level contrast is the last level against the CONTROL (it said the first and last levels); a population in the not-interacted list is NOT TESTED for the interaction, by either route (it said every one was fitted on main effects, false of a fitted interaction spread over several coefficients); the interaction IS contrasted as its own row and each main effect is conditional on the other factor's CONTROL (it said 'not tested here' and 'the reference level'; GAP-C47)"
+  }
+ ],
+ "plugin": "de",
+ "statements": {
+  "3df36ce1304c6857": {
+   "how": "confirmed",
+   "site": "statement:1240",
+   "why": "true: reached only when the plan's decision carries no term and no factor of the design has two replicated levels"
+  },
+  "4020b633601a5575": {
+   "how": "confirmed",
+   "site": "statement:1552",
+   "why": "true: a population whose term has a level below min_samples_per_level is not contrasted - including one with no sample at the control, which the host's frame keeps as an empty level (GAP-C48)"
+  },
+  "4c64452c76de6f4a": {
+   "how": "answer 2",
+   "site": "statement:1702",
+   "why": "three statements of what was contrasted, squared with the host's decision: the multi-level contrast is the last level against the CONTROL (it said the first and last levels); a population in the not-interacted list is NOT TESTED for the interaction, by either route (it said every one was fitted on main effects, false of a fitted interaction spread over several coefficients); the interaction IS contrasted as its own row and each main effect is conditional on the other factor's CONTROL (it said 'not tested here' and 'the reference level'; GAP-C47)"
+  },
+  "57c16ab05538967b": {
+   "how": "confirmed",
+   "site": "statement:1660",
+   "why": "true: the model is fitted per population and padj corrected within each population-term family; the joint count is computed beside it"
+  },
+  "5d4b25178bc19292": {
+   "how": "confirmed",
+   "site": "statement:1622",
+   "why": "true: the fit ran and its dispersion arrays are absent in this build; no host decision"
+  },
+  "80ec8d87e7a9d684": {
+   "how": "confirmed",
+   "site": "statement:1590",
+   "why": "true: the refusal names the causes it measured, none of them a reference or a covariate"
+  },
+  "85774b79cd4e873f": {
+   "how": "answer 2",
+   "site": "statement:1683",
+   "why": "three statements of what was contrasted, squared with the host's decision: the multi-level contrast is the last level against the CONTROL (it said the first and last levels); a population in the not-interacted list is NOT TESTED for the interaction, by either route (it said every one was fitted on main effects, false of a fitted interaction spread over several coefficients); the interaction IS contrasted as its own row and each main effect is conditional on the other factor's CONTROL (it said 'not tested here' and 'the reference level'; GAP-C47)"
+  },
+  "870deafc5a46d8cb": {
+   "how": "confirmed",
+   "site": "statement:1541",
+   "why": "true: every term the host's rank test drops in a population is named with its reason - a covariate dropped there (one value, or collinear with a term) is named here too, as a term of the model; the advice to name terms concerns the contrast's terms"
+  },
+  "95d95fa2f559a633": {
+   "how": "confirmed",
+   "site": "statement:1301",
+   "why": "true: a population with no pseudobulk sample is drawn NOT TESTED; it states what was not contrasted and why, and touches no host decision"
+  },
+  "9b7200834cbb0e46": {
+   "how": "confirmed",
+   "site": "statement:1222",
+   "why": "a refusal of an unknown fit_type: true whatever the design; names the dispersion model, not a contrast or a covariate"
+  },
+  "b33aba8bfe15ef7a": {
+   "how": "answer 2",
+   "site": "statement:1723",
+   "why": "three statements of what was contrasted, squared with the host's decision: the multi-level contrast is the last level against the CONTROL (it said the first and last levels); a population in the not-interacted list is NOT TESTED for the interaction, by either route (it said every one was fitted on main effects, false of a fitted interaction spread over several coefficients); the interaction IS contrasted as its own row and each main effect is conditional on the other factor's CONTROL (it said 'not tested here' and 'the reference level'; GAP-C47)"
+  },
+  "bfefdb0049c1f19b": {
+   "how": "confirmed",
+   "site": "statement:1755",
+   "why": "true: the dispersion fit's settings, as passed; no reference or covariate is stated"
+  },
+  "cbd173dd222d0ab0": {
+   "how": "confirmed",
+   "site": "statement:1561",
+   "why": "true: a population with no gene at min_counts is not contrasted; a depth statement, no host decision"
+  },
+  "dbd9b4c32c7e3911": {
+   "how": "confirmed",
+   "site": "statement:1670",
+   "why": "true: the formulas printed are the ones fitted per population, now with the covariates the host modelled; the headline names the terms tested"
+  },
+  "dc37f93968c0177d": {
+   "how": "confirmed",
+   "site": "statement:1234",
+   "why": "true: with no readable design table there is no contrast; the host decides none here"
+  },
+  "f3bdd1db7af37ea6": {
+   "how": "confirmed",
+   "site": "statement:1735",
+   "why": "true: counts genes with and without an adjusted p-value; no reference or covariate is stated"
+  }
+ }
+}

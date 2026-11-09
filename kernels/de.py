@@ -26,7 +26,7 @@ which genes left the answer before it was computed. The result comes after them.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.3.0",
+    "version": "0.4.0",
     "state_version": 2,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "which genes change, per cell type, across the design",
     "when_to_use": "you have a design table with replicates and want differential expression",
@@ -1676,6 +1676,10 @@ def run(ctx):
             + ". The headline names the terms tested, not one model.")
     if multi_level:
         items = sorted(multi_level.items())
+        # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in
+        # kernels/de.design.json): the pair taken is the factor's last level against its
+        # CONTROL, in the host's order, where "first and last" had meant the levels that sorted
+        # first and last.
         ctx.caveat(
             f"ONE CONTRAST PER FACTOR, AND {len(items)} population-term combination(s) have a "
             f"factor with MORE THAN TWO LEVELS: "
@@ -1683,29 +1687,39 @@ def run(ctx):
                         for (p, t), (hi, lo, mid) in items[:6])
             + (", and others" if len(items) > 6 else "")
             + ". The factor is fitted whole, so every level moves the coefficients, but only its "
-              "first and last levels are compared. A population reported here as not responding "
-              "was compared on ONE of that factor's contrasts, not on all of them; the pair "
-              "taken is the `contrast` column of tables/de_by_population.csv.")
+              "last level is compared, against its CONTROL, and its other levels are never "
+              "contrasted. A population with no sample at the control is not contrasted on that "
+              "factor at all, and is named with the populations not tested. A population "
+              "reported here as not responding was compared on ONE of that factor's contrasts, "
+              "not on all of them; the pair taken is the `contrast` column of "
+              "tables/de_by_population.csv.")
     if not_interacted:
         pairs_ni = sorted(set(not_interacted.values()))
+        # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in
+        # kernels/de.design.json): it said these populations "were fitted on main effects
+        # instead", which is false of the second way into this list - an interaction that was
+        # fitted and spreads over several coefficients, which one contrast cannot test.
         ctx.caveat(
-            f"THE PLAN ASKED FOR AN INTERACTION THAT {len(not_interacted)} POPULATION(S) CANNOT "
-            f"FIT, and those populations were fitted on main effects instead: "
+            f"THE PLAN ASKED FOR AN INTERACTION THAT {len(not_interacted)} POPULATION(S) DO NOT "
+            f"CONTRAST: "
             + "; ".join(
                 f"{a}:{b} in "
                 + ", ".join(sorted(q for q, v in not_interacted.items() if v == (a, b)))
                 for a, b in pairs_ni)
-            + ". The term is dropped where the design matrix would not be full rank - a cell of "
-              "the two factors' table has no sample in that population - so the model there "
-              "estimates the same main effects and no interaction. A population reported here "
-              "as not responding to the interaction was NOT TESTED for one; the formula "
-              "actually fitted per population is in the caveat above.")
+            + ". Either the term could not be fitted - a cell of the two factors' table has no "
+              "sample in that population, so the design matrix would not be full rank and the "
+              "model there estimates the main effects alone - or it was fitted and spreads over "
+              "more than one coefficient (a factor with more than two levels), which one "
+              "contrast cannot test. Either way a population reported here as not responding to "
+              "the interaction was NOT TESTED for one; the formula actually fitted per "
+              "population is in the caveat above.")
     if interacted:
         pairs = sorted({v for v in interacted.values()})
-        # IT IS CONTRASTED, AND THIS SAID IT WAS NOT (GAP-040: the caveat denied an interaction
-        # the code above tests and writes as its own row). Answered with the design worksheet,
-        # because what it states is which level each main-effect row is conditional on - now the
-        # run's control, the host's decision, where it was whichever level sorted first.
+        # ANSWERED THROUGH THE DESIGN WORKSHEET (a statement site, recorded in
+        # kernels/de.design.json; GAP-C47): it said the interaction "IS NOT TESTED HERE" beside
+        # the row this plugin writes for it, and that each main effect was conditional on "the
+        # reference level" of the other factor - the level that sorted first. The interaction is
+        # contrasted, and each main-effect row is the effect at the other factor's CONTROL.
         ctx.caveat(
             "AN INTERACTION IS IN THE MODEL AND IS CONTRASTED, AS ITS OWN ROW. "
             + ", ".join(f"`{a}:{b}`" for a, b in pairs)
