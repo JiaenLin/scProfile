@@ -393,7 +393,10 @@ ck(f"a linux lock exists for {', '.join(shared.members)}", bool(linux),
    f"none among {[x.where() for x in shipped]}")
 for x in linux:
     st = LK.state(shared, locks=shipped, machine=x.platform)
-    ck(f"{x.where()} is CURRENT for today's requirement", st[0] == "locked", st[1])
+    # THE REASON AND THE FIX, not st[1]: that is the lock object, which is None exactly when the
+    # lock is stale - the one case this line exists to explain - so the failure read "— None".
+    ck(f"{x.where()} is CURRENT for today's requirement", st[0] == "locked",
+       f"{st[2]}  Fix: {st[3]}")
     ck("it is a closure, not a copy of the direct requirements",
        len(x.pins) > len(shared.packages), f"{len(x.pins)} pins")
     for m in shared.members:

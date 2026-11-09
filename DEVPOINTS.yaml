@@ -453,14 +453,17 @@ points:
             # AND THE PLUGIN'S OWN PYTHON (harness ADR-0026, K-s): one line naming `Path`, never
             # imported, cost eighteen units five minutes of inference each before the NameError.
             - ["{python}", "tests/test_a_plugin_names_only_what_it_binds.py"]
-            # AND THE GROUP'S LOCK, LAST (autodev W002): an edit of `requires` makes the group's
-            # lock stale; `install` then refuses the group and the suite fails until it is
-            # re-locked. This re-locks the edited plugin's group with uv (uv on PATH, and the
-            # network); last, so a refusal here stops none of the followers above. Commit the
-            # lock it writes. It resolves against the index of the day: on a later day it can move
-            # pins, which renames the environment, and a group never locked gets its first lock.
-            - ["{python}", "-m", "scprofile.cli", "lock", "{name}", "--platform",
-               "x86_64-manylinux_2_17"]
+            # AND THE SHIPPED LOCK IS STILL CURRENT, LAST (autodev W002). An edit of `requires`
+            # makes its group's lock stale, and `install` then refuses that group. This CHECKS and
+            # changes nothing: about 14 s, no uv, no network. It exits 1 on a stale shipped lock,
+            # naming why and the `scprofile lock` command, and exits 0 otherwise, so a caption edit
+            # passes. Re-locking stays the deliberate manual step in the environment stage's
+            # `finished_by`, and is never a follower. It was briefly one, and the verifier
+            # measured three faults: a re-lock re-resolves against the day's index (as of
+            # 2026-11-02 the group differed from the lock in 40 of 161 pins); it wrote a first,
+            # untested lock for a group never locked (velocity renamed); and without uv it failed
+            # unrelated edits.
+            - ["{python}", "tests/test_an_environment_is_built_from_its_lock.py"]
           finished_by: >
             `sch dev convert plan --root . --point kernel --name <plugin>` prints every entry
             with what it lacks and, given `--python`, the upstream function's parameters beside
