@@ -1,4 +1,4 @@
-"""The resolved versions of one environment group, recorded once and applied without resolving.
+"""The resolved versions of one environment group, recorded once and applied by pip unresolved.
 
 WHAT THIS FIXES, MEASURED (harness ADR-0027, PBS 720377)
 
@@ -15,7 +15,7 @@ Two facts, both measured on 2026-11-09, decide the shape of the answer:
     pertpy 1.5 needs Python 3.13 - so the group can only hold pertpy 1.0.x, and pip walked every
     arviz 1.x release before it could learn that.
   - THE SOLUTION STILL DOES NOT RUN. Resolved from the ranges alone, abundance cannot start: pertpy
-    1.0.5 with statsmodels 0.15 raises ImportError, 1.0.5 asks scanpy 1.10 for a function only 1.11
+    1.0.5 with statsmodels 0.15 raises ImportError, 1.0.5 asks scanpy 1.10 for a function only 1.12
     has, and numpyro 0.22 cannot initialise scCODA's model. Metadata cannot know any of that. It
     is host knowledge, kept in `constraints.txt` beside the locks, with the measurement behind
     each line.

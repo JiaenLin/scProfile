@@ -16,7 +16,8 @@ Measured on the workstation: uv solves the same ranges in 25 s. The group can on
 and pertpy 1.5 needs Python 3.13. Even that solution cannot run abundance, for three reasons:
 
 - pertpy 1.0.5 with statsmodels 0.15 raises ImportError;
-- pertpy 1.0.5 imports a scanpy 1.11 name, and the group caps scanpy below 1.11;
+- pertpy 1.0.5 imports `check_use_raw` from scanpy, a name scanpy first has in 1.12 (1.11.0-1.11.5
+  have only `_check_use_raw`), and the group caps scanpy below 1.11;
 - numpyro 0.22 cannot initialise scCODA.
 
 Fixed in the host, with no plugin edited:
@@ -29,6 +30,22 @@ Fixed in the host, with no plugin edited:
 On an exact macOS replica of those 161 versions, the selftests of de, abundance, cellcycle,
 decoupler, liana and pseudotime pass. The acceptance check is a fresh-prefix build of the group on
 the cluster, followed by every member's selftest: harness `autodev/waves/W002.md`.
+
+## The shipped lock's wheels need glibc 2.28, not the 2.17 its tag names — OPEN, 2026-11-09
+
+The lock was resolved with `--python-platform x86_64-manylinux_2_17`. uv accepts a version for that
+target when it has a wheel for glibc 2.17 **or a source distribution**. Nine pinned versions ship
+cp312 linux wheels only for a newer glibc (measured from PyPI, 2026-11-09):
+
+- glibc 2.28: h5py 3.16.0, pyarrow 26.0.1;
+- glibc 2.27: contourpy 1.3.3, ml-dtypes 0.5.4, pillow 13.0.0, scikit-learn 1.9.1, tensorstore 0.1.86;
+- glibc 2.24: pandas 2.3.3, scikit-misc 0.5.3.
+
+On a machine with glibc 2.17 to 2.27, `lock.accepts` reads the tag as the floor and accepts the
+lock. pip then tries to compile those nine packages from source. The real floor is glibc 2.28. The
+three pins with no wheel at all (docrep, blitzgsea, loompy) are pure Python and build anywhere.
+Closing it: re-lock for `x86_64-manylinux_2_28`, or resolve wheels only for the target, once the
+cluster's glibc is on record (harness gap GAP-C27).
 
 ## The conda half of an environment is not locked — OPEN, 2026-11-09
 

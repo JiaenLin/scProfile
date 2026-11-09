@@ -145,7 +145,7 @@ def _lock(a):
     The group is resolved from its members' merged ranges under the host's constraints
     (`setup/locks/constraints.txt`), for ONE platform and ONE interpreter, and the answer is
     written to `setup/locks/<platform>/<members>.txt`. `install` then applies it with `pip
-    --no-deps` and resolves nothing - the resolve PBS 720377 could not finish is answered here,
+    --no-deps`, and pip resolves nothing - the resolve PBS 720377 could not finish is answered here,
     on a machine with uv, and never again on the cluster.
 
     THE PLATFORM IS THE BUILDING MACHINE'S, NOT THIS ONE'S. A lock written on a laptop for a linux
@@ -4221,8 +4221,9 @@ def main(argv=None):
     lo.add_argument("kernel", help="plugin name(s), comma-separated; each locks its whole group")
     lo.add_argument("--platform", default=None,
                     help="the platform of the machine that will BUILD from this lock, as uv names "
-                         "it (e.g. x86_64-manylinux_2_17 for linux with glibc >= 2.17). Default: "
-                         "this machine")
+                         "it (e.g. x86_64-manylinux_2_17). The tag is the resolver's target, not a "
+                         "wheel floor: a version with a source distribution is accepted even if "
+                         "its wheels need a newer glibc (KNOWN_ISSUES). Default: this machine")
     lo.add_argument("--python", default=None,
                     help="the interpreter version to resolve for. Default: the one `install` "
                          "would build, from the group's merged range")

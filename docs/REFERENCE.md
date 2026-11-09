@@ -28,7 +28,7 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | command | what it does |
 |---|---|
 | `scprofile plan` | Reads the object, reports what would run and why the rest would not. Writes nothing and computes nothing. |
-| `scprofile install` | Groups the selected plugins' requirements into as few environments as satisfy them, and builds the group the plugin belongs to. A group that has a current lock for this machine is built from that lock with `pip --no-deps`, so nothing is resolved, and the result is checked against the lock. A lock that no longer matches is refused. Then each member's selftest runs, and its verdict is recorded per member. |
+| `scprofile install` | Groups the selected plugins' requirements into as few environments as satisfy them, and builds the group the plugin belongs to. A group that has a current lock for this machine is built from that lock with `pip --no-deps`, so pip resolves nothing (conda still solves the conda packages), and the result is checked against the lock. A lock that no longer matches is refused. Then each member's selftest runs, and its verdict is recorded per member. |
 | `scprofile lock` | Resolves a plugin's whole environment group once, with uv, under `setup/locks/constraints.txt`, for one platform (`--platform`, the building machine's) and one interpreter. It writes every version to `setup/locks/<platform>/<members>.txt`. A maintainer runs it after changing a plugin's `requires`. |
 | `scprofile doctor` | Reports which environments exist, which plugins resolve to them, whether each group is locked, and what is missing. |
 | `scprofile run` | Plans, runs the plugins, merges results into one object, writes the report and the run card. |
@@ -313,8 +313,11 @@ satisfy them. A plugin declares ranges. What those ranges resolve to on one plat
 once, by `scprofile lock`, in `setup/locks/<platform>/<members>.txt`. Each lock file carries:
 
 - every package of the group's closure, at one exact version;
-- the platform it was resolved for (for example `x86_64-manylinux_2_17`, meaning linux x86_64 with
-  glibc 2.17 or newer);
+- the platform it was resolved for, as uv names it (for example `x86_64-manylinux_2_17`: linux
+  x86_64). The tag is the resolver's target, not the floor of what installs. uv accepts a version for
+  that target when it ships a source distribution, even if its wheels need a newer glibc. The shipped
+  lock pins nine packages whose cp312 wheels need glibc 2.24 to 2.28, so its real wheel floor is
+  **glibc 2.28** (KNOWN_ISSUES);
 - the interpreter version;
 - the resolver;
 - the ranges and host constraints (`setup/locks/constraints.txt`) it was resolved from.
@@ -323,7 +326,7 @@ On a machine whose platform a lock covers, a group is in one of three states:
 
 | state | when | what `install` does |
 |---|---|---|
-| locked | a lock exists for exactly these members and today's requirement | Applies it with `pip install --no-deps`, so nothing is resolved. Then checks that every installed version is the locked one; a difference is a failed build with no stamp. |
+| locked | a lock exists for exactly these members and today's requirement | Applies it with `pip install --no-deps`, so pip resolves nothing; conda still solves the conda packages. Then checks that every installed version is the locked one; a difference is a failed build with no stamp. |
 | stale | a lock names a member of this group, but its members or its requirement changed | Refuses before anything is built. The refusal names what changed and the `scprofile lock` command. A stale lock is never bypassed by resolving the ranges instead. |
 | unlocked | no lock for this platform names any member | Resolves the ranges at install time, as before, and says so. |
 

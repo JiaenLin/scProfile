@@ -307,7 +307,9 @@ points:
             `sch dev convert borrowed --root . --point kernel` names every package the kernel
             LOADS that its own `requires` does not ask for, with the file and line that loads it.
             Add each to `requires` - the interval there is evidence for, not the version that
-            happens to be installed - and re-run this status
+            happens to be installed - then re-lock its group with
+            `scprofile lock <kernel> --platform x86_64-manylinux_2_17` and commit the lock, and
+            re-run this status
           why: >
             what this kernel needs, declared by this kernel. `Group.name` hashes what a group is
             built from - its lock, resolved from the UNION of its members' requirements, or that
@@ -451,6 +453,14 @@ points:
             # AND THE PLUGIN'S OWN PYTHON (harness ADR-0026, K-s): one line naming `Path`, never
             # imported, cost eighteen units five minutes of inference each before the NameError.
             - ["{python}", "tests/test_a_plugin_names_only_what_it_binds.py"]
+            # AND THE GROUP'S LOCK, LAST (autodev W002): an edit of `requires` makes the group's
+            # lock stale; `install` then refuses the group and the suite fails until it is
+            # re-locked. This re-locks the edited plugin's group with uv (uv on PATH, and the
+            # network); last, so a refusal here stops none of the followers above. Commit the
+            # lock it writes. It resolves against the index of the day: on a later day it can move
+            # pins, which renames the environment, and a group never locked gets its first lock.
+            - ["{python}", "-m", "scprofile.cli", "lock", "{name}", "--platform",
+               "x86_64-manylinux_2_17"]
           finished_by: >
             `sch dev convert plan --root . --point kernel --name <plugin>` prints every entry
             with what it lacks and, given `--python`, the upstream function's parameters beside

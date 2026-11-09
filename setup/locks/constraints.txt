@@ -8,14 +8,15 @@
 # for linux x86_64 and python 3.12: each package was imported, and each plugin's own selftest was run.
 
 # pertpy <= 1.0.6 imports `multipletests` from `statsmodels.sandbox.stats.multicomp`. statsmodels
-# 0.15 removed it, so with 0.15.0 `import pertpy` raises ImportError. pertpy declares statsmodels
-# with no ceiling.
+# 0.15 removed it, so with 0.15.0 `import pertpy` raises ImportError. pertpy 1.0.4 and 1.0.5 do not
+# declare statsmodels at all: it arrives through scanpy, plotnine, blitzgsea and sparsecca (the
+# lock's `# via`), and without this line uv chose 0.15.0.
 statsmodels<0.15
 
-# pertpy 1.0.5 imports `check_use_raw` from `scanpy._utils`. scanpy 1.10.4 has only
-# `_check_use_raw`, so `import pertpy` raises ImportError with any scanpy 1.10, and four members of
-# the group cap scanpy below 1.11. pertpy 1.0.0-1.0.4 import `_check_use_raw`. pertpy declares
-# scanpy with no floor.
+# pertpy 1.0.5 imports `check_use_raw` from `scanpy._utils`, a name scanpy first has in 1.12
+# (1.11.0-1.11.5 have only `_check_use_raw`). scanpy 1.10.4 has only `_check_use_raw`, so
+# `import pertpy` raises ImportError with any scanpy 1.10, and four members of the group cap scanpy
+# below 1.11. pertpy 1.0.0-1.0.4 import `_check_use_raw`. pertpy declares scanpy with no floor.
 pertpy<1.0.5
 
 # numpyro 0.22.0 cannot initialise the scCODA model that pertpy 1.0.4 builds: `run_nuts` raises

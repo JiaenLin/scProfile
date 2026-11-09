@@ -8,9 +8,9 @@ from except a resolve that could not finish.
 
 Measured on the workstation on 2026-11-09: a complete resolver (uv) solves the same ranges in
 25 s - and its answer still cannot run abundance. pertpy 1.0.5 with statsmodels 0.15 does not
-import; 1.0.5 asks scanpy 1.10 for a function only 1.11 has; numpyro 0.22 cannot initialise
+import; 1.0.5 asks scanpy 1.10 for a function only 1.12 has; numpyro 0.22 cannot initialise
 scCODA. So the group is resolved ONCE, on purpose, with those facts applied as host constraints,
-and the cluster applies the answer without resolving anything.
+and the cluster's pip applies the answer without resolving anything.
 
 What this suite pins, every part of it failing on the code before the lock (f294c89):
   1. a current lock for this machine NAMES the environment: the name moves when a pin moves, and
