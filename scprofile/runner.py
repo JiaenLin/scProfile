@@ -1198,6 +1198,15 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
         except Exception as e:                                            # noqa: BLE001
             build_failure = e
             log(f"\n  BUILD FAILED: {e}")
+            if grp is not None and len(grp.members) > 1:
+                # A SHARED BUILD FAILS FOR EVERY MEMBER, and the resolver cannot see the solve
+                # that failed - only the declarations. The site can: name the member whose
+                # closure does not resolve and it is built alone, the others without it.
+                from . import resolve as _RSV
+                _now = ", ".join(sorted(_RSV.isolated_by_site())) or "unset"
+                log(f"  Fix, when one member's requirement is what does not resolve: build it "
+                    f"alone with  {_RSV.ISOLATE_VAR}=<member>[,<member>]  (members: "
+                    f"{', '.join(grp.members)}; {_RSV.ISOLATE_VAR} is {_now})")
             log("  The environment is NOT built and no stamp is written, so nothing will treat "
                 "it as one. Every member's selftest still runs below, because what the finished "
                 "half of this environment can prove is worth more than a second job to find out.")

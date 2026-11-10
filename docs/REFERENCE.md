@@ -311,7 +311,10 @@ plugin declares `unit_network`.
 ## Environments
 
 `scprofile install` groups every selected plugin's requirements into the fewest environments that
-satisfy them. A plugin declares ranges. What those ranges resolve to on one platform is recorded
+satisfy them. The grouping reads declarations, so it cannot see a solve that fails: a site that has
+measured one names the member in `$SCPROFILE_ISOLATE` (plugin names, separated by commas or spaces),
+and each listed plugin is then built alone ("isolated by the site") while the others share without
+it. A failed shared build prints its members and this variable as the fix. A plugin declares ranges. What those ranges resolve to on one platform is recorded
 once, by `scprofile lock`, in `setup/locks/<platform>/<members>.txt`. Each lock file carries:
 
 - every package of the group's closure, at one exact version;

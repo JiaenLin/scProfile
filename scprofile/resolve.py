@@ -26,7 +26,22 @@ compatible gets its own environment and says so.
 from __future__ import annotations
 
 import hashlib
+import os
 import re
+
+#: THE SITE'S OWN ISOLATION LIST: plugin names, separated by commas, colons or spaces. "When in
+#: doubt, isolate" covers what this module can see - two declarations that clash, or share nothing.
+#: It cannot see a solve that fails: seven plugins grouped on their declarations alone built one
+#: environment whose pip stage died on one member's dependency closure, and no member installed.
+#: A site that has measured such a failure names the member here; it is then built alone, and the
+#: others share without it. Read at grouping time, so a shell, a job script or a test can set it.
+ISOLATE_VAR = "SCPROFILE_ISOLATE"
+
+
+def isolated_by_site(environ=None):
+    """The plugin names `$SCPROFILE_ISOLATE` asks to build alone (a set; empty when it is unset)."""
+    raw = (os.environ if environ is None else environ).get(ISOLATE_VAR) or ""
+    return {n for n in re.split(r"[,:\s]+", raw) if n}
 
 #: A constraint is a comma-joined list of `<op><version>` clauses, as pip writes them.
 _CLAUSE = re.compile(r"^\s*(==|!=|>=|<=|>|<|~=)?\s*([0-9][0-9A-Za-z.\-+*]*)\s*$")
@@ -357,9 +372,19 @@ def group_by_compatibility(kernels, log=None):
     """
     say = log or (lambda *_a: None)
     groups = []
+    alone = isolated_by_site()
     for k in sorted(kernels, key=lambda x: x.name):
         req = requirement(k)
         if req is None:
+            continue
+        if k.name in alone:
+            # ISOLATED BY THE SITE: its own group, which no later plugin may join either.
+            g = Group(req["python"], req["packages"], [k.name],
+                      why_alone=f"isolated by the site (${ISOLATE_VAR})",
+                      conda=req["conda"], channels=req["channels"], r=req["r"])
+            g.site_isolated = True
+            groups.append(g)
+            say(f"  {k.name}: new environment - isolated by the site (${ISOLATE_VAR})")
             continue
         placed = None
         #: Kept apart so the reason a plugin is alone LEADS WITH A CLASH where one exists. A real
@@ -368,6 +393,8 @@ def group_by_compatibility(kernels, log=None):
         #: sends a maintainer to look for a conflict that is not there.
         clashes, silences = [], []
         for g in groups:
+            if getattr(g, "site_isolated", False):
+                continue
             ok, why = _fits(g, req)
             if not ok:
                 clashes.append(f"{g.members[0]}: {why}")
