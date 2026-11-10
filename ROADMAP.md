@@ -15,12 +15,11 @@ from scQC → scAnno → scIntegrate, and most of the field's best tools need so
 No kernel is added without written answers to all six. They are the fields of `PLUGIN`, in the
 one file the plugin is.
 
-1. **What question does it answer** that no shipped kernel answers?
+1. **What question does it answer**, and which shipped kernel answers it too?
 2. **What does it need** beyond counts + labels + samples? Anything extra is a gate most datasets
    fail, and the kernel must refuse cleanly rather than produce a number.
-3. **Can it be installed reproducibly** — a `requires` the builder can resolve against every
-   other plugin's, and a selftest that runs the real
-   thing? An R tool needs a working bridge before its kernel is worth writing.
+3. **Can it be installed reproducibly** — a `requires` the builder can resolve, shared or alone,
+   and a selftest that runs the real thing? An R tool needs a working bridge before its kernel is worth writing.
 4. **What can its output NOT show?** If this list is short, it has not been thought about.
 5. **Is there evidence it works**, on data like the target, from someone other than its authors?
 6. **What breaks silently** if the input is wrong? This decides whether it needs a `guard.py`.
@@ -144,7 +143,7 @@ tissue that caveat is the whole story, and it belongs beside every edge.
 
 ---
 
-## Tier 2 — worth having, once Tier 1 is real
+## Tier 2 — candidates
 
 | kernel | answers | needs | note |
 |---|---|---|---|
@@ -236,9 +235,6 @@ Three pieces of harness, each blocking several kernels:
 
 Stated in advance so it can be checked later.
 
-- **Tier 2 will grow faster than Tier 1 finishes.** The gate is there to slow that down. A kernel
-  that runs but whose `cannot_show` was never written is worse than no kernel, because its output
-  looks exactly as authoritative as one that was thought about.
 - **The pairs will drift into single defaults.** If `scenic` is slow to install, people will run
   `decoupler` alone and report it as regulon activity. The report must name the missing half of a
   pair as an absence, not leave it silent.

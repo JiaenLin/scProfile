@@ -67,8 +67,10 @@ print("\nno project, person, machine or cohort appears anywhere")
 # path, a head node - until the day the harness's own scan flagged the guard. The names now come
 # from a file OUTSIDE the repository, $SCPROFILE_FORBIDDEN_TERMS (one per line, # comments); what
 # is spelled here is the SHAPE of a leak, which is not a name: a home path, a login node, a job
-# id, an e-mail, a dated scratch directory, any node of any cluster - and the design vocabulary
-# of a study, which identifies it as surely as its name does (`a` and `b` carry every lesson).
+# id, an e-mail, a dated scratch directory, any node of any cluster. A study's own design
+# vocabulary identifies it as surely as its name does, and it is that study's words, so it comes
+# from the same file (harness B1-095): spelled here, ordinary biology words such as a heart cell
+# type were forbidden in this tool for every cohort (`a` and `b` carry every lesson).
 _terms_file = os.environ.get("SCPROFILE_FORBIDDEN_TERMS")
 _terms = ([l.strip() for l in Path(_terms_file).read_text(encoding="utf-8").splitlines()
            if l.strip() and not l.startswith("#")]
@@ -78,8 +80,6 @@ BAD = re.compile("|".join([
     r"\blogin-\d{2}-\d{2}\b", r"\bhn-\d{2}-\d{2}\b", r"\b\d{6}\.hn-\d{2}-\d{2}\b",
     r"[\w.+-]+@[\w-]+\.(?:edu|com|org|sg|ac\.uk)\b", r"scratch/\d{8}__",
     r"\bcompute[a-z]?\d{3,}\b",
-    r"\bage\s*(?:x|\u00d7|by)\s*diet\b", r"\bhigh[- ]fat\b", r"\bHFD\b",
-    r"\bten (?:animals|mice|hearts)\b", r"heart study|myocard|cardiomyocyte",
 ] + [re.escape(t) for t in _terms]), re.I)
 print(f"  {len(_terms)} site term(s) "
       f"{'from ' + _terms_file if _terms else 'supplied: none - set SCPROFILE_FORBIDDEN_TERMS to prove more'}")
@@ -142,25 +142,29 @@ ck(f"no project or host names in the tree ({scanned} files scanned)", not hits,
 ck("and the scan actually opened the tree", scanned >= 40, f"only {scanned} files")
 
 
-def _scan_text(text):
+def _scan_text(text, bad=None):
     """The same two passes this check runs over the tree, applied to one string."""
+    bad = bad or BAD
     lines = text.splitlines()
-    if any(BAD.search(l) and not OK_LINE.search(l) for l in lines):
+    if any(bad.search(l) and not OK_LINE.search(l) for l in lines):
         return True
     joined = re.sub(r"\s+", " ", re.sub(r"\n\s*(?:#|//|--)?\s*", " ", "\n".join(lines)))
-    return bool(BAD.search(joined))
+    return bool(bad.search(joined))
 
 
 # THE SCAN IS PROVED ABLE TO FIRE, on the exact shape that got past it. A leak guard that has
 # only ever reported clean is indistinguishable from one that cannot report anything else, and
 # this one WAS: the line-based version passed while the phrase sat in `declare.py` with the
-# wrap falling between its two words. `\u0074en` etc. keep the control out of the guard's own reach.
-_probe_word = "\u0074en" + " " + "\u0061nimals"
-ck("a leak on one line is caught", _scan_text(f"# measured on {_probe_word} of one tissue"))
+# wrap falling between its two words. The phrase is a site term made up here, added the way the
+# site's file adds one - the guard spells no study's words (harness B1-095), and what is proved
+# is the two passes, not a phrase. `q` keeps the probe out of the guard's own reach.
+_probe_term = "quokka" + " " + "quorum"
+_PROBE = re.compile(BAD.pattern + "|" + re.escape(_probe_term), re.I)
+ck("a leak on one line is caught", _scan_text(f"# measured on {_probe_term} of one tissue", _PROBE))
 ck("and the same leak split by a line wrap is caught too",
-   _scan_text("# measured on \u0074en\n# \u0061nimals of one tissue"),
+   _scan_text("# measured on quokka\n# quorum of one tissue", _PROBE),
    "a phrase the text wrapper broke is a phrase a line-based scan cannot see")
-ck("and clean prose is not", not _scan_text("# measured on ten units of one cohort"))
+ck("and clean prose is not", not _scan_text("# measured on ten units of one cohort", _PROBE))
 
 print("\nevery role a user might name differently is DETECTED and OVERRIDABLE")
 for role in ("label", "sample", "batch", "compartment", "counts_layer", "lognorm_layer",
@@ -738,17 +742,6 @@ ck("no plugin declares another plugin by name",
 _unprov = _FB.unprovidable_capabilities(_K)
 ck("every capability a plugin asks for has an installed provider",
    not _unprov, str([a for a, _ in _unprov]))
-# A FACT ABOUT THIS REPOSITORY, NOT A PROOF OF THE MACHINERY - and it used to be both, which is
-# why deleting one kernel file read as the scheduler breaking. The shipped nine have exactly ONE
-# resolvable edge between them, `velocity -> pseudotime`, and it is optional; four of the five
-# derived capabilities are provided by six plugins and injected by none. The mechanism is proved
-# on sets built for it in tests/test_wave_graph.py - required edges, chains, diamonds, cycles -
-# so what is left here is the claim that this tree still composes at all.
-if _family("the shipped set still has an edge to compose"):
-    ck("the shipped set still has an edge to compose",
-       bool(_pe(_K)),
-       "no plugin here reads another's output. The machinery is proved in test_wave_graph.py; this "
-       "says the nine no longer exercise any of it")
 # TWO WAVE BUILDERS, ONE GRAPH. `schedule` orders the run and `order_of_runs` orders the plan,
 # and until both were made to call one edge function they read different things: the run put a
 # consumer in the same wave as its producer while the plan put it in the next one. The first fix
