@@ -1,6 +1,7 @@
 #!/bin/sh
-# THE COMMIT GATE. Installed once per clone by `git config core.hooksPath setup/githooks`, and
-# then run by git before every commit here, whatever session, editor or terminal made it. The
-# rules are not in this file: they are the commit half of `.claude/hooks/dev_guideline.py`, so
-# they exist once. `scprofile check` reports whether this is installed.
+# THE GATE, FOR A COMMIT MADE ON main ITSELF. Installed once per clone by `git config
+# core.hooksPath setup/githooks`. A commit on any other branch meets no gate, so work in progress
+# can be checkpointed while it is red; the push to main is the door (`pre-push`). The rules are
+# not in this file: they are the gate half of `.claude/hooks/dev_guideline.py`, so they exist once.
+# `scprofile check` reports whether this is installed.
 exec python3 "$(git rev-parse --show-toplevel)/.claude/hooks/dev_guideline.py" --pre-commit

@@ -1,0 +1,7 @@
+#!/bin/sh
+# THE GATE, AT THE DOOR OF main. Installed once per clone by `git config core.hooksPath
+# setup/githooks`, and then run by git before every push from here, whatever session, editor or
+# terminal made it. git passes the remote's name and URL as arguments and one line per pushed ref
+# on stdin; a push to refs/heads/main meets the gate, any other ref meets none. The rules are not
+# in this file: they are the gate half of `.claude/hooks/dev_guideline.py`, so they exist once.
+exec python3 "$(git rev-parse --show-toplevel)/.claude/hooks/dev_guideline.py" --pre-push "$@"

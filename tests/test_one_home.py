@@ -114,33 +114,22 @@ for d in sorted((ROOT / "docs").glob("*.md")) + [ROOT / "README.md", ROOT / "DEV
             missing.append(f"{d.name} -> {m}")
 ck("no document points at a file that is not here", not missing, "; ".join(missing[:6]))
 
-print("\nthe guideline's enforced list matches what the hook actually denies")
+print("\nthe guideline's gate is the one git runs")
 DEV = (ROOT / "DEVELOPMENT.md").read_text(encoding="utf-8")
-HOOK = (ROOT / ".claude" / "hooks" / "dev_guideline.py").read_text(encoding="utf-8")
-ck("the hook denies scratchpad material and the guideline says so",
-   "_is_scratch" in HOOK and "scratchpad" in DEV.lower())
-ck("the hook denies ad-hoc heredocs and the guideline says so",
-   "heredoc" in HOOK and "heredoc" in DEV.lower())
-ck("the guideline names the repository as the only home",
-   "ONLY HOME" in DEV.upper())
-ck("and the script it points people to is committed",
+# WHAT THE HOOKS DO IS ASKED OF THEM, NOT READ OFF THEIR SOURCE (harness B1-025). These lines
+# pinned the hook's text and the guideline's wording - that the hook denied scratch writes,
+# heredocs and commits, that the guideline said "ONLY HOME" - so every trim of a process rule was
+# red here until the pin was edited too. The behaviour is asked of the real hook and real git in
+# tests/test_the_gate_guards_main_not_work_in_progress.py: the session hook refuses nothing, a red
+# commit off `main` succeeds, a red push to `main` is refused by `tests/run_all.py`'s verdict, and
+# a green one goes through. What stays here is what the documents point at.
+ck("the script the guideline points people to is committed",
    (ROOT / "tests" / "preview_panels.py").is_file())
-# THE COMMIT RULES FIRE ON THE REPOSITORY, NOT ON THE SESSION. A session rooted elsewhere made
-# commits here past every rule, because the only trigger was a PreToolUse hook keyed to the
-# session's root. The commit half now runs as a git hook under a committed hooks path, and the
-# three parties that name that path read it from one module.
-from scprofile import gate as _GATE
-_pc = ROOT / _GATE.HOOKS_PATH / _GATE.PRE_COMMIT
-ck("the commit gate is a committed git hook", _pc.is_file() and os.access(_pc, os.X_OK),
-   str(_pc))
-ck("and it runs the commit half of the guideline, not a copy of it",
-   "--pre-commit" in _pc.read_text(encoding="utf-8") and "def pre_commit" in HOOK)
-ck("the session hook refuses a commit while the gate is not installed",
-   "installed(ROOT)" in HOOK and "install_command()" in HOOK)
-# THE GATE IS THE ONE RUNNER. The commit half looped over tests/test_*.py itself, without the
-# PYTHONPATH the runner sets, and the first real run refused on seven suites the runner passes.
-ck("and the commit gate runs `tests/run_all.py`, not a copy of it",
-   "run_all.py" in HOOK.split("def pre_commit")[1])
+from scprofile import gate as _GATE                                             # noqa: E402
+for _h in (_GATE.PRE_PUSH, _GATE.PRE_COMMIT):
+    _pc = ROOT / _GATE.HOOKS_PATH / _h
+    ck(f"the gate's {_h} hook is committed and executable",
+       _pc.is_file() and os.access(_pc, os.X_OK), str(_pc))
 ck("the guideline says how to install it", _GATE.install_command() in DEV)
 
 print("\nthe paper test is wired end to end, not only defined")

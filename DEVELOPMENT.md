@@ -2,23 +2,18 @@
 
 # Development guideline
 
-*Enforced by `.claude/hooks/dev_guideline.py`, which DENIES rather than reminds, on two axes. **The session** (a Claude Code `PreToolUse` hook): tool code written outside the package, scProfile material written to a scratchpad, ad-hoc scProfile code run from a shell heredoc. **The commit** (a git `pre-commit` hook, the commit half of the same file): a commit while any suite or `scprofile check` is red, and figure code committed while `check --deep` is red — fired by `git commit` in this repository whatever session, editor or terminal made it. The split was paid for: a session rooted in the plugin maker's repository edited this one through the maker, as the round's rule requires, and met no gate at all, because the only trigger was keyed to the session's root directory. **Install the commit gate once per clone:* `git config core.hooksPath setup/githooks` *— `scprofile check` is red until you do, and the session hook refuses a commit until you do. The TEST LOOP below is how the tool is exercised against real runs; `docs/TEST_LOOP.md` is its design, and `docs/ANATOMY_OF_A_RUN.md` is every layer of one run as the code does it. What it cannot enforce is whether anyone LOOKED at a figure — `scprofile review` records that, and the count is printed on every figure-code commit.*
+*The gate is `.claude/hooks/dev_guideline.py`, run by git from the committed `setup/githooks`: **a push to `main`** is refused while any suite or `scprofile check` is red, or while it carries figure code and `check --deep` is red, and a commit made on `main` itself meets the same gate. A commit or push on any other branch meets none, so work in progress can be checkpointed while it is red; a change is judged when it is accepted, at `main`. A git hook fires in this repository whatever session, editor or terminal made the change — the split was paid for: a session rooted in the plugin maker's repository edited this one through the maker and met no gate at all, because the only trigger was keyed to the session's root directory. **Install the gate once per clone:* `git config core.hooksPath setup/githooks` *— `scprofile check` prints a warning until you do. The same file is a Claude Code `PreToolUse` hook for the session, and there it only reminds. The TEST LOOP below is how the tool is exercised against real runs; `docs/TEST_LOOP.md` is its design, and `docs/ANATOMY_OF_A_RUN.md` is every layer of one run as the code does it. What no hook can enforce is whether anyone LOOKED at a figure — `scprofile review` records that, and the reminder is printed whenever the gate passes figure code.*
 
-**THE REPOSITORY IS THE ONLY HOME.**
-Every scProfile artefact — code, tests, docs, skills, examples, the scripts you use to look at a
-panel — lives here and nowhere else. A run's outputs live in that run's directory. **There is no
-third place**, and a scratchpad is not one: work put there has no commit, no history, and is gone
-with the session that made it.
+**Deliverables live in the repository or in the run they came from.**
+Code, tests, docs, skills, examples and the scripts used to look at a panel are committed here; a
+run's outputs live in that run's directory. A scratch directory is a fine place to work and to
+measure, and a poor place to keep anything: what is left there has no commit and no history.
+Four manuscript drafts and every harness used to render a panel were once kept in one, so the one
+reusable thing — a way to redraw a panel from a finished run — was rebuilt from memory each time.
 
-This was broken while the rule above it was being enforced. Four manuscript drafts and every
-harness used to render a panel and look at it were written to a scratchpad, so the one thing that
-could be reused — a way to redraw a panel from a finished run — had to be rebuilt from memory
-each time and was never committed. *A figure in a scratchpad is a draft. So is everything else.*
-
-Two consequences, both enforced:
-- **Use the CLI, or commit the script.** Ad-hoc scProfile code in a shell heredoc is a script
-  nobody can run twice. `tests/preview_panels.py` exists because that need is real and kept
-  being met in the wrong place.
+Two consequences:
+- **A script you will need twice belongs in `tests/`.** A one-line measurement from a shell is
+  fine; `tests/preview_panels.py` exists because redrawing a panel kept being rebuilt instead.
 - **A written result belongs to its run.** `scprofile paper --write` puts it there, with a run
   key, bound to the figures it was read off.
 
