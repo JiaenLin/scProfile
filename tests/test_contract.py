@@ -24,6 +24,17 @@ import subject                                                            # noqa
 from scprofile import manifest                                            # noqa: E402
 from scprofile.kernels import Kernel, discover, order, undeclared, unmet   # noqa: E402
 
+# THIS SUITE TESTS HOW THE HOST RESOLVES A PLUGIN'S ENVIRONMENT, NOT WHICH ONE A CALLER CHOSE
+# (W032, GAP-C76). The harness's ladder exports `SCPROFILE_DE_PYTHON` so that de runs on the
+# fixture, and every tier inherits it: `env_state` then read de as `override`, and "de finds the
+# shared environment" failed on a tree nothing had changed. The per-plugin overrides
+# (`runner.config_override`) are dropped for this process and what it launches; a check that wants
+# one sets its own (`SCPROFILE_SLOW_PYTHON` below).
+import os as _os_env                                                       # noqa: E402
+for _k in discover():
+    for _s in ("PYTHON", "RSCRIPT"):
+        _os_env.environ.pop(f"SCPROFILE_{_k.upper().replace('-', '_')}_{_s}", None)
+
 FAILED = []
 
 

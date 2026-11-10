@@ -1670,6 +1670,8 @@ def _design(a):
             print(f"  {verdict} {n:<12} "
                   + ("its declaration does not load"
                      if any(m == "declaration" for m, _w in d["missing"]) else
+                     "not design-aware, and its design record does not account for it"
+                     if not d["design_aware"] and d["owes"] else
                      "not design-aware" if not d["design_aware"] else
                      f"design-aware, {len(d['sites'])} fitting site(s), "
                      f"{len(d['missing'])} owed"))
@@ -2846,12 +2848,30 @@ def _check(a):
     else:
         _bad = {}
         for _n, _k in sorted(_ks.items()):
-            _e = [x.check for x in _V.validate_plugin(_k) + _V.validate_references(_k)
-                  if x.level == "ERROR"]
+            try:
+                _e = [x.check for x in _V.validate_plugin(_k) + _V.validate_references(_k)
+                      if x.level == "ERROR"]
+            except Exception as e:                                        # noqa: BLE001
+                _e = [f"the validator raised {type(e).__name__}: {e}"]
             if _e:
                 _bad[_n] = _e
         row(f"every shipped plugin validates ({len(_ks)} found)", not _bad,
             "; ".join(f"{n}: {len(v)} error(s) — {v[0]}" for n, v in _bad.items()))
+        # THE DESIGN RECORD, CHECKED HERE TOO (W032, GAP-C74). It verified itself in the design
+        # stage and in the suite, and `check` - the gate's second half, and what a reader runs to
+        # ask whether an installation is sound - never ran it: every record forged in W013's
+        # final re-check left this 26 green. A plugin that is neither spent nor recorded passes
+        # at once; one whose declaration the host cannot load is red here by name.
+        _rec = {}
+        for _n, _k in sorted(_ks.items()):
+            if Path(_k.path).suffix != ".py" or not Path(_k.path).is_file():
+                continue
+            _ok, _why = _V.design_record_check(_k)
+            if not _ok:
+                _rec[_n] = _why
+        row(f"every shipped plugin's declaration loads, and its design record accounts for it "
+            f"as it ships ({len(_ks)} found)", not _rec,
+            "; ".join(f"{n}: {w}" for n, w in _rec.items()))
 
     # --- the commit gate of THIS CLONE --------------------------------------------------------
     # A PROPERTY OF THE CHECKOUT, NOT OF THE CODE, and the one row here that a fresh clone is

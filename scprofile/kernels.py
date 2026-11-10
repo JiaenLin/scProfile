@@ -556,6 +556,144 @@ class Kernel:
         return f"<Kernel {self.name}>"
 
 
+#: The name a one-file plugin declares itself under.
+DECLARATION = "PLUGIN"
+
+
+def _bindings(tree, name=DECLARATION):
+    """[(line, what)] - every place the module binds `name` in its own scope, by any syntax.
+
+    Every form counts, because each one is a binding the host would not read and the import
+    would: an assignment of any kind, `del`, a loop or `with` target, an import alias, a `def` or
+    a `class` of that name, an `except ... as`, a walrus, a `match` capture - at the top level
+    or inside a block the import runs (`if`, `try`, `for`, `with`) - and a `global` statement in
+    any function, which reaches the module from inside it. A function's or a class's own body is
+    its own scope. A binding no syntax names (`globals()[...]`, `exec`) is not seen here; in a
+    plugin with a design record it is code outside the declaration, which the record refuses.
+    """
+    import ast
+    out = []
+
+    def visit(node, top):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            if top and getattr(node, "name", None) == name:
+                out.append((node.lineno, f"a `{'class' if isinstance(node, ast.ClassDef) else 'def'}`"))
+            # what is evaluated where the definition stands: decorators, defaults, bases
+            here = list(getattr(node, "decorator_list", []))
+            if isinstance(node, ast.ClassDef):
+                here += list(node.bases) + [k.value for k in node.keywords]
+            else:
+                here += list(node.args.defaults) + [d for d in node.args.kw_defaults if d]
+            for x in here:
+                visit(x, top)
+            for x in ast.walk(node):
+                if isinstance(x, ast.Global) and name in x.names:
+                    out.append((x.lineno, "`global PLUGIN`"))
+            return
+        if top:
+            if isinstance(node, ast.Name) and node.id == name and \
+                    isinstance(node.ctx, (ast.Store, ast.Del)):
+                out.append((node.lineno, "an assignment" if isinstance(node.ctx, ast.Store)
+                            else "a `del`"))
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                for a in node.names:
+                    if (a.asname or a.name.split(".")[0]) == name:
+                        out.append((node.lineno, "an import"))
+            elif isinstance(node, ast.ExceptHandler) and node.name == name:
+                out.append((node.lineno, "an `except ... as`"))
+            elif getattr(node, "name", None) == name and type(node).__name__ in ("MatchAs",
+                                                                                "MatchStar"):
+                out.append((node.lineno, "a `match` capture"))
+            elif type(node).__name__ == "MatchMapping" and getattr(node, "rest", None) == name:
+                out.append((node.lineno, "a `match` capture"))
+        for ch in ast.iter_child_nodes(node):
+            visit(ch, top)
+
+    visit(tree, True)
+    return sorted(set(out))
+
+
+def declaration_node(src):
+    """(tree, node, why) - the one statement `PLUGIN = {...}` of a plugin's source, read and never
+    run. `why` is None when the file has exactly that, or the sentence saying what it has instead.
+
+    ONE READER FOR THE HOST AND FOR EVERY CHECK OF IT (W032; W013's verifier, GAP-C72, GAP-C73).
+    The host kept the LAST top-level `PLUGIN =` while the design record's check read the FIRST, so
+    a second binding appended to the file left the host reading another declaration than the one
+    checked; and the check compared and swapped the declaration's WHOLE LINES while it read only
+    the assignment's value, so a statement on its first line (`x(); PLUGIN = {`) or its last
+    (`}; <code>`) ran on every import and was compared nowhere - a payload there doubled every
+    fold change de wrote, with every check green. So a declaration is:
+      - the module's ONE binding of `PLUGIN`, in any syntax and at any depth the import runs
+        (`_bindings`), and it is a top-level `PLUGIN = <value>` naming nothing else;
+      - ALONE ON ITS LINES: it starts at the first column of its first line, and after it its last
+        line holds only blanks or a comment - so the lines that are folded and swapped as "the
+        declaration" hold no code.
+    A file that does not parse is said so, whatever the parser raised.
+    """
+    import ast
+    try:
+        tree = ast.parse(src)
+    except SyntaxError as e:
+        return None, None, f"the file does not parse ({e})"
+    except Exception as e:                    # noqa: BLE001 - a NUL byte, RecursionError, ...
+        return None, None, f"the file does not parse ({type(e).__name__}: {e})"
+    binds = _bindings(tree)
+    top = [n for n in tree.body if isinstance(n, ast.Assign)
+           and any(isinstance(t, ast.Name) and t.id == DECLARATION for t in n.targets)]
+    if not binds:
+        return tree, None, "there is no `PLUGIN = {...}` declaration"
+    if len(binds) > 1:
+        return tree, (top[0] if top else None), (
+            f"`PLUGIN` is bound {len(binds)} times ("
+            + ", ".join(f"line {ln}: {what}" for ln, what in binds)
+            + ") - a plugin has ONE declaration, or the host reads one and the check another")
+    if not top:
+        return tree, None, (f"`PLUGIN` is bound at line {binds[0][0]} by {binds[0][1]}, not "
+                            f"declared by `PLUGIN = {{...}}` at the top of the module")
+    node = top[0]
+    if len(node.targets) != 1:
+        return tree, node, (f"the declaration at line {node.lineno} assigns other names with "
+                            f"`PLUGIN`; it assigns `PLUGIN` alone")
+    lines = src.split("\n")
+    after = lines[node.end_lineno - 1].encode("utf-8")[node.end_col_offset:].decode(
+        "utf-8", "replace").strip()
+    if node.col_offset != 0:
+        return tree, node, (f"code precedes the declaration on its first line (line "
+                            f"{node.lineno}): its lines hold `PLUGIN = {{...}}` alone")
+    if after and not after.startswith("#"):
+        return tree, node, (f"code follows the declaration on its last line (line "
+                            f"{node.end_lineno}: {after[:60]!r}): its lines hold "
+                            f"`PLUGIN = {{...}}` alone")
+    return tree, node, None
+
+
+def read_declaration(src):
+    """(spec, span, why) - a plugin source's declaration as the host loads it: the literal dict,
+    its (first, last) line, and None; or ({}, span or None, the sentence saying why it does not
+    load). `ast.literal_eval` is the only evaluator, and whatever it raises is a sentence - an
+    unhashable key raised TypeError out of discovery, past every caller (GAP-C73)."""
+    import ast
+    _tree, node, why = declaration_node(src)
+    span = (node.lineno, node.end_lineno) if node is not None else None
+    if why:
+        return {}, span, why
+    try:
+        v = ast.literal_eval(node.value)
+    except ValueError as e:
+        return {}, span, f"`PLUGIN = {{...}}` is not a pure literal - run-time code inside it ({e})"
+    except Exception as e:                    # noqa: BLE001 - TypeError, RecursionError, ...
+        return {}, span, (f"`PLUGIN = {{...}}` is not a literal the host can read "
+                          f"({type(e).__name__}: {e})")
+    if not isinstance(v, dict):
+        return {}, span, f"`PLUGIN` is not a dict (it is a {type(v).__name__})"
+    needs = v.get("needs")
+    if needs and not isinstance(needs, dict):
+        return {}, span, (f"`PLUGIN['needs']` is not a mapping (it is a {type(needs).__name__}): "
+                          f"the host reads its roles by name")
+    return v, span, None
+
+
 class FileKernel(Kernel):
     """A plugin that is ONE FILE: a PLUGIN dict and a run(ctx). Nothing else is required.
 
@@ -565,21 +703,23 @@ class FileKernel(Kernel):
     """
 
     def __init__(self, path):
-        import ast
         self.path = path
         self.name = path.stem
         self.spec = {}
+        #: Why the file has no declaration the host can load, or None (`read_declaration`). A
+        #: plugin whose declaration does not load is listed with an empty spec and this sentence,
+        #: never raised: discovery lists every plugin, and one file must not hide the others.
+        self.declaration_error = None
         try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except SyntaxError:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            self.declaration_error = f"the file cannot be read as UTF-8 text ({type(e).__name__}: {e})"
             return
-        for node in tree.body:
-            if isinstance(node, ast.Assign) and any(
-                    getattr(tgt, "id", "") == "PLUGIN" for tgt in node.targets):
-                try:
-                    self.spec = ast.literal_eval(node.value)
-                except ValueError:
-                    self.spec = {}
+        spec, _span, why = read_declaration(text)
+        self.declaration_error = why
+        if why and why.startswith("the file does not parse"):
+            return
+        self.spec = spec
         # `needs` is one mapping here rather than four keys, because a plugin author should write
         # what it needs in one place. Flattened to the names the rest of the host already uses.
         needs = self.spec.get("needs") or {}

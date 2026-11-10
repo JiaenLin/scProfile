@@ -70,6 +70,11 @@ def validate_plugin(kernel):
     # Every check below was written against the directory shape and looked for siblings that a
     # one-file plugin does not have - so the shape the host now prefers failed its own validator.
     if not d.is_dir():
+        # A DECLARATION THE HOST COULD NOT LOAD IS NAMED FIRST (W032): the host lists the plugin
+        # with an empty spec and the sentence why (`kernels.read_declaration`), so every finding
+        # below it is a consequence of this one.
+        if getattr(kernel, "declaration_error", None):
+            f.append(Finding("ERROR", "its declaration does not load", kernel.declaration_error))
         # ONE CHECK, SHARED. The builder refuses what validate refuses; a builder that accepts
         # what validate rejects installs something nobody can maintain.
         from . import declare
@@ -945,27 +950,36 @@ def _outside_declaration(src):
 
 
 def _declaration_literal(src):
-    """None when `PLUGIN = {...}` is a pure literal, or why it is not."""
-    import ast
-    for n in ast.parse(src).body:
-        if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "PLUGIN"
-                                             for t in n.targets):
-            try:
-                v = ast.literal_eval(n.value)
-            except ValueError as e:
-                return f"`PLUGIN = {{...}}` is not a pure literal - run-time code inside it ({e})"
-            return None if isinstance(v, dict) else "`PLUGIN` is not a dict"
-    return "there is no `PLUGIN = {...}` declaration"
+    """None when the file's declaration is one the host loads - ONE binding of `PLUGIN`, a
+    top-level `PLUGIN = {...}` alone on its lines, a pure literal dict - or why it is not. The
+    host's own reader (`kernels.read_declaration`), so the check and the host read one statement
+    (W032, GAP-C72, GAP-C73); it never raises."""
+    from .kernels import read_declaration
+    return read_declaration(src)[2]
 
 
 def _declaration(src):
     """(first line, last line) of the `PLUGIN = {...}` assignment, or None: the declaration, which
-    the maker's verb `sch dev edit` changes and nothing else does."""
-    import ast
-    for n in ast.parse(src).body:
-        if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "PLUGIN"
-                                             for t in n.targets):
-            return n.lineno, n.end_lineno
+    the maker's verb `sch dev edit` changes and nothing else does. None too when the file has no
+    declaration standing alone on its lines (`kernels.declaration_node`): only lines that hold the
+    assignment and nothing else are ever folded or swapped as "the declaration"."""
+    from .kernels import declaration_node
+    _tree, node, why = declaration_node(src)
+    return None if (why or node is None) else (node.lineno, node.end_lineno)
+
+
+def _lone_declaration(text):
+    """None when `text` is ONE declaration and nothing else - what a record's `after_declaration`
+    must be, since it is swapped into the plugin as its declaration's lines - or why it is not."""
+    from .kernels import declaration_node
+    why = _declaration_literal(text)
+    if why:
+        return why
+    tree, _node, _w = declaration_node(text)
+    if len(tree.body) != 1:
+        return f"it holds {len(tree.body)} statements, not the declaration alone"
+    if not str(text).endswith("\n"):
+        return "it does not end its last line"
     return None
 
 
@@ -1014,21 +1028,40 @@ def design_record_check(kernel, root=None):
          rewritten to start from a doctored file, or a hand edit before the first answer, does not
          meet it. Where that commit cannot be read the base is not established, and this fails.
     The declaration is the maker's verb's to change after an answer; it is compared nowhere but
-    in step 1.
+    in step 1 - and step 1 holds it to the host's own reader (`kernels.read_declaration`): one
+    binding of `PLUGIN`, alone on its lines, a pure literal, in the shipped file and in every file
+    of the chain (W032).
+
+    IT FAILS CLOSED, NEVER WITH A TRACEBACK. The record is a file anyone can edit, so whatever it
+    holds - a diff that is not text, sites that are not a list - is a sentence and a failure.
     """
+    try:
+        return _design_record_check(kernel, root)
+    except Exception as e:                                       # noqa: BLE001 - fail closed
+        return False, (f"the design record of {kernel.name} cannot be checked "
+                       f"({type(e).__name__}: {e})")
+
+
+def _design_record_check(kernel, root):
     path = Path(kernel.path)
     root = Path(root) if root else path.parent.parent
-    shipped = path.read_text(encoding="utf-8")
     try:
-        bad = _declaration_literal(shipped)
-    except SyntaxError as e:
-        return False, f"kernels/{path.name} does not parse ({e})"
+        shipped = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        return False, f"kernels/{path.name} cannot be read as UTF-8 text ({type(e).__name__}: {e})"
+    # THE DECLARATION AS THE HOST READS IT, OR NOTHING PASSES (W032): one binding of `PLUGIN`, a
+    # top-level `PLUGIN = {...}` alone on its lines, a pure literal. Every file of the chain below
+    # is held to the same, and so is each declaration the record swaps in: the lines this check
+    # folds and swaps as "the declaration" are then lines that hold no code.
+    bad = _declaration_literal(shipped)
     if bad:
-        return False, bad
+        return False, f"kernels/{path.name}: {bad}"
     rec = _read_record(kernel)
     if rec.get("unreadable"):
         return False, f"the record {rec['unreadable']} does not parse"
     answers = rec.get("answers") or []
+    if not isinstance(answers, list) or not all(isinstance(a, dict) for a in answers):
+        return False, f"the record {design_record_path(kernel).name}'s answers are not a list of entries"
     anchor = _spent_commit(root, kernel.name)
     if not answers and anchor is None:
         return True, ("no answer recorded, and not spent: DEVPOINTS names no blind-record commit "
@@ -1040,6 +1073,10 @@ def design_record_check(kernel, root=None):
     if answers:
         last = answers[-1]
         if _sha(cur) != last.get("after") and last.get("after_declaration"):
+            why = _lone_declaration(last["after_declaration"])
+            if why:
+                return False, (f"answer {last.get('n')}'s recorded declaration is not one "
+                               f"declaration alone: {why}")
             cur = _swap_declaration(shipped, last["after_declaration"])
         if _sha(cur) != last.get("after"):
             return False, (f"kernels/{path.name} is not the file its last recorded answer "
@@ -1048,13 +1085,19 @@ def design_record_check(kernel, root=None):
         for ans in reversed(answers):
             if _sha(cur) != ans.get("after"):
                 return False, f"answer {ans.get('n')} did not make the file the next answer met"
+            why = _declaration_literal(cur)
+            if why:
+                return False, f"the file answer {ans.get('n')} made: {why}"
             try:
-                prev = _apply_unified(cur, _reverse_diff(ans.get("diff") or ""))
+                prev = _apply_unified(cur, _reverse_diff(str(ans.get("diff") or "")))
             except ValueError as e:
                 return False, f"answer {ans.get('n')} does not undo from the shipped file: {e}"
             if _sha(prev) != ans.get("before"):
                 return False, (f"answer {ans.get('n')} undone is not the file it records it was "
                                f"made on")
+            why = _declaration_literal(prev)
+            if why:
+                return False, f"the file answer {ans.get('n')} was made on: {why}"
             try:
                 _ops, sites, refusals, _n = _admit(prev, cur)
             except SyntaxError as e:
@@ -1069,6 +1112,9 @@ def design_record_check(kernel, root=None):
     if base is None:
         return False, (f"the base cannot be established: the plugin at its blind-record commit "
                        f"{anchor} could not be read ({how})")
+    why = _declaration_literal(base)
+    if why:
+        return False, f"the plugin at its blind-record commit {anchor}: {why}"
     try:
         same = _outside_declaration(cur) == _outside_declaration(base)
     except SyntaxError as e:
@@ -1106,7 +1152,19 @@ def design_sites(kernel, root=None):
     READ FROM THE SOURCE, NOT FROM A RUN, so it is a build question. It cannot see a plugin that
     asks the host and then reorders anyway; the two-shape fixture, whose control sorts last on
     one shape, is the check that can (`agree` in the harness's ladder).
+
+    IT NEVER RAISES (W032, GAP-C73): a declaration or a record this cannot read is an owe with
+    its sentence, so the stage that runs it - and a job's first step - fails by name.
     """
+    try:
+        return _design_sites(kernel, root)
+    except Exception as e:                                       # noqa: BLE001 - fail closed
+        return {"design_aware": False, "sites": [], "statements": [], "takes": [],
+                "missing": [("declaration", f"the design stage cannot read this plugin "
+                                            f"({type(e).__name__}: {e})")], "owes": True}
+
+
+def _design_sites(kernel, root):
     spec = kernel.spec or {}
     inj = spec.get("inject") or {}
     takes = (set(inj.get("required") or []) | set(inj.get("optional") or [])
@@ -1116,17 +1174,27 @@ def design_sites(kernel, root=None):
     path = Path(kernel.path)
     # A DECLARATION THAT DOES NOT LOAD IS NOT "NOT DESIGN-AWARE" (fix-up 5): the host reads an
     # empty spec from a `PLUGIN` that is not a pure literal, and this read "nothing to answer"
-    # over a plugin whose import runs whatever the declaration hides.
+    # over a plugin whose import runs whatever the declaration hides. Read by the host's own
+    # reader, so a second binding or code on the declaration's lines owes here too (W032).
     if path.is_file() and path.suffix == ".py":
         try:
             why = _declaration_literal(path.read_text(encoding="utf-8"))
-        except SyntaxError as e:
-            why = f"the file does not parse ({e})"
+        except (OSError, UnicodeDecodeError) as e:
+            why = f"the file cannot be read as UTF-8 text ({type(e).__name__}: {e})"
+        why = why or getattr(kernel, "declaration_error", None)
         if why or not spec:
             out["missing"].append(("declaration", why or "the host loaded no declaration"))
             out["owes"] = True
             return out
+        # THE RECORD IS CHECKED FOR EVERY PLUGIN, DESIGN-AWARE OR NOT (W032). It was reached only
+        # past "design-aware", so a declaration edited to drop `design` and `contrast` from
+        # `inject` - or one the host read as empty - left this stage `ok` over any hand edit.
+        # A plugin that is neither spent nor recorded passes it at once ("not spent").
+        out["record"] = design_record_check(kernel, root=root)
     if not out["design_aware"] or not path.is_file():
+        if not out.get("record", (True, ""))[0]:
+            out["missing"].append(("record", out["record"][1]))
+        out["owes"] = bool(out["missing"])
         return out
     try:
         fits, stmts, called = _scan(path.read_text(encoding="utf-8"))
@@ -1150,10 +1218,8 @@ def design_sites(kernel, root=None):
     for s in stmts:
         if not s["answered"]:
             out["missing"].append((f"statement:{s['line']}", STATEMENT_OWES))
-    ok, why = design_record_check(kernel, root=root)
-    out["record"] = (ok, why)
-    if not ok:
-        out["missing"].append(("record", why))
+    if not out.get("record", (True, ""))[0]:
+        out["missing"].append(("record", out["record"][1]))
     out["owes"] = bool(out["missing"])
     return out
 
@@ -1167,6 +1233,12 @@ def design_report(kernel, log=print, root=None):
             + "; ".join(w for m, w in d["missing"] if m == "declaration"))
         return 1
     if not d["design_aware"]:
+        rec = [w for m, w in d["missing"] if m == "record"]
+        if rec:
+            log(f"  OWES {kernel.name:<12} not design-aware (inject names neither `design` nor "
+                f"`contrast`), and its design record (kernels/{design_record_path(kernel).name}) "
+                f"does not account for it as it ships: " + "; ".join(rec))
+            return 1
         log(f"  ok   {kernel.name:<12} not design-aware (inject names neither `design` nor "
             f"`contrast`): nothing to answer")
         return 0
@@ -1216,16 +1288,19 @@ def design_report(kernel, log=print, root=None):
 
 
 def _version_node(src):
-    """(line, current value) of the PLUGIN dict's `version`, or (None, None)."""
+    """(line, current value) of the PLUGIN dict's `version`, or (None, None) - read from the
+    declaration the host reads (`kernels.declaration_node`), never from a second binding. A file
+    that does not parse raises SyntaxError, as `ast.parse` did here before."""
     import ast
-    tree = ast.parse(src)
-    for n in tree.body:
-        if isinstance(n, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "PLUGIN"
-                                             for t in n.targets) and isinstance(n.value, ast.Dict):
-            for k, v in zip(n.value.keys, n.value.values):
-                if isinstance(k, ast.Constant) and k.value == "version" \
-                        and isinstance(v, ast.Constant):
-                    return v.lineno, str(v.value)
+    from .kernels import declaration_node
+    tree, n, why = declaration_node(src)
+    if tree is None:
+        raise SyntaxError(why)
+    if n is not None and not why and isinstance(n.value, ast.Dict):
+        for k, v in zip(n.value.keys, n.value.values):
+            if isinstance(k, ast.Constant) and k.value == "version" \
+                    and isinstance(v, ast.Constant):
+                return v.lineno, str(v.value)
     return None, None
 
 
@@ -1295,6 +1370,13 @@ def design_answer(kernel, proposed, why, *, as_version=None, log=print, root=Non
     _vl, vold = _version_node(before)
     new_version = as_version or _bump(vold)
     after = _set_version(text, new_version) if vold else text
+    # AN ANSWER LEAVES A DECLARATION THE HOST LOADS (W032): a `global PLUGIN` added inside a site
+    # binds nothing the admission counts, and would rebind the module's declaration at run time.
+    why_decl = _declaration_literal(after)
+    if why_decl:
+        log(f"  refused: the answer leaves kernels/{path.name} with a declaration the host cannot "
+            f"load - {why_decl}")
+        return 1
     try:
         _f2, stmts2, _c2 = _scan(after)
     except SyntaxError as e:

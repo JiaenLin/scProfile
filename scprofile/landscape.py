@@ -243,12 +243,14 @@ def verified_fields(rec):
 
 # ------------------------------------------------------------------------------ the forecast
 def _spec_of_source(src):
-    """The PLUGIN literal of a plugin's source, read and never imported."""
-    import ast
-    tree = ast.parse(src)
-    node = next((n for n in tree.body if isinstance(n, ast.Assign)
-                 and any(isinstance(t, ast.Name) and t.id == "PLUGIN" for t in n.targets)), None)
-    return ast.literal_eval(node.value) if node is not None else {}
+    """The PLUGIN literal of a plugin's source, read and never imported - by the host's own
+    reader (`kernels.read_declaration`), so the forecast reads the declaration the host loads
+    (W032, GAP-C73). A source with no declaration the host can load raises ValueError saying why."""
+    from .kernels import read_declaration
+    spec, _span, why = read_declaration(src)
+    if why and why != "there is no `PLUGIN = {...}` declaration":
+        raise ValueError(why)
+    return spec
 
 
 def _span_of(src, markers):

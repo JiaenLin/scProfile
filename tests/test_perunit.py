@@ -19,6 +19,17 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scprofile import cli, merge, report                                        # noqa: E402
 
+# THE DOCTOR IS ASKED HOW THE HOST RESOLVES EACH PLUGIN, NOT WHICH INTERPRETER A CALLER CHOSE
+# (W032, GAP-C76): the harness's ladder exports `SCPROFILE_DE_PYTHON` so that de runs on the
+# fixture, and under it `doctor` called de `ok` by override - "doctor does not call de ok"
+# failed on a tree nothing had changed. The per-plugin overrides (`runner.config_override`) are
+# dropped for this process and what it launches.
+import os as _os_env                                                          # noqa: E402
+from scprofile.kernels import discover as _discover                           # noqa: E402
+for _k in _discover():
+    for _s in ("PYTHON", "RSCRIPT"):
+        _os_env.environ.pop(f"SCPROFILE_{_k.upper().replace('-', '_')}_{_s}", None)
+
 FAIL = []
 
 
