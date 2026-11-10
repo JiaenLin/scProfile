@@ -140,8 +140,8 @@ rules:
   # that touched a held-out kernel: it carried the liana accounting - 8 of 12 exported plotting
   # functions ruled, the other 4 named as owed - and it is the commit at which the held-out rule
   # took effect. That work is NOT being undone, because undoing it would be one more edit to a
-  # held-out plugin. From this commit forward the eight are untouched, and that is a falsifiable
-  # claim rather than a recollection.
+  # held-out plugin. From this commit each of the eight is untouched until its own migration wave
+  # (harness GOALS A4.1, ADR-0029), and that is a falsifiable claim rather than a recollection.
   since:
     commit: f127a2b
     means: >
@@ -165,9 +165,9 @@ rules:
       never copied. A block repeated inside one plugin, or shared between two, is mechanism that
       escaped the maker
   # RULE 2. THE OTHER EIGHT ARE HELD OUT. They are the only evidence the maker is general, and
-  # they are spent the moment they are touched - including by fixing them. abundance's
-  # pertpy/statsmodels ImportError and de's unsatisfiable `pydeseq2 >=0.5,<0.6` STAY BROKEN;
-  # pseudotime's undeclared `scipy` stays undeclared. "liana sits at 8 of 12" is a RESULT.
+  # they are spent the moment they are touched - including by fixing them. So each stays as it
+  # is until its own migration wave starts - abundance's pertpy/statsmodels ImportError,
+  # pseudotime's undeclared `scipy`, "liana sits at 8 of 12" - and no longer than that.
   #
   # SPENT, ONE AT A TIME, EACH AS A BLIND TEST OF THE MAKER (harness ADR-0029: a plugin's freeze
   # ends when its own migration starts, and it is then repaired through the maker, never kept
@@ -187,20 +187,11 @@ rules:
     means: >
       the held-out set is the maker's test set. A repair to one of these fits the maker to it, and
       the next unseen tool is then the first real test with the evidence already spent
-  # RULE 3. GENERAL MECHANISM AND THE AGENTIC LAYER ARE WORKED ON IN PLACE. These are the paths a
-  # change is allowed to land in. The artefact being converted is in scope by definition and is
-  # not listed here; `held_out` above is what rules on the rest.
-  in_place:
-    # `.claude` IS THE AGENTIC LAYER and the rule names it in the same breath as the host: the
-    # skills and hooks an agent reads are mechanism exactly as `scprofile/` is. LEAK_SCOPE.txt is
-    # the leak guard's own declaration - what `sch conform` S1 may find here, each with its reason
-    # (autodev W032) - and is mechanism exactly as the guard's suite is.
-    paths: [scprofile, tests, docs, setup, jobs, .claude, DEVPOINTS.yaml, ROADMAP.md, README.md,
-            DESIGN.md, DEVELOPMENT.md, BUILD_PLAN.md, UPSTREAM.md, KNOWN_ISSUES.md, VERSION,
-            pyproject.toml, LEAK_SCOPE.txt]
-    means: >
-      the host, its suites and its documentation are the mechanism this round exists to improve;
-      a change outside them and outside the converted artefact is scope this round did not agree
+  # RULE 3 IS NOT A LIST OF PATHS. "General mechanism and the agentic layer are fixed IN PLACE"
+  # says where mechanism is fixed - in the host, never copied into a plugin, which `maker_output`
+  # above checks - and not which paths may change. Read as an allow-list it turned a citation file
+  # or a committed lock into a BROKEN round (harness B1-066); a wave's registration and its
+  # verifier bound a change's scope.
   # RULE 4. END TO END IS ONE PLUGIN. What runs on the real cohort is exactly the complement of
   # the held-out set, and the two lists may not quietly grow into each other.
   end_to_end:
@@ -479,11 +470,13 @@ points:
         # entry and what it lacks. This stage replaced `legends` and `placement` - the two
         # questions they asked are two of the keys below, on one list.
         #
-        # THE LEGACY KEYS STAY UNTIL THE LAST HELD-OUT PLUGIN IS ON THE PLAN. `places_every`,
-        # `axis_field`, `positions` and `axes` are what a plugin written before the plan carried
-        # the call is read by - the prose `use:` and the two prefix maps - and `--migrate` is
-        # what turns that into entries. Removing them now would make the eight unreadable, which
-        # rule 2 forbids and the reader's fallback exists for.
+        # THE LEGACY KEYS STAY WHILE A PLUGIN IS READ BY THEM. `places_every`, `axis_field`,
+        # `positions` and `axes` are what a plugin written before the plan carried the call is
+        # read by - the prose `use:` and the two prefix maps - and `--migrate` is what turns that
+        # into entries. Measured 2026-11-10 (autodev W023): cellchat and de are on the plan, every
+        # entry with an axis and a position; the seven still held out have none. Each one's
+        # migration wave moves it onto `report.figures`; after the last, these four keys and the
+        # readers' fallbacks are deleted (harness B1-026).
         - name: plan
           phase: build
           fills: [report.figures]
