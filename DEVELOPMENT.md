@@ -30,7 +30,9 @@ The suite proves a function returns. It cannot prove the chain works on runs som
 made, in the state they are actually in. So a project's real runs go through every element in
 order — `exists · landscape · licence · adopt · merge · report · drawing · eye · paper` — and a
 station that has produced no evidence is **BLOCKED, never skipped**. Skipping is how a chain gets
-reported working on the strength of the stations that happened to be easy.
+reported working on the strength of the stations that happened to be easy. The reuse stations
+(landscape, licence, adopt, merge) are `n/a` on runs that reused nothing - every first run of a
+new cohort - and `n/a` does not block; one licence, `reused` or ADOPTED.json and they are asked.
 
 `python tests/loop_stations.py --runs <dir>` names the first blocked station and the one thing to
 do next. Four rules, each paid for:

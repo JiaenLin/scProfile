@@ -45,6 +45,29 @@ def _lines(p):
             if l.strip() and l.strip().startswith("{")]
 
 
+def _no_reuse(runs):
+    """True when no run used `--reuse-from`: none records `reused`, holds a licence, or adopted.
+
+    REUSE IS AN EFFICIENCY, NOT A STATION EVERY RUN OWES (harness B1-020). Stations 2-5 ask
+    whether reuse reuses; on a run that reused nothing there is nothing to ask, and BLOCKED there
+    made every first run of a new cohort fail the loop until a second, redundant run existed.
+    "BLOCKED, never skipped" still holds for any run that did reuse: one licence, one `reused`
+    or one ADOPTED.json and all four stations are asked as before.
+    """
+    from scprofile.manifest import own_files
+    for r in runs:
+        if _load(r / "report.json").get("reused"):
+            return False
+        if (r / "LICENCES").is_dir() and any((r / "LICENCES").glob("*.json")):
+            return False
+        if any(f.name == "ADOPTED.json" for f in own_files(r, (".json",))):
+            return False
+    return True
+
+
+NO_REUSE = (EMPTY, "no run used --reuse-from", "")
+
+
 def station_exists(runs):
     """1. What do these runs already hold?"""
     from scprofile import resume as RS
@@ -59,6 +82,8 @@ def station_exists(runs):
 
 def station_landscape(runs):
     """2. Which results could a new run reuse?"""
+    if _no_reuse(runs):
+        return NO_REUSE
     from scprofile import landscape as LS
     try:
         cands = LS.survey(runs[0].parent) if hasattr(LS, "survey") else None
@@ -75,6 +100,8 @@ def station_landscape(runs):
 
 def station_licence(runs):
     """3. Is any of it fit to build on? Grades must come from criteria, on disk."""
+    if _no_reuse(runs):
+        return NO_REUSE
     grades = Counter()
     for r in runs:
         for f in sorted((r / "LICENCES").glob("*.json")) if (r / "LICENCES").is_dir() else []:
@@ -88,6 +115,8 @@ def station_licence(runs):
 
 def station_adopt(runs):
     """4. Does reuse actually reuse? MEASURED on the filesystem, not read off a log."""
+    if _no_reuse(runs):
+        return NO_REUSE
     from scprofile.manifest import own_files
     adopted = [(r, f.parent) for r in runs
                for f in own_files(r, (".json",)) if f.name == "ADOPTED.json"]
@@ -121,6 +150,8 @@ def station_adopt(runs):
 
 def station_merge(runs):
     """5. Did an adopted result reach the merged object?"""
+    if _no_reuse(runs):
+        return NO_REUSE
     hits = 0
     for r in runs:
         pay = _load(r / "report.json")
@@ -653,17 +684,17 @@ def main(argv=None):
             state, detail, nxt = BLOCKED, f"station raised: {e}", ""
         record[name] = {"state": state, "detail": detail, "next": nxt}
         if not a.json:
-            mark = "  ok  " if state == PASS else "BLOCKED"
+            mark = {PASS: "  ok  ", EMPTY: "  n/a "}.get(state, "BLOCKED")
             print(f"{mark}  {name:<12} {detail}")
             # ONE STATION ASKED: the help under it is one line, so the verdict stays within the
             # tail the maker keeps. The whole list is the round's, printed when the round is.
             if a.station and nxt:
                 nxt = nxt.splitlines()[0]
-            if nxt and state != PASS:
+            if nxt and state not in (PASS, EMPTY):
                 print(f"          -> {nxt}")
             elif nxt:
                 print(f"          note: {nxt}")
-        if state != PASS and first_blocked is None:
+        if state not in (PASS, EMPTY) and first_blocked is None:
             first_blocked = name
     if a.json:
         # THE SAME FACTS THE PROSE CARRIES, and nothing the prose does not. An agent reading

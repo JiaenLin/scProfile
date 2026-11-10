@@ -72,7 +72,9 @@ a claim.
 | 8 | **paper** | does any of it support a claim? | claims, verdicts, and a rendered section in the run |
 
 **A station is BLOCKED, not skipped, when its evidence is absent.** Skipping is how a chain gets
-reported working on the strength of the stations that happened to be easy.
+reported working on the strength of the stations that happened to be easy. Stations 2-5 ask about
+reuse, so on runs that used no `--reuse-from` (no `reused`, no licence, no ADOPTED.json) they are
+`n/a`, and `n/a` does not block: a first run of a new cohort has nothing to reuse.
 
 ---
 
