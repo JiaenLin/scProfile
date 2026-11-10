@@ -245,7 +245,7 @@ with tempfile.TemporaryDirectory() as td:
     ax.set_xlabel("receiver")
     ax.set_ylabel("sender")
     cb = fig.colorbar(im, ax=ax, fraction=0.045, pad=0.02)
-    cb.set_label("aged minus young   (% of the arm's own total, significant only)", fontsize=6)
+    cb.set_label("adult minus yearling   (% of the arm's own total, significant only)", fontsize=6)
     e = F.save(fig, Path(td), "diff", caption="c", formats=("png",), dpi=200,
                log=lambda *a, **k: None, stamp="age   ·   4 vs 6 samples, cells pooled per arm")
     ink = border_ink(e["path"])
@@ -276,9 +276,9 @@ try:
         per = {"s1": edges_for(POPS, 1.0), "s2": edges_for(POPS, 1.1),
                "s3": edges_for(POPS, 2.0, ("P1", "P2", "P3", "P4")),
                "s4": edges_for(POPS, 2.2, ("P1", "P2", "P3", "P4"))}     # P4 scored in one arm only
-        design = {"s1": {"age": "young"}, "s2": {"age": "young"}, "s3": {"age": "aged"},
-                  "s4": {"age": "aged"}}
-        spec = ("age", "age", "young", "aged", {"age": "young"}, {"age": "aged"})
+        design = {"s1": {"age": "yearling"}, "s2": {"age": "yearling"}, "s3": {"age": "adult"},
+                  "s4": {"age": "adult"}}
+        spec = ("age", "age", "yearling", "adult", {"age": "yearling"}, {"age": "adult"})
         CP.draw_contrast(per, design, spec, Path(td), "p", weight="prob", group_col="pathway")
         flow = [v for k, v in _SAVED.items() if "C3_flow" in k]
         ck("the flow panel drew with a one-arm group", bool(flow) and "†" in flow[0], str(flow)[:200])
@@ -290,12 +290,12 @@ try:
         per = {}
         design = {}
         k = 0
-        for age in ("young", "aged"):
+        for age in ("yearling", "adult"):
             for diet in ("a", "b"):
                 for rep in (1, 2):
                     k += 1
-                    e = edges_for(POPS, 1.0 + 0.7 * (age == "aged") + 0.4 * (diet == "b")
-                                  + 0.9 * (age == "aged" and diet == "b"))
+                    e = edges_for(POPS, 1.0 + 0.7 * (age == "adult") + 0.4 * (diet == "b")
+                                  + 0.9 * (age == "adult" and diet == "b"))
                     e["pathway"] = [("P1", "P2", "P3", "P4")[n % 4] for n in range(len(e))]
                     per[f"s{k}"] = e
                     design[f"s{k}"] = {"age": age, "diet": diet}
@@ -311,7 +311,7 @@ try:
     print("\nacross the design: the asterisk on a header has its footnote on the panel")
     with tempfile.TemporaryDirectory() as td:
         per_sample = {f"s{i}": {"cells": 100.0 + i, "edges": 10.0 + i} for i in range(1, 9)}
-        dsg = {f"s{i}": {"age": "young" if i <= 4 else "aged", "diet": "a" if i % 2 else "b",
+        dsg = {f"s{i}": {"age": "yearling" if i <= 4 else "adult", "diet": "a" if i % 2 else "b",
                          "chemistry": "v2" if i <= 4 else "v3"} for i in range(1, 9)}
         dest = Path(td) / "p_across_design.png"
         DP.draw(per_sample, dsg, dest)
@@ -330,7 +330,7 @@ print("\nacross the design: the footnote sits clear of the marker key")
 with tempfile.TemporaryDirectory() as td:
     per_sample = {f"s{i}": {"cells": 100.0 + i, "edges": 10.0 + i, "populations": 5.0 + i % 3}
                   for i in range(1, 13)}
-    dsg = {f"s{i}": {"age": "young" if i <= 6 else "aged", "diet": "a" if i % 2 else "b",
+    dsg = {f"s{i}": {"age": "yearling" if i <= 6 else "adult", "diet": "a" if i % 2 else "b",
                      "chemistry": "v2" if i <= 6 else "v3", "batch": "A"} for i in range(1, 13)}
     n, rec = DP.draw(per_sample, dsg, Path(td) / "p_across_design.png")
     over = [f for f in rec.get("audit", []) if f.get("code") == "text_overlap"]
@@ -448,8 +448,8 @@ try:
     with tempfile.TemporaryDirectory() as td:
         per = {"s1": edges_for(POPS, 0.02), "s2": edges_for(POPS, 0.021),
                "s3": edges_for(POPS, 0.024), "s4": edges_for(POPS, 0.025)}
-        design = {"s1": {"age": "young"}, "s2": {"age": "young"}, "s3": {"age": "aged"}, "s4": {"age": "aged"}}
-        spec = ("age", "age", "young", "aged", {"age": "young"}, {"age": "aged"})
+        design = {"s1": {"age": "yearling"}, "s2": {"age": "yearling"}, "s3": {"age": "adult"}, "s4": {"age": "adult"}}
+        spec = ("age", "age", "yearling", "adult", {"age": "yearling"}, {"age": "adult"})
         CP.draw_contrast(per, design, spec, Path(td), "p", weight="prob", group_col="pathway")
 finally:
     F.save = _orig_save
@@ -470,8 +470,8 @@ try:
     with tempfile.TemporaryDirectory() as td:
         per = {"s1": edges_for(POPS, 0.02), "s2": edges_for(POPS, 0.021),
                "s3": edges_for(POPS, 0.024), "s4": edges_for(POPS, 0.025)}
-        design = {"s1": {"age": "young"}, "s2": {"age": "young"}, "s3": {"age": "aged"}, "s4": {"age": "aged"}}
-        spec = ("age", "age", "young", "aged", {"age": "young"}, {"age": "aged"})
+        design = {"s1": {"age": "yearling"}, "s2": {"age": "yearling"}, "s3": {"age": "adult"}, "s4": {"age": "adult"}}
+        spec = ("age", "age", "yearling", "adult", {"age": "yearling"}, {"age": "adult"})
         CP.draw_contrast(per, design, spec, Path(td), "p", weight="prob", group_col="pathway")
 finally:
     F.save = _orig_save

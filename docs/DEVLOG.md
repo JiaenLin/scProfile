@@ -89,7 +89,7 @@ found:  nothing.
 
         sentinel: `separation_by_label.csv` has 13 rows and no sentinel among them (was 14 with
         `UNRESOLVED` worst); the host's own check reported nothing; both the host caveat — now
-        naming counts, `EXCLUDED 2,086, UNRESOLVED 2,139` — and the plugin's appear.
+        naming counts, `EXCLUDED <n>, UNRESOLVED <m>` — and the plugin's appear.
         empty run: `README.md`, `report/index.html`, `report.json`, `object: None`, no crash.
         ran-but-produced-nothing: velocity refused, `object: None`, no `cohort_profiled.h5ad`,
         and the message names velocity rather than claiming nothing ran.
@@ -115,7 +115,7 @@ tested: resolve + install of a SHARED environment / selftest of all 8 / plan --a
         selftest ran each of them out of that one directory.
 
 **A ONE-FILE PLUGIN WITH ITS OWN ENVIRONMENT RAN THROUGH `_entry.py`** (677295): `decoupler ok
-        281s  674 regulators scored per cell`, `prior: 39,961 edges, 1,114 regulators for mouse`,
+        281s  674 regulators scored per cell`, `prior: <E> edges, <R> regulators for <organism>`,
         `merged obsm: X_tf_activity`. Two plugins into one 3.48 GB object, one report, one README.
 
 **THE REPAIR LOOP CLOSED ON A SHARED ENVIRONMENT** (677296): `scvelo` removed from the resolved
@@ -151,17 +151,17 @@ found:  [host] `install` read the named plugin's own `lock.yml`. Resolution deci
               completeness rule was stated over every plugin on disk. An audit that cannot be run
               clean on a legitimate invocation is one people learn to silence -> 8ea8c2c
         [host] **"an array carries no barcodes" was a gap, stated as a fact about arrays.** The
-              host excludes NaN-embedding cells from every plugin, so decoupler was handed N-2,086
-              of N cells, returned N-2,086 rows, and the merge refused it for not covering
+              host excludes NaN-embedding cells from every plugin, so decoupler was handed N-n
+              of N cells, returned N-n rows, and the merge refused it for not covering
               N - refused a plugin for returning exactly the cells it was given. `emit_obsm`
               writes the barcodes; the merge aligns by them, and a per-unit plugin's arrays can
               cross units for the same reason -> 16aaf4b. Log: `decoupler obsm['X_tf_activity']:
-              N-2,086 of N cells covered; the rest are NaN`
+              N-n of N cells covered; the rest are NaN`
         [host] the 3 GB `input_for_kernels.h5ad` was called "a reusable cached working file" and
               was neither: nothing read it again and nothing named it. A receipt makes it reusable
               and `report.json`/`README` name it as what the plugins ACTUALLY read -> ba9ec53
         [declaration] decoupler reported the annotator sentinel `UNRESOLVED` as a group in
-              `activity_by_label.csv`, over 2,139 cells. The host's own check caught it. That is
+              `activity_by_label.csv`, over m cells. The host's own check caught it. That is
               the SECOND of two plugins to make this exact mistake, which is a statement about the
               affordance: `ctx.populations()` now answers it once and attaches the caveat -> fd5d664
         [docs] README, PLUGIN_DESIGN, MAINTAINING_PLUGINS and plugin.py's own docstring still
@@ -186,15 +186,15 @@ tested: the sentinel affordance / the compatibility copy's receipt / the whole p
 found:  nothing.
 
         sentinel: `decoupler_activity_by_label.csv` has 13 rows and no sentinel among them (was
-        14, with an `UNRESOLVED` row over 2,139 cells), the host's own check reported nothing —
+        14, with an `UNRESOLVED` row over m cells), the host's own check reported nothing —
         `diagnoses: []` where cycle 4 had one — and the caveat `ctx.populations()` attaches is in
-        the run: *"2,139 cells carry an annotator sentinel and are NOT summarised as a
+        the run: *"m cells carry an annotator sentinel and are NOT summarised as a
         population"*.
         compatibility copy: `reusing the compatibility copy already at input_for_kernels.h5ad
         (3.14 GB); it was made from this same object` — a 3.14 GB rewrite that every previous run
         into the same `--out` had done. `report.json` carries `input_read_by_kernels` and the
         README says what that file is.
-        merge by barcode, again: `decoupler obsm['X_tf_activity']: N-2,086 of N cells
+        merge by barcode, again: `decoupler obsm['X_tf_activity']: N-n of N cells
         covered; the rest are NaN` -> `merged obsm: X_tf_activity`, on the final code.
         plan: `0 error(s), 0 warning(s)` over all 10 plugins; `wrote .../out/run_plan.html`.
         restricted: `checked: all 2 known plugin(s) appear exactly once`.
@@ -375,19 +375,19 @@ this cycle: the previous attempt's R step failed and `install` raised before any
             visited 20,064 director(ies), found 503 candidate(s)
             mtx  filtered: 13,824/13,824 barcodes matched (100.0%) within sample S1   [x10]
             141 further candidate(s) not opened: every cell was already covered
-            attached from 10 source(s): N-2,086/N-2,086 cells (100.0%) have spliced/unspliced counts
+            attached from 10 source(s): N-n/N-n cells (100.0%) have spliced/unspliced counts
 
         ...and velocity then refused, because of a COLUMN INDEX.
 
         [host] `features.tsv` is `<gene id>	<symbol>	<type>` and `sources.load` read column 0.
-              The object is indexed by SYMBOLS: 466 of 34,290 genes matched,
-              `filter_and_normalize` dropped 34,286 for want of shared counts, and velocity
+              The object is indexed by SYMBOLS: a few hundred of the object's genes matched,
+              `filter_and_normalize` dropped nearly all of them for want of shared counts, and velocity
               refused because `only 4 genes survived selection` - **a refusal about the DATA whose
               cause was a column index**, and one that would have been believed. Every field is a
               candidate now and `attach` takes whichever overlaps the object more → b318bcd
         [declaration] de raised `numpy.linalg.LinAlgError: Singular matrix` from inside pydeseq2.
-              `~ age + diet + chemistry + batch`: chemistry takes one value for every aged sample
-              and another for every young one. `RUN_PLAN.md` says an imbalance, a confound, even
+              `~ age + diet + chemistry + batch`: chemistry takes one value for every sample of one arm
+              and another for every sample of the other. `RUN_PLAN.md` says an imbalance, a confound, even
               a COMPLETE confound all run with a caveat - so the terms that add no estimable
               column are dropped, in the order given, and NAMED → b318bcd
         [host] and the loop could only say `no known failure signature matched, so the layer is
@@ -445,13 +445,13 @@ diet`: chemistry dropped as aliased with age, and NAMED. Two refusals left, both
               them, verified, by absolute path → a5314fa
         [host] and the gene-column fix BROKE THE SHAPE IT WAS FIXING. `genes` became a list per
               FIELD of features.tsv, so `len(genes)` was 2, and the orientation check compared
-              34,290 against 2 and refused every source as `matches neither 15,046 barcodes nor 2
+              the gene count against 2 and refused every source as `matches neither 15,046 barcodes nor 2
               genes`. A fix that turned partial sourcing into none, found on the run that was
               meant to prove it → a5314fa
 
 **THE THIRD RUN** (PBS 677891). velocity produces a real result on the real cohort for the first
 time in this project's history: `partial - velocity fitted on 2,000 genes (stochastic); median
-confidence 0.42; unspliced 23.9% of counts`, `wrote velocity.h5ad (N-2,086 x 2,000, velocity graph
+confidence 0.42; unspliced <p>% of counts`, `wrote velocity.h5ad (N-n x 2,000, velocity graph
 included)`, `transitions: 11 directed label transition(s)`. `partial` is the DECLARED behaviour
 below `min_confidence` 0.5, not a failure.
 
@@ -465,8 +465,8 @@ conversion: **did the two plugins lose behaviour?** No, and what they GAINED is 
         cellcycle's converted form produces the same shape - `status ok`, `obs [phase, S_score,
         G2M_score]`, two captioned figures with source data, the same headline format - and its
         selftest passes the same assertions with one added. What changed is that it now goes
-        through `_entry.py`: `the whole cohort x 34,290 genes` -> `4,225 sentinel-labelled cells
-        kept` -> `excluded 2,086 cells with NaN in X_scanvi` -> scored N-2,086. **The directory
+        through `_entry.py`: `the whole cohort x G genes` -> `s sentinel-labelled cells
+        kept` -> `excluded n cells with NaN in X_scanvi` -> scored N-n. **The directory
         shape read `in.json` itself and applied NONE of that**, which is what "the contract is the
         host's" means in numbers rather than in prose.
 
@@ -505,7 +505,7 @@ Every plugin, including the third-party one, produced a result:
     de               ok   609s  779 gene-population-term results below padj 0.05 across 10
                                 population(s), formula ~ age + batch + diet
     velocity         partial 530s  velocity fitted on 2,000 genes (stochastic); median
-                                confidence 0.42; unspliced 23.9% of counts
+                                confidence 0.42; unspliced <p>% of counts
     cellchat[...]    ok         1,654 interactions over 9 populations, CellChatDB.mouse  [x10]
     liana[...]       ok        27,002 interactions over 9 populations  [x10]
     abundance        ok    61s  2 credible compositional effect(s) at fdr 0.05
@@ -559,7 +559,7 @@ fixed cost to the slope. On a fixture with a known 6 GB baseline and 12 GB per 1
 
 Worse, the fix's own first version failed the wrong way: with one point it attributed the whole
 peak to the *baseline* and the docstring called that conservative. It is conservative only at the
-size measured. 7.2 GB at N-2,086 cells would charge 7.2 GB for 500,000, where the truth is nearer
+size measured. 7.2 GB at N-n cells would charge 7.2 GB for 500,000, where the truth is nearer
 36 — a five-fold under-request, which is precisely the failure that kills a job at the end of its
 longest step. It now attributes to the rate, which over-charges the smaller instances instead,
 where the error is bounded by the baseline and nothing dies.
@@ -881,7 +881,7 @@ tested: one job, on the same real ten-sample cohort, at `67499d2`. It is the fir
 
 clean:  **221 figures with ZERO instances recomputed.** All fourteen adopted by hardlink,
         inode verified shared (`links=2`), 9 m 32 s of compute replaced by 3 m 28 s, PBS mem
-        35.3 GB against 42.7. Exit standard MET, card `ok` on 14 of 14, eight suites green,
+        35.3 GB against 42.7. Exit standard MET, card `ok` on every instance, eight suites green,
         `check --deep` 33 green.
 
 **The property this run was submitted to test.** If every instance is adopted from a run made by

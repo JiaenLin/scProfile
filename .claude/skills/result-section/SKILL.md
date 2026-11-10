@@ -249,7 +249,7 @@ plugin is measuring something else is the failure this arrangement exists to pre
 > factor; `Effect of <factor>` for a marginal one; `Interaction of <factor> and <factor>`.
 >
 > The composed section already carries these headings. Keep them. Never a raw contrast label
-> (`age | diet = chow`) and never the design's own tags (`SIMPLE`, `MARGINAL`, `INTERACTION`):
+> (`age | diet = ctrl`) and never the design's own tags (`SIMPLE`, `MARGINAL`, `INTERACTION`):
 > a section carried in with either is refused.
 
 **This supersedes the older rule that a heading should be a finding.** That rule was written when
@@ -277,7 +277,7 @@ or its parts ("the plugin", "the kernel", "the host"). The method's own name bel
 which the tool composes from the declarations; a Results sentence may name it where a journal
 would. `paper --write` refuses a section that breaks any of these, quoting the line.
 
-*Cost: a full draft went in with `## SIMPLE age | diet = chow` as its headings, "in this run" in
+*Cost: a full draft went in with `## SIMPLE age | diet = ctrl` as its headings, "in this run" in
 its first paragraph and the run key in its last. Every number in it was right. It read as a log.*
 
 ### When two scales disagree, say which one carries the claim
@@ -311,7 +311,7 @@ the supporting material - the paragraph is what a reader meets at the end of the
 
 ## The shape of the section
 
-**A finding opens each section, in its first sentence.** "Aged hearts signal more, and the
+**A finding opens each section, in its first sentence.** "Treated samples signal more, and the
 increase is broad", not "the age comparison was performed". A reader moving through the document
 should meet the result immediately under each heading.
 

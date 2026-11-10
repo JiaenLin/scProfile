@@ -577,7 +577,8 @@ def _bindings(tree, name=DECLARATION):
     def visit(node, top):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
             if top and getattr(node, "name", None) == name:
-                out.append((node.lineno, f"a `{'class' if isinstance(node, ast.ClassDef) else 'def'}`"))
+                kind = "class" if isinstance(node, ast.ClassDef) else "def"
+                out.append((node.lineno, f"a `{kind}`"))
             # what is evaluated where the definition stands: decorators, defaults, bases
             here = list(getattr(node, "decorator_list", []))
             if isinstance(node, ast.ClassDef):
@@ -713,7 +714,8 @@ class FileKernel(Kernel):
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as e:
-            self.declaration_error = f"the file cannot be read as UTF-8 text ({type(e).__name__}: {e})"
+            self.declaration_error = (f"the file cannot be read as UTF-8 text "
+                                      f"({type(e).__name__}: {e})")
             return
         spec, _span, why = read_declaration(text)
         self.declaration_error = why
@@ -970,8 +972,8 @@ def _budget(wave, budget):
     #
     # A DECLARATION READ AND THEN DISCARDED IS WORSE THAN ONE NEVER READ, because the plan prints
     # the discarded number's consequence and nothing prints the declaration. Measured on PBS
-    # 677891: ten GRNBoost2 fits, 34,290 targets each, at one core apiece, still unfinished after
-    # 4h23m of a 12h timeout.
+    # 677891: ten GRNBoost2 fits, every gene of the object a target in each, at one core apiece,
+    # still unfinished after 4h23m of a 12h timeout.
     for i in wave:
         i["cores"] = max(1, min(int(i["declared"] or 1), int(budget)))
     return wave

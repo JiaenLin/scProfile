@@ -70,7 +70,7 @@ untreated`; the covariate modelled on both). Run on a synthetic 2x2 whose contro
 the plugin's table is bit-identical to the unmerged hand edit that first attempted this, on one
 interpreter, and is the base fit reparametrised exactly as treatment coding predicts.
 
-**Build 7 of 10** (blind: 5 of 9, the `design` stage added since). Still owed, all in the harness
+**Build: 7 stages done, of 10** (blind: 5 of 9, the `design` stage added since). Still owed, all in the harness
 half of the maker, so not fixable in this repository:
 - the python extractor cannot see a tool whose plots are class methods or live in a submodule
   (`sch/dev/extract/python_package.py`), so `inventory` and `plan` stay part-way on the admission;

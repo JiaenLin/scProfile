@@ -1230,8 +1230,8 @@ def _run(a):
     # A JOB-WIDE COUNTER IS NOT A SET OF POINTS ON A PER-INSTANCE CURVE. Every instance that
     # shared one job reports the SAME figure, so a fit over them is a horizontal line through
     # one value repeated - which is exactly what "45.0 GB fixed + 0.0 GB/100k" was, from ten
-    # instances spanning 7,374 to 11,985 cells. The fit was not weak; it was measuring nothing,
-    # and it printed as a pair of numbers to copy into a declaration.
+    # instances spanning about 7 to 12 thousand cells. The fit was not weak; it was measuring
+    # nothing, and it printed as a pair of numbers to copy into a declaration.
     #
     # DETECTED FROM THE DATA RATHER THAN PLUMBED THROUGH. Identical peaks at differing sizes is
     # the signature itself - it is the tell that found this - and reading it here means the
@@ -3267,14 +3267,14 @@ def _watch(a):
     shell loop every time. Four wrong answers in one day came out of those loops, two of them
     reporting a sealed run as vanished. Written once, it cannot be wrong in a new way each time.
     """
-    from . import watch as WT
+    from . import watch as WATCH
 
     out = Path(a.out)
     if a.wait:
-        st = WT.wait(out, timeout_s=(a.timeout or None), poll_s=a.poll)
+        st = WATCH.wait(out, timeout_s=(a.timeout or None), poll_s=a.poll)
     else:
-        st = WT.state(out)
-    print(f"  {WT.describe(out)}")
+        st = WATCH.state(out)
+    print(f"  {WATCH.describe(out)}")
     if st.get("live_log"):
         print(f"  live log: {st['live_log']}")
     # THE HANDOFF. A watcher that reports a seal and stops leaves the agent at a dead end at
@@ -3282,9 +3282,9 @@ def _watch(a):
     # does something else, which is how a cycle that the tool can drive end to end turns into a
     # sequence of errands somebody has to remember. When the job ends, the next task goes on the
     # screen without being asked for.
-    if st["state"] in (WT.SEALED, WT.FAILED):
+    if st["state"] in (WATCH.SEALED, WATCH.FAILED):
         _print_next(out, getattr(a, "plugin", "") or "")
-    return REFUSE if st["state"] == WT.FAILED else 0
+    return REFUSE if st["state"] == WATCH.FAILED else 0
 
 
 def _print_next(out, plugin=""):
@@ -3331,8 +3331,8 @@ def _next(a):
     if not out.is_dir():
         print(f"scprofile: no such run directory: {out}", file=sys.stderr)
         return REFUSE
-    from . import watch as WT
-    print(f"  {WT.describe(out)}")
+    from . import watch as WATCH
+    print(f"  {WATCH.describe(out)}")
     _print_next(out, a.plugin or "")
     return 0
 

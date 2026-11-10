@@ -2,7 +2,7 @@
 
 The union was drawn first, with a missing population's row and column hatched so a reader could
 see it was absent. Honest, and still the wrong panel: on a real cohort it put two full rows and
-two full columns of hatch through the middle of a 13x13 matrix - 48 of 169 cells, 28% of the
+two full columns of hatch through the middle of a 13x13 matrix - 48 of its 169 tiles, 28% of the
 figure - carrying no comparison and breaking every real block in half.
 
 The rule this locks: a cell that cannot hold a comparison is not drawn where comparisons are
@@ -20,21 +20,21 @@ def _edges(pairs):
 
 
 def test_the_set_is_the_intersection():
-    aged = _edges([("cm", "fib"), ("fib", "endo"), ("neural", "cm")])
-    young = _edges([("cm", "fib"), ("fib", "endo")])
-    keep, dropped = contrast_populations({"aged": aged, "young": young})
+    adult = _edges([("cm", "fib"), ("fib", "endo"), ("neural", "cm")])
+    yearling = _edges([("cm", "fib"), ("fib", "endo")])
+    keep, dropped = contrast_populations({"adult": adult, "yearling": yearling})
     assert keep == ["cm", "endo", "fib"], keep
     assert "neural" not in keep, "a population absent from one arm is still on the axis"
 
 
 def test_what_is_removed_is_named_with_the_arm_that_lacked_it():
     """A removal is only cheap when the thing removed is named."""
-    aged = _edges([("cm", "fib"), ("neural", "cm")])
-    young = _edges([("cm", "fib"), ("dc", "cm")])
-    _keep, dropped = contrast_populations({"aged": aged, "young": young})
+    adult = _edges([("cm", "fib"), ("neural", "cm")])
+    yearling = _edges([("cm", "fib"), ("dc", "cm")])
+    _keep, dropped = contrast_populations({"adult": adult, "yearling": yearling})
     assert set(dropped) == {"neural", "dc"}, dropped
-    assert dropped["neural"] == ["young"], "the arm that lacked it is not recorded"
-    assert dropped["dc"] == ["aged"]
+    assert dropped["neural"] == ["yearling"], "the arm that lacked it is not recorded"
+    assert dropped["dc"] == ["adult"]
 
 
 def test_one_shared_axis_survives_the_change():

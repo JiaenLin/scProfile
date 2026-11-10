@@ -269,7 +269,7 @@ def confounding(facts):
 def settings_for(k, *, keys, facts, references=None, cores=None):
     """The SETTINGS this plugin should run with, at the highest capacity the project supports.
 
-    A plan that says "run liana" and not "over these 10 samples, on this layer, with this label
+    A plan that says "run liana" and not "over these N samples, on this layer, with this label
     column" has not planned anything - the user still has to work out every flag, and a plugin run
     with a default it should not have used produces a result nobody can tell from a correct one.
 

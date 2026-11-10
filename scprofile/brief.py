@@ -216,7 +216,7 @@ def write_brief(run, plugin, spec=None, design=None):
         # writer): with the run's controls. Without them the headings came out in another order
         # and the writer had to choose between two lists in one brief.
         # AND THE REGISTER'S HEADING, NOT THE DESIGN'S TAG (harness ADR-0024): `SIMPLE age |
-        # diet = chow` was what this told the writer to use verbatim, and the manuscript that
+        # diet = ctrl` was what this told the writer to use verbatim, and the manuscript that
         # came back was headed with it.
         for _c in _cm(design, controls=ctl):
             L += [f"  {C._effect_heading(_c.get('label', ''), _c.get('kind', ''))}"

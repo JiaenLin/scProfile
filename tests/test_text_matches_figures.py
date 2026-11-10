@@ -70,7 +70,7 @@ if rows:
           f"(got {rows[0].get('populations_only_one_arm')!r})")
 
 # 5. THE UNIT, NOT THE LEVEL. `from`/`to` are factor LEVELS - two contrasts can both read
-#    "young against aged" and mean different objects - so a consumer resolving a side by that
+#    "yearling against adult" and mean different objects - so a consumer resolving a side by that
 #    name reads the MARGINAL unit for every conditional contrast. Found in a real run: the
 #    composition table listed four marginal arms while telling the reader every comparison is
 #    read against it, and the per-contrast composition caveat used the wrong pair every time.

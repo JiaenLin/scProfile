@@ -153,7 +153,7 @@ ck("and the round count is kept", PA.status(root)[0][2] == 2)
 
 print("\nTHE PROPERTY THAT MAKES IT A GATE: a redraw invalidates the claim")
 # A claim is a statement ABOUT A PICTURE. Change the picture and the statement has not merely
-# aged - the thing it described is gone, and it has to be defended again. Same mechanism as the
+# grown old - the thing it described is gone, and it has to be defended again. Same mechanism as the
 # figure-review ledger, for the same reason.
 (figs / A.split("/")[-1]).write_text("A CHANGED")
 ck("redrawing a cited figure takes the claim to STALE", PA.status(root)[0][1] == PA.STALE)

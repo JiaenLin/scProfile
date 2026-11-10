@@ -2,8 +2,8 @@
 
 An arm's network is ONE fit on its members' pooled cells; each member also has a fit of its own.
 Those are different fits, so drawing the arm as a bar and the members as points put two
-incomparable quantities on one axis - measured, the same 23,263 cells gave 30.56 as one pooled
-fit and 84.28 as three separate fits summed, so every point sat above every bar in every arm,
+incomparable quantities on one axis - measured on a real cohort, the same cells gave one value
+as a pooled fit and nearly three times it as three separate fits summed, so every point sat above every bar in every arm,
 whatever the biology was. Dividing both by cells does not reconcile that; it is not a scale
 error.
 

@@ -944,7 +944,7 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   **ONE INSTANCE.** A cohort panel titled "absent = left out of its own mean" was byte-identical in
   every numeric column to its sibling titled "absent = 0", because the unit tables had been built
   once with the zero rule and reused for both — so `nanmean` had no NaN to skip. Applying the rule
-  for real changed 8 of 13 entities, by up to **10x** (an entity present in 1 of 10 units), and
+  for real changed 8 of 13 entities, by up to **10x** (an entity present in one unit of ten), and
   reordered the top five. The repair then broke a SECOND rule silently: the summariser had been
   setting its `n_units` to the per-entity present count, so `n_present == n_units` for every row
   and the label rule that attaches `(k/N)` to any dot whose n is not the full n stopped firing
@@ -1157,7 +1157,7 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   contrasts of which 16 were unreachable, and surfaced a fourth factor nobody had asked about. The
   removal sets differed across the six contrasts of interest: one entity was dropped from four of
   them, another from all six, a third from two - and the set comparable everywhere was 9 of 13 at
-  GROUP level against 5 of 13 at sample level, so choosing the coarser unit recovered four entities
+  GROUP level against five of the 13 at sample level, so choosing the coarser unit recovered four entities
   that per-sample screening discards.
   **CHECK:** does each panel print the floor for ITS OWN arm sizes, not the study's? Does each name
   what IT removed? Where an entity is compared at group level, does the panel say so?
@@ -1188,10 +1188,10 @@ an axis with ticks, a lightness-ordered ramp, jitter or a beeswarm so marks can 
   the design is randomised at and cannot yield a p-value across samples. It is a DESCRIPTION - and
   an honest one, because a sample-level test on an entity the samples cannot support is not more
   rigorous, it is a detection threshold wearing a p-value.
-  **ONE INSTANCE.** Requiring the sample unit left 5 of 13 entities comparable on the main contrast
+  **ONE INSTANCE.** Requiring the sample unit left five of the 13 entities comparable on the main contrast
   and discarded 8. Resolving the unit per entity instead left 5 at sample level, sent 6 to the
   group, and dropped only 2 - the two with no cells in one arm. Across all six contrasts of the
-  2x2 the set comparable everywhere went from 5 of 13 to 9 of 13. The fallback is not a loophole:
+  2x2 the set comparable everywhere went from five of the 13 to nine of them. The fallback is not a loophole:
   on a rare entity clearing the floor in 1 of 3 units per arm, both a strict criterion (present in
   every unit) and a lax one (present in at least two) still routed it to the group.
   **CHECK:** for each entity in each contrast, which unit did you resolve, and did anything get
@@ -1224,8 +1224,8 @@ other**, each in a different costume:
   silent*, not *never seen*;
 - a category absent from an arm entering a difference as 0, and therefore ranking as the largest
   change on the page;
-- a row-scaled heatmap giving a category seen in 2 of 10 samples the same full-intensity tile as
-  one seen in all 10;
+- a row-scaled heatmap giving a category seen in two samples of ten the same full-intensity tile as
+  one seen in all of them;
 - the upstream tool assigning `p = 0` by a fallback branch wherever one arm is empty, so the
   on/off cases — the ones a reader most wants — are never tested and score maximally significant;
 - invisible `1e-10` self-links inserted for nodes with no surviving link, to satisfy a drawing
@@ -1284,7 +1284,7 @@ sentinels collide with where it is not.
   silent. Render, then count the marks inside the axes and compare that to the number of records
   handed to the renderer - the same identity check as C17, applied to geometry rather than to
   padding. Are they equal? *One instance:* an axis limit taken from the largest MEAN while
-  per-unit points were drawn over it clipped **20 of 368 points (5.4%)**, including every one of
+  per-unit points were drawn over it clipped **20 of 368 points (about one in twenty)**, including every one of
   a panel's nine - so that panel showed two summary bars and not a single unit, with nothing
   saying so. Prefer the full domain of a bounded quantity over a data-derived limit.
 - **D21 (per-unit thresholds)** A method run once per unit applies its own floors once per unit,
@@ -1396,8 +1396,8 @@ is, and assert `n_rows_per_group == n_independent_units_per_group`. If n_rows ex
 product, a square, a per-cell expansion — re-run the contrast at the unit level and **report the
 number of conclusions that change**. *One instance:* the upstream significance test treats N×N
 population pairs as replicates and pools the animals away first; re-run with the animal as the
-unit, the verdict changed on **40 of 68** pathways and every top offender had signal in 1 of 10
-animals. What went on the figure: the pair-level test is not underpowered, it is measuring the
+unit, the verdict changed on **40 of 68** pathways and every top offender had signal in a single animal
+of ten. What went on the figure: the pair-level test is not underpowered, it is measuring the
 wrong thing, and its apparent power is manufactured by the pooling step.
 
 **E24.** When the correct test is underpowered, print the attainable floor and draw a
@@ -1449,7 +1449,7 @@ data can falsify. Check it mechanically: for every stated bound, scan the figure
 for a value on the wrong side of it.
 
 *Two instances, both in one set, both shipped.* A panel printed *"6 vs 4 units cannot reach below
-p = 0.0095"* while all ten of its highlighted hits sat at **p = 0.004762**; at the printed floor,
+p = 0.0095"* while all ten of its highlighted hits sat at **p = 1/210**; at the printed floor,
 multiple-testing correction over its own 161 tests gives q = 0.153 and **nothing on the panel
 crosses its own significance threshold at all** — the figure disproves its own headline in its own
 footnote. A sibling asserted a floor of 0.0079 and its table attained **0.0075**. In both cases the

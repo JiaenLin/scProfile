@@ -45,7 +45,7 @@ def design(rows):
 
 print("\na 2x2 with replication supports an interaction")
 d = design({f"s{i}": {"age": a, "diet": t} for i, (a, t) in enumerate(
-    [(a, t) for a in ("young", "old") for t in ("ctrl", "trt") for _ in range(3)])})
+    [(a, t) for a in ("youth", "old") for t in ("ctrl", "trt") for _ in range(3)])})
 f = P.design_facts(d, ["age", "diet"], "sample", list(d))
 ck("both factors testable", f["testable"] == ["age", "diet"], str(f["testable"]))
 ck("the crossed pair is found", f["crossed_pairs"] == [["age", "diet"]], str(f["crossed_pairs"]))
@@ -90,7 +90,7 @@ for label, rows in (("every arm n=1", {"a": {"g": "x"}, "b": {"g": "y"}, "c": {"
        any("carried as a caveat" in w for w in vv.why), "; ".join(vv.why))
 
 print("\nconfounding is a caveat and the run proceeds")
-dc = {f"s{i}": {"age": ("old" if i < 4 else "young"),
+dc = {f"s{i}": {"age": ("old" if i < 4 else "youth"),
                 "chem": ("V2" if i < 4 else "V3"),
                 "diet": ("trt" if i % 2 else "ctrl")} for i in range(8)}
 fc = P.design_facts(design(dc), ["age", "chem", "diet"], "sample", list(dc))
@@ -326,7 +326,7 @@ from scprofile import plan_report as PR                                         
 # A FRESH design, not `d` - which an earlier section rebinds. A test that silently reads a name
 # some other block redefined is testing whatever ran last.
 _rd = {f"s{i}": {"age": a, "diet": t2} for i, (a, t2) in enumerate(
-    [(a, t2) for a in ("young", "old") for t2 in ("ctrl", "trt") for _ in range(3)])}
+    [(a, t2) for a in ("youth", "old") for t2 in ("ctrl", "trt") for _ in range(3)])}
 _plan = {
     "version": "0.1.0", "h5ad": "/x/o.h5ad",
     "describe": {"n_obs": 120000, "n_vars": 30000},
@@ -538,7 +538,7 @@ for _n in _orgless:
 
 print("\nevery contrast a factorial design supports, not one per factor")
 # THE CASE THAT MOTIVATED IT, BUILT SO IT CANNOT PASS BY ACCIDENT: a pure interaction. Diet
-# raises the measure in the aged animals and lowers it in the young by the same amount, so the
+# raises the measure in one arm's animals and lowers it in the other's by the same amount, so the
 # MARGINAL diet effect is exactly zero and both simple effects are large. A resolver that
 # reports only the marginal says "no effect of F" for the one design built to find it.
 from scprofile import design_panel as _DPn                                     # noqa: E402

@@ -285,7 +285,7 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
     # This was first fixed by keeping the union and HATCHING the rows and columns that could not
     # hold a difference, so that a reader could see they were absent. That was honest and it was
     # still the wrong panel: on a real cohort it put two full rows and two full columns of hatch
-    # through the middle of a 13x13 matrix - 48 of 169 cells, 28% of the figure - carrying no
+    # through the middle of a 13x13 matrix - 48 of its 169 tiles, 28% of the figure - carrying no
     # comparison, and breaking every real block in half. A cell that cannot hold a difference
     # should not occupy the space where differences are read.
     #
@@ -551,8 +551,8 @@ def contrast_populations(pooled):
 
     The union was drawn first, with the arms' missing populations hatched so a reader could see
     they were absent. That is honest and it is still the wrong panel: on a real cohort it put two
-    fully hatched rows and two fully hatched columns into a 13x13 matrix - 48 of 169 cells, 28% of
-    the panel - carrying no comparison at all, and it put them THROUGH the middle of the grid so
+    fully hatched rows and two fully hatched columns into a 13x13 matrix - 48 of its 169 tiles,
+    28% of the panel - carrying no comparison at all, and it put them THROUGH the middle of the grid so
     every real block was broken in half. A cell that cannot hold a difference should not be drawn
     where a difference goes.
 
@@ -1091,9 +1091,9 @@ def decompose_by_member(edges, sizes_arm, sizes_member, *, weight="prob"):
     THE PROBLEM THIS SOLVES. An arm's network is one fit on its members' pooled cells, and each
     member also has a fit of its own. Those are different fits, so a panel that draws the arm as
     a bar and its members as points is putting two incomparable quantities on one axis - and
-    dividing both by cells does not reconcile them. Measured on a real cohort: the same 23,263
-    cells gave 30.56 as one pooled fit and 84.28 as three separate fits summed, so every member
-    point sat above every bar, in every arm, whatever the biology was.
+    dividing both by cells does not reconcile them. Measured on a real cohort: the same cells
+    gave one value as a pooled fit and nearly three times it as three separate fits summed, so
+    every member point sat above every bar, in every arm, whatever the biology was.
 
     THE RULE. For an ordered pair of populations (i, j) the arm's own value is credited to member
     `a` by that member's share of the arm's cells in the two populations involved:

@@ -52,12 +52,12 @@ check("startswith(_C.COMPOSED_MARK)" in pap,
 # 4. THE HEADING NAMES THE COMPARISON, IN THE REGISTER A JOURNAL PRINTS, AND IS GENERATED FROM
 #    THE RUN; THE FINDING IS THE FIRST SENTENCE UNDER IT.
 #
-#    This check previously required the heading to BE the finding - "aged carries 3.22x the
-#    strength of young". That reads well and makes the document's SHAPE depend on its outcome:
+#    This check previously required the heading to BE the finding - "<one arm> carries 3.22x the
+#    strength of <the other>". That reads well and makes the document's SHAPE depend on its outcome:
 #    two runs of one design produce differently-titled sections, so nothing can be laid side by
 #    side or cited across runs. Then it named the arms by unit - "Differential <subject> between
 #    <unit> and <unit>" - which a writer copied into a manuscript beside headings like
-#    `SIMPLE age | diet = chow` (harness ADR-0024). The writing skill's own rule is the heading
+#    `SIMPLE age | diet = ctrl` (harness ADR-0024). The writing skill's own rule is the heading
 #    a journal prints: `Effect of <factor> within <stratum>`, the stratum telling two
 #    conditional contrasts of one factor apart. What still has to hold: the heading is BUILT
 #    FROM THE RUN rather than authored, so it cannot drift from the text beneath it.
@@ -91,17 +91,17 @@ if "difference of two differences" not in sec:
 
 # 5. THE SUMMARY TABLE MUST SURVIVE THE RENDERER. Two defects, both visible in the first table
 #    a reader of the paper meets, and both invisible to every check that existed:
-#      - a contrast conditioned on a second factor is named `age | diet = chow`, and the pipe is
+#      - a contrast conditioned on a second factor is named `age | diet = ctrl`, and the pipe is
 #        the column separator, so those rows carried six cells against a five-column header;
 #      - the `|---|---|` separator was compared as a set of CELLS against a set of CHARACTERS,
 #        which never matches, so a row of `---` was rendered as data under every header.
 from scprofile.paper import _md as _MD                                    # noqa: E402
 
-_t = _MD("| comparison | reference |\n|---|---|\n| age \\| diet = chow | young |")
+_t = _MD("| comparison | reference |\n|---|---|\n| age \\| diet = ctrl | early |")
 check(_t.count("<tr>") == 2,
       f"the rendered table has {_t.count('<tr>')} row(s) for a header and one row of data - "
       f"the markdown separator is being rendered as data")
-check("<td>age | diet = chow</td>" in _t,
+check("<td>age | diet = ctrl</td>" in _t,
       "a contrast label containing a pipe is split across two cells, so the row has more cells "
       "than the header has columns")
 check("_cell(" in src,

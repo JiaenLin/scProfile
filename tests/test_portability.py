@@ -363,10 +363,12 @@ for _n in _a2.walk(_tree):
                 and isinstance(_n.body[0].value.value, str)):
             _n.body.pop(0)
 _psrc = _a2.unparse(_tree)
-# `chow`/`HFD`-style level names are covered TREE-WIDE by the leak guard at the top of
-# this file, not here: a literal listed in two places is one that gets removed from one
-# of them. What is left is the vocabulary a PLANNER specifically must not reason about.
-for lit in ("2x2", "young", "aged", "cell_type", "sample_id",
+# A STUDY'S LEVEL NAMES ARE NOT SPELLED HERE (W032, GAP-C75): they are covered TREE-WIDE by
+# the leak guard at the top of this file, from the list outside the repository, and by the
+# harness's S1 over every file - a literal listed in two places is one that gets removed from
+# one of them, and a level spelled in the guard is the leak it exists to catch. What is left
+# is the vocabulary a PLANNER specifically must not reason about.
+for lit in ("2x2", "cell_type", "sample_id",
             "mouse", "human", "nucleus"):
     ck(f"the planner's CODE does not mention {lit!r}", lit not in _psrc)
 ck("no minimum sample count is hard-coded except the statistical one",
@@ -872,9 +874,9 @@ print("\nand a page is bound by what IT DRAWS, not only by what the plugin decla
 # and a significance colour. The constraint reached index.html and not the page making the claim.
 _units = [{"unit": u, "metrics": {"populations": float(i + 8)}}
           for i, u in enumerate(["A1", "A2", "A3", "Y1", "Y2", "Y3"])]
-_design = {"A1": {"age": "aged", "diet": "HFD"}, "A2": {"age": "aged", "diet": "HFD"},
-           "A3": {"age": "aged", "diet": "chow"}, "Y1": {"age": "young", "diet": "chow"},
-           "Y2": {"age": "young", "diet": "chow"}, "Y3": {"age": "young", "diet": "HFD"}}
+_design = {"A1": {"age": "adult", "diet": "HSD"}, "A2": {"age": "adult", "diet": "HSD"},
+           "A3": {"age": "adult", "diet": "cereal"}, "Y1": {"age": "yearling", "diet": "cereal"},
+           "Y2": {"age": "yearling", "diet": "cereal"}, "Y3": {"age": "yearling", "diet": "HSD"}}
 _con = ("The embedding may carry clustering. It must NOT carry a composition or abundance "
         "claim across age, diet.")
 ck("the factors the panel will cross are found",
@@ -1089,7 +1091,7 @@ ck("the merge carries the names it was given",
 # samples twice, and a reader with two panels showing the same difference under two names has,
 # on the page, two pieces of evidence. Keying the partition on (sample, level) PAIRS missed it
 # entirely, because an aliased confounder almost never shares the vocabulary of the factor it is
-# aliased with — a reagent version aliased with an age arm calls its levels v3/v4, not young/old.
+# aliased with — a reagent version aliased with an age arm calls its levels v3/v4, not yearling/adult.
 _ali_des = {f"S{i}": {"bio": "y" if i < 3 else "o",
                       "reagent": "v3" if i < 3 else "v4",
                       "crossed": "a" if i % 2 else "b"} for i in range(6)}
@@ -1105,7 +1107,7 @@ ck("the page says which of the two the difference belongs to cannot be known",
    "not something this data can say" in _RP._by_arm_block(_ali, aware=False))
 ck("it detects the alias across different level VOCABULARIES",
    "by_level" in pathlib.Path(inputs.__file__).read_text(),
-   "keying on (sample, level) pairs cannot see young/aged aliased with v3/v4")
+   "keying on (sample, level) pairs cannot see yearling/adult aliased with v3/v4")
 
 _html = _RP._by_arm_block(_ba, aware=False)
 ck("the page says outright that it is a description and not a test",

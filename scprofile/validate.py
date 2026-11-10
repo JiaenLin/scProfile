@@ -1061,7 +1061,8 @@ def _design_record_check(kernel, root):
         return False, f"the record {rec['unreadable']} does not parse"
     answers = rec.get("answers") or []
     if not isinstance(answers, list) or not all(isinstance(a, dict) for a in answers):
-        return False, f"the record {design_record_path(kernel).name}'s answers are not a list of entries"
+        return False, (f"the record {design_record_path(kernel).name}'s answers are not a list "
+                       f"of entries")
     anchor = _spent_commit(root, kernel.name)
     if not answers and anchor is None:
         return True, ("no answer recorded, and not spent: DEVPOINTS names no blind-record commit "

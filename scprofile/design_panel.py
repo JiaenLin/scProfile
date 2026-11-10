@@ -174,8 +174,9 @@ def aliased(design, factors=None):
     They used to be the same list, which made the question unanswerable exactly when it mattered
     most: a caller that named its two biological factors - the careful thing to do, and what the
     planner does - was comparing them only against each other, so a factor aliased with a
-    TECHNICAL column came back clean. Measured on a real 2x2 where every aged library was run on
-    one chemistry and every young one on another: asked about all four columns the tool says
+    TECHNICAL column came back clean. Measured on a real 2x2 where every library of one arm was
+    run on one chemistry and every library of the other on another: asked about all four columns
+    the tool says
     `age` is aliased with `chemistry`; asked about `age` and `diet` it says nothing is aliased
     with anything, and every caption then describes an age effect that is equally a chemistry
     effect. The narrowing silently removed the warning, on the one cohort in this family.

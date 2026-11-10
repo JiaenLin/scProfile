@@ -1,7 +1,7 @@
 """A marginal comparison needs a unit on each side, and the crossing does not provide one.
 
 The failure this pins: with two factors, `resolve` returned the four crossed arms and nothing
-else, so `aged` pooled over diet existed as a QUESTION the design enumerated and as no OBJECT
+else, so `adult` pooled over diet existed as a QUESTION the design enumerated and as no OBJECT
 any tool could be handed. Every marginal contrast printed "no single unit pools each side" and
 drew nothing, on every run, while the design plainly asked for it.
 """

@@ -516,7 +516,7 @@ def memory_drift(kernel, payload, concurrent=1):
     # `peak_measurement` says so in its own docstring - the cgroup figure "over-attributes when
     # several instances share one job" - and this function went on telling the maintainer to
     # raise a declaration to it anyway. Measured: ten cellchat instances in one job each
-    # reported 45.0 GB, identical, over inputs of 7,374 to 11,985 cells, fitted as
+    # reported 45.0 GB, identical, over inputs of about 7 to 12 thousand cells, fitted as
     # "45.0 GB fixed + 0.0 GB/100k". A figure that does not move with the input is not a
     # measurement of the input, and ten identical readings are ONE reading taken ten times.
     #

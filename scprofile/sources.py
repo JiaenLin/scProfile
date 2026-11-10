@@ -273,16 +273,16 @@ def load(source, log=print, names=DEFAULT_LAYERS):
         # EVERY COLUMN OF features.tsv IS A CANDIDATE GENE NAME, and which one the object uses is
         # the object's business. The 10x/STARsolo convention is `<gene id>\t<symbol>\t<type>`;
         # this read column 0 while the object is indexed by SYMBOLS, so on a real cohort it
-        # matched 466 of 34,290 genes, `filter_and_normalize` then dropped 34,286 for want of
-        # shared counts, and velocity refused because "only 4 genes survived selection" - a
+        # matched a few hundred of its genes, `filter_and_normalize` then dropped nearly all for
+        # want of shared counts, and velocity refused because "only 4 genes survived selection" - a
         # refusal about the DATA whose cause was a column index. Both columns are returned;
         # `attach` takes whichever overlaps the object more and says which, and by how much.
         genes = [_read_list(fg, c) for c in (0, 1)]
         mats = [scipy.io.mmread(str(f)).tocsr() for f in fm]
         # mtx from these quantifiers is genes x cells; orient by which axis matches the lists.
         # `len(genes)` IS NOT THE GENE COUNT any more - `genes` is one list per field of
-        # features.tsv - and using it here compared 34,290 against 2, refused every source as
-        # "matches neither N barcodes nor 2 genes", and turned a fix into a total failure to
+        # features.tsv - and using it here compared the gene count against 2, refused every
+        # source as "matches neither N barcodes nor 2 genes", and turned a fix into a total failure to
         # source anything. Measured on PBS 677757, on the run that was meant to prove the fix.
         n_genes = len(genes[0])
         if mats[0].shape[0] == n_genes and mats[0].shape[1] == len(bcs):

@@ -230,7 +230,7 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   survives inspection, the sentence reads fluently, and only someone who knows what the identifiers
   MEAN can see that they belong to different objects. Build such sentences from the same variables
   that draw the marks, and derive each clause separately even when that makes the sentence longer.
-  **ONE INSTANCE.** A headline panel printed "One animal, X, carries ~48% of the chow arm's signal
+  **ONE INSTANCE.** A headline panel printed "One animal, X, carries ~48% of the control arm's signal
   - it is the deepest library (1949 edges against 297)". X was the cohort's deepest library and an
   animal of the OTHER arm; the animal carrying ~48% of the named arm was a different one entirely.
   Both halves were true of somebody. The name came from an argmax over the whole cohort while the

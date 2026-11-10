@@ -1,0 +1,15 @@
+# LEAK_SCOPE.txt - what `sch conform`'s S1 (and the dev ladder's leak tier) may find in this
+# repository, and why (harness W024; this file: autodev W032, GAP-C75).
+#
+# One entry per line:   <path> :: <what may appear> :: <why>
+#   <path>   repository-relative
+#   <what>   listed terms separated by ", ", excused at that path only. A tool declares no record
+#            path (`*`): nothing from a cohort - names, levels, numbers, paths - enters a tool.
+#   <why>    required: an entry without a reason is refused and not applied
+#
+# A cohort's GENERATED word list holds every count its records quote, and a record that quotes a
+# fact about a public reference puts that fact on the list. Such a fact belongs to the reference,
+# not to the cohort, and is declared here with what it is. Nothing a cohort measured is.
+
+docs/REFERENCES.md  :: 3,379 :: the number of interactions in the pinned CellChatDB v2 mouse database, measured in the built environment: a fact about the public reference, which a cohort's records also quote
+kernels/cellchat.py :: 37.9%, 3,379 :: CellChatDB v2's own composition, measured from the shipped database (the secreted share of its interactions; the number of mouse interactions): facts about the public reference, which a cohort's records also quote

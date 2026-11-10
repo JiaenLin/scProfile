@@ -1022,8 +1022,8 @@ class Context(FigureContextReader):
         barcodes: they are `self.adata.obs_names`, right here.
 
         What it cost: the host itself EXCLUDES cells with NaN in a computed embedding from every
-        plugin, so a plugin handed N-2,086 of an object's N cells returned an array of
-        N-2,086 rows and the merge refused it for not covering N - refused the plugin for
+        plugin, so a plugin handed N-n of an object's N cells returned an array of
+        N-n rows and the merge refused it for not covering N - refused the plugin for
         returning exactly the cells the host had given it. Nothing about that is specific to one
         plugin or one dataset; it is every plugin that emits an array on an object with a
         withheld cell in it.
@@ -1544,7 +1544,7 @@ class CompareContext(FigureContextReader):
         self.figure_position = dict(figure_position or {})
         self.figure_ceiling = dict(figure_ceiling or {})
         self._figure_count = {}
-        #: A label for this comparison, e.g. `age__aged__young`. Used in filenames.
+        #: A label for this comparison, e.g. `dose__high__low`. Used in filenames.
         self.pair = str(pair)
         #: {unit_name: Path} - the finished units, in the order the contrast names them.
         self.units = {str(k): Path(v) for k, v in dict(units or {}).items()}

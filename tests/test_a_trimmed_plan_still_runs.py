@@ -76,7 +76,7 @@ with tempfile.TemporaryDirectory() as td:
     fig = plt.figure()
     ck("a group-axis panel is drawn for it", ctx.emit_figure("F3_roles", fig) is not None)
     lines = []
-    marg = Context(None, keys={}, out=Path(td), cores=1, unit="aged", unit_axis="margin",
+    marg = Context(None, keys={}, out=Path(td), cores=1, unit="adult", unit_axis="margin",
                    figure_position={"F3_roles": "contrast"}, plan_ids=("F3_roles",),
                    plan_axis={"F3_roles": "group"}, log=lines.append)
     fig = plt.figure()

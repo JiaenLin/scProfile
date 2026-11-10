@@ -1591,7 +1591,7 @@ def test_an_array_carries_its_barcodes():
     """"An array carries no barcodes" was a gap the host had left, stated as a fact about arrays.
 
     The host EXCLUDES cells with NaN in a computed embedding from every plugin. A plugin handed
-    N-2,086 of an object's N cells therefore returned an array of N-2,086 rows, and the merge
+    N-n of an object's N cells therefore returned an array of N-n rows, and the merge
     refused it for not covering N - refused the plugin for returning exactly the cells the
     host had given it. Nothing in that is specific to one plugin: it is every plugin that emits
     an array on an object with a withheld cell in it.

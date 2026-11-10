@@ -28,7 +28,7 @@ def check(c, m):
 
 
 # the vocabulary is general, not this cohort's
-for levels, want in ((["treated", "control"], "control"), (["KO", "WT"], "WT"),
+for levels, want in ((["treated", "control"], "control"), (["ko", "wt"], "wt"),
                      (["drug", "vehicle"], "vehicle"), (["d7", "d0"], "d0"),
                      (["stim", "unstimulated"], "unstimulated")):
     got, why = control_for(levels)

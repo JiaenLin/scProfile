@@ -190,7 +190,7 @@ with tempfile.TemporaryDirectory() as td:
     _k = _disc().get("cellchat")
     out = Path(td) / "20260101T000000Z__scprofile-abc1234__stage"
     kdir = out / "kernels" / "cellchat"
-    for u in ("young", "aged"):
+    for u in ("yearling", "adult"):
         (kdir / u).mkdir(parents=True)
     cdir = kdir / "compare" / "age"
     (cdir / "figures").mkdir(parents=True)
@@ -201,9 +201,9 @@ with tempfile.TemporaryDirectory() as td:
                                                "version": str(_k.spec.get("version")), "ok": True,
                                                "figures": ["figures/nativecmp_barplot_count.png"]}))
     (cdir / "in.json").write_text("{}")
-    design = {"s1": {"age": "young"}, "s2": {"age": "aged"}}
-    units = [{"unit": "young", "dir": "kernels/cellchat/young"}, {"unit": "aged", "dir": "kernels/cellchat/aged"}]
-    pairs = [("age", "age", "young", "aged", {"age": "young"}, {"age": "aged"})]
+    design = {"s1": {"age": "yearling"}, "s2": {"age": "adult"}}
+    units = [{"unit": "yearling", "dir": "kernels/cellchat/yearling"}, {"unit": "adult", "dir": "kernels/cellchat/adult"}]
+    pairs = [("age", "age", "yearling", "adult", {"age": "yearling"}, {"age": "adult"})]
     drawn = RP._native_compare("cellchat", _k.spec, {}, design, pairs, out, units, prefix=None,
                                declared=dict(_k.spec.get("native_plots") or {}))
     recs = [t for t in drawn if isinstance(t, tuple) and "nativecmp_barplot_count" in str(t[1])]

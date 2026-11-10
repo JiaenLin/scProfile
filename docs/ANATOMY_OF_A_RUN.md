@@ -84,7 +84,7 @@ Written by `sch dev job --ref <reference run> --redraw --plugin cellchat --predi
 
 - **J4** — **The fixture gate** (§4) — `run.fixture_first` in the tool's DEVPOINTS. Exit 0 continues; exit 3 (could not run) and exit 2 (failed) both refuse the cohort with exit 4 and different words.
 
-- **J5** — **The tool runs:** the reference's argv with only the destination changed — `scprofile run --h5ad cohort_integrated.h5ad --out <run> --kernel cellchat --prefix …/env --design design.csv --label-key cell_type_forced --sample-key sample --batch-key batch --counts-layer counts --lognorm-layer lognorm --embedding X_scanvi --layout X_umap_scanvi --organism mouse --assay nucleus --timeout 21600 --control age=young --control diet=chow`. Not piped, not teed; the exit code is read before the trap uses it.
+- **J5** — **The tool runs:** the reference's argv with only the destination changed — `scprofile run --h5ad cohort_integrated.h5ad --out <run> --kernel cellchat --prefix …/env --design design.csv --label-key cell_type_forced --sample-key sample --batch-key batch --counts-layer counts --lognorm-layer lognorm --embedding X_scanvi --layout X_umap_scanvi --organism mouse --assay nucleus --timeout 21600 --control <factor>=<its control> ...`. Not piped, not teed; the exit code is read before the trap uses it.
 
 - **J6** — **What follows a run**, declared in `run.after`: `status --out`, `capacity --promised`, `capacity --memory`. Each exit is a verdict printed as `after: exit N`, not a failure of the run.
 
@@ -176,7 +176,7 @@ Everything below runs inside the status contract: `STATUS.json` is written at th
 
 - **U1** — the core share is capped before `library(CellChat)` can start anything (`_R_CAP`); reticulate is pointed at the environment's own Python; the drawing protocol (the companion, prepended) is configured once
 
-- **U2** — the store: `cellchat.rds` and its stamp `cellchat.inference.txt` = md5(matrix) | md5(meta) | database | the six parameters | the CellChat version | md5(the recipe span). Stamp equal → `reusing the saved CellChat object; inference skipped` (*18 of 18 on 712314*); else the recipe
+- **U2** — the store: `cellchat.rds` and its stamp `cellchat.inference.txt` = md5(matrix) | md5(meta) | database | the six parameters | the CellChat version | md5(the recipe span). Stamp equal → `reusing the saved CellChat object; inference skipped` (*every unit, on 712314*); else the recipe
 
 - **U3** — **the recipe** (between `# --- RECIPE START ---` and `END`): `createCellChat → subsetData → identifyOverExpressedGenes → identifyOverExpressedInteractions → computeCommunProb(type, trim, population.size, nboot) → filterCommunication(min.cells) → computeCommunProbPathway → aggregateNet → netAnalysis_computeCentrality`; between the last two, the four side tables the tool's own downstream quantities give (pathway probability, centrality, rank-net, network embedding), each wrapped so one failing costs its table and not the instance
 

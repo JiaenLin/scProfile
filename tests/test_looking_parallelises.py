@@ -49,7 +49,7 @@ def check(ok, msg):
 #: with `.split()` instead of `.splitlines()` turned 93 paths into 269 tokens, matched none of
 #: them, and silently dropped every figure under a contrast directory from the fan-out. The
 #: counts were the only symptom.
-AWKWARD = "age | diet = chow"
+AWKWARD = "age | diet = ctrl"
 
 
 def _fixture(td, per_dir=(7, 5, 4, 3)):

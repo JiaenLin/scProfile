@@ -256,7 +256,7 @@ ck("a small overshoot is noise and is not reported",
 print("\na job-wide counter is never charged to one instance")
 # THE SECOND HALF OF THE SAME DEFECT. Fixing the cgroup PATH made the number right - 45.0 GB
 # against PBS's own 42.7 GB for the job - and it was still attributed to each of ten concurrent
-# instances, so all ten reported 45.0 GB over inputs of 7,374 to 11,985 cells and the advice was
+# instances, so all ten reported 45.0 GB over inputs of about 7 to 12 thousand cells and the advice was
 # to raise a 3.8 GB declaration elevenfold. An even split puts the true figure near 4.5 GB, which
 # is 1.18x the declaration: it was right all along.
 class _K:
@@ -264,7 +264,7 @@ class _K:
     executor = {"memory_gb_base": 3.8, "memory_gb_per_100k": 0.0}
 
 
-_pl = {"measured": {"n_cells": 11985, "cgroup_peak_gb": 45.0, "peak_rss_gb": 4.1}}
+_pl = {"measured": {"n_cells": 12000, "cgroup_peak_gb": 45.0, "peak_rss_gb": 4.1}}
 _shared = FB.memory_drift(_K(), _pl, concurrent=10)
 _alone = FB.memory_drift(_K(), _pl, concurrent=1)
 ck("with several instances in one job it is not a declaration defect",
@@ -277,7 +277,7 @@ ck("with ONE instance the counter is exact and the declaration IS checked",
    len(_alone) == 1 and _alone[0].layer == FB.DECLARATION,
    str([d.layer for d in _alone]))
 ck("the floor measurement is never suppressed - only the job-wide one",
-   FB.memory_drift(_K(), {"measured": {"n_cells": 11985, "peak_rss_gb": 45.0}},
+   FB.memory_drift(_K(), {"measured": {"n_cells": 12000, "peak_rss_gb": 45.0}},
                    concurrent=10)[0].layer == FB.DECLARATION,
    "the process's own floor belongs to the process, however many share the job")
 
@@ -294,8 +294,8 @@ ck("detected from the data, not plumbed through the scheduler",
 print("\nthe memory counter is the JOB'S cgroup, never the machine's")
 # RECONSTRUCTED FROM THE RUN THAT BROKE IT: a 1 TB node, a batch job in an unnamespaced
 # cgroup v2, ten concurrent instances. The old code read /sys/fs/cgroup/memory.peak by absolute
-# path - the ROOT - and reported 1000.7 GB ten times, identical, for instances of 7,374 to 11,985
-# cells. PBS billed the whole job 42.7 GB. The declaration it then told the maintainer to raise
+# path - the ROOT - and reported the whole node's ~1 TB ten times, identical, for instances of about 7 to 12
+# thousand cells. PBS billed the whole job 42.7 GB. The declaration it then told the maintainer to raise
 # was 3.5-3.8 GB and correct.
 import tempfile as _tf                                                          # noqa: E402
 from pathlib import Path as _P                                                  # noqa: E402
@@ -318,12 +318,12 @@ _job = _tree("0::/pbspro.service/jobs/698875\n",
              {"pbspro.service/jobs/698875/memory.peak": 42.7})
 ck("a job-scoped cgroup v2 peak is read", _job is not None and abs(_job - 42.7) < 0.01, str(_job))
 
-_root = _tree("0::/\n", {"memory.peak": 1000.7})
-ck("THE ROOT CGROUP IS NOT READ - this is the 1000.7 GB, and it must not come back",
+_root = _tree("0::/\n", {"memory.peak": 1000.5})
+ck("THE ROOT CGROUP IS NOT READ - this is the node-wide ~1 TB, and it must not come back",
    _root is None, str(_root))
 
 _nodewide = _tree("0::/pbspro.service/jobs/698875\n",
-                  {"pbspro.service/jobs/698875/memory.peak": 1000.7})
+                  {"pbspro.service/jobs/698875/memory.peak": 1000.5})
 ck("and a job-scoped value indistinguishable from the whole machine is refused too",
    _nodewide is None, f"{_nodewide} - a counter that might be the node is not evidence")
 
@@ -332,7 +332,7 @@ _v1 = _tree("7:memory:/pbspro/698875\n",
 ck("cgroup v1 still works, at its own controller path", _v1 is not None and abs(_v1 - 12.5) < 0.01,
    str(_v1))
 
-_v1root = _tree("7:memory:/\n", {"memory/memory.max_usage_in_bytes": 1000.7})
+_v1root = _tree("7:memory:/\n", {"memory/memory.max_usage_in_bytes": 1000.5})
 ck("and v1's root is refused by the same rule", _v1root is None, str(_v1root))
 
 ck("no /proc at all is None, not a crash and not a zero",
@@ -447,7 +447,7 @@ ck("without smaps_rollup the resident set is summed and the basis says so",
 _gb3, _basis3 = _E._tree_gb(100, proc=_P(_tf.mkdtemp()) / "absent", page=4096)
 ck("and where there is no /proc at all nothing is invented", _gb3 is None, str(_gb3))
 
-_three = {"n_cells": 11985, "peak_rss_gb": 4.1, "cgroup_peak_gb": 45.0, "tree_peak_gb": 7.2,
+_three = {"n_cells": 12000, "peak_rss_gb": 4.1, "cgroup_peak_gb": 45.0, "tree_peak_gb": 7.2,
           "tree_basis": "pss"}
 ck("the tree peak is preferred over both the floor and the job's counter",
    FB.peak_measurement(_three)[0] == 7.2, str(FB.peak_measurement(_three)))

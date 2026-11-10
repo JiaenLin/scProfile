@@ -304,11 +304,12 @@ def _cgroup_peak_gb(root=None, procfile=None, total=None):
     THE BUG THIS EXISTS TO NOT REPEAT. This read `/sys/fs/cgroup/memory.peak` by absolute path.
     Under cgroup v2 with no namespace - which is what a PBS job on a shared node gets - that
     path IS THE ROOT CGROUP, so it reports the whole machine rather than the job. On a 1 TB node
-    it returned 1000.7 GB for all ten instances of a run whose real cost was about 4 GB each,
-    and every one of them was identical, because it was the same node-wide number ten times.
+    it returned the whole node's ~1 TB for all ten instances of a run whose real cost was about
+    4 GB each, and every one of them was identical, because it was the same node-wide number ten
+    times.
 
     That number then became advice. The declaration was 3.5-3.8 GB and correct - PBS billed the
-    entire job 42.7 GB - and the tool told its maintainer to raise it to 1000.7 GB, which is
+    entire job 42.7 GB - and the tool told its maintainer to raise it to ~1 TB, which is
     larger than the biggest queue on that cluster accepts. FOLLOWING THE ADVICE WOULD HAVE MADE
     EVERY FUTURE RUN UNSCHEDULABLE: the failure it warns about is a job that gets killed, and
     the fix it proposed is a job that can never start. A wrong measurement is bad; a wrong
@@ -337,7 +338,7 @@ def _cgroup_peak_gb(root=None, procfile=None, total=None):
     total = _mem_total_gb() if total is None else total
     for f in paths:
         # A RELATIVE PATH OF "" MEANS THE ROOT, and the root is the machine. Skip it rather than
-        # read it: this is the exact shape that produced the 1000.7 GB above.
+        # read it: this is the exact shape that produced the ~1 TB above.
         try:
             if f.parent.resolve() in (root.resolve(), (root / "memory").resolve()):
                 continue

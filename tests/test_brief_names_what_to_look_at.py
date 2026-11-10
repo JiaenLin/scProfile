@@ -167,7 +167,7 @@ with tempfile.TemporaryDirectory() as d:
     check(rows == heads and rows, "the brief's contrasts table and its verbatim headings list the "
                                   "contrasts in different orders: %r vs %r" % (rows, heads))
     # THE HEADINGS A JOURNAL PRINTS (harness ADR-0024): the brief told the writer to use
-    # `SIMPLE age | diet = chow` verbatim, and the writer did - the heading a manuscript refuses.
+    # `SIMPLE age | diet = ctrl` verbatim, and the writer did - the heading a manuscript refuses.
     check(not [l for l in txt.splitlines() if l.strip().startswith(("SIMPLE", "MARGINAL", "INTERACTION"))],
           "the brief's verbatim headings carry the design's own tags")
 _DP.comparisons = _orig_cm

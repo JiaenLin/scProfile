@@ -22,10 +22,10 @@ from . import declare as _D
 from .figure import CATEGORY_COLOURS
 
 CSS = """
-:root{--bg:#fff;--fg:#191919;--mut:#5b5b5b;--line:#e6e4e0;--card:#faf9f7;--warn:#fff8ec;
+:root{--bg:#fff;--fg:#191919;--muted:#5b5b5b;--line:#e6e4e0;--card:#faf9f7;--warn:#fff8ec;
 --warnl:#b06d12;--bad:#fdeeed;--badl:#a8403c;--good:#eef7ee;--goodl:#3f7d43}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#16181c;--fg:#e8e6e3;
---mut:#a3a09b;--line:#2d3138;--card:#1d2025;--warn:#2a2115;--warnl:#e0a44a;--bad:#2a1717;
+--muted:#a3a09b;--line:#2d3138;--card:#1d2025;--warn:#2a2115;--warnl:#e0a44a;--bad:#2a1717;
 --badl:#e07b76;--good:#16241a;--goodl:#7fbf85}}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--fg);margin:0;padding:2.5rem 1.5rem 5rem;
@@ -34,7 +34,7 @@ main{max-width:1100px;margin:0 auto}
 h1{font-size:1.9rem;margin:0 0 .35rem}h2{font-size:1.2rem;margin:2.6rem 0 .8rem;
 padding-bottom:.35rem;border-bottom:1px solid var(--line)}
 h3{font-size:1rem;margin:1.6rem 0 .5rem}
-.sub{color:var(--mut);font-size:.9rem}.lede{font-size:1.03rem}
+.sub{color:var(--muted);font-size:.9rem}.lede{font-size:1.03rem}
 .warn,.bad,.good{padding:1rem 1.2rem;margin:1.2rem 0;border-radius:0 5px 5px 0;font-size:.93rem}
 .warn{background:var(--warn);border-left:3px solid var(--warnl)}
 .bad{background:var(--bad);border-left:3px solid var(--badl)}
@@ -43,7 +43,7 @@ h3{font-size:1rem;margin:1.6rem 0 .5rem}
 table{border-collapse:collapse;width:100%;font-size:.87rem;font-variant-numeric:tabular-nums}
 th,td{border-bottom:1px solid var(--line);padding:.45rem .55rem;text-align:left;
 vertical-align:top}
-th{background:var(--card);font-size:.7rem;text-transform:uppercase;color:var(--mut)}
+th{background:var(--card);font-size:.7rem;text-transform:uppercase;color:var(--muted)}
 code{font-family:ui-monospace,Consolas,monospace;font-size:.85em}
 a{color:inherit}
 figcaption{margin-top:.7rem;font-size:.86rem;line-height:1.5}
@@ -53,7 +53,7 @@ border-radius:8px}img{max-width:100%;height:auto;display:block;border-radius:4px
 ul{margin:.4rem 0 .4rem 1.1rem;padding:0}li{margin:.25rem 0}
 .pill.warn{background:#fef3c7;color:#92400e}
 .pill{display:inline-block;padding:.1rem .45rem;border-radius:3px;background:var(--card);
-border:1px solid var(--line);font-size:.72rem;color:var(--mut)}
+border:1px solid var(--line);font-size:.72rem;color:var(--muted)}
 """
 
 

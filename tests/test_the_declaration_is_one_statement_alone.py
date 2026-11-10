@@ -47,7 +47,8 @@ FAILS = []
 
 
 def ck(name, ok, detail=""):
-    print(("  ok   " if ok else "  FAIL ") + name + ("" if ok else f"\n         {str(detail)[:700]}"))
+    print(("  ok   " if ok else "  FAIL ") + name
+          + ("" if ok else f"\n         {str(detail)[:700]}"))
     if not ok:
         FAILS.append(name)
 
@@ -176,7 +177,8 @@ ATTACKS = [
     ("V-nul", "a NUL byte in a comment", swap("PLUGIN = {\n", "PLUGIN = {  # \x00\n")(SHIPPED),
      RECORD, "does not parse"),
     ("V-bytes", "a byte that is not UTF-8, in a comment",
-     SHIPPED.replace("PLUGIN = {\n", "PLUGIN = {  # \udcff\n", 1).encode("utf-8", "surrogateescape"),
+     SHIPPED.replace("PLUGIN = {\n", "PLUGIN = {  # \udcff\n", 1)
+     .encode("utf-8", "surrogateescape"),
      RECORD, "UTF-8"),
     ("V-mutation", "the declaration changed after it, by a statement outside it",
      SHIPPED + '\nPLUGIN["inject"] = {}\n', RECORD, "outside its declaration"),

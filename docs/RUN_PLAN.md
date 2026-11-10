@@ -17,7 +17,7 @@ Each method gets a **verdict** and a **readiness**, and they are about different
 
 | | question | example |
 |---|---|---|
-| **verdict** | what would this do on *your data*? | RUN (full) over 10 samples |
+| **verdict** | what would this do on *your data*? | RUN (full) over N samples |
 | **readiness** | what stands between *this installation* and running it? | its environment is not built |
 
 A method that is not installed here is not a limitation of your data. The plan leads with the
