@@ -190,7 +190,7 @@ table. Every step is a command the step before it printed, and none is a person'
 | 9 render, deliver | the writer | `paper --render`; `delivered` |
 | 10 seal the writing | the job | `submit_writing_seal.sh --prepare / --seal` |
 
-The loop is 3 → 4 → 5 → 6 → 3', repeated until 4 is clean; the pen (7) opens only then. A
+The loop is 3 → 4 → 5 → 6 → 3'. The pen opens on every plate without an open finding; a flagged plate waits for its fix. A
 finding has one of three owners, and the worksheet names it: the host's own panel (fixed in
 `scprofile/`, nothing to paste), the tool's plate (the plan entry's arguments, size and legend),
 or the plugin's own drawing (its file and line). A plate the upstream draws as it should is
@@ -201,8 +201,8 @@ word alone does not.
 
 1. Run the driver. It names the first blocked station.
 2. Clear that station — run the command, do the looking, write the claim.
-3. **Every finding becomes a change in this repository, or it did not happen.** A defect seen and
-   not fixed is a defect found twice.
+3. **Every bug found becomes a change with a failing test; a finding that is not a bug is
+   answered (`review --answer`) or recorded.**
 4. Commit, push, and if the finding changed what a run produces, make a new run rather than
    editing one: a run key names the commit that produced what is in the directory.
 5. Start the next round from station 1, because a change upstream invalidates what is downstream
@@ -210,23 +210,6 @@ word alone does not.
 
 **A round that finds nothing is a result**, and it is the only evidence that a previous round's
 fix worked. Record it as a round.
-
-### Scan the whole set BEFORE fixing anything — the loop converges only if you do
-
-Every fix that changes a rendering makes a new run, and the eye ledger is bound to each image's
-digest, so **a new run resets the whole scan set to unreviewed.** Fix as you go and the station
-never fills: the counter went 0 → 3 → 5 → 8 → 0 across five rounds while eight real defects were
-being found and fixed, because each fix rebuilt the figures the previous looks were recorded
-against.
-
-That is the ledger behaving correctly — a look at a picture that no longer exists is not evidence
-about the picture that does. But it means the loop has a shape:
-
-> **Scan the complete set on ONE build, collecting every finding and fixing nothing. Then fix
-> them all in one commit, rebuild, and re-scan to verify.**
-
-Two builds per round instead of one per defect. The station passes when a complete scan produces
-no fix, which is also the only definition of "the figures are right" this loop has.
 
 ---
 
@@ -263,38 +246,6 @@ Two consequences worth stating plainly, because both are easy to get backwards:
   reproduce those collisions from the panels' own coordinates all came back clean, which cost
   more than the fix did. Where a defect is measured by the tool, extend the tool's measurement
   until it says where and when — a defect report a person has to re-derive is half a mechanism.
-
-## THE GOAL OF THE LOOP IS STATION 7 COMPLETE. NOTHING ELSE IS THE GOAL.
-
-**The loop has now been abandoned short of its goal twice, and both times it looked like
-progress.** This section exists because a round that clears every machine check reads like an
-achievement and is not one.
-
-The stations divide into two halves that are not comparable:
-
-- **Stations 1 to 6b are the cheap half.** They are mechanical, they run in seconds, and they go
-  green long before the tool is any good. A build can pass every one of them and still ship
-  panels whose labels name no point, whose axes hide the result, and whose blank cells mean two
-  different things.
-- **Station 7 is the loop.** Every figure defect this tool has ever had was found by opening the
-  image while the suite was green. A round that clears the machine checks and looks at six
-  panels of eighty-four has tested almost nothing.
-
-So:
-
-1. **The goal is station 7 at N of N, then station 8.** Not "station 7 started", not "the
-   blocking mechanical defects cleared". The scan is complete or the round is not finished.
-2. **A partial scan is never reported as progress.** "6 of 84 looked at" is an unfinished
-   round, and describing what those six found does not change that. The loop prints the count on
-   every blocked round for this reason.
-3. **Running out of things that are easy to fix is not a reason to stop.** It is the point at
-   which the loop starts doing what it exists for.
-4. **Only two things legitimately interrupt a scan**: a defect that makes the remaining panels
-   not worth looking at, and the end of the set. Neither is "I have enough to report".
-
-The convergence rule still applies inside the scan: look at the complete set on ONE build
-fixing nothing, then fix everything in one commit, rebuild, and re-scan. Fixing mid-scan
-invalidates the reviews already recorded, because a review is bound to its image's sha256.
 
 ## Where this loop is weak
 
@@ -347,8 +298,8 @@ none the next, neither run adopting anything. Station 6b now clears a **commit**
 A review is bound to its image's sha256, which is right: a redrawn panel has not been looked at.
 But a change in the *host* redraws every panel of every plugin, so one line in `figure.py` costs
 all 84 recorded looks. Measured across five rounds, the eye station went 0 → 3 → 5 → 8 → 0 while
-real defects were being found. The convergence rule — scan the whole set on one build, fix in one
-commit, rebuild, re-scan — is a discipline working around this, not a solution. **Half of this is now fixed:** the looks are still
+real defects were being found. A rule once worked around this - scan the whole set on one build,
+fixing nothing - and it is retired (harness B1-021): what it protected now carries. **Half of this is now fixed:** the looks are still
 destroyed, correctly, but the FINDINGS are carried. `carried_findings()` reads the ledgers of
 earlier runs and the eye station prints, beside each panel to open, what was last written about
 that path and which run it came from. That is the difference between re-reading 84 panels and

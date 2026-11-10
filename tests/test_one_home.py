@@ -160,10 +160,9 @@ for _f in ("docs/PLUGIN_DESIGN.md", "docs/MAINTAINING_PLUGINS.md"):
 
 print("\nthe test loop is part of development, not a document beside it")
 _DEV = (ROOT / "DEVELOPMENT.md").read_text(encoding="utf-8")
-ck("the guideline carries the loop", "THE LOOP IS HOW THIS TOOL IS TESTED" in _DEV)
-ck("and names its stations", all(w in _DEV for w in ("adopt", "drawing", "eye", "paper")))
-ck("and the rule that makes it converge",
-   "before fixing anything" in _DEV and "from the eye to a measurement" in _DEV)
+# ITS WORDING IS NOT PINNED (harness B1-025): what the loop does is asked of the real driver in
+# tests/test_a_first_run_needs_no_reuse.py and tests/test_loop_driver.py.
+ck("the guideline names the loop's stations", all(w in _DEV for w in ("adopt", "drawing", "eye", "paper")))
 ck("the driver it points at is committed", (ROOT / "tests" / "loop_stations.py").is_file())
 ck("and the design document exists", (ROOT / "docs" / "TEST_LOOP.md").is_file())
 

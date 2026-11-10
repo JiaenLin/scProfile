@@ -40,12 +40,8 @@ do next. Four rules, each paid for:
 - **Evidence, not assertion.** A file the station wrote; a MEASUREMENT of the filesystem rather
   than of the tool's report of itself — `ADOPTED … by hardlink` is a claim and `st_nlink` is a
   fact; or a recorded look bound to the image's digest.
-- **Scan the whole set before fixing anything.** Every fix that changes a rendering makes a new
-  run, and the review ledger binds to digests, so a new run resets the scan set. Fixing as you go,
-  the eye station went 0 → 3 → 5 → 8 → 0 across five rounds while real defects were being found.
-  Collect on one build, fix in one commit, rebuild, re-scan.
-- **Every finding becomes a change in this repository, or it did not happen.** A defect seen and
-  not fixed is a defect found twice.
+- **Every bug found becomes a change with a failing test; a finding that is not a bug is
+  answered (`review --answer`) or recorded.**
 - **The gate is `python tests/run_all.py`, and nothing else.** It runs one subprocess per suite
   and the exit code decides, which is what `setup/dev_cycle.pbs` step 0 has always done. An
   ad-hoc runner that IMPORTS the suites instead reported green for a whole session: several
@@ -77,15 +73,9 @@ do next. Four rules, each paid for:
   Four are fixed and named with the failure that exposed them; four are open. A loop that
   presents itself as sound is the same defect as a gate that fires on correct behaviour — both
   ask to be believed rather than checked. Read that section before trusting a green run.
-- **THE GOAL IS THE EYE SCAN COMPLETE AND THE MANUSCRIPT WRITTEN. NOTHING ELSE IS THE GOAL.**
-  A round ends when station 7 is at N of N and station 8 has produced the draft and its figure
-  panel — not when the mechanical stations go green. Stations 1 to 6b are the cheap half: they
-  run in seconds and pass while the pictures are still wrong and while no manuscript exists.
-  A partial scan is an unfinished round and **must not be reported as progress**, however much
-  the panels it did cover turned up; and a run with no `PAPER.md` and no `report/paper.html` has
-  not produced its deliverables, whatever else it wrote. The loop prints the distance to the goal
-  as a count on every blocked round, and names every required output that is missing, because
-  both have been abandoned short of the goal while being described as going well.
+- **The eye scan and the written section are the evidence for the report's goal (harness
+  GOALS A5.1); report coverage as N of M.** Stations 1 to 6b run in seconds and go green
+  while a picture can still be wrong, so the loop prints the eye's count on every blocked run.
 - **Move what you can from the eye to a measurement.** The eye is the slowest station and the only
   irreplaceable one. Three of the first eleven defects were mechanical — text over text, a label
   off the canvas, an unkeyed size channel — and are now measured by `emit_figure` on every panel

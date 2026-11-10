@@ -94,9 +94,8 @@ Two ordering rules follow, both paid for:
 - **Mark what must change, and the pen waits on it.** `scprofile review ... --defect` records a
   look that says the panel must change. The audit stage reads those beside the machine's own
   findings; the agenda's write task, `scprofile next` and `paper --claim` refuse a figure with
-  an open finding until it is redrawn or a later look on the same image says otherwise. The
-  order the tool enforces is look at everything, fix what the looks and the audit name, rerun,
-  look at what was redrawn, and only then write (harness ADR-0018).
+  an open finding until it is redrawn or a later look on the same image says otherwise.
+  The pen opens on every plate without an open finding; a flagged plate waits for its fix. (`paper --claim`, harness ADR-0019)
 - **The fix is a worksheet, the rerun is a job, the second look is only what changed.**
   `scprofile review --out <run> --plugin <p> --worksheet` prints every open finding by kind
   with its owner - the host's own panel, the tool's plan entry, or the plugin's own code - and

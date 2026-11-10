@@ -3,7 +3,8 @@
 Stations 2-5 of the loop (landscape, licence, adopt, merge) ask whether reuse reuses. Every first
 run of a new cohort has used no `--reuse-from`, so all four were BLOCKED and the loop exited 1
 until a second, redundant run existed (harness B1-020). On such a run they are now `n/a` and do
-not block; on a run that did reuse anything, they are asked exactly as before.
+not block; on a run that did reuse anything, they are asked exactly as before. And a blocked round
+reports the eye's coverage as a count, not as an instruction about what may be reported (B1-016).
 
 Asked of the real driver, `tests/loop_stations.py`, on run directories built here.
 
@@ -66,6 +67,20 @@ with tempfile.TemporaryDirectory() as t:
     ck("adoption that never happened is BLOCKED, not skipped",
        rc == 1 and any(l.startswith("BLOCKED") and "4 adopt" in l for l in out.splitlines()),
        f"exit {rc}: {out[-400:]}")
+
+    print("\na whole round over a directory of runs, blocked")
+    # THE ROUND REPORTS COVERAGE AS A COUNT (harness B1-016), and a finding that is not a bug is
+    # answered rather than turned into a change (B1-096). The round is blocked here at station 1,
+    # which is when the count is printed.
+    rc, out = loop("--runs", str(fresh.parent))
+    ck("the round is blocked, and says where", rc == 1 and "THE LOOP IS BLOCKED AT" in out,
+       f"exit {rc}")
+    ck("it reports the eye's coverage as N of M", "    eye: 0/0 looked at" in out, out[-600:])
+    ck("and nothing tells the reader what may not be reported as progress",
+       "PROGRESS" not in out.upper(), [l for l in out.splitlines() if "PROGRESS" in l.upper()])
+    ck("a finding that is not a bug is answered or recorded",
+       "answered (review --answer) or recorded" in out
+       and "or it did not happen" not in out, out[-600:])
 
 print("\n" + ("a first run needs no reuse" if not FAIL else f"{len(FAIL)} FAILED: {FAIL}"))
 sys.exit(1 if FAIL else 0)
