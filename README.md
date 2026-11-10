@@ -410,9 +410,10 @@ plugin written outside Python uses.
 Point `$SCPROFILE_KERNELS` at your own directory to add methods without forking. Site methods
 override shipped ones, and `doctor` reports when that happens.
 
-Adding one to **this repository** takes one more step: `scprofile generated --write`. The shipped
-table in `ROADMAP.md` and the panel catalogue in the figures skill are rendered from the code, so a
-new method is added by adding its file and running that — never by editing a document. Panel kinds
+Adding one to **this repository** is adding its file: `scprofile scaffold <name> --new` writes it and
+renders the shipped table in `ROADMAP.md` and the panel catalogue in the figures skill from the code
+(`scprofile generated --write` does the same for a file written another way) — never by editing a
+document. Panel kinds
 work the same way: declare the kind once in `scprofile/panels.py`, including what it cannot show
 and why the host must not draw it if the method owns it, and run the same command.
 

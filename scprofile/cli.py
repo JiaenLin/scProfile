@@ -1770,6 +1770,12 @@ def _scaffold(a):
                 return REFUSE
             f.write_text(render(n), encoding="utf-8")
             print(f"wrote {f}")
+        # AND THE GENERATED BLOCKS FOLLOW THE FILE (harness B1-094). ROADMAP.md's shipped table is
+        # rendered from the declarations, so a new plugin was red until somebody ran `generated
+        # --write` - a second command, and parallel waves collided on the one block it rewrites.
+        # The table renders only what the repository ships, so a plugin written anywhere else
+        # (`--dir` outside the kernel root) leaves it as it was.
+        _generated(argparse.Namespace(write=True))
         print("Next: fill in run(), then `scprofile validate <name>`.")
         return 0
 

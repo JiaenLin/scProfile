@@ -265,10 +265,11 @@ used, the answer was **one** — and only for its numbers; the R script containe
 `png()` or `pdf()` call at all. After the accounting it is **14**, and four of those answer a
 design comparison directly. The gap was never a decision; it was never counted.
 
-**It is a ratchet, and the debt is written in the plugin that owes it.** A wrapper declares
+**The debt is written in the plugin that owes it.** A wrapper declares
 either `native_plots` or `wraps.plots_unreviewed` — an admission, in its own words, that nobody has
 been through its upstream's figures yet. `validate` refuses a wrapper that says neither, so a new
-one cannot arrive silently. The count of outstanding admissions may shrink and never grow.
+one cannot arrive silently. A new wrapper may arrive with an admission: its accounting is work
+to schedule, not a gate on admitting it.
 
 This used to be `native.OWES_ACCOUNTING`, a tuple of eight plugin names in a host module. That is a
 registry of plugins living in the host, which is the one thing the one-file format exists to

@@ -64,8 +64,8 @@ do next. Four rules, each paid for:
   rejects "reimplemented", "not considered" and "dependency missing" by name. A reimplementation
   is legitimate only as `superseded_by_design`, naming the panel that replaces it AND the defect
   in the upstream encoding it corrects. A wrapper that has not done the accounting declares
-  `wraps.plots_unreviewed` saying so, in its own file; `validate` refuses one that says neither,
-  and the number outstanding may shrink, never grow. See `docs/FIGURE_STANDARD.md` §6.
+  `wraps.plots_unreviewed` saying so, in its own file; `validate` refuses one that says neither.
+  See `docs/FIGURE_STANDARD.md` §6.
 - **Fix the mechanism that exists; do not add one beside it.** Every rule in
   `docs/FIGURE_STANDARD.md` names the function that enforces it, and each was a change to
   something already there - the contrast population set, the sentinel mask, the paper writer, the

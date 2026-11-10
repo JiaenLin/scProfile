@@ -238,12 +238,10 @@ points:
     # document, in both directions - a deleted kernel left its row behind and a count word above
     # the table with it.
     #
-    # The table is now RENDERED from the declarations. The row still has to be there, so the
-    # check stays, but the way to satisfy it is a command rather than an edit - which is why the
-    # command is named here as well as in the failure.
-    register:
-      - {file: ROADMAP.md, pattern: "^\\| `{name}` \\|",
-         fix: "python -m scprofile.cli generated --write"}
+    # The table is now RENDERED from the declarations, and the scaffold renders it as it writes a
+    # new plugin (harness B1-094), as the maker's edit verb does after an edit (`after_edit`
+    # below). The check that the table is current stays in tests/test_declaration.py; nothing is
+    # left for a newcomer to register.
     tests: [tests/smoke]
 
     # HOW A RAW TOOL BECOMES ONE OF THESE. Read by `sch dev convert`, which holds no field names
@@ -544,6 +542,10 @@ points:
           after_edit:
             - ["{python}", "-m", "scprofile.cli", "validate", "{name}"]
             - ["{python}", "-m", "scprofile.cli", "scaffold", "{name}", "--force"]
+            # THE GENERATED BLOCKS, REWRITTEN (harness B1-094): an edit of a declaration's
+            # `summary` or `requires` changes its row in ROADMAP.md's shipped table, which was red
+            # until somebody ran this by hand. It rewrites only a block that is not current.
+            - ["{python}", "-m", "scprofile.cli", "generated", "--write"]
             - ["{python}", "tests/test_the_figure_plan_is_the_same_plan.py", "--record"]
             # THE VOCABULARY GUARD, LAST (harness ADR-0026): a cohort word in a legend passed the
             # verb, the validator and the build status; only the portability suite refuses it,
