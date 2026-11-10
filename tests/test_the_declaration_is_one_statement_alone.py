@@ -157,6 +157,8 @@ ATTACKS = [
      SHIPPED + "\nif True:\n    PLUGIN = {**PLUGIN}\n", RECORD, "bound 2 times"),
     ("V-global", "a function rebinding the module's PLUGIN through `global`",
      SHIPPED + "\ndef _again():\n    global PLUGIN\n    PLUGIN = {}\n", RECORD, "bound"),
+    ("V-annotation", "a walrus in a function's annotation, evaluated where the `def` stands",
+     SHIPPED + "\ndef _again(x: (PLUGIN := {})):\n    return x\n", RECORD, "bound 2 times"),
     ("V-augmented", "`PLUGIN |= {...}` after the declaration",
      SHIPPED + '\nPLUGIN |= {"api": 1}\n', RECORD, "bound 2 times"),
     ("V-import", "an import bound to the name", SHIPPED + "\nimport json as PLUGIN\n", RECORD,

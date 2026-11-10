@@ -579,12 +579,18 @@ def _bindings(tree, name=DECLARATION):
             if top and getattr(node, "name", None) == name:
                 kind = "class" if isinstance(node, ast.ClassDef) else "def"
                 out.append((node.lineno, f"a `{kind}`"))
-            # what is evaluated where the definition stands: decorators, defaults, bases
+            # what is evaluated where the definition stands: decorators, defaults, bases, and a
+            # function's annotations (a walrus in one binds in the module)
             here = list(getattr(node, "decorator_list", []))
             if isinstance(node, ast.ClassDef):
                 here += list(node.bases) + [k.value for k in node.keywords]
             else:
-                here += list(node.args.defaults) + [d for d in node.args.kw_defaults if d]
+                a = node.args
+                here += list(a.defaults) + [d for d in a.kw_defaults if d]
+                if not isinstance(node, ast.Lambda):
+                    here += [x.annotation for x in a.posonlyargs + a.args + a.kwonlyargs
+                             + [v for v in (a.vararg, a.kwarg) if v] if x.annotation]
+                    here += [node.returns] if node.returns else []
             for x in here:
                 visit(x, top)
             for x in ast.walk(node):

@@ -192,10 +192,12 @@ rules:
   # not listed here; `held_out` above is what rules on the rest.
   in_place:
     # `.claude` IS THE AGENTIC LAYER and the rule names it in the same breath as the host: the
-    # skills and hooks an agent reads are mechanism exactly as `scprofile/` is.
+    # skills and hooks an agent reads are mechanism exactly as `scprofile/` is. LEAK_SCOPE.txt is
+    # the leak guard's own declaration - what `sch conform` S1 may find here, each with its reason
+    # (autodev W032) - and is mechanism exactly as the guard's suite is.
     paths: [scprofile, tests, docs, setup, jobs, .claude, DEVPOINTS.yaml, ROADMAP.md, README.md,
             DESIGN.md, DEVELOPMENT.md, BUILD_PLAN.md, UPSTREAM.md, KNOWN_ISSUES.md, VERSION,
-            pyproject.toml]
+            pyproject.toml, LEAK_SCOPE.txt]
     means: >
       the host, its suites and its documentation are the mechanism this round exists to improve;
       a change outside them and outside the converted artefact is scope this round did not agree
