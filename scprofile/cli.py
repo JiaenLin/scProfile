@@ -2755,8 +2755,8 @@ def _check(a):
     root = Path(__file__).resolve().parent
     rows = []
 
-    def row(name, ok, detail=""):
-        rows.append((name, bool(ok), detail))
+    def row(name, ok, detail="", warn=False):
+        rows.append((name, bool(ok), detail, bool(warn)))
 
     # --- every module reachable, counting the subprocess launch -------------------------------
     mods = {f.stem: f for f in root.glob("*.py") if not f.stem.startswith("__")}
@@ -2784,45 +2784,27 @@ def _check(a):
     unreached = sorted(set(mods) - seen - {"panels"})
     row("every module reachable from the CLI", not unreached, ", ".join(unreached))
 
-    src = (root / "cli.py").read_text(encoding="utf-8")
-    ent = (root / "_entry.py").read_text(encoding="utf-8")
-    rep = (root / "report.py").read_text(encoding="utf-8")
-    man = (root / "manifest.py").read_text(encoding="utf-8")
-
-    row("group-level inference: the unit axis is resolved from the design",
-        "_UN.resolve(" in src, "run still resolves units as samples")
-    row("group-level inference: a unit carries its members",
-        '"unit_members"' in man and "unit_members=" in src, "in.json has no unit_members")
-    row("the landscape and the adopter cannot disagree",
-        'granter="adopted-on-demand"' in src,
-        "match can approve on the card while adopt requires a licence")
-    row("a reused instance records WHERE IT LIVES, so its figures are found",
-        'pl_["dir"] = str(d.relative_to(out))' in src,
-        "fold_payloads falls back to the plugin dir and the per-unit table is not found")
-    row("a run records what it reused", '"reused": reused,' in src)
-    row("run can ADOPT a licensed earlier result instead of recomputing",
-        '"--reuse-from"' in src and "_LCN.adopt(" in src,
-        "landscape reports reuse but run recomputes everything")
-    row("plan and run resolve the SAME unit axis",
-        src.count("_UN.resolve(") + src.count("_UNP.resolve(") >= 2,
-        "plan schedules a different set of instances than run creates")
-    # THE PATTERN IS ASSEMBLED, NOT WRITTEN. A check that greps its own file for a literal
-    # finds the literal in its own line and reports a defect that is only its own text. Built
-    # from parts, it appears nowhere in the source it scans.
-    _bad_call = "read_design(a." + "design, units"
-    row("the design table is read against SAMPLES, not units",
-        _bad_call not in src,
-        "a group unit label is not a sample and will look like a missing row")
-    row("group-level inference: a plugin subsets by membership",
-        "col.isin(want)" in ent, "_entry subsets by equality on the sample key")
-    row("group-level comparison: between-arm panels are drawn",
-        "_arm_content" in rep and "draw_arm_networks" in rep)
-    row("figures: the reporter reads unit_network", "unit_network" in rep)
-    row("run publishes its own verdict", "_RC.write(out, payload)" in src)
-    row("resume is honoured by run", "_resume.state(" in src)
-    row("the exit standard is run by the writer of the report", "standard" in rep)
-    for c in ("status", "landscape", "licence", "review", "paper", "check", "scaffold"):
-        row(f"command `{c}` is registered", f'add_parser("{c}"' in src)
+    # THE ROWS THAT READ SOURCE TEXT ARE GONE (harness B1-024). Twenty-one rows here passed only
+    # while cli.py, report.py, _entry.py and manifest.py contained an exact string, so a rename
+    # turned `check` red with nothing broken - "A CHECK THAT READS SOURCE PROVES THE CODE IS
+    # PRESENT. It does not prove the code is right" (selfcheck.py). What they named is asked of
+    # the code where it runs: by the suite, by `--deep`'s reuse rows below, and here by the parser.
+    import contextlib as _ctx
+    import io as _io
+    _cmds = ("status", "landscape", "licence", "review", "paper", "check", "scaffold")
+    _deaf = []
+    for _c in _cmds:
+        _buf = _io.StringIO()
+        try:
+            with _ctx.redirect_stdout(_buf), _ctx.redirect_stderr(_buf):
+                main([_c, "--help"])
+        except SystemExit as _e:
+            if _e.code not in (0, None):
+                _deaf.append(_c)
+        else:
+            _deaf.append(_c)
+    row(f"the CLI answers for its commands ({', '.join(_cmds)})", not _deaf,
+        f"no `--help` from: {', '.join(_deaf)}")
     row("panel registry agrees with what is drawn",
         set(_P.IMPLEMENTED) <= set(_P.BY_ID)
         and set(_P.IMPLEMENTED) | set(_P.gaps()) | set(_P.plugin_kinds()) == set(_P.BY_ID),
@@ -2874,15 +2856,14 @@ def _check(a):
             "; ".join(f"{n}: {w}" for n, w in _rec.items()))
 
     # --- the commit gate of THIS CLONE --------------------------------------------------------
-    # A PROPERTY OF THE CHECKOUT, NOT OF THE CODE, and the one row here that a fresh clone is
-    # red on by construction. The guideline's commit rules run as a git pre-commit hook under a
-    # committed hooks path; `core.hooksPath` is per-clone and cannot be committed, so until the
-    # install command has been run once, nothing here fires on `git commit`. Measured: a session
-    # rooted in another repository committed figure code past every rule, because the only
-    # trigger was keyed to the session and not to this repository.
+    # A PROPERTY OF THE CHECKOUT, NOT OF THE CODE, so a WARNING and never red (harness B1-017).
+    # `core.hooksPath` is per-clone and cannot be committed: counted red, this row made `check`
+    # red on every fresh clone, cluster checkout and pip install - a check that fails on correct
+    # code - while it says nothing about the installation the rest of `check` is about. Printed,
+    # with the command, for whoever maintains this clone.
     from . import gate as _G
     _ok, _why = _G.installed(root.parent)
-    row("the commit gate is installed in this clone", _ok, _why)
+    row("the commit gate is installed in this clone", _ok, _why, warn=True)
 
     # --- what a run directory actually produced, if one was named -----------------------------
     if a.out:
@@ -2934,13 +2915,18 @@ def _check(a):
         ok_hl, why_hl = _SC.adoption_is_a_hardlink()
         row("adoption shares the inode rather than copying", ok_hl, why_hl)
 
-    width = max(len(n) for n, _o, _d in rows)
-    red = 0
-    for name, ok, detail in rows:
-        mark = "GREEN" if ok else "RED  "
-        red += 0 if ok else 1
+    width = max(len(r[0]) for r in rows)
+    red = warned = 0
+    for name, ok, detail, warn in rows:
+        if ok:
+            mark = "GREEN"
+        elif warn:
+            mark, warned = "WARN ", warned + 1
+        else:
+            mark, red = "RED  ", red + 1
         print(f"  {mark}  {name:<{width}}" + (f"   {detail}" if detail and not ok else ""))
-    print(f"\n  {len(rows) - red} green, {red} red")
+    print(f"\n  {len(rows) - red - warned} green, {red} red"
+          + (f", {warned} warning(s), not counted red" if warned else ""))
     return 0 if red == 0 else REFUSE
 
 def _licence(a):
