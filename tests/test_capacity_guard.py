@@ -4,7 +4,7 @@ THE SUITES CANNOT CATCH THIS CLASS. Every one of them passes while a run produce
 figures it produced yesterday: they check that the code is well-formed, and capacity is a
 property of the OUTPUT. Both of the worst defects in this stage were exactly that shape - four
 plot functions failing on every unit with no file, no log line and no non-zero exit, and a
-rebuild that dropped 266 comparison figures and printed the same success line. Neither failed a
+rebuild that dropped its comparison figures and printed the same success line. Neither failed a
 test, and neither was noticed at the time.
 """
 import json

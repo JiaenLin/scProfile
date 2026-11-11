@@ -4,7 +4,7 @@ THE TEST SUITE IS NOT A REGRESSION GUARD FOR THIS. Every suite can pass while a 
 half the figures it produced yesterday: the suites check that the code is well-formed, and
 capacity is a property of the OUTPUT. Both of the worst defects in this stage were of that
 shape - four plot functions failing on every unit with no file, no log line and no non-zero
-exit, and a rebuild that dropped 266 comparison figures and printed the same success line.
+exit, and a rebuild that dropped its comparison figures and printed the same success line.
 Neither would have failed a test, and neither did.
 
 So a run records what it delivered, and any later run can be held against it. A DECREASE is

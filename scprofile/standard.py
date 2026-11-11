@@ -477,7 +477,7 @@ def check_page(path, *, exempt=(), recorded=(), kinds=None):
     # THE LABELS A FIGURE IS DRAWN WITH, not the words underneath it. Checking captions alone
     # passed a page whose strongest signal in every population was `A0A079HLR9` - because the
     # accession was on the AXIS and in the source table, and the caption said "mean activity".
-    # 123 of that plugin's 674 regulators are unmapped, and the criterion reported none.
+    # many of that plugin's regulators are unmapped, and the criterion reported none.
     acc = set(ACCESSION.findall(" ".join(caps)))
     acc |= _source_accessions(Path(path))
     acc = sorted(acc)

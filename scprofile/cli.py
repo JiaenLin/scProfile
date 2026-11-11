@@ -4181,7 +4181,7 @@ def _capacity(a):
     it produced yesterday: they check that the code is well-formed, and capacity is a property of
     the OUTPUT. Both of the worst defects in this stage were exactly that shape - four plot
     functions failing on every unit with no file and no non-zero exit, and a rebuild that dropped
-    266 comparison figures and printed the same success line. Neither failed a test.
+    its comparison figures and printed the same success line. Neither failed a test.
     """
     from . import capacity as _C
 

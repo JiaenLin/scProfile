@@ -44,7 +44,7 @@ Both of the worst defects in this stage were exactly that shape:
 
 - Four plot functions failed on every unit of a whole run — **no file, no log line, no non-zero
   exit**. Found by counting figure kinds against the declaration, days later.
-- A rebuild dropped **266 comparison figures**, recorded nothing in their place, and printed the
+- A rebuild dropped **its comparison figures**, recorded nothing in their place, and printed the
   same success line.
 
 Neither failed a test. Neither would.
