@@ -438,8 +438,9 @@ ARM_LEVEL_CAP = 12
 ARM_MIN_CELLS = 20
 
 
-#: How many columns of a wide array to summarise per arm. A 674-column activity matrix has no
-#: useful "the" column; the ones that DIFFER between arms are the ones a reader wants.
+#: How many columns of a wide array to summarise per arm. An activity matrix with a column per
+#: regulator, hundreds of them, has no useful "the" column; the ones that DIFFER between arms are
+#: the ones a reader wants.
 OBSM_TOP = 2
 
 
@@ -559,8 +560,9 @@ def by_arm(adata, columns, design, sample_key, factors, *, cap=ARM_LEVEL_CAP, ob
         # over CELLS: a per-arm median with n in the tens of thousands. That is
         # pseudoreplication - the unit of replication is the sample, and treating cells as
         # independent replicates is the single most-documented error in this field (Squair et
-        # al., Nat Commun 2021; Zimmerman et al., Nat Commun 2021). A reader shown `n = 54,093
-        # vs 44,534` reads overwhelming evidence from a handful of biological replicates.
+        # al., Nat Commun 2021; Zimmerman et al., Nat Commun 2021). A reader shown an `n` in the
+        # tens of thousands per arm reads overwhelming evidence from a handful of biological
+        # replicates.
         #
         # Computed here because this is the only place holding the column, the sample key and
         # the design at once, and it costs one groupby. The cell-level summary is KEPT beside

@@ -8,8 +8,8 @@ because a real report failed without it, and the failure is named beside the rul
 **A plugin knows its method. The host knows the cohort. Anything a plugin cannot see from inside
 one method belongs to the host, and anything the host would have to guess belongs to the plugin.**
 
-Every fix that stuck this cycle moved work in that direction. The report that started with 191
-figures, 51 of them distinct and 140 of them the same fifteen plots redrawn per sample, had no
+Every fix that stuck this cycle moved work in that direction. The report that started with most
+of its figures the same few plots redrawn once per sample had no
 cohort overview, no comparison between design arms anywhere, and two headlines its own figures
 refuted. The host owns these so that every plugin gets them without implementing them.
 
@@ -21,9 +21,9 @@ A plugin declares these; the host holds it to every one of them.
 |---|---|
 | `inject.required` | The SINGLE statement of what it must be given. Stating the same requirement twice - once as `inject`, once as a `needs_*` flag - drifted, and six decisions read the flag nobody set: no plugin ever refused, no contrast was ever planned, and the wave graph had no edges. |
 | `provides` | The capability it offers. A plugin naming a PEER hard-codes one site's toolbox; naming a capability lets the host resolve the producer. Two plugins wrote the thing another asked for by name and declared `provides: []`, so the request could never be satisfied. |
-| `produces` | Every slot it writes, INCLUDING the column names of any array. A 674-column matrix reaches the object as a bare ndarray, and the host can split it by design arm and can only call the result `X_tf_activity[3]`, which is not a regulator. |
+| `produces` | Every slot it writes, INCLUDING the column names of any array. A matrix with hundreds of columns reaches the object as a bare ndarray, and the host can split it by design arm and can only call the result `X_tf_activity[3]`, which is not a regulator. |
 | `report.figures` | Per panel: `id`, `shows`, the QUESTION it answers, its `source`, and whether it is `required`. Without a declaration an absent panel and a panel nobody wanted look identical. |
-| `report.unit_metrics` | If it runs per unit: at least one comparable scalar. Without it a per-unit plugin delivers N single-sample reports stapled together, and whether the units agree is answered nowhere. One plugin's count ran 8,194 to 38,895 across the units of a single tissue. |
+| `report.unit_metrics` | If it runs per unit: at least one comparable scalar. Without it a per-unit plugin delivers N single-sample reports stapled together, and whether the units agree is answered nowhere. One plugin's count varied several-fold across the units of a single tissue. |
 | `cannot_show` | Its limits, written before the run. A result whose limits were never written down reads exactly as authoritative as one whose limits were thought about. |
 | caveats, claim-first | The leading sentence carries the claim; the host shows that and collapses the rest. A caveat nobody reaches the end of was not read. |
 | `ctx.contradiction(...)` | When its OWN diagnostic refutes its OWN headline. Two pages carried a headline the evidence below it disproved - honestly plotted, and never met by a reader who takes the headline. It is a payload field of its OWN (contract 1.4), not one sentence among ten in `caveats`: a refutation nothing downstream can distinguish from a qualification cannot be shown where the claim is, and its absence cannot be noticed by anything. |

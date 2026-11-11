@@ -168,7 +168,7 @@ This ordering is the most transferable thing here. Look for these FIRST next tim
   **ONE INSTANCE.** Four fixers worked in parallel on one figure directory. Their reports were
   accurate and their code changes were all correct and all landed. But a checker opening the file
   one of them had signed off as final found text struck through by a key arrow and a declaration
-  reading "3.13 to 3.13 is 1.0x in value and 1.0x in width" - a degenerate case a SIBLING agent had
+  reading "<v> to <v> is 1.0x in value and 1.0x in width", one value at both ends - a degenerate case a SIBLING agent had
   already hardened the shared helper against, forty-one minutes after that PNG was written. Two
   agents also reported the same file at different byte sizes because a third rewrote it between
   their reads, and one cited two paths as "before" that were byte-identical to the "after".

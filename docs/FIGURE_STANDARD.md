@@ -117,7 +117,7 @@ extreme of a colour scale, an empty bar beside a full one, an arrow from the ori
 sets the limits and compresses every real difference. Mark those elements, take them **off** the
 magnitude scale, and name them. Do not drop them — a dropped row is invisible.
 
-*Measured: with those elements off the scale, a colour range fell from ±150 to ±50 and a
+*Measured: with those elements off the scale, a colour range shrank several-fold and a
 pair-specific pattern appeared that had read as a uniform shift.*
 
 ### R9 — A contrast states what it cannot separate
@@ -206,7 +206,7 @@ it. What is removed is returned BY NAME with the arm that lacked it, and the cap
 
 This replaced masking in the plot. The union was drawn first with absent rows and columns hatched
 — honest, and still wrong: on a real cohort it put two full rows and two full columns of hatch
-through the middle of a 13×13 matrix, 48 of its 169 tiles, breaking every real block in half. Removal
+through the middle of the matrix, breaking every real block in half. Removal
 belongs at source; the *fact* of removal belongs in the caption. Locked by
 `tests/test_contrast_populations.py`, which also asserts no `hatch=` survives in the contrast code.
 

@@ -599,8 +599,8 @@ def written_width_mm(path, dpi=None):
     canvas rather than fitting it in. Reporting `figsize` after such a save is a check that
     cannot fail: it restates the input as though it were the outcome.
 
-    Measured on real panels, a declared 174.00 mm double column wrote at 175.01 mm and every log
-    line said the two agreed, because the number in the log came from the figure object.
+    Measured on real panels, a declared double column wrote about a millimetre wider and every
+    log line said the two agreed, because the number in the log came from the figure object.
     """
     import struct
 
@@ -1153,7 +1153,7 @@ def audit_findings(fig):
     # is clipped by an artist's own clip box - which is what truncated a title and a label.
     # FIGURE-LEVEL TEXT IS OUTSIDE THE CANVAS ON PURPOSE (the provenance stamp), and a
     # decoration lives in the margin on purpose; the first version reported every correctly
-    # stamped panel as clipped, on all 223 of a real run.
+    # stamped panel of a real run as clipped.
     fw, fh = fig.canvas.get_width_height()
     for t, b, r in texts:
         if r["kind"] in _DECOR or r["kind"] in ("figtext", "stamp") or not t.get_clip_on():

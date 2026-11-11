@@ -75,8 +75,8 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 ```
 
 **Figures are NOT collected into a top-level directory, and tables are.** This listing said
-`tables/  figures/` until 2026-08-29 and a reader would have gone looking; on a real ten-sample
-run all 181 figures were under `kernels/<plugin>/`, where they are written. The asymmetry is
+`tables/  figures/` until 2026-08-29 and a reader would have gone looking; on a real
+run every figure was under `kernels/<plugin>/`, where it is written. The asymmetry is
 deliberate: a licence covers an instance's products and hashes them where they were produced, an
 adopted instance is hardlinked back into the same place, and a second copy of a figure elsewhere
 is a second thing to keep in step. The report reaches every one of them by relative path.

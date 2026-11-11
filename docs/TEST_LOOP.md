@@ -164,8 +164,8 @@ figures is a few dozen *kinds* repeated over units, and a drawing defect lives i
 
 That is one stated set, `review.scan_set`, and every reader counts it: station 7, the agenda's
 look task, and `scprofile review --plugin <p> --shards N`, which prints it whole and split for
-several agents (`--all-figures` is the audit of everything drawn). On the 2×2 cohort it is 139
-of 945 figures. It replaced two sets and two definitions of a kind (harness ADR-0017), under
+several agents (`--all-figures` is the audit of everything drawn). On a real cohort it is a
+small fraction of the figures drawn. It replaced two sets and two definitions of a kind (harness ADR-0017), under
 which an agent that did exactly what one command said was told by the next that nothing was
 done. A scan that covers three quarters of the kinds is a scan that says so.
 
@@ -227,7 +227,7 @@ Station 6b reads what a machine can see in the panels. It was written to clear w
 run is clean, which is wrong, and the loop found out how:
 
 > The same commit drew the same panels from the same data twice. One run reported five text
-> collisions across two panel kinds; the next reported none, on 140 panels. Neither run adopted
+> collisions across two panel kinds; the next reported none, on the same panels. Neither run adopted
 > anything — both drew afresh, from identical inputs. So the placement is not deterministic
 > across runs, and which of the two a station happens to read decides whether it passes.
 

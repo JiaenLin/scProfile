@@ -96,8 +96,8 @@ being printed over eight required keys no stage mentioned.
 F2_population_power 14, F10_pathway_similarity 9, F9_patterns 1, F6_signaling_roles 1. Stations 7
 (eye, 0 of 149), 8 (paper) and 9 (required outputs) are blocked behind it.
 
-PRE-EXISTING AND MEASURED AS SUCH: three earlier runs carry the identical 43 audits and
-180 audit keys, so the round that moved cellchat's drawing protocol into a generated companion
+PRE-EXISTING AND MEASURED AS SUCH: three earlier runs carry the identical audits and
+audit keys, so the round that moved cellchat's drawing protocol into a generated companion
 neither caused these nor cleared them. They are mechanical defects `emit_figure` records on every
 panel of every run and they need no eye to fix.
 
@@ -108,7 +108,7 @@ invocation goes through the scheduler, and no job existed that did both.
 ## The composed section routes a total-strength sentence to the count figure (closed 2026-09-13, harness ADR-0020 step 3)
 
 Found by the reviewer of harness blind 0006 (2026-09-13). The composed `PAPER.<plugin>.md`
-attributes the range of total interaction STRENGTH ratios ("1.02-fold to 3.22-fold") to Fig. 1,
+attributes the range of total interaction STRENGTH ratios to Fig. 1,
 which the paper's numbering gives to `nativecmp_compareInteractions_count` - a different
 quantity - while the strength figure is Fig. 2. The route for the `how_much_total` need
 (`figs_for(label, ("how_much_total", ...))` in `compose.py`) takes the first figure declared to

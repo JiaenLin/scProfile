@@ -195,7 +195,7 @@ by opening the image while the suite was green.** An encoding that contradicted 
 ranking that hid the thing the panel existed to show. Labels driven off the axes by a fix for
 labels. A table shows none of these, and nothing fails.
 
-*Cost: 672 figures in one run, two of them ever opened, and a manuscript written from the tables
+*Cost: hundreds of figures in one run, almost none of them ever opened, and a manuscript written from the tables
 beneath them. The writing was fluent and described panels nobody had seen.*
 
 **You are the agent that runs this tool.** `docs/AGENT_CONTRACT.md` says which half of the work

@@ -491,8 +491,8 @@ def memory_drift(kernel, payload, concurrent=1):
     moment is distinguishable from a healthy run, and the log ends without an exception,
     because SIGKILL leaves no traceback to diagnose.
 
-    Measured: an instance reported a 14.4 GB peak, its declaration was sized from that, and the
-    scheduler billed the job 42.7 GB - a 3.0x under-report, and a dead run at a 48 GB request.
+    Measured on a real run: an instance reported a peak a fraction of what the scheduler billed
+    the job, its declaration was sized from that under-report, and the run died at its request.
 
     SO IT TAKES THE LARGER OF THE MEASUREMENTS AND SAYS WHICH IT TOOK. A process cannot measure
     its own peak reliably: `RUSAGE_SELF` excludes children entirely, `RUSAGE_CHILDREN` returns
@@ -515,10 +515,10 @@ def memory_drift(kernel, payload, concurrent=1):
     # A JOB-WIDE COUNTER IS NOT THIS INSTANCE'S COST, AND MUST NOT BE READ AS ONE.
     # `peak_measurement` says so in its own docstring - the cgroup figure "over-attributes when
     # several instances share one job" - and this function went on telling the maintainer to
-    # raise a declaration to it anyway. Measured: ten cellchat instances in one job each
-    # reported 45.0 GB, identical, over inputs of about 7 to 12 thousand cells, fitted as
-    # "45.0 GB fixed + 0.0 GB/100k". A figure that does not move with the input is not a
-    # measurement of the input, and ten identical readings are ONE reading taken ten times.
+    # raise a declaration to it anyway. Measured: every cellchat instance in one job reported
+    # the same figure, identical over inputs of different sizes, and the fit read it as a fixed
+    # cost with a zero per-cell rate. A figure that does not move with the input is not a
+    # measurement of the input, and N identical readings are ONE reading taken N times.
     #
     # So when the job held more than one instance, this reports the observation and NAMES the
     # per-instance bound it implies, and does NOT raise a declaration defect. The declaration

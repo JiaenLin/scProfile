@@ -26,7 +26,7 @@ must say truthfully who drew it.
 
 THE HOST OWNS THE FORMAT AND MUST THEREFORE OWN A WRITER FOR IT - both languages.
 
-MEASURED ON A SEALED RUN: 711 panels, 69 with a written legend and 642 with none. The reason was
+MEASURED ON A SEALED RUN: most panels carried no written legend at all. The reason was
 structural rather than careless. This module had FOUR read sites in the host and not one writer in
 production: `write` below was dead code, and the only thing in the whole repository that produced
 a `captions.tsv` was R embedded inside ONE plugin, which had copied the format into three separate

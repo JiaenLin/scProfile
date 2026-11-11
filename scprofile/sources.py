@@ -311,8 +311,8 @@ def attach(A, sources, *, sample_key=None, min_match=MIN_MATCH, log=print,
     n, g = A.n_obs, A.n_vars
     # COO PIECES, ASSEMBLED ONCE. This built a `lil_matrix((n_obs, n_vars))` per layer and
     # assigned each source into it with `D[np.ix_(dst_rows, dst_cols)] = M[...]`. That is correct
-    # and it does not survive a real object: a LIL is a Python list per row, so a hundred thousand
-    # cells by thirty-four thousand genes at ~150 million nonzeros per layer is tens of GB of
+    # and it does not survive a real object: a LIL is a Python list per row, so a cohort-sized
+    # object, a hundred million nonzeros or more per layer, is tens of GB of
     # interpreter objects, filled one source at a time through scipy's Python-level fancy-index
     # assignment, and then converted. Nothing had ever run it - velocity refused for want of
     # counts in every previous cycle - so the cost was unmeasured rather than accepted.

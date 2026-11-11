@@ -314,12 +314,14 @@ def tasks(run, plugin, spec=None, how=None):
     # `review.shards` has said so in its own docstring since it was written - "the brief's list
     # holds the ones the PAPER is written from, which is a smaller set and the one the writing
     # step actually blocks on" - and this function then gated on the whole outstanding set. On
-    # this cohort that is 1019 figures against 90: writing 24 claims required opening every
-    # chord diagram of every pathway of every contrast, 50 of the 81 kinds of which no sentence
-    # the composer writes ever cites. A gate nobody can pass is a gate that gets stepped around.
+    # a real cohort the whole set was many times the paper's: writing a handful of claims
+    # required opening every chord diagram of every pathway of every contrast, most of them of
+    # kinds no sentence the composer writes ever cites. A gate nobody can pass is a gate that
+    # gets stepped around.
     #
-    # THE FULL SET IS STILL REPORTED, in the step's own title, because "90 outstanding" on a run
-    # holding 1187 figures would read as a run whose figures had almost all been looked at.
+    # THE FULL SET IS STILL REPORTED, in the step's own title, because a small "outstanding"
+    # count on a run holding many times as many figures would read as a run whose figures had
+    # almost all been looked at.
     # THE ONE SELECTION (harness ADR-0017): the set station 7 counts and `review --shards`
     # splits - the paper's figures plus one instance of every kind the paper does not show. An
     # empty set is not an empty gate: before the brief has written the paper's list the set is

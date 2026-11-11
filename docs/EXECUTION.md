@@ -61,8 +61,8 @@ peak_gb  ≈  memory_gb_base  +  memory_gb_per_100k × n_cells / 100_000
 ```
 
 The interpreter, the imports and the object are paid **once**, whatever `n` is; only the working
-matrices scale. Modelling memory as a pure rate makes a 15 GB measurement on a 10,000-cell
-instance read as 150 GB per 100k, which over-predicts small instances by an order of magnitude and
+matrices scale. Modelling memory as a pure rate makes, for instance, a 10 GB measurement on a 5,000-cell
+instance read as 200 GB per 100k, which over-predicts small instances by an order of magnitude and
 can under-predict large ones — and under-predicting is the one that kills a job.
 
 **Measure both terms; do not estimate them.** Every run reports each instance's peak RSS and cell

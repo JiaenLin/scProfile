@@ -1011,7 +1011,7 @@ class Context(FigureContextReader):
         COLUMNS.
 
         AN ARRAY CARRIES NO COLUMN NAMES EITHER, and that gap costs the same thing one step
-        later. A 674-column activity matrix reaches the merged object as a bare ndarray, so the
+        later. A wide activity matrix reaches the merged object as a bare ndarray, so the
         host can split it by design arm and can only call the results `X_tf_activity[3]` - which
         is not a regulator, and not a figure anybody can read. The plugin is the party that
         knows the names, right here, exactly as the host was the party that knew the barcodes.
@@ -1257,7 +1257,7 @@ class Context(FigureContextReader):
         #
         # `bbox_inches="tight"` on the line below is what makes this necessary - it ADDS
         # everything outside the axes to the canvas rather than fitting it in, so a panel that
-        # asked for the 85 mm single column saved at 98 to 213 mm. Nothing errors; the
+        # asked for the 85 mm single column saved far wider than that. Nothing errors; the
         # typesetter scales the file down to the column and takes every font with it.
         try:
             from . import figure as _F
