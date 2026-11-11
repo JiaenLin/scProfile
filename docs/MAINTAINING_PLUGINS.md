@@ -126,13 +126,33 @@ through the maker (harness autodev W035): `scprofile prose <plugin> --replace OL
 admitted only when the code is unchanged - Python's tokens with comments and docstrings set
 aside, each embedded R script compared by its code with its comments set aside (strings,
 backtick names, raw strings and `__SPLICE__` markers are code) - and refused, naming the line,
-otherwise. It is made on a committed file and recorded in `kernels/<plugin>.design.json` like a
-design answer, as `kind: prose`. The record keeps only the lines the edit wrote and names every
-other line by its digest, so a leak taken out of a plugin does not move into its record. The
-record check reads the file before back from git. Then the `plan.after_edit` followers run, the
+otherwise. The rule is asked of the file as it will be written, its version raised, and
+`--as-version` (here and on `design --answer`) is a version, N.N.N, or refused: a value spliced
+between the declaration's quotes is code otherwise. Once written, the record check runs, and a
+failure puts plugin and record back. It is made on a committed file and recorded in
+`kernels/<plugin>.design.json` like a design answer, as `kind: prose`.
+
+**What a record keeps.** Only the lines an answer wrote; every other line is named by its digest,
+and no answer keeps a copy of the declaration. The record check reads each answer's file before
+back from git at the commit it was made on (`made_on`), applies the diff, checks both digests and
+admits the change again by its rule; the shipped file, and each answer's file before, must meet
+the answer before it outside the declaration, which is `sch dev edit`'s to change at any point.
+So a leak taken out of a plugin, by `prose`, `design --answer` or `sch dev edit`, does not move
+into or stay in its record. The maker drops the declaration copy an older record kept whenever it
+writes that record. Two answers predate this: de's, made in W013 on files that were never
+committed, so they keep their full diffs and the declaration they left; they carry no cohort or
+site string. A design answer too is made on a committed file now. Then the `plan.after_edit`
+followers run, the
 same list `sch dev edit` runs (`--no-follow` prints them instead). The record needs an anchor in
 DEVPOINTS (`rules.held_out.spent` for a spent plugin, `rules.end_to_end.anchor` for cellchat), so
 a held-out plugin is refused until its own migration.
+
+**A value measured on a sample is the sample's.** A sentence in a plugin, string or comment, that
+says what was measured on (or observed in) a sample, cohort, dataset, donor or animal and carries
+a number is that sample's data, which no tool carries and no generated term list holds: a list
+holds names and levels, not values a run computed. `scprofile validate` - every verb's first
+follower - refuses one in a plugin DEVPOINTS anchors, and reports one in a held-out plugin, which
+changes only in its own migration. Say what the run measures and where it shows it.
 
 Three declarations a plugin owes the maker's readings: `produces` in the grammar its readers
 read (a table by name, `slot[name]`, a trailing `?` for an optional output); `cache` naming the

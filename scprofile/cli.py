@@ -4587,7 +4587,8 @@ def main(argv=None):
                          "digest of its syntax, with --why")
     dz.add_argument("--why", default="", help="the answer's or the confirmation's reason")
     dz.add_argument("--as-version", default=None,
-                    help="with --answer: the version the author states, instead of the minor bump")
+                    help="with --answer: the version the author states (N.N.N, or refused), instead of "
+                         "the minor bump")
     dz.add_argument("--replay-into", metavar="FILE", default=None,
                     help="apply every recorded answer, in order, to FILE - a copy of the plugin "
                          "rebuilt from its base by the maker's verb calls")
@@ -4601,7 +4602,8 @@ def main(argv=None):
                          "applied in order and recorded as one edit)")
     pz.add_argument("--why", default="", help="the edit's reason, recorded with it")
     pz.add_argument("--as-version", default=None,
-                    help="the version the author states, instead of the maker's minor bump")
+                    help="the version the author states (N.N.N, or refused), instead of the "
+                         "maker's minor bump")
     pz.add_argument("--dry", action="store_true", help="print the diff, write nothing")
     pz.add_argument("--no-follow", action="store_true",
                     help="print the declared followers (`plan.after_edit`) as the next step "

@@ -60,6 +60,56 @@ def _src(p):
                      if not l.strip().startswith("#"))
 
 
+#: A SENTENCE THAT SAYS WHAT WAS MEASURED ON A SAMPLE OR A COHORT, AND CARRIES A NUMBER (W035 fix
+#: round 1). By its own words the number is that sample's: cohort data, which never enters a tool
+#: (RULES tier II), and which no generated term list holds - a list holds names and levels, not
+#: the values a run computed from them. cellchat's caveat quoted two such shares, and its maker
+#: record copied them. A run measures its own; a plugin says where that measurement is shown.
+_MEASURED_ON = re.compile(r"(?i)\b(?:measured|observed)\b[^.;:]*?\b(?:on|in|from|across)\b[^.;:]*?"
+                          r"\b(?:samples?|cohorts?|datasets?|donors?|patients?|animals?|mice"
+                          r"|organoids?)\b")
+_A_NUMBER = re.compile(r"\d+(?:\.\d+)?\s*%|\b\d+(?:\.\d+)?\s*[x×](?![A-Za-z])"
+                       r"|\b\d{1,3}(?:,\d{3})+\b|\b\d+\.\d+\b")
+
+
+def sample_values(src):
+    """[(line, sentence)] - each sentence of a plugin's strings and comments that says what was
+    measured on a sample or a cohort and carries a number. Never raises: a file that does not
+    parse has its comments read and nothing else."""
+    import ast
+    import io
+    import tokenize
+    texts = []
+    try:
+        for node in ast.walk(ast.parse(src)):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                texts.append((node.lineno, node.value))
+    except (SyntaxError, ValueError):
+        pass
+    try:
+        block, start, prev = [], None, None
+        for t in tokenize.generate_tokens(io.StringIO(src).readline):
+            if t.type != tokenize.COMMENT:
+                continue
+            if prev is not None and t.start[0] == prev + 1:
+                block.append(t.string.lstrip("#").strip())
+            else:
+                if block:
+                    texts.append((start, " ".join(block)))
+                block, start = [t.string.lstrip("#").strip()], t.start[0]
+            prev = t.start[0]
+        if block:
+            texts.append((start, " ".join(block)))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        pass
+    out = []
+    for line, text in texts:
+        for s in re.split(r"(?<=[.!?])\s+", " ".join(str(text).split())):
+            if _MEASURED_ON.search(s) and _A_NUMBER.search(s):
+                out.append((line, s))
+    return out
+
+
 def validate_plugin(kernel):
     """Static checks on one plugin. Returns [Finding]."""
     f, d, spec = [], Path(kernel.path), kernel.spec
@@ -104,6 +154,17 @@ def validate_plugin(kernel):
                     "dropped): `len(...)` then returns the cell count and `if dropped:` asks the "
                     "truth value of an array. Use `p = ctx.populations()` and `p.names` / "
                     "`p.dropped`, or name the two `mask, groups`"))
+        # A VALUE MEASURED ON A SAMPLE IS THE SAMPLE'S (W035 fix round 1): refused where the maker
+        # owns the plugin - DEVPOINTS anchors its record, so its every edit goes through a verb
+        # whose first follower is this - and reported on a plugin still held out, which is the
+        # maker's test material and changes only in its own migration.
+        owned = _spent_commit(d.parent.parent, kernel.name) is not None
+        for line, s in sample_values(src):
+            f.append(Finding(
+                "ERROR" if owned else "WARN", f"states a value measured on a sample (line {line})",
+                f"\"{s[:160]}\" - by its own words the number is a sample's, which no tool carries "
+                f"and no generated term list holds. Say what the run measures and where it shows "
+                f"it, without that sample's numbers"))
         if "def selftest(" not in src:
             f.append(Finding("WARN", "no selftest(ctx) in the file",
                              "the builder runs it on every new machine to prove the call is "
@@ -445,7 +506,14 @@ def _read_record(kernel):
 
 
 def _write_record(kernel, rec):
+    """Write the record. A RECORD KEEPS NO COPY OF A DECLARATION IT CAN READ BACK (W035 fix round
+    1): an answer made on a committed file (`made_on`) is rebuilt from git by the record check, so
+    the copy of the declaration it left is dropped whenever the maker writes the record - a copy
+    kept what a later edit took out of the plugin, a cohort's value included."""
     import json
+    for a in rec.get("answers") or []:
+        if isinstance(a, dict) and a.get("made_on"):
+            a.pop("after_declaration", None)
     design_record_path(kernel).write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n",
                                           encoding="utf-8")
 
@@ -1031,9 +1099,14 @@ def design_record_check(kernel, root=None):
     THE RECORD VERIFIES ITSELF WHEREVER IT IS READ (W013's verifier, fix-ups 4 and 5), from the
     repository alone:
       1. the declaration is a pure literal - `ast.literal_eval` - so no run-time code hides in it;
-      2. the shipped file, its declaration set back to the last answer's, is the file the last
-         answer made; every recorded diff is then undone, last first, each landing exactly on the
-         file it was made against, and admitted again, forward, at the sites it records;
+      2. the shipped file is, outside its declaration, the file the last answer made, and each
+         answer's file before is, outside its declaration, the file the answer before it made.
+         An answer made on a committed file (`made_on`: every prose answer, and every answer since
+         W035's fix round 1) is rebuilt from git - its file before read back at that commit, its
+         diff (the lines it wrote, the rest by digest) applied, both digests checked - so the
+         record holds no line the plugin no longer carries and no copy of the declaration. An
+         older answer is undone from the next file, its recorded declaration set back first. Each
+         is admitted again by its rule: the prose rule, or at the sites it records;
       3. THE CHAIN'S END IS ANCHORED: the first answer's `before` - or, with no answer yet, the
          shipped file - is, outside its declaration, the plugin at the commit its blind record was
          taken at, as DEVPOINTS `rules.held_out.spent` declares it and git keeps it. A record
@@ -1083,68 +1156,94 @@ def _design_record_check(kernel, root):
         return False, (f"a record with no anchor: DEVPOINTS `rules.held_out.spent` names no "
                        f"blind-record commit for {kernel.name}")
     cur = shipped
-    if answers:
-        last = answers[-1]
-        if _sha(cur) != last.get("after") and last.get("after_declaration"):
-            why = _lone_declaration(last["after_declaration"])
-            if why:
-                return False, (f"answer {last.get('n')}'s recorded declaration is not one "
-                               f"declaration alone: {why}")
-            cur = _swap_declaration(shipped, last["after_declaration"])
-        if _sha(cur) != last.get("after"):
-            return False, (f"kernels/{path.name} is not the file its last recorded answer "
-                           f"({last.get('n')}) made, outside its declaration: changed since by "
-                           f"hand, or by an answer the worksheet did not record")
-        for ans in reversed(answers):
-            if _sha(cur) != ans.get("after"):
-                return False, f"answer {ans.get('n')} did not make the file the next answer met"
-            why = _declaration_literal(cur)
-            if why:
-                return False, f"the file answer {ans.get('n')} made: {why}"
-            if ans.get("kind") == "prose":
-                # A PROSE ANSWER CARRIES NO TEXT THE PLUGIN NO LONGER CARRIES (W035): its file
-                # before is read back from git at the commit it was made on, its recorded diff
-                # must turn that file into this one, and the prose rule admits the change again.
-                prev, how = _git_show(root, str(ans.get("made_on") or ""), f"kernels/{path.name}")
-                if prev is None:
-                    return False, (f"answer {ans.get('n')} (prose): the file it was made on "
-                                   f"cannot be read ({how})")
-                if _sha(prev) != ans.get("before"):
-                    return False, (f"answer {ans.get('n')} (prose): the file at its commit is not "
-                                   f"the file it records it was made on")
-                try:
-                    redo = _apply_unified(prev, str(ans.get("diff") or ""))
-                except ValueError as e:
-                    return False, f"answer {ans.get('n')} (prose): its diff does not apply ({e})"
-                if redo != cur:
-                    return False, (f"answer {ans.get('n')} (prose): its diff does not make the "
-                                   f"file the record says it made")
-                why = "; ".join(prose_refusals(prev, cur)) or (
-                    "it changes nothing" if prev == cur else "")
-                if why:
-                    return False, f"answer {ans.get('n')} is not admissible as prose: {why}"
-                cur = prev
-                continue
-            try:
-                prev = _apply_unified(cur, _reverse_diff(str(ans.get("diff") or "")))
-            except ValueError as e:
-                return False, f"answer {ans.get('n')} does not undo from the shipped file: {e}"
+    for i, ans in enumerate(reversed(answers)):
+        # THE NEXT FILE - the shipped one, or the file the next answer was made on - meets this
+        # answer OUTSIDE ITS DECLARATION: the declaration is the maker's verb's to change at any
+        # point, after the last answer or between two (W035 fix round 1; `sch dev edit` between
+        # two answers broke the chain before).
+        missed = ((f"kernels/{path.name} is not the file its last recorded answer "
+                   f"({ans.get('n')}) made, outside its declaration: changed since by hand, or by "
+                   f"an answer the worksheet did not record") if i == 0 else
+                  f"answer {ans.get('n')} did not make the file the next answer met")
+        if ans.get("made_on") or ans.get("kind") == "prose":
+            # AN ANSWER MADE ON A COMMITTED FILE IS REBUILT FROM GIT (W035; every answer since its
+            # fix round 1): its file before is read back at the commit it was made on, its diff -
+            # the lines it wrote, every other line by its digest - turns that into the file it
+            # made, both digests hold, and its rule admits the change again. So the record keeps no
+            # text the plugin no longer carries, and no copy of the declaration.
+            what = "prose" if ans.get("kind") == "prose" else "design"
+            prev, how = _git_show(root, str(ans.get("made_on") or ""), f"kernels/{path.name}")
+            if prev is None:
+                return False, (f"answer {ans.get('n')} ({what}): the file it was made on cannot "
+                               f"be read ({how})")
             if _sha(prev) != ans.get("before"):
-                return False, (f"answer {ans.get('n')} undone is not the file it records it was "
-                               f"made on")
+                return False, (f"answer {ans.get('n')} ({what}): the file at its commit is not the "
+                               f"file it records it was made on")
             why = _declaration_literal(prev)
             if why:
                 return False, f"the file answer {ans.get('n')} was made on: {why}"
             try:
-                _ops, sites, refusals, _n = _admit(prev, cur)
-            except SyntaxError as e:
-                return False, f"answer {ans.get('n')}: a file in the record does not parse ({e})"
-            if refusals or not sites or sites != sorted(ans.get("sites") or []):
-                return False, (f"answer {ans.get('n')} is not admissible as recorded: "
-                               + ("; ".join(refusals) if refusals else
-                                  f"it touches {sites or 'no site'}, the record says "
-                                  f"{ans.get('sites')}"))
+                made = _apply_unified(prev, str(ans.get("diff") or ""))
+            except ValueError as e:
+                return False, f"answer {ans.get('n')} ({what}): its diff does not apply ({e})"
+            if _sha(made) != ans.get("after"):
+                return False, (f"answer {ans.get('n')} ({what}): its diff does not make the file "
+                               f"the record says it made")
+            why = _declaration_literal(made)
+            if why:
+                return False, f"the file answer {ans.get('n')} made: {why}"
+            if _outside_declaration(made) != _outside_declaration(cur):
+                return False, missed
+            if what == "prose":
+                why = "; ".join(prose_refusals(prev, made)) or (
+                    "it changes nothing" if prev == made else "")
+                if why:
+                    return False, f"answer {ans.get('n')} is not admissible as prose: {why}"
+            else:
+                try:
+                    _ops, sites, refusals, _n = _admit(prev, made)
+                except SyntaxError as e:
+                    return False, f"answer {ans.get('n')}: a file in the record does not parse ({e})"
+                if refusals or not sites or sites != sorted(ans.get("sites") or []):
+                    return False, (f"answer {ans.get('n')} is not admissible as recorded: "
+                                   + ("; ".join(refusals) if refusals else
+                                      f"it touches {sites or 'no site'}, the record says "
+                                      f"{ans.get('sites')}"))
             cur = prev
+            continue
+        # AN ANSWER RECORDED BEFORE W035's FIX ROUND 1 (de's two, made on files never committed):
+        # its diff carries its lines, and the declaration it left is set back into the next file.
+        if _sha(cur) != ans.get("after") and ans.get("after_declaration"):
+            why = _lone_declaration(ans["after_declaration"])
+            if why:
+                return False, (f"answer {ans.get('n')}'s recorded declaration is not one "
+                               f"declaration alone: {why}")
+            cur = _swap_declaration(cur, ans["after_declaration"])
+        if _sha(cur) != ans.get("after"):
+            return False, missed
+        why = _declaration_literal(cur)
+        if why:
+            return False, f"the file answer {ans.get('n')} made: {why}"
+        try:
+            prev = _apply_unified(cur, _reverse_diff(str(ans.get("diff") or "")))
+        except ValueError as e:
+            return False, f"answer {ans.get('n')} does not undo from the shipped file: {e}"
+        if _sha(prev) != ans.get("before"):
+            return False, (f"answer {ans.get('n')} undone is not the file it records it was "
+                           f"made on")
+        why = _declaration_literal(prev)
+        if why:
+            return False, f"the file answer {ans.get('n')} was made on: {why}"
+        try:
+            _ops, sites, refusals, _n = _admit(prev, cur)
+        except SyntaxError as e:
+            return False, f"answer {ans.get('n')}: a file in the record does not parse ({e})"
+        if refusals or not sites or sites != sorted(ans.get("sites") or []):
+            return False, (f"answer {ans.get('n')} is not admissible as recorded: "
+                           + ("; ".join(refusals) if refusals else
+                              f"it touches {sites or 'no site'}, the record says "
+                              f"{ans.get('sites')}"))
+        cur = prev
     base, how = _git_show(root, anchor, f"kernels/{path.name}")
     if base is None:
         return False, (f"the base cannot be established: the plugin at its blind-record commit "
@@ -1360,6 +1459,52 @@ def _bump(v):
         return str(v)
 
 
+#: The form of a version a maker's verb writes: three numbers, the form the harness's own reader
+#: bumps (sch/dev/edit.py `bump_version`). The value is spliced between the declaration's quotes,
+#: so anything else - a quote, a comma, a line break - writes code, not a version: `--as-version
+#: '0.43.1", "status": "planned'` turned a built plugin into a planned one, and the verb said it
+#: had applied a prose edit (W035 fix round 1, the verifier's A8).
+VERSION_FORM = re.compile(r"\A\d+\.\d+\.\d+\Z")
+
+
+def _version_refusal(as_version):
+    """None, or why `as_version` - a value the author types - may not be written as a version."""
+    if as_version is None or VERSION_FORM.match(str(as_version)):
+        return None
+    return (f"--as-version {str(as_version)[:60]!r} is not a version: a verb writes N.N.N between "
+            f"the declaration's quotes and nothing else")
+
+
+def _made_on(root, path, before):
+    """(commit, None) when `before` is the plugin as committed at HEAD - the commit an answer is
+    MADE ON, from which the record check reads it back - or (None, why it is not)."""
+    head, how = _git_head(root)
+    shown = _git_show(root, head, f"kernels/{path.name}")[0] if head else None
+    if shown != before:
+        return None, (f"kernels/{path.name} differs from the commit it would be made on ({how}) - "
+                      f"commit it first: the record check reads an answer's file back from git, so "
+                      f"the record carries only the lines the answer writes")
+    return head, None
+
+
+def _keep_or_restore(kernel, root, before, rec_before, log):
+    """0 when the plugin and record just written meet the record check; otherwise both are put
+    back as they were and 1. WHAT IS WRITTEN IS WHAT IS CHECKED: the verb's admission and the
+    record check read one file, so no answer the check would refuse is left on disk."""
+    ok, why_not = design_record_check(kernel, root=root)
+    if ok:
+        return 0
+    Path(kernel.path).write_text(before, encoding="utf-8")
+    rp = design_record_path(kernel)
+    if rec_before is None:
+        rp.unlink()
+    else:
+        rp.write_text(rec_before, encoding="utf-8")
+    log(f"  refused: written, the answer does not meet its record check ({why_not}); plugin and "
+        f"record are put back as they were")
+    return 1
+
+
 def design_answer(kernel, proposed, why, *, as_version=None, log=print, root=None):
     """Apply an author's answer to the design worksheet, by the sites it names, and record it.
 
@@ -1372,6 +1517,10 @@ def design_answer(kernel, proposed, why, *, as_version=None, log=print, root=Non
     import difflib
     if not str(why or "").strip():
         log("  refused: --why is the answer's reason, and a recorded answer carries one")
+        return 1
+    bad_v = _version_refusal(as_version)
+    if bad_v:
+        log(f"  refused: {bad_v}")
         return 1
     path = Path(kernel.path)
     # THE FIRST ANSWER IS MADE ON THE PLUGIN AS IT WAS BLIND (fix-up 5): the record's chain must
@@ -1419,6 +1568,22 @@ def design_answer(kernel, proposed, why, *, as_version=None, log=print, root=Non
     except SyntaxError as e:
         log(f"  refused: the answer does not parse ({e})")
         return 1
+    # THE ADMISSION IS ASKED OF WHAT IS WRITTEN (W035 fix round 1): the file with its version
+    # raised, at the same sites, and the version reads back as the one stated.
+    _o2, sites2, refusals2, _t2 = _admit(before, after)
+    if refusals2 or sites2 != sites or (vold and _version_node(after)[1] != new_version):
+        log(f"  refused: kernels/{path.name} as it would be written - "
+            + ("; ".join(refusals2) if refusals2 else
+               f"it touches {sites2 or 'no site'}, not {sites}" if sites2 != sites else
+               f"its version does not read back as {new_version!r}"))
+        return 1
+    root_ = Path(root) if root else path.parent.parent
+    head, not_made = _made_on(root_, path, before)
+    if head is None:
+        log(f"  refused: {not_made}")
+        return 1
+    rp = design_record_path(kernel)
+    rec_before = rp.read_text(encoding="utf-8") if rp.is_file() else None
     rec = _read_record(kernel)
     n = len(rec["answers"]) + 1
     touched = [(j1 + 1, max(j2, j1 + 1)) for _t, _i1, _i2, j1, j2 in ops]
@@ -1429,13 +1594,17 @@ def design_answer(kernel, proposed, why, *, as_version=None, log=print, root=Non
                                           "how": f"answer {n}", "why": str(why)}
     diff = "".join(difflib.unified_diff(_lines(before), _lines(after),
                                         f"a/kernels/{path.name}", f"b/kernels/{path.name}", n=3))
+    # MADE ON A COMMITTED FILE, AND RECORDED BY THE LINES IT WROTE (W035 fix round 1): the record
+    # check reads the file before back from git, so the record keeps neither a removed line nor a
+    # copy of the declaration - a design answer that takes a cohort's value out of a statement
+    # would otherwise move the value into the record, as the first prose answer did.
     rec["answers"].append({"n": n, "why": str(why), "sites": sites, "version": new_version,
-                           "before": _sha(before), "after": _sha(after), "diff": diff,
-                           # THE DECLARATION IT LEFT, so the record still meets the plugin after
-                           # the maker's verb edits the declaration (`design_record_check`)
-                           "after_declaration": _declaration_text(after)})
+                           "before": _sha(before), "after": _sha(after), "made_on": head,
+                           "diff": _redact(diff)})
     path.write_text(after, encoding="utf-8")
     _write_record(kernel, rec)
+    if _keep_or_restore(kernel, root_, before, rec_before, log):
+        return 1
     log(f"  answer {n} applied to kernels/{path.name} at {', '.join(sites)}; version {vold} -> "
         f"{new_version}; recorded in kernels/{design_record_path(kernel).name}")
     log(f"  next: scprofile validate {kernel.name}, then scprofile design {kernel.name}")
@@ -1732,6 +1901,10 @@ def prose_answer(kernel, replacements, why, *, as_version=None, dry=False, log=p
     if not str(why or "").strip():
         log("  refused: --why is the edit's reason, and a recorded edit carries one")
         return 1
+    bad_v = _version_refusal(as_version)
+    if bad_v:
+        log(f"  refused: {bad_v}")
+        return 1
     if not replacements:
         log("  refused: nothing to change - give --replace OLD NEW")
         return 1
@@ -1752,14 +1925,19 @@ def prose_answer(kernel, replacements, why, *, as_version=None, dry=False, log=p
     if text == before:
         log("  refused: the edit changes nothing")
         return 1
-    refusals = prose_refusals(before, text)
+    _vl, vold = _version_node(before)
+    new_version = as_version or _bump(vold)
+    after = _set_version(text, new_version) if vold else text
+    # THE RULE IS ASKED OF WHAT IS WRITTEN (W035 fix round 1): the file with its version raised,
+    # not the file before the version was spliced in - the verifier's A8 passed the rule on the
+    # second and wrote the first.
+    refusals = prose_refusals(before, after)
+    if not refusals and vold and _version_node(after)[1] != new_version:
+        refusals = [f"line {_vl}: the version does not read back as {new_version!r}"]
     if refusals:
         for x in refusals:
             log(f"  refused: kernels/{path.name} {x}")
         return 1
-    _vl, vold = _version_node(before)
-    new_version = as_version or _bump(vold)
-    after = _set_version(text, new_version) if vold else text
     bad = _declaration_literal(after)
     if bad:
         log(f"  refused: the edit leaves a declaration the host cannot load - {bad}")
@@ -1773,21 +1951,21 @@ def prose_answer(kernel, replacements, why, *, as_version=None, dry=False, log=p
     # MADE ON A COMMITTED FILE, so the record need not keep the text it removed: an edit that
     # takes a leak out of a plugin would otherwise put the same leak into its record. The record
     # check reads the file back from git at this commit, as it reads the anchor.
-    head, how = _git_head(root)
-    shown = _git_show(root, head, f"kernels/{path.name}")[0] if head else None
-    if shown != before:
-        log(f"  refused: kernels/{path.name} differs from the commit it would be made on "
-            f"({how}) - commit it first: the record check reads a prose answer's file back from "
-            f"git, so the record carries only the lines the edit writes")
+    head, not_made = _made_on(root, path, before)
+    if head is None:
+        log(f"  refused: {not_made}")
         return 1
+    rp = design_record_path(kernel)
+    rec_before = rp.read_text(encoding="utf-8") if rp.is_file() else None
     rec = _read_record(kernel)
     n = len(rec["answers"]) + 1
     rec["answers"].append({"n": n, "kind": "prose", "why": str(why), "sites": [],
                            "version": new_version, "before": _sha(before), "after": _sha(after),
-                           "made_on": head, "diff": _redact(diff),
-                           "after_declaration": _declaration_text(after)})
+                           "made_on": head, "diff": _redact(diff)})
     path.write_text(after, encoding="utf-8")
     _write_record(kernel, rec)
+    if _keep_or_restore(kernel, root, before, rec_before, log):
+        return 1
     log(f"  answer {n} (prose) applied to kernels/{path.name}; version {vold} -> {new_version}; "
         f"recorded in kernels/{design_record_path(kernel).name}")
     return 0

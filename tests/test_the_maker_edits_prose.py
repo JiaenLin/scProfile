@@ -19,6 +19,15 @@ WHAT THIS HOLDS, each failing before `scprofile prose` existed:
   5. on the shipped repository the verb runs through the CLI: a dry run of an R-comment edit of
      cellchat writes nothing, an edit of its R code and any edit of a held-out plugin are refused,
      and the shipped cellchat meets its record (`scprofile design cellchat` exits 0).
+
+W035's FIX ROUND 1 (the verifier's findings), each failing on 849698a, through the real CLI on a
+local clone of this repository:
+  6. a verb writes what it admits: `--as-version` is N.N.N or refused, for `prose` and for
+     `design --answer`, and nothing is written; a design answer is made on a committed file too;
+  7. a record keeps no text an edit took out and no copy of the declaration, and a declaration
+     edit between two answers - `sch dev edit`'s - keeps the chain the record check walks;
+  8. a sentence saying what was measured on a sample, with a number, is refused by `validate` on
+     a plugin the maker owns (`sample_values`), and the shipped cellchat states none.
 """
 import hashlib
 import io
@@ -267,6 +276,183 @@ for held in ("abundance", "velocity"):
 r = cli("design", "cellchat")
 ck("the shipped cellchat meets its record (`scprofile design cellchat` exits 0)",
    r.returncode == 0, (r.stdout + r.stderr)[-600:])
+
+
+# W035's FIX ROUND 1: THE VERIFIER'S THREE FINDINGS, each through the real CLI on a local clone of
+# this repository (its history included: the anchor, and the commits a record names), so the
+# shipped files stay as they are.
+G = ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+     "-c", "core.hooksPath=/dev/null"]
+
+
+def clone_here(td):
+    """A clone of this repository at its HEAD, with this tree's code copied over the clone's, so
+    the code under test is the code here."""
+    import shutil
+    dst = Path(td) / "repo"
+    head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True,
+                          text=True, env=GITENV).stdout.strip()
+    r = subprocess.run(["git", "clone", "-q", "--no-checkout", str(ROOT), str(dst)],
+                       capture_output=True, text=True, env=GITENV)
+    if r.returncode or not head:
+        return None
+    subprocess.run(["git", "-C", str(dst), "checkout", "-q", head], capture_output=True,
+                   env=GITENV)
+    for p in (ROOT / "scprofile").glob("*.py"):
+        shutil.copyfile(p, dst / "scprofile" / p.name)
+    return dst
+
+
+def kernels_changed(dst):
+    return subprocess.run(["git", "-C", str(dst), "status", "--porcelain", "--", "kernels"],
+                          capture_output=True, text=True, env=GITENV).stdout.strip()
+
+
+def commit_all(dst, msg):
+    subprocess.run(["git", "-C", str(dst), *G, "add", "-A", "kernels"], capture_output=True,
+                   env=GITENV)
+    subprocess.run(["git", "-C", str(dst), *G, "commit", "-q", "-m", msg], capture_output=True,
+                   env=GITENV)
+
+
+def said(r):
+    return (r.stdout + r.stderr)[-500:]
+
+
+print("\n6. a verb writes what it admits: a version is a version (fix round 1, the verifier's A8)")
+# `--as-version '0.43.1", "status": "planned'` exited 0, wrote a new key into cellchat's
+# declaration and turned it from built to planned: the prose rule had been asked of the file
+# before the version was spliced in, and `design --answer` spliced the same way.
+SPLICE = '9.9.9", "status": "planned'
+with tempfile.TemporaryDirectory() as td:
+    dst = clone_here(td)
+    ck("(a local clone of this repository, for the real CLI)", dst is not None)
+    if dst is not None:
+        csrc = (dst / "kernels" / "cellchat.py").read_text(encoding="utf-8")
+        j = csrc.index('"""')
+        old, new = csrc[j:j + 12], csrc[j:j + 12] + " (reworded)"
+        r = cli("prose", "cellchat", "--replace", old, new, "--why", "t", "--as-version", SPLICE,
+                "--no-follow", cwd=dst)
+        ck("prose: a version spliced with a key is refused, and nothing is written",
+           r.returncode == 1 and not kernels_changed(dst) and "version" in said(r), said(r))
+        r = cli("prose", "cellchat", "--replace", old, new, "--why", "t", "--as-version",
+                "banana", "--no-follow", cwd=dst)
+        ck("prose: a version that is not N.N.N is refused, and nothing is written",
+           r.returncode == 1 and not kernels_changed(dst), said(r))
+        r = cli("prose", "cellchat", "--replace", old, new, "--why", "t", "--as-version", "9.9.9",
+                "--dry", cwd=dst)
+        ck("prose: a version of that form is admitted (a dry run writes nothing)",
+           r.returncode == 0 and '+    "version": "9.9.9",' in r.stdout
+           and not kernels_changed(dst), said(r))
+        # design --answer: one of de's statements answered, with the same splice
+        import re
+        desrc = (dst / "kernels" / "de.py").read_text(encoding="utf-8")
+        dl = desrc.split("\n")
+        prop = None
+        for x in V._scan(desrc)[1]:
+            for ln in range(x["line"], x["span"][1] + 1):
+                m = re.search(r'"([A-Za-z][^"\\]{8,})"', dl[ln - 1])
+                if not m:
+                    continue
+                cand = list(dl)
+                cand[ln - 1] = dl[ln - 1][:m.start(1)] + "Note: " + dl[ln - 1][m.start(1):]
+                _o, sites, refused, _n = V._admit(desrc, "\n".join(cand))
+                if sites and not refused:
+                    prop = "\n".join(cand)
+                    break
+            if prop:
+                break
+        ck("(de has a statement an answer can change)", prop is not None)
+        if prop is not None:
+            pf = Path(td) / "answer.py"
+            pf.write_text(prop, encoding="utf-8")
+            r = cli("design", "de", "--answer", str(pf), "--why", "t", "--as-version", SPLICE,
+                    cwd=dst)
+            ck("design --answer: a version spliced with a key is refused, and nothing is written",
+               r.returncode == 1 and not kernels_changed(dst), said(r))
+            r = cli("design", "de", "--answer", str(pf), "--why", "a word added", cwd=dst)
+            drec = (dst / "kernels" / "de.design.json").read_text(encoding="utf-8")
+            import json
+            last = (json.loads(drec).get("answers") or [{}])[-1]
+            ck("design --answer: an answer is made on a committed file and recorded by the lines "
+               "it wrote, with no copy of the declaration", r.returncode == 0
+               and len(last.get("made_on") or "") == 40 and "after_declaration" not in last
+               and V.REDACTED in last.get("diff", "") if hasattr(V, "REDACTED") else False,
+               (said(r), sorted(last)))
+            r = cli("design", "de", cwd=dst)
+            ck("and de's record, two older answers and this one, meets the plugin "
+               "(`scprofile design de` exits 0)", r.returncode == 0, said(r))
+
+print("\n7. a record keeps no text an edit took out, and no copy of the declaration (fix round 1)")
+# Each answer kept the whole declaration it left (`after_declaration`, ~125,000 characters for
+# cellchat), so a comment taken out of the declaration by a second answer stayed in the first
+# one's copy, and the record check said ok. And a declaration edit between two answers - the
+# maker's own verb, `sch dev edit` - broke the chain the check walks.
+with tempfile.TemporaryDirectory() as td:
+    dst = clone_here(td)
+    if dst is not None:
+        cc = dst / "kernels" / "cellchat.py"
+        src = cc.read_text(encoding="utf-8")
+        a_, b_ = V._declaration(src)
+        coms = [t.string for t in tokenize.generate_tokens(io.StringIO(src).readline)
+                if t.type == tokenize.COMMENT and a_ <= t.start[0] <= b_ and len(t.string) > 40
+                and src.count(t.string) == 1]
+        ck("(cellchat's declaration carries comments to take out)", len(coms) >= 2, len(coms))
+        if len(coms) >= 2:
+            r = cli("prose", "cellchat", "--replace", coms[0], "# reworded by the test", "--why",
+                    "a declaration comment out", "--no-follow", cwd=dst)
+            rec = (dst / "kernels" / "cellchat.design.json").read_text(encoding="utf-8")
+            ck("a prose answer takes a comment out of the declaration", r.returncode == 0, said(r))
+            ck("the record keeps no copy of the comment it took out",
+               coms[0].lstrip("# ").strip() not in rec)
+            ck("the record keeps no copy of the declaration", "after_declaration" not in rec)
+            # A DECLARATION EDIT, as `sch dev edit` makes one: a value changed and the version
+            # raised, committed - then a second prose answer.
+            commit_all(dst, "answer")
+            import ast as _ast
+            src = cc.read_text(encoding="utf-8")
+            node = V._version_node(src)
+            decl = next(n for n in _ast.parse(src).body if isinstance(n, _ast.Assign)
+                        and getattr(n.targets[0], "id", "") == "PLUGIN").value
+            sv = next(v for k_, v in zip(decl.keys, decl.values)
+                      if isinstance(k_, _ast.Constant) and k_.value == "summary")
+            seg = _ast.get_source_segment(src, sv)
+            src = src.replace(seg, '"a summary the test wrote"', 1)
+            src = src.replace(f'"version": "{node[1]}"', '"version": "9.0.0"', 1)
+            cc.write_text(src, encoding="utf-8")
+            commit_all(dst, "a declaration edit")
+            r = cli("design", "cellchat", cwd=dst)
+            ck("a declaration edit after an answer meets the record", r.returncode == 0, said(r))
+            r = cli("prose", "cellchat", "--replace", coms[1], "# reworded again", "--why",
+                    "a second comment out", "--no-follow", cwd=dst)
+            ck("a second prose answer, after the declaration edit", r.returncode == 0, said(r))
+            r = cli("design", "cellchat", cwd=dst)
+            ck("the chain holds across the declaration edit (`scprofile design cellchat` exits 0)",
+               r.returncode == 0, said(r))
+            rec = (dst / "kernels" / "cellchat.design.json").read_text(encoding="utf-8")
+            ck("and the record keeps neither the declaration's old value nor either comment",
+               _ast.literal_eval(seg) not in rec and coms[1].lstrip("# ").strip() not in rec
+               and coms[0].lstrip("# ").strip() not in rec)
+
+print("\n8. a value measured on a sample is the sample's: no plugin the maker owns states one "
+      "(fix round 1)")
+# cellchat's caveat quoted two shares measured on one sample of a real cohort - numbers no
+# generated term list holds, since a list holds names and levels - and its record copied them.
+HAVE8 = hasattr(V, "sample_values")
+ck("validate.sample_values exists", HAVE8)
+if HAVE8:
+    for s, want in (("Measured on one sample of a real cohort, X fell from 41.0% to 12.5%.", True),
+                    ("Observed across two donors: a 3.1x enrichment.", True),
+                    ("measured on 3 samples, the median was 0.42.", True),
+                    ("The 41.0% above is MEASURED from the shipped database.", False),
+                    ("The size of that is measured on this run rather than quoted.", False)):
+        in_string, in_comment = (bool(V.sample_values(f"x = {s!r}\n")),
+                                 bool(V.sample_values(f"# {s}\n")))
+        ck(f"{'found' if want else 'not found'}, in a string and in a comment: {s[:60]}",
+           in_string == want and in_comment == want, (in_string, in_comment))
+r = cli("validate", "cellchat")
+ck("`scprofile validate cellchat` passes, naming no value measured on a sample",
+   r.returncode == 0 and "measured on a sample" not in r.stdout, r.stdout[-600:])
 
 print(f"\n{len(FAILS)} failure(s)" + (": " + "; ".join(FAILS) if FAILS else ""))
 sys.exit(1 if FAILS else 0)

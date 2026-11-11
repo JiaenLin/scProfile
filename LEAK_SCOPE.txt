@@ -13,4 +13,3 @@
 
 docs/REFERENCES.md  :: 3,379 :: the number of interactions in the pinned CellChatDB v2 mouse database, measured in the built environment: a fact about the public reference, which a cohort's records also quote
 kernels/cellchat.py :: 37.9%, 3,379 :: CellChatDB v2's own composition, measured from the shipped database (the secreted share of its interactions; the number of mouse interactions): facts about the public reference, which a cohort's records also quote
-kernels/cellchat.design.json :: 37.9%, 3,379 :: the maker's record of cellchat carries the declaration each answer left (W035), so the same two facts about the public reference as kernels/cellchat.py's entry above, and nothing else of the plugin's text
