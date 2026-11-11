@@ -237,7 +237,7 @@ else:
         # the diff names every line by its digest, the lines it wrote too (W035 fix round 2)
         ck("the record carries the diff, the reason and the sites",
            ans.get("sites") == ["statement:13"] and ans.get("why") == "it is contrasted"
-           and "+" + V.REDACTED + V._sha("        # the interaction is contrasted\n")
+           and "+" + V.REDACTED + V._sha("        # the interaction is contrasted, as its own row\n")
            in ans.get("diff", "") and "the interaction is contrasted" not in ans.get("diff", ""),
            ans)
         copy = Path(td) / "copy.py"

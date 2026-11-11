@@ -524,7 +524,7 @@ with tempfile.TemporaryDirectory() as td:
                          '"""The module\'s docstring.\n-- a dash line holding 4,242 cells\n"""\n')
     k = repo(td, "demo", plug2)
     log = []
-    rc = V.prose_answer(k, [("-- a dash line holding 4,242 cells\n", "")], "a dash line out",
+    rc = V.prose_answer(k, [("-- a dash line holding 4,242 cells\n", "")], "a docstring line out",
                         root=td, log=log.append)
     rtext = V.design_record_path(k).read_text(encoding="utf-8") if rc == 0 else ""
     ck("a removed line that begins `-- ` is named by its digest, not kept as a header",
@@ -540,7 +540,7 @@ TRUE = {"a method rule":
         "In the published benchmark (Author et al., 2022), the method was measured on 16 "
         "datasets and recovered 62% of the curated interactions.",
         "the reference database's size":
-        "Observed in the shipped database, 1,280 of 3,379 mouse interactions are secreted.",
+        "Observed in the reference dataset, the database holds 1,280 of 3,379 mouse interactions.",
         "a synthetic-fixture sentence":
         "Measured on the synthetic fixture's two samples, the selftest recovers 100% of the "
         "planted edges.",
