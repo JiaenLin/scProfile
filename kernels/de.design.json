@@ -38,6 +38,17 @@
   }
  ],
  "plugin": "de",
+ "rewrites": [
+  {
+   "commit": "42bb9fe468851b4c521bce2b465c0c147f27417f",
+   "dropped": {
+    "1": "6deeff78fc0604da",
+    "2": "6deeff78fc0604da"
+   },
+   "version": "0.1.0",
+   "why": "W047 fix round: run 2 (a53335e) dropped the copies of the declaration answers 1 and 2 kept with a rewrite that left no trace; rewritten again here from the record as git keeps it at 4d5e90f, so that the record says what was dropped, by which tool and on which commit"
+  }
+ ],
  "statements": {
   "3df36ce1304c6857": {
    "how": "confirmed",
