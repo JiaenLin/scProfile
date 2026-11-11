@@ -1,4 +1,5 @@
-"""A design record holds only what the maker writes, and an older record is rewritten through it.
+"""A design record holds only what the maker writes, each field in the form it writes it (a reason
+only as text), and an older record is rewritten through the maker, with a trace the check reads.
 
 FOUND BY W047 (a reader's pass for one cohort's values, run 2). de's two W013 answers each kept a
 copy of the declaration they left (`after_declaration`), and with it one cohort's description
@@ -23,6 +24,17 @@ code, and each failing on the head before it (`4d5e90f`):
   5. replace refs under the anchor and the made-on answer, with a code line smuggled into the
      plugin and every digest re-made, are refused: the check reads the objects the ids name;
   6. an anchor DEVPOINTS names by an abbreviation is refused.
+
+AND, FOUND BY THE BATCH'S VERIFICATION (W047 fix round), each failing on `945549f`:
+  7. `--rewrite-record` is refused, nothing written: over a copy that is not the declaration its
+     answer made (the verifier's reproduction: it exited 0 and wrote a record identical to a
+     clean one), with no `--why`, and over a hand-edited plugin; and no other verb drops a copy;
+  8. what it writes carries a trace the check validates - the tool's version, the commit, the
+     reason, each dropped copy's digest - so a trace forged in any field, or removed, fails;
+  9. a value planted in any field the maker writes (`n`, a prose answer's `sites`, a statement
+     no file of the chain has, `version`, `diff`, ...) is refused by name, not only a new key.
+A reason (`why`) is the author's words and is held only to being text: a value written into one
+passes the check, and is read as any text of the repository is.
 """
 import json
 import os
@@ -112,7 +124,8 @@ try:
        rc == 1 and "after_declaration" in out and "--rewrite-record" in out, out[-500:])
 
     print("\n2. `--rewrite-record` writes it without, and proves what it dropped")
-    rc, out = cli("design", "de", "--rewrite-record")
+    WHY = "a rewrite in a test of this suite"
+    rc, out = cli("design", "de", "--rewrite-record", "--why", WHY)
     ck("exit 0", rc == 0, out[-600:])
     ck("each dropped copy is the declaration of the file its answer made, rebuilt from git and "
        "the record, byte for byte",
@@ -127,6 +140,14 @@ try:
        [{k: v for k, v in a.items() if k != "after_declaration"} for a in old["answers"]]
        == new["answers"] and old["statements"] == new["statements"])
     ck("de.py is not touched", DE.read_bytes() == SHIPPED)
+    trace = new.get("rewrites") or [{}]
+    ck("and the record says it was rewritten: one entry, the tool's version, the commit it ran "
+       "on, the reason, each dropped copy's digest",
+       len(new.get("rewrites") or []) == 1 and trace[0].get("commit") == git("rev-parse", "HEAD")
+       and trace[0].get("why") == WHY and trace[0].get("version") == (
+           ROOT / "VERSION").read_text(encoding="utf-8").strip()
+       and trace[0].get("dropped") == {str(n): V._sha(c) for n, c in copies.items()},
+       new.get("rewrites"))
     # INDEPENDENTLY OF THE VERB'S OWN WORDS: answer 2 made the file committed at 9cbe9c6, and
     # that file's declaration is the copy answer 2 kept.
     a2 = V._git_show(clone, "9cbe9c62dfbad797d66d8645136e1ae9269e2f32", "kernels/de.py")[0]
@@ -138,7 +159,7 @@ try:
     ck("the design stage exits 0 and check's design-record row is green", rc == 0
        and record_row(out2).startswith("GREEN"), (out[-300:], record_row(out2)))
     before = REC.read_bytes()
-    rc, out = cli("design", "de", "--rewrite-record")
+    rc, out = cli("design", "de", "--rewrite-record", "--why", WHY)
     ck("a second run writes nothing", rc == 0 and "nothing written" in out
        and REC.read_bytes() == before, out[-300:])
 
@@ -167,7 +188,7 @@ try:
 
     print("\n4. the same route on cellchat's record, already in the form")
     cc = (clone / "kernels" / "cellchat.design.json").read_bytes()
-    rc, out = cli("design", "cellchat", "--rewrite-record")
+    rc, out = cli("design", "cellchat", "--rewrite-record", "--why", WHY)
     ck("writes nothing, and says so", rc == 0 and "nothing written" in out
        and (clone / "kernels" / "cellchat.design.json").read_bytes() == cc, out[-300:])
 
@@ -224,6 +245,140 @@ try:
     (clone / "DEVPOINTS.yaml").write_text(dp, encoding="utf-8")
     rc, out = cli("design", "de")
     ck("(and the whole hash passes again)", rc == 0, out[-300:])
+
+    print("\n7. `--rewrite-record` is refused, nothing written (the batch's verification, F1)")
+    # THE VERIFIER'S REPRODUCTION: the record an older maker wrote, a value put into a copy. It
+    # exited 0, said the copy was NOT the declaration, and wrote a record identical to a clean one.
+    P = "planted: 3 of 7 units, a synthetic count"
+    tampered = json.loads(old_text)
+    tampered["answers"][0]["after_declaration"] += f"# {P}\n"
+    REC.write_text(json.dumps(tampered, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    t0 = REC.read_bytes()
+    rc, out = cli("design", "de", "--rewrite-record", "--why", WHY)
+    ck("a copy that is not the declaration its answer made: refused, naming the answer, nothing "
+       "written", rc == 1 and "answer 1's copy of the declaration is NOT the declaration" in out
+       and "nothing written" in out and REC.read_bytes() == t0, out[-500:])
+    REC.write_text(old_text, encoding="utf-8")
+    rc, out = cli("design", "de", "--rewrite-record")
+    ck("with no reason: refused, naming --why, nothing written", rc == 1 and "--why" in out
+       and REC.read_text(encoding="utf-8") == old_text, out[-300:])
+    # THE SAME FACT BY ANOTHER VERB (ATTACKS 21): a confirmation writes the record too, and every
+    # copy went with whichever verb wrote next, with no trace. Only the rewrite drops one now.
+    line = V._scan(SHIPPED.decode("utf-8"))[1][0]["line"]
+    rc, out = cli("design", "de", "--confirm", str(line), "--why", "a confirmation in a test")
+    kept = json.loads(REC.read_text(encoding="utf-8"))
+    ck("a confirmation over the record an older maker wrote keeps both copies, for the check to "
+       "refuse", {a["n"]: a.get("after_declaration") for a in kept["answers"]
+                  if "after_declaration" in a} == copies, out[-300:])
+    # THE CHECK IS THE VERB'S (the verifier's mutant "the rewrite skips its check" was green):
+    # over a hand-edited plugin, a record already in the form is refused, not "already written".
+    DE.write_bytes(SHIPPED + b"# a hand edit\n")
+    for label, rec_text in (("a record already in the form", before.decode("utf-8")),
+                            ("the record an older maker wrote", old_text)):
+        REC.write_text(rec_text, encoding="utf-8")
+        rc, out = cli("design", "de", "--rewrite-record", "--why", WHY)
+        ck(f"over a hand-edited plugin, {label}: refused by its check, nothing written",
+           rc == 1 and "does not pass its check" in out
+           and REC.read_text(encoding="utf-8") == rec_text
+           and DE.read_bytes() == SHIPPED + b"# a hand edit\n", out[-300:])
+    DE.write_bytes(SHIPPED)
+    REC.write_bytes(before)
+
+    def planted(cases, rec_path, name, base_bytes):
+        for where, edit, says in cases:
+            r = json.loads(base_bytes)
+            try:
+                edit(r)
+            except (KeyError, IndexError, TypeError, AttributeError) as e:
+                ck(f"{where}: (planted)", False, f"the record has no such field here: {e!r}")
+                continue
+            rec_path.write_text(json.dumps(r, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+            rc, out = cli("design", name)
+            ck(f"{where}: refused by name", rc == 1 and says in out, out[-400:])
+        rec_path.write_bytes(base_bytes)
+
+    print("\n8. the trace is validated wherever the record is read: forged, or removed, it fails")
+    head_c = git("rev-parse", "HEAD")
+
+    def tr(r):
+        return r["rewrites"][0]
+    planted((
+        ("the trace removed", lambda r: r.pop("rewrites"),
+         "no rewrite in the record says it dropped it"),
+        ("one dropped copy taken out of it", lambda r: tr(r)["dropped"].pop("2"),
+         "answer 2 was recorded before W035's fix round 1"),
+        ("a dropped copy's digest forged", lambda r: tr(r)["dropped"].__setitem__(
+            "1", "0123456789abcdef"), "the trace is not of this record"),
+        ("its `version` forged", lambda r: tr(r).__setitem__("version", "9.9.9"),
+         "rewrite 1's `version`"),
+        ("its `commit`, a whole id git does not hold", lambda r: tr(r).__setitem__(
+            "commit", "1" * 40), "cannot be read"),
+        ("its `commit` abbreviated", lambda r: tr(r).__setitem__("commit", head_c[:7]),
+         "not a commit id"),
+        ("its `why` emptied", lambda r: tr(r).__setitem__("why", " "),
+         "rewrite 1's `why` is not a reason"),
+        ("a made-on answer named as dropped", lambda r: tr(r)["dropped"].__setitem__(
+            "3", "0123456789abcdef"), "which is no answer recorded before"),
+        ("a key of its own", lambda r: tr(r).__setitem__("note", P), "never writes"),
+        ("one of its keys removed", lambda r: tr(r).pop("version"), "lacks ['version']"),
+        ("doubled", lambda r: r["rewrites"].append(dict(tr(r))), "more than one rewrite"),
+    ), REC, "de", before)
+
+    print("\n9. a value in a field the maker writes, in a form it never writes, is refused by name")
+    sts = json.loads(before)["statements"]
+    conf = next(d for d, s in sorted(sts.items()) if s["how"] == "confirmed")
+    ans2 = next(d for d, s in sorted(sts.items()) if s["how"] == "answer 2")
+
+    def in_diff(i, fn):
+        return lambda r: r["answers"][i].__setitem__("diff", fn(r["answers"][i]["diff"]))
+    planted((
+        ("the record's `plugin`", lambda r: r.__setitem__("plugin", f"de, {P}"), "`plugin`"),
+        ("an older answer's `n`", lambda r: r["answers"][0].__setitem__("n", f"1, {P}"), "`n`"),
+        ("the made-on answer's `n`, a number", lambda r: r["answers"][2].__setitem__("n", 37),
+         "`n`"),
+        ("a design answer's `kind`", lambda r: r["answers"][1].__setitem__("kind", P), "`kind`"),
+        ("an answer's `why` emptied", lambda r: r["answers"][1].__setitem__("why", ""), "`why`"),
+        ("a prose answer's `sites`", lambda r: r["answers"][2].__setitem__("sites", [P]),
+         "`sites`"),
+        ("a design answer's `sites`, out of the admission's order",
+         lambda r: r["answers"][1]["sites"].reverse(), "`sites`"),
+        ("an older answer's `version`", lambda r: r["answers"][0].__setitem__("version", "3.7.0"),
+         "`version`"),
+        ("the made-on answer's `version`",
+         lambda r: r["answers"][2].__setitem__("version", "3.7.0"), "`version`"),
+        ("an older diff's header", in_diff(0, lambda d: d.replace(
+            "--- a/kernels/de.py", f"--- a/kernels/de.py {P}", 1)), "`diff`"),
+        ("a made-on diff's header", in_diff(2, lambda d: d.replace(
+            "+++ b/kernels/de.py", f"+++ b/kernels/de.py {P}", 1)), "`diff`"),
+        ("a hunk's tail", in_diff(0, lambda d: d.replace(" @@\n", f" @@ {P}\n", 1)), "`diff`"),
+        ("a hunk's counts", in_diff(2, lambda d: re.sub(
+            r"(@@ -\d+(?:,\d+)? \+\d+),\d+ @@", r"\g<1>,37 @@", d, count=1)), "`diff`"),
+        ("a row the maker never writes", in_diff(2, lambda d: d + f"\\ {P}\n"), "`diff`"),
+        ("a statement no file of the chain has", lambda r: r["statements"].__setitem__(
+            "0" * 16, {"site": "statement:1", "how": "confirmed", "why": P}),
+         "no statement the worksheet names"),
+        ("a statement's `site`", lambda r: r["statements"][conf].__setitem__(
+            "site", "statement:37"), "`site`"),
+        ("a statement's `how`", lambda r: r["statements"][conf].__setitem__("how", P), "`how`"),
+        ("an answered statement's `why`, not its answer's", lambda r: r["statements"][
+            ans2].__setitem__("why", P), "`why`"),
+        ("a confirmation's `why` emptied", lambda r: r["statements"][conf].__setitem__(
+            "why", " "), "`why`"),
+    ), REC, "de", before)
+    rc2, out2 = cli("check")
+    ck("(and with the record as written, check's design-record row is green)",
+       record_row(out2).startswith("GREEN"), record_row(out2))
+    # THE VERIFIER'S THREE, ON cellchat's RECORD: each passed `design cellchat`, and the rewrite
+    # said the record was already as the maker writes it.
+    CC = clone / "kernels" / "cellchat.design.json"
+    planted((
+        ("cellchat: a value in a prose answer's `sites`",
+         lambda r: r["answers"][0].__setitem__("sites", [P]), "`sites`"),
+        ("cellchat: a value in `n`", lambda r: r["answers"][0].__setitem__("n", f"1, {P}"), "`n`"),
+        ("cellchat: a statement keyed by a digest no line has", lambda r: r["statements"]
+         .__setitem__("0" * 16, {"site": "x", "how": P, "why": "y"}),
+         "no statement the worksheet names"),
+    ), CC, "cellchat", cc)
 finally:
     shutil.rmtree(td, ignore_errors=True)
 
@@ -231,4 +386,5 @@ print()
 if FAILS:
     print(f"{len(FAILS)} FAILED")
     raise SystemExit(1)
-print("a design record holds only what the maker writes, and an older one is rewritten through it")
+print("a design record holds only what the maker writes, each field in the form it writes it (a "
+      "reason only as text), and an older one is rewritten through it, with a trace")

@@ -2034,16 +2034,20 @@ def design_rewrite_record(kernel, why="", log=print, root=None):
     # form to tidy away (the record check refuses it by its digest too, in the trace).
     for n, copy in sorted(copies.items()):
         made = files.get(n, (None, None))[1]
-        if made is None or _declaration_text(made) != copy:
+        if made is not None and _declaration_text(made) != copy:
             log(f"  refused: answer {n}'s copy of the declaration is NOT the declaration of the "
                 f"file the answer made, as the record check rebuilt that file from git and the "
-                f"record" + ("" if made is not None else " (it could not rebuild it)")
-                + ": the record carries a copy no file of its chain had - a finding, not a form "
-                  "to tidy; nothing written")
+                f"record: the record carries a copy no file of its chain had - a finding, not a "
+                f"form to tidy; nothing written")
             return 1
     if not ok:
         log(f"  refused: the record as the maker writes it does not pass its check ({why_not}); "
             f"nothing written")
+        return 1
+    unbuilt = [n for n in sorted(copies) if n not in files]
+    if unbuilt:
+        log(f"  refused: the record check rebuilt no file for answer(s) {unbuilt}, so their copies "
+            f"cannot be compared with the declaration each made; nothing written")
         return 1
     if not changed:
         log(f"  kernels/{rp.name} is already as the maker writes it: nothing written")
