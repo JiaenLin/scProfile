@@ -2,8 +2,8 @@
 
 The matrix store had this right from the start - on a hit it logs "not rewritten" and leaves the
 file alone. The object store, sitting beside it in the same script, re-wrote the `.rds` it had
-just loaded from that same path under that same stamp. Measured on eighteen units: 1.02 GB
-written back byte-identical every run.
+just loaded from that same path under that same stamp: every object it read was written back
+byte-identical on every run.
 
 The cost is the smaller half. The mtime is the larger one: a cache HIT moved the object's
 timestamp forward, so a cached input came to look NEWER than the artifacts derived from it -
