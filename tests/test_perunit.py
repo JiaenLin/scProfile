@@ -650,21 +650,21 @@ print("\nand memory is charged against the cells the instance actually touches")
 _km = _types.SimpleNamespace(executor={"cores": 8, "memory_gb_per_100k": 12,
                                        "memory_gb_base": 6, "gpus": 0})
 _whole = demand({"cores": 8}, _km, 90_000)          # synthetic sizes: a cohort, and one unit
-_unit = demand({"cores": 8}, _km, 12_000)
+_unit = demand({"cores": 8}, _km, 11_000)
 ck("a cohort instance is charged more than a per-unit one",
    _whole["memory_gb"] > _unit["memory_gb"],
    f"{_whole['memory_gb']:.1f} vs {_unit['memory_gb']:.1f} GB")
-_expected = 12 * (90_000 - 12_000) / 100_000
+_expected = 12 * (90_000 - 11_000) / 100_000
 ck("and the difference is exactly the per-cell term over the extra cells",
    abs((_whole["memory_gb"] - _unit["memory_gb"]) - _expected) < 0.01,
    f"{_whole['memory_gb'] - _unit['memory_gb']:.2f} vs {_expected:.2f} GB")
 ck("and both pay the baseline, so neither is charged from zero",
-   _unit["memory_gb"] > 6, f"{_unit['memory_gb']:.1f} GB for 12,000 cells")
+   _unit["memory_gb"] > 6, f"{_unit['memory_gb']:.1f} GB for 11,000 cells")
 
 print("\nand the two-term model is FITTED from the run, never divided from one point")
 from scprofile.kernels import fit_memory_model                                 # noqa: E402
 _truth_b, _truth_r = 6.0, 12.0
-_pts = [(n, _truth_b + _truth_r * n / 100_000) for n in (6_000, 9_000, 12_000, 25_000)]
+_pts = [(n, _truth_b + _truth_r * n / 100_000) for n in (6_000, 9_000, 14_000, 25_000)]
 _b, _r = fit_memory_model(_pts)
 ck("the fit recovers a known baseline", abs(_b - _truth_b) < 0.01, f"{_b} vs {_truth_b}")
 ck("and a known per-cell rate", abs(_r - _truth_r) < 0.01, f"{_r} vs {_truth_r}")

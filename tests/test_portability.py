@@ -924,7 +924,7 @@ ck("the declaration check REFUSES a per-unit plugin that declares none",
    "a per-unit plugin with no unit_metrics must be an ERROR, not a WARN")
 
 print("\nthe host draws that comparison, so no plugin writes its own version of it")
-_units = [{"unit": f"u{i}", "metrics": {"m": v}} for i, v in enumerate([4000, 11000, 20000])]   # synthetic, a 5.00x range
+_units = [{"unit": f"u{i}", "metrics": {"m": v}} for i, v in enumerate([4000, 11000, 22000])]   # synthetic, a 5.50x range
 _html = _RP._across_units(_units, [{"id": "m", "question": "how many?"}])
 ck("it renders from the units alone, with no plotting library",
    "<svg" in _html and "import matplotlib" not in inspect.getsource(_RP))
@@ -936,7 +936,7 @@ ck("it renders from the units alone, with no plotting library",
 # section must still come back with its numbers in it.
 import scprofile.design_panel as _DP2                                           # noqa: E402
 _u2 = [{"unit": f"u{i}", "metrics": {"m": float(v)}}
-       for i, v in enumerate([4000, 11000, 20000, 12000, 30000, 9000])]
+       for i, v in enumerate([4000, 11000, 22000, 12000, 30000, 9000])]
 _d2 = {f"u{i}": {"g": ("a" if i < 3 else "b")} for i in range(6)}
 _real = _DP2.draw
 try:
@@ -949,7 +949,7 @@ try:
 finally:
     _DP2.draw = _real
 ck("it states the range rather than judging it",
-   "5.00x" in _html and "too" not in _html.lower().split("across units")[1][:400])
+   "5.50x" in _html and "too" not in _html.lower().split("across units")[1][:400])
 ck("it names the extremes so a reader can go to the unit",
    "u0" in _html and "u2" in _html)
 ck("a per-unit plugin that recorded nothing is NAMED as uncomparable, not omitted",
