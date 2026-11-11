@@ -1,14 +1,16 @@
 #!/bin/bash
 #PBS -N scprofile_resolve
-#PBS -q workq
 #PBS -l select=1:ncpus=2:mem=8gb
 #PBS -l walltime=00:30:00
 #PBS -j oe
 #
 # Does a plugin's dependency need its own environment?
 #
-#   qsub -v PY=<host interpreter>,PKGS="pertpy pydeseq2",OUT=<dir> -o <dir>/resolve.log \
+#   qsub -q <queue> -v PY=<host interpreter>,PKGS="pertpy pydeseq2",OUT=<dir> -o <dir>/resolve.log \
 #        setup/resolve_probe.pbs
+#
+# The queue is the site's: `-q` names one whose limits cover the request above, or the server's
+# default queue takes the job.
 #
 # DRY RUN ONLY. Resolves and reports; installs nothing.
 #

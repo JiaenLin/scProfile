@@ -1,6 +1,5 @@
 #!/bin/bash
 #PBS -N scprofile_loop
-#PBS -q short
 #PBS -l select=1:ncpus=4:mem=16gb
 #PBS -l walltime=01:00:00
 #PBS -j oe
@@ -28,7 +27,10 @@
 # rule-one: no-removal. Reads the runs; writes only inside $RUNDIR.
 # Authored on the workstation and pushed (rule H1). No `git` runs below.
 #
-#   qsub -v RUNDIR=...,TOOL=...,RUNS=...[,ROUND=N] setup/loop.pbs
+#   qsub -q <queue> -v RUNDIR=...,TOOL=...,RUNS=...[,ROUND=N] setup/loop.pbs
+#
+# The queue is the site's: `-q` names one whose limits cover the request above, or the server's
+# default queue takes the job.
 
 set -euo pipefail
 

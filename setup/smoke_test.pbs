@@ -1,7 +1,6 @@
 #!/bin/bash
 #PBS -N scprofile_smoke
-#PBS -q workq
-# 8 cores and 48gb, against `workq`'s ceiling of 50. The fixtures are tiny; the plugin
+# 8 cores and 48gb, inside an ordinary queue's ceiling. The fixtures are tiny; the plugin
 # SELFTESTS are not - they fit real models in real environments, several sharing one
 # node. Estimate high: an over-request costs queue time, and a kill keeps nothing.
 #PBS -l select=1:ncpus=8:mem=48gb
@@ -11,15 +10,18 @@
 # Prove the whole path on a synthetic dataset: build a fixture, run the kernels over it, merge,
 # report. Nothing here touches your data.
 #
-#   qsub -v TOOL=$HOME/tools/scProfile,OUT=<scratch>,HOST_PYTHON=<python with anndata> \
+#   qsub -q <queue> -v TOOL=$HOME/tools/scProfile,OUT=<scratch>,HOST_PYTHON=<python with anndata> \
 #        [,PREFIX=<dir holding the kernel envs>] -o <scratch>/smoke.pbs.log  setup/smoke_test.pbs
+#
+# The queue is the site's: `-q` names one whose limits cover the request above, or the server's
+# default queue takes the job.
 #
 # PREFIX is OPTIONAL. Without it only host-interpreter plugins run, which still walks the plan,
 # the decision channel, the per-unit path, the merge and the report - everything that broke on
 # 2026-08-26. Give it when you also want the plugins that bring their own environment.
 #
-# RUN THIS BEFORE A LONG RUN, EVERY TIME. It is minutes on `workq` against hours on `super`, and
-# the failure it exists to catch cost three hours of a 64-core allocation and produced two
+# RUN THIS BEFORE A LONG RUN, EVERY TIME. It is minutes on a small queue against hours on a large
+# one, and the failure it exists to catch cost three hours of a 64-core allocation and produced two
 # refused plugins and no result.
 #
 # Run this after `install`. A selftest proves a kernel's ENVIRONMENT works; this proves the

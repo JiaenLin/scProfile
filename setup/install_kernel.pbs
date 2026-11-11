@@ -1,14 +1,16 @@
 #!/bin/bash
 #PBS -N scprofile_install
-#PBS -q workq
 #PBS -l select=1:ncpus=4:mem=16gb
 #PBS -l walltime=03:00:00
 #PBS -j oe
 
 # Build one scProfile kernel environment as a batch job, and prove it with the kernel's selftest.
 #
-#   qsub -v KERNEL=velocity,PREFIX=$HOME/envs,TOOL=$HOME/tools/scProfile \
+#   qsub -q <queue> -v KERNEL=velocity,PREFIX=$HOME/envs,TOOL=$HOME/tools/scProfile \
 #        -o $HOME/envs/install_velocity.log  setup/install_kernel.pbs
+#
+# The queue is the site's: `-q` names one whose limits cover the request above, or the server's
+# default queue takes the job.
 #
 # WHY A JOB AND NOT A PROMPT
 #
