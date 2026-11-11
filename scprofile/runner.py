@@ -1290,7 +1290,7 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
     # is a different pair of anndatas, deliberately far apart wherever a plugin is pinned to an
     # older island. `readable_input` handles a mismatch correctly at RUN time, but it asks on the
     # user's object, after the environment is built and the expensive part has started; one
-    # recorded instance reported NOT RUN for all ten units of a run. The same question costs under
+    # recorded instance reported NOT RUN for every unit of a run. The same question costs under
     # a second on a four-cell object, so it is asked here instead.
     #
     # A WARNING, NOT A REFUSAL. The run-time path can still convert and re-probe, and an
@@ -1505,7 +1505,7 @@ def run(kernel, *, inp, out_dir, prefix=None, log=print, timeout=None):
     # A WORKING DIRECTORY THE INSTANCE OWNS. Nothing set one, so every plugin inherited the
     # directory the job was launched from - and a wrapped tool that writes to the current
     # directory then writes into the PROJECT. Measured: CellChat's netVisual and its cluster-
-    # number estimator dropped eight plates and a PDF at the project root, beside the stage
+    # number estimator dropped plates and a PDF at the project root, beside the stage
     # directories, on a run whose output was supposed to be sealed inside its own run key. The
     # instance directory is where anything a tool drops belongs.
     _cwd = Path(out).resolve()

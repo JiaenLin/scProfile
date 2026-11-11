@@ -35,8 +35,8 @@ THREE GRADES, AND THE THIRD IS THE HONEST ONE.
 A RETROSPECTIVE LICENCE IS NOT A FULL ONE WITH AN ASTERISK. It is a different claim: "the bytes
 are intact and complete and I know where they came from", not "the run that made them reported
 nothing wrong". Keeping the two apart is the entire reason this file has grades instead of a
-boolean, because the temptation - when eight earlier runs are sitting there and re-running costs
-hours - is exactly to blur them.
+boolean, because the temptation - when earlier runs are sitting there and re-running is
+expensive - is exactly to blur them.
 """
 
 from __future__ import annotations
@@ -144,10 +144,10 @@ def products(unit_dir):
     A unit directory holds two very different things: what the host STAGED for the kernel - the
     expression matrix, the metadata, the database copy - and what the kernel RETURNED. Only the
     second is adopted by a later run; the first is regenerable from the source object and is
-    where nearly all the bytes are. Measured on one real instance: the products are 5.7 MB
-    inside a 158 MB directory.
+    where nearly all the bytes are. Measured on one real instance: the products are a small
+    part of the directory.
 
-    Hashing the staged bulk would have made licensing eight runs an operation people avoid, and
+    Hashing the staged bulk would have made licensing earlier runs an operation people avoid, and
     the whole point of reuse is to be cheaper than recomputing. It would also have made the
     licence assert something it has no business asserting - that the INPUT staged for a finished
     run is unchanged - which is not what a later run adopts.
@@ -200,7 +200,7 @@ def evaluate(rundir, plugin, unit=None, *, declared=None, required_figures=(),
     # declares three tables and wrote one leaves a directory that looks fine.
     #
     # AND AGAINST THE DECLARED REQUIRED FIGURES, WHICH IS THE HOLE AN AUDIT FOUND. Checking only
-    # `produces` verified ONE path on a plugin whose licence covered thirteen artifacts: ten
+    # `produces` verified ONE path on a plugin whose licence covered many artifacts: its
     # figures were licensed and checked by no declaration at all. Worse, the covered set is read
     # FROM the manifest, so an instance that drew three figures of ten would licence three,
     # report "every file hashed" and "nothing missing", and be indistinguishable from a run of
@@ -270,7 +270,7 @@ def decide(rundir, plugin, unit=None, *, declared=None, required_figures=(),
 
     SPLIT FROM `grant` BECAUSE A PREVIEW THAT DISAGREES WITH THE ACTION IS WORSE THAN NEITHER.
     The first version of the CLI ran its own shortened check for the dry run - hard classes only
-    - and reported "would grant" for ten instances that `--grant` then refused, because the
+    - and reported "would grant" for instances that `--grant` then refused, because the
     shortened check never looked at the self-report. One decision function, two callers.
     """
     from . import resume, runcard

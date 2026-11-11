@@ -1,6 +1,6 @@
 # Anatomy of a scProfile Run
 
-*Every layer of one whole run, every step and every element, as the code does it — read from scProfile d933b13 and harness 4658b1a on 2026-09-16 (harness ADR-0026, the open items). Figures in italics are measured on the run for review (harness ADR-0026's third job); everything else is read from the source. Written for a cold agent or maintainer who has to read a run without having built it. Nothing simplified away; where a step is a judgement, a limit or a debt, it is said as such. When the code moves, this file is the one to move with it.*
+*Every layer of one whole run, every step and every element, as the code does it — read from scProfile d933b13 and harness 4658b1a on 2026-09-16 (harness ADR-0026, the open items). Figures in italics were seen on the run for review (harness ADR-0026's third job) where they are the fixture's or the tool's own; that run's cohort values stay in its own record, and an illustration is marked as one. Everything else is read from the source. Written for a cold agent or maintainer who has to read a run without having built it. Nothing simplified away; where a step is a judgement, a limit or a debt, it is said as such. When the code moves, this file is the one to move with it.*
 
 ## 1. The map: one run directory
 
@@ -21,7 +21,7 @@ A run is a directory under `<project>/runs/scprofile/04_profile/` named by its k
   CAPACITY.json                          what the run delivered, counted from its own trees
   README.md                              written last, by inspecting the directory
   kernels/cellchat/
-    <unit>/                              one directory per instance (18 on the cohort)
+    <unit>/                              one directory per instance
       in.json  out.json                  the contract in and out
       cellchat_db.R/.log/.csv            the database export
       cellchat_expr.mtx(.genes)  cellchat_meta.csv   what R was handed
@@ -74,7 +74,7 @@ Written by `sch dev job --ref <reference run> --redraw --plugin cellchat --predi
 
 - **E1** — **Emission refuses** when the plugin's build owes (a stage not done, or a judgement stage whose validator refuses) — `--anyway` emits with a header note. The header carries the reference, the prediction, the tool commit, every flag carried from the reference's own recorded argv one per line, the flags a redraw dropped (`run.redraw_drops: [--no-cache]`), and the cache forecast (§10).
 
-- **E2** — **Products expected** are read from the reference's own `STATUS.json` record (282 on this cohort); on a redraw figures are not expected. `fixture/`, `logs/`, `cache/` are never products.
+- **E2** — **Products expected** are read from the reference's own `STATUS.json` record; on a redraw figures are not expected. `fixture/`, `logs/`, `cache/` are never products.
 
 - **J1** — **The seal trap.** `RUNNING.txt` at start; at exit `SEALED.txt` only if exit 0 and every expected product is present, else `FAILED.txt` with `missing=`. A killed job seals FAILED. `incomplete_checks=` names a gate that could not run.
 
@@ -84,7 +84,7 @@ Written by `sch dev job --ref <reference run> --redraw --plugin cellchat --predi
 
 - **J4** — **The fixture gate** (§4) — `run.fixture_first` in the tool's DEVPOINTS. Exit 0 continues; exit 3 (could not run) and exit 2 (failed) both refuse the cohort with exit 4 and different words.
 
-- **J5** — **The tool runs:** the reference's argv with only the destination changed — `scprofile run --h5ad cohort_integrated.h5ad --out <run> --kernel cellchat --prefix …/env --design design.csv --label-key cell_type_forced --sample-key sample --batch-key batch --counts-layer counts --lognorm-layer lognorm --embedding X_scanvi --layout X_umap_scanvi --organism mouse --assay nucleus --timeout 21600 --control <factor>=<its control> ...`. Not piped, not teed; the exit code is read before the trap uses it.
+- **J5** — **The tool runs:** the reference's argv with only the destination changed — `scprofile run --h5ad cohort_integrated.h5ad --out <run> --kernel cellchat --prefix …/env --design design.csv --label-key cell_type_forced --sample-key sample --batch-key batch --counts-layer counts --lognorm-layer lognorm --embedding X_scanvi --layout X_umap_scanvi --organism <organism> --assay <assay> --timeout <seconds> --control <factor>=<its control> ...`. Not piped, not teed; the exit code is read before the trap uses it.
 
 - **J6** — **What follows a run**, declared in `run.after`: `status --out`, `capacity --promised`, `capacity --memory`. Each exit is a verdict printed as `after: exit N`, not a failure of the run.
 
@@ -112,13 +112,13 @@ Everything below runs inside the status contract: `STATUS.json` is written at th
 
 - **R3** — **The design** is read from `--design`: keyed on the column named by `--sample-key` when the table has it, else a known name (sample, sample_id, library, batch, donor), else refused naming `--sample-key`; every other column is a factor unless `--factor` names the factors the run is about (the other columns stay in the rows for the confound panels); a sample in the object with no row is refused by name; `--control FACTOR=LEVEL` fixes each factor's reference level. Without a table the design is derived from columns constant within every sample, and said to be derived.
 
-- **R4** — **The units are resolved, group first.** `units.resolve`: the group axis is every arm of the design's factors (the four cells of a 2×2, named `<levelA>_<levelB>`) plus, for a crossed design, the marginal pools of each factor (each level over the other factor pooled) — the sides a marginal contrast needs; the sample axis is every sample (10 here). *18 units on this cohort.* Each unit's members, axis, cell count and the populations it contains are recorded once, where the object is open; a population absent from a unit is the host's to say.
+- **R4** — **The units are resolved, group first.** `units.resolve`: the group axis is every arm of the design's factors (the four cells of a 2×2, named `<levelA>_<levelB>`) plus, for a crossed design, the marginal pools of each factor (each level over the other factor pooled) — the sides a marginal contrast needs; the sample axis is every sample. *For illustration, not from a run: a 2×2 over eight samples is 4 arms + 4 marginal pools + 8 samples = 16 units.* Each unit's members, axis, cell count and the populations it contains are recorded once, where the object is open; a population absent from a unit is the host's to say.
 
 - **R5** — **The tool's fingerprint** (the code as it was when the run started) is taken and re-checked before every instance; a tree that changes under a run stops it.
 
 - **R6** — **The plan's decisions** are computed by the planner's own function (settings per plugin from the design; e.g. which parameters the design decides) and printed with their provenance (default / decided / overridden by `--params`).
 
-- **R7** — **The schedule.** Budget = `--cores` or the machine's; memory per instance = base + rate × the cells that instance touches, from the declaration; `schedule` packs instances into waves by cores and memory (*18 instances in 1 wave, 64 cores*). The plan line and the per-instance timeout are printed before anything runs.
+- **R7** — **The schedule.** Budget = `--cores` or the machine's; memory per instance = base + rate × the cells that instance touches, from the declaration; `schedule` packs instances into waves by cores and memory (*for illustration: 16 instances in 1 wave on a 32-core budget*). The plan line and the per-instance timeout are printed before anything runs.
 
 - **R8** — **A wave runs.** Prerequisites are re-checked at the start of each wave. Admission is by cores, not count: a `ResourcePool` of permits; each instance thread takes its share before spawning. For each instance the host writes `in.json` (§6) and launches the plugin's entry point in the plugin's own interpreter with the core share exported to every thread pool.
 
@@ -130,7 +130,7 @@ Everything below runs inside the status contract: `STATUS.json` is written at th
 
 - **R12** — **The comparison phase** (§7).
 
-- **R13** — **The models.** From every instance's own measurement (`measured` in `out.json`: process-tree peak sampled every second, cgroup peak where readable, CPU seconds, wall, cells): memory fitted as base + per-100k-cells over the 18 points, cores as mean/peak, cost as a band; each carried in `report.json` beside the declaration.
+- **R13** — **The models.** From every instance's own measurement (`measured` in `out.json`: process-tree peak sampled every second, cgroup peak where readable, CPU seconds, wall, cells): memory fitted as base + per-100k-cells over one point per instance, cores as mean/peak, cost as a band; each carried in `report.json` beside the declaration.
 
 - **R14** — **Across the design:** `by_arm` for every per-cell column (quantiles and compositions, description only); the concordance of one plugin's number against another's; which pages the constraint on use binds (from the factors a page actually shows). Controls, the section spec each plugin declared, what was reused and from where, the object the plugins actually read.
 
@@ -162,7 +162,7 @@ Everything below runs inside the status contract: `STATUS.json` is written at th
 
 - **C1** — refuses without a label or with fewer than two populations after `ctx.populations()` (the host's roster: a population below `min_cells` is dropped and named)
 
-- **C2** — `_R_DB`: exports the database for the organism (`CellChatDB.mouse`) to `cellchat_db.csv`; coverage of the object's genes against it is computed; below `min_coverage` the run refuses or says the result will be thin
+- **C2** — `_R_DB`: exports the database for the organism (`CellChatDB.human` or `CellChatDB.mouse`) to `cellchat_db.csv`; coverage of the object's genes against it is computed; below `min_coverage` the run refuses or says the result will be thin
 
 - **C3** — **the matrix store** (`ctx.cache("matrix")`): the expression matrix and metadata written once per unit as `.mtx`/`.csv` for R, reused when the digest matches
 
@@ -190,19 +190,19 @@ Everything below runs inside the status contract: `STATUS.json` is written at th
 
 - **P1** — The pairs come from the design and the controls: on a 2×2 cohort the two marginal contrasts (`<A>`, `<B>`), the four simple effects within strata (`<A> | <B> = <level>`, one per level of the other factor, each way), and `_across_arms` for the interaction — *7 directories*.
 
-- **P2** — Each launch runs the plugin's `compare(ctx)` in its own environment with two units' output directories, at the plugin's declared core share (2); launches run pooled, `at_once = cores // share` (*32 at once; the phase 2 min 45 s*); `compare/phase.json` records the share and the count; each launch writes `in.json`, `out.json`, `figure_context.tsv`, its R script and log, `removals.csv`, `tables/`, `figures/`.
+- **P2** — Each launch runs the plugin's `compare(ctx)` in its own environment with two units' output directories, at the plugin's declared core share (2); launches run pooled, `at_once = cores // share` (*for illustration: a 32-core budget at a share of 2 runs 16 at once*); `compare/phase.json` records the share and the count; each launch writes `in.json`, `out.json`, `figure_context.tsv`, its R script and log, `removals.csv`, `tables/`, `figures/`.
 
 - **P3** — `_R_COMPARE` (one contrast): the two saved objects are aligned before merging — a population only one arm has is removed from the comparison and recorded by category in `removals.csv`; `mergeCellChat`; then by the plan: `nativecmp_diff_heatmap_count/weight`, `nativecmp_rankNet_stacked` (CellChat's between-arm test, the numbers to `tables/rank_net_comparison.csv`), `nativecmp_signalingRole_scatter_pair`, `nativecmp_signalingRole_heatmap` (outgoing and incoming, one colour scale), `nativecmp_bubble_comparison`, `nativecmp_barplot_count` (ranked before it is cut, the ceiling the declaration's), `nativecmp_rankSimilarity_functional`, `nativecmp_aggregate_circle` and `nativecmp_chord_cell` per pathway under their ceilings. The tally last.
 
-- **P4** — `_R_COHORT` (across arms, the interaction): every arm's object; `compareInteractions` (totals per arm with each animal as a point, count and weight) and the same per 1,000 cells; the interaction on both scales — per-pathway flow within each level of the other factor from `rankNet`, additive (`nativecmp_interaction_flow`) and log (`_flow_log`), the interaction matrix, the ligand–receptor level (`nativecmp_interaction_lr`, `_lr_scatter`); no test for a difference of differences exists and none is claimed; its tables (`nativecmp_interaction__*.csv`, alignment) beside the figures.
+- **P4** — `_R_COHORT` (across arms, the interaction): every arm's object; `compareInteractions` (totals per arm with each sample as a point, count and weight) and the same per 1,000 cells; the interaction on both scales — per-pathway flow within each level of the other factor from `rankNet`, additive (`nativecmp_interaction_flow`) and log (`_flow_log`), the interaction matrix, the ligand–receptor level (`nativecmp_interaction_lr`, `_lr_scatter`); no test for a difference of differences exists and none is claimed; its tables (`nativecmp_interaction__*.csv`, alignment) beside the figures.
 
 - **P5** — The host's own comparison panels are drawn from the plugins' tables (diff matrix, flow compare, role shift, unit totals, presence…), each through one audited save whose record goes to `report/panels.json`.
 
 ## 8. The record and the pages
 
-- **W1** — `report.write_all` → per plugin `write_kernel`: `cellchat.html` (the plugin's page: overview, arms, contrasts, the interaction, limits), `cellchat_by_arm.html` (each arm's pooled fit), `cellchat_profile.html` (per sample — filed apart because a page carrying one plot ten times hides its result), the per-unit appendix; every host panel audited and repaired (the column fit, the stamp placed from the rendered box, the re-solve).
+- **W1** — `report.write_all` → per plugin `write_kernel`: `cellchat.html` (the plugin's page: overview, arms, contrasts, the interaction, limits), `cellchat_by_arm.html` (each arm's pooled fit), `cellchat_profile.html` (per sample — filed apart because a page carrying one plot once per sample hides its result), the per-unit appendix; every host panel audited and repaired (the column fit, the stamp placed from the rendered box, the re-solve).
 
-- **W2** — **The figure set** (`figureset.build`): every plate the pages placed and every per-unit plate on the plan copied to `report/figures/<axis>/<subject>/NN_<what>.png`, laid into lettered figures (`figure_01…16.png`, `figure_S01…S20.png`) with legends composed from the entries', indexed in `cellchat_figures.json` — *122 plates in 16 figures and 20 supplementary*. Derived, never drawn.
+- **W2** — **The figure set** (`figureset.build`): every plate the pages placed and every per-unit plate on the plan copied to `report/figures/<axis>/<subject>/NN_<what>.png`, laid into lettered figures (`figure_01.png`, … and the supplementary `figure_S01.png`, …) with legends composed from the entries', indexed in `cellchat_figures.json`. Derived, never drawn.
 
 - **W3** — `write_index` → `index.html`; then per plugin: `ensure_section` (a section composed from the run's tables when none is authored — `PAPER.cellchat.md`; an authored one is never overwritten), `paper.render` → `cellchat_paper.html`, the brief `WRITING_BRIEF.md` (the design's questions, the contrasts, the figure list `FIGURES.txt`, the skill and the template), the agenda `AGENDA.md` (the run's tasks in the stations' own commands, outstanding count printed), the panel gallery `cellchat_panel.html` from `panels.json`.
 
@@ -216,7 +216,7 @@ Everything below runs inside the status contract: `STATUS.json` is written at th
 | `capacity --promised` | the plan's promise (each entry's files per axis occurrence) and the native accounting's promise (each used export produced a file somewhere); a promise on an axis the run's directories show no occurrence of is waived by name; the other way: files under `kernels/` accounted for by nothing (the host's panels excepted) | done: 35 declared upstream plots, every one a file |
 | `capacity --memory` / `--cores` / `--cost` | the fitted model against the declaration; owes when declared < fitted; `--declare` writes the envelope (raises a term the fit exceeds, keeps one it does not) | 3.2 + 14.3 at or above the fit |
 | `capacity --drift` | the declaration diagnoses in `report.json`, each distinct drift once with how many units said it | no drift |
-| `capacity --out RUN --against REF` | what the run delivered against another run, on the run's own trees: REGRESSION / gain per count | one gain: tables 214 → 286 (the four side tables registered) |
+| `capacity --out RUN --against REF` | what the run delivered against another run, on the run's own trees: REGRESSION / gain per count | one gain: the table count, by the four side tables now registered per unit |
 | `sch dev convert status --run` | the maker: build 9 stages from source; test 9 stages by running each stage's command against the run: measure, cores, cost, declared, promised, looked_at (station 7), audited (6b), written (8), delivered (9) | build 9 of 9; test 5 of 9, `looked_at` next |
 | `scprofile next` / the agenda | the next command for the next station, in the run's own words | the lookers |
 
@@ -232,7 +232,7 @@ No job or verb spawns an agent: each station prints the command for the next, an
 
 | station | who | the command, what it does, what it writes |
 |---|---|---|
-| 7 `looked_at` | lookers (cold agents, 3 in ADR-0025) | `scprofile review --out RUN --plugin cellchat --shards N` lists the scan set — every figure the paper numbers plus the largest instance of every kind it does not show (*80 on the run for review*) — split N ways, siblings together, only the outstanding; each look is `review --figure F --note "…" [--defect] --reviewer <name>`, appended to `<run>/kernels/cellchat/FIGURE_REVIEW.jsonl` with the plate's sha256; a look carries to any sibling run whose plate has the same bytes (`--adopt` appends what a run relies on to its own ledger); `--defect` is a verdict the audit counts |
+| 7 `looked_at` | lookers (cold agents, 3 in ADR-0025) | `scprofile review --out RUN --plugin cellchat --shards N` lists the scan set — every figure the paper numbers plus the largest instance of every kind it does not show — split N ways, siblings together, only the outstanding; each look is `review --figure F --note "…" [--defect] --reviewer <name>`, appended to `<run>/kernels/cellchat/FIGURE_REVIEW.jsonl` with the plate's sha256; a look carries to any sibling run whose plate has the same bytes (`--adopt` appends what a run relies on to its own ledger); `--defect` is a verdict the audit counts |
 | 6b `audited` | machine, then the author | station 6b reads `panels.json` audits and repairs, the eye's defects, the stated disclosures (a disclosure closes a finding only while the entry's legend in this tree carries its words); the worksheet `review --worksheet` groups open findings by kind, names the owner (host panel / tool plate / plugin drawing), quotes the eye and prints the two answers |
 | the author's pass | a cold author | edits through the maker's verb — `sch dev edit --set / --legend / --remove / --add …`, one command per change, the followers run — or `review --figure F --answer "why" --reviewer <author>` for a plate that should stay (settled by a looker's fresh look), or `--answer … --stated` once the sentence is in the legend; `capacity --declare` for a measured term |
 | the rerun | the job | `sch dev job --ref RUN --redraw --plugin cellchat --predict "…"` → validate → submit (§3); the second look lists only what was redrawn or answered |
@@ -245,19 +245,19 @@ No job or verb spawns an agent: each station prints the command for the next, an
 
 | piece | time | basis |
 |---|---|---|
-| queue wait on the pinned node | ~1 min when idle, not guaranteed | ADR-0026's first job: submitted 15:08:52, started 15:09:38 |
-| fixture gate, both shapes in parallel | 2 min 28 s | the run for review |
-| cohort, objects reused | ~11 min (units ~3, compare 2:45, report once) | the run for review: 14 min 9 s total |
-| cohort, every object re-inferred | ~22 min | ADR-0026's first job: 24 min 49 s total |
-| the loop with the writing, one clean pass | 2½–3½ h wall clock (estimate) | ADR-0025: lookers 36 min, author 71 min over three exchanges, writer 21, reviewer 17, three reruns and three seals in ~6 h |
+| queue wait on the pinned node | short when the node is idle, not guaranteed | a job's own submit and start stamps |
+| fixture gate, both shapes in parallel | 2 min 28 s | the run for review; the fixture is synthetic and fixed, so the time is the gate's own |
+| cohort, objects reused | the units, the comparison phase, the report once; it scales with units and contrasts | the run's own `report.json` (`seconds`) |
+| cohort, every object re-inferred | the reused case plus every unit's inference | the run's own `report.json` |
+| the loop with the writing, one clean pass | hours of wall clock (estimate) | ADR-0025's record: the lookers, the author over three exchanges, the writer, the reviewer, three reruns and three seals |
 
 ## 13. What is not automatic, and the open limits
 
 - **The agentic layer is session-started.** By design since ADR-0017/0019: every station prints its command; nothing spawns the lookers, the author, the writer or the reviewer.
-- **Looks carry by bytes.** A re-inferred object changes the permutation-dependent plates, so after a re-inference every plate is new to the eye (the run for review: 80 figures to look at, nothing carried).
+- **Looks carry by bytes.** A re-inferred object changes the permutation-dependent plates, so after a re-inference every plate is new to the eye (on the run for review, the whole scan set to look at, nothing carried).
 - **The forecast is relative to the run named**, not to the store; a cleared store makes a HIT wrong.
 - **A literal fitted to the cohort** has no static gate; the fixture run is it, and the fixture has one factor — the interaction axis is never exercised by the gate.
-- **The store keeps one object per parameter key per span**; a change to a keyed parameter or the recipe re-infers once (~22 min).
+- **The store keeps one object per parameter key per span**; a change to a keyed parameter or the recipe re-infers once (the costliest row of §12).
 - **The disclosure binding is mechanical**: a rewrite of the legend in other words unbinds a stated disclosure until it is re-stated (the worksheet says which).
 - **Two commit gates.** scProfile's runs under `.venv` and counts its SKIPs; the harness's `unittest discover` prints `skipped=N`. A green with skips is a weaker statement, and both now say so.
 - **The run's own record lists only its own trees** since d933b13; runs made before it (ADR-0026's first and second jobs) carry the fixture's files in their `STATUS.json` products.

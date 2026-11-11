@@ -304,10 +304,10 @@ def test_the_plan_and_the_run_search_the_same_distance():
     The PLANNER walks for missing layers so it can say "pass --search <this>"; the RUN walks the
     leads it was given so a plugin can attach them. They were written separately: depth 14 with
     400,000 visits and a substring prune on one side, depth 3 with 4,000 visits and an exact-name
-    skip list on the other. Measured on real aligner output, STARsolo delivers
-    `<sample>_Solo.out/Velocyto/filtered/` at DEPTH 9 below a project root - so the plan could
-    name the directory and the run, handed exactly that root, could not reach it, and would refuse
-    with a list of everywhere it had looked, none of it deep enough.
+    skip list on the other. Measured on real aligner output, STARsolo
+    delivers `<sample>_Solo.out/Velocyto/filtered/` well past depth 3 below a project root - so
+    the plan could name the directory and the run, handed exactly that root, could not reach it,
+    and would refuse with a list of everywhere it had looked, none of it deep enough.
     """
     print("\nthe plan and the run reach the same distance")
     from scprofile import provenance as PV, sources as SRC
@@ -316,7 +316,7 @@ def test_the_plan_and_the_run_search_the_same_distance():
     check("so is the visit cap", SRC.MAX_DIRS == PV.WALK_CAP,
           f"{SRC.MAX_DIRS} vs {PV.WALK_CAP}")
     check("and it is deep enough for real aligner output", SRC.MAX_DEPTH >= 9,
-          "Velocyto/filtered sits at depth 9 below a project root")
+          "Velocyto/filtered sits that deep below a real project root")
     check("the run prunes what the plan prunes", all(p in SRC.PRUNE for p in PV.PRUNE))
     # SUBSTRING, NOT NAME. The directory is `<sample>__STARtmp`.
     check("a STARsolo temp tree is pruned by substring", SRC._pruned("S1__STARtmp"))
@@ -340,7 +340,7 @@ def test_the_plan_and_the_run_search_the_same_distance():
 
     # AN ALIGNER WRITES THE SAME COUNTS TWICE. STARsolo delivers `Velocyto/filtered/` (every cell)
     # beside `Velocyto/raw/` (every droplet); matched by barcode they give the identical answer
-    # for the cells in the object, and on a real ten-sample project the raw copies are 22 GB of
+    # for the cells in the object, and on a real project the raw copies are many GB of
     # MatrixMarket text read, parsed and discarded for nothing.
     with tempfile.TemporaryDirectory() as td:
         root = Path(td) / "Solo.out" / "Velocyto"
@@ -403,7 +403,7 @@ def test_the_plan_and_the_run_search_the_same_distance():
         check("counts land in the named genes only",
               (sp_dense[:, [0, 2]] == 0).all() and (sp_dense[:, [1, 3]] > 0).all(), str(sp_dense))
         # THE FAILURE THAT PRODUCES A FULL MATRIX AND A WRONG ANSWER: the same core barcode
-        # recurs across samples, so matching globally gives one animal's counts to another's cell.
+        # recurs across samples, so matching globally gives one sample's counts to another's cell.
         check("a sample's counts stay in that sample",
               (sp_dense[:3, 1] == 5.0).all() and (sp_dense[3:, 1] == 7.0).all(), str(sp_dense[:, 1]))
         check("and the second layer is not the first",
@@ -419,7 +419,7 @@ def test_a_reference_can_be_asked_for_by_role():
     declarations from the beginning and NOTHING EVER PASSED THEM, because `in.json` carried only
     `{name: path}`.
 
-    Measured on cycle 6's second run (docs/DEVLOG.md): scenic refused on all ten units of a real
+    Measured on cycle 6's second run (docs/DEVLOG.md): scenic refused on every unit of a real
     cohort with "the cisTarget references are not available", while its own `in.json` listed all
     three of them, verified, by absolute path.
     """
@@ -719,7 +719,7 @@ def test_wrapping_plugins_record_upstream():
     """A plugin that wraps someone else's tool must carry that tool's own instructions.
 
     Not a documentation nicety. The defaults that matter are the ones that do not error: LIANA+
-    defaults to a HUMAN ligand-receptor resource and returns a small plausible table on mouse data;
+    defaults to a HUMAN ligand-receptor resource, giving a small plausible table on non-human data;
     scanpy's score_genes defaults to `use_raw=None`, meaning use `.raw` if present, so the same
     plugin scores different values on two objects that differ only in whether an upstream step
     left one behind. Both were found by reading the documentation and writing it down, and neither
@@ -794,7 +794,7 @@ def test_schedule():
     # instances that MAY run, and only `concurrency`/`CorePool` decides how many do. Requiring the
     # whole wave to fit forced a proportional split across instances that were not running yet,
     # and on any wave larger than the budget it drove every instance to one core - scenic declared
-    # 16 and got `int(16 * 12 / 313)` = 0 -> 1.
+    # 16 and got a proportional share that rounded to 0, then 1.
     from scprofile.kernels import CorePool
     for wave in plan:
         check("no instance is given more than the whole budget", all(i["cores"] <= 16 for i in wave))
@@ -816,7 +816,7 @@ def test_the_tool_cannot_change_under_a_running_run():
     """Two mechanisms, because one of them is a job script somebody else may not use.
 
     A run reads its code at EVERY subprocess launch. A `git pull` into the tool directory while a
-    three-hour run is spawning instances is picked up by everything launched after it: the run
+    long run is spawning instances is picked up by everything launched after it: the run
     uses two versions and reports one, since the banner records the commit once at the start.
     Both versions are correct alone - the MIXTURE is what is wrong - so nothing else catches it
     and the report names a commit that never produced those results in full.
@@ -874,7 +874,7 @@ def test_the_tool_cannot_change_under_a_running_run():
 def test_no_undefined_names():
     """A name a function reads that nothing defines is a NameError waiting for the right branch.
 
-    `ctx.constraint` cost 3,867 seconds of finished work because nothing read the code for
+    `ctx.constraint` cost a run's finished work because nothing read the code for
     names before running it. This reads every plugin and every host module with `symtable`:
     a name referenced inside a function, resolved globally, that the module never defines and
     Python does not provide, cannot work.
@@ -921,7 +921,7 @@ def test_every_ctx_attribute_a_plugin_uses_exists():
 
     `kernels/scenic.py` used `ctx.constraint` because `constraint` is set in `plugin.py` a few
     lines above `Context` - on `Guard`. Nothing caught it: not the declaration check, not the
-    selftest, not the plan. It surfaced 3,867 seconds into a run, after GRNBoost2, motif pruning
+    selftest, not the plan. It surfaced deep into a run, after GRNBoost2, motif pruning
     and AUC over every cell had all completed, and threw the lot away while writing a caveat.
 
     That is the worst shape a bug can have here - maximum cost, minimum signal - and it is
@@ -1302,7 +1302,7 @@ def test_a_plugin_is_launched_the_way_its_shape_requires(tmp):
 
     Exit 0 with no `out.json` is the one failure mode the host cannot tell from a plugin that
     finished with no results, and it is what the first plugin supplied from outside this
-    repository did on a real cohort: 0 seconds, an empty log, no traceback anywhere.
+    repository did on a real cohort: no time at all, an empty log, no traceback anywhere.
 
     So the SHAPE says how it is launched, and this asserts both shapes rather than the one that
     happened to work.
@@ -1553,11 +1553,11 @@ def test_a_required_capability_is_checked_before_the_run_not_inside_it():
 
 
 def test_the_compatibility_copy_is_a_record_and_a_cache():
-    """3.14 GB was left beside every run and called "a legitimate cached working file, reusable".
+    """A copy left beside every run was called "a legitimate cached working file, reusable".
 
     It was neither. Nothing ever read it again - every run into the same `--out` rewrote it from
     scratch - and nothing named it, so it sat beside an output directory as an unidentifiable
-    3 GB file. Both halves of the description are now true: a receipt makes it reusable, and
+    large file. Both halves of the description are now true: a receipt makes it reusable, and
     `report.json` names it as what the plugins ACTUALLY read, which is not the object passed in.
     """
     print("\nthe compatibility copy")
@@ -1585,7 +1585,7 @@ def test_the_compatibility_copy_is_a_record_and_a_cache():
     from scprofile import cli as _c
     check("the run names the copy in its own record",
           "input_read_by_kernels" in inspect.getsource(_c._run),
-          "3 GB nobody can identify beside an output directory is debris, not a record")
+          "a copy nobody can identify beside an output directory is debris, not a record")
 
 
 def test_an_array_carries_its_barcodes():
@@ -2056,12 +2056,12 @@ def test_a_figure_is_saved_at_the_width_it_declared():
 
     `figsize` describes the AXES. `bbox_inches="tight"` ADDS everything outside them — a key in
     the right margin, a long tick label, a colourbar — so panels declaring the 85 mm single
-    column were measured saving at 98, 143, 195 and 213 mm across the shipped set.
+    column were measured saving far wider than that across the shipped set.
 
     Nothing errors, which is why it survived every review: a typesetter scales the over-wide
-    file down to the column and takes every font with it, so 7 pt type set at 85 mm prints at
-    5 pt from a 213 mm file. The figure looks right in the report and is illegible in print —
-    invisible exactly where the work is checked.
+    file down to the column and takes every font with it, so 7 pt type set at 85 mm prints
+    smaller from an over-wide file. The figure looks right in the report and is illegible in
+    print — invisible exactly where the work is checked.
 
     ASSERTED HERE, AT `emit_figure`, BECAUSE THAT IS WHERE PLUGINS SAVE. The same fix was first
     put in `figure.save()`, which every shipped plugin bypasses, so it was central to the wrong
@@ -2103,7 +2103,7 @@ def test_the_saved_width_is_measured_from_the_file_not_from_the_figure():
     fitting it in. So any width reported from the figure object after such a save restates the
     input as though it were the result: a check that cannot fail.
 
-    Measured on real panels, a declared 174.00 mm double column wrote at 175.01 mm and every log
+    Measured on real panels, a declared 174.00 mm double column wrote wider than that and every log
     line said the two agreed, because the number in the log came from `figsize`.
 
     TWO ASSERTIONS, AND THE SECOND IS THE ONE THAT MATTERS. That the reader returns the file's
@@ -2444,7 +2444,7 @@ def test_a_figure_review_is_bound_to_the_image_it_describes():
     except _RV.Refused:
         _dupe_ok = True
     check("the SAME note on another figure is refused, case included", _dupe_ok,
-       "one line copied across forty panels is the obvious way to defeat this")
+       "one line copied across many panels is the obvious way to defeat this")
     try:
         _RV.record(_d3, "kernels/k/figures/nope.png", "a note about a figure that is not here")
         _ghost_ok = False

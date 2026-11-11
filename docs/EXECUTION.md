@@ -72,10 +72,10 @@ from a slope.
 
 **One point cannot separate them**, and the fit says so: it attributes the whole peak to the
 **rate** and reports no baseline. That is the direction that fails safe. Attributing it to the
-baseline is exact at the size measured and under-predicts every larger one — 7.2 GB seen at 98,627
-cells would charge 7.2 GB for 500,000, where the truth is nearer 36. Attributing it to the rate
-over-charges the smaller instances instead, where the error is bounded by the baseline and nothing
-dies.
+baseline is exact at the size measured and under-predicts every larger one — for illustration, a
+peak of 10 GB seen at 50,000 cells would charge 10 GB for 500,000, where the truth is nearer 100.
+Attributing it to the rate over-charges the smaller instances instead, where the error is bounded
+by the baseline and nothing dies.
 
 A plugin that declares no memory is scheduled on a conservative assumption **and the run says it
 is guessing**, every time. `declare` warns, so the gap is visible where it can be fixed.
@@ -83,8 +83,8 @@ is guessing**, every time. `declare` warns, so the gap is visible where it can b
 ### Admission is by resources, not by count
 
 `ResourcePool` admits an instance when **every** dimension it needs is free. A cores-only pool is
-blind in the dimension that actually ends runs: a job died at 260 GB against a 200 GB request
-while each of its ten instances was correctly holding one core. The core budget was satisfied
+blind in the dimension that actually ends runs: a job died above its memory request
+while each of its instances was correctly holding one core. The core budget was satisfied
 throughout and could not have prevented it.
 
 Every request is capped at the pool's own totals before it is waited on, so an instance wanting
@@ -160,10 +160,10 @@ every unit's table is indexed by the same pairs and the units really can be comp
 like that: each fit discovers its own regulon set, so two units' AUC columns are **not the same
 quantity** and a between-condition comparison built from them compares different things.
 
-Measured on a ten-sample cohort: **37 to 111 regulons per sample, and two samples shared
-17% of their transcription factors (Jaccard 0.17)** — with the counts separating almost perfectly by
-a design factor that is itself confounded with batch, which is what makes the naive reading
-dangerous rather than merely noisy.
+Measured on a real cohort: **the regulon count varied widely from sample to sample, and two
+samples shared only a small part of their transcription factors** — and where such counts follow a
+design factor that is itself confounded with batch, the naive reading is dangerous rather than
+merely noisy.
 
 A plugin in that position declares `also_cohort` with its reason, and the scheduler emits **one
 extra instance with `unit: None` alongside the per-unit ones**. Both are kept because they answer
@@ -212,7 +212,7 @@ is imported, before any plugin code runs, and inherits whatever the job script e
 sake. `manifest.env_for_kernel` therefore sets `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
 `MKL_NUM_THREADS`, `NUMEXPR_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS` and `BLIS_NUM_THREADS` from the
 share in the manifest it was just handed — one statement of the number, so the two cannot disagree.
-*Without it an eight-instance wave on a sixteen-core allocation ran 128 BLAS threads on 16 cores,
+*Without it an eight-instance wave on a sixteen-core allocation runs 128 BLAS threads on 16 cores,
 with every instance correctly told `cores: 1`.*
 
 **Admission is by CORES, not by count.** Every instance is given the cores it DECLARED, capped at
@@ -225,20 +225,20 @@ the way the pool behaves.
 `declared x budget / sum(declared)` — and that is a different rule wearing the same word. It
 assumed a wave runs all at once, when only the resident subset does, so it charged every instance
 for the presence of instances that had not started. On any wave larger than the budget the
-arithmetic collapsed to one core each: 37 instances declaring 313 cores against a budget of 12 gave
-`scenic` `int(16 x 12 / 313)` = 0, floored to 1. Measured on cycle 6's third run (DEVLOG.md) — ten GRNBoost2 fits, each
-declaring 16 cores, each running on one, still unfinished after 4h23m of a 12h timeout while the
-plan printed `scenic[S1](1c)` and nothing printed the 16. **A declaration read and then
-discarded is worse than one never read**, because the plan prints its consequence and never prints
-the declaration.*
+arithmetic collapsed to one core each: `scenic` declares 16, and `int(16 x budget / sum(declared))`
+is 0 once a wave declares more than sixteen times the budget, floored to 1. Seen on cycle 6's third
+run (DEVLOG.md) — one GRNBoost2 fit per sample, each declaring 16 cores, each running on one, still
+unfinished after hours while the plan printed `scenic[S1](1c)` and nothing printed the 16. **A
+declaration read and then discarded is worse than one never read**, because the plan prints its
+consequence and never prints the declaration.*
 
 *That sentence was here from the beginning and nothing implemented it until 2026-08-22: the runner
 started **every** instance of a wave at once, however many there were. The two are not the same
-thing — the budget divides the share each instance is **told** it has, and thirty-five instances
-each correctly told `cores: 1` still run thirty-five processes on a node asked for eight. On the
-shipped set, ten samples and three `per_unit` plugins, that is 35 subprocesses each opening a 3 GB
-object, and the memory failure it causes reads as the plugin's fault. `kernels.concurrency()` is
-the rule; the wave is now started through it.*
+thing — the budget divides the share each instance is **told** it has, and N instances each
+correctly told `cores: 1` still run N processes on a node asked for far fewer cores. On the shipped
+set, three `per_unit` plugins put one instance per sample each into the wave, every one a
+subprocess opening the whole object, and the memory failure it causes reads as the plugin's fault.
+`kernels.concurrency()` is the rule; the wave is now started through it.*
 
 **The budget is divided over the instances that actually launch, at the start of each wave — not
 over the ones that were requested.** A wave is filtered by five things first, in order: the plugin
@@ -248,11 +248,11 @@ which is why `in.json` — the file carrying the core share — is written after
 rest of the preparation. *An earlier version of this paragraph claimed all five and the code did
 two; a review found the gap. The share is what a plugin is contractually required to use instead
 of `os.cpu_count()`, so a wrong one is a real misallocation, not a reporting detail.* Measured:
-`run --all --cores 8` on a ten-sample object built a wave of 35 instances declaring 301 cores,
-scaled every one of them to 1, and ran the single built plugin single-threaded on an eight-core
-allocation — while `plan --cores 8`, which filters first, printed `velocity(7c)` for the same
-command. Two documents describing the same run disagreeing is how it was found, and it scales with
-how many declared-but-unbuilt plugins the roadmap holds.
+`run --all` on a multi-sample object built a wave of every declared instance, built or not, scaled
+every one of them to 1 core, and ran the single built plugin single-threaded on a multi-core
+allocation — while `plan` with the same `--cores`, which filters first, printed a multi-core share
+for `velocity`. Two documents describing the same run disagreeing is how it was found, and it
+scales with how many declared-but-unbuilt plugins the roadmap holds.
 
 ---
 
@@ -266,7 +266,7 @@ The same graph, three backends. Where compute happens is not part of what the an
 | `pbs` | **one job per plugin instance**, submitted at once | `-W depend=afterok:<jobid>` |
 | `slurm` | same shape | `--dependency=afterok` |
 
-On a scheduler this is the real win: wave 1 of eight plugins over ten samples is up to eighty
+On a scheduler this is the real win: wave 1 of eight plugins over N samples is up to 8N
 independent jobs, limited by the queue rather than by one node. The harness's dependency edges
 become the scheduler's, and nothing waits on a barrier that the graph does not require.
 
@@ -282,13 +282,13 @@ One plugin failing must not take the wave with it.
 - a failed instance is recorded, its dependents are marked unrunnable **by name**, and everything
   else continues;
 - a **per-unit** plugin that fails on one unit reports that unit as absent and keeps the rest —
-  three of ten samples failing is a result about those three, not a dead run;
+  some samples failing is a result about those samples, not a dead run;
 - the report names every plugin that did not run and why, because a plugin missing from a report
   looks identical to one that found nothing;
 - **a plugin that ran on some units and failed on others is neither "ran" nor "not run", and gets
-  its own state.** It appears in both lists, and testing `ran` first rendered seven-of-ten samples
-  as a plain success carrying one sample's headline — while the merged column held NaN for the
-  other three, which is invisible in an object and in a headline alike. The index says `ran, N
+  its own state.** It appears in both lists, and testing `ran` first rendered a plugin that failed
+  on some samples as a plain success carrying one sample's headline — while the merged column held
+  NaN for those, which is invisible in an object and in a headline alike. The index says `ran, N
   unit(s) failed` and names the units; the README lists it under *Ran, but not on every unit*.
 
 **A per-unit plugin's ARRAYS cross units too, now that they carry their barcodes.** They used to
@@ -303,7 +303,7 @@ cohort that no one unit's result implies. Emit a table or a side-car object inst
 Per-unit results are folded for reporting, never collapsed. One plugin gets one page and one
 `report.json` entry, and that entry carries **every** unit — status, headline, caveats, figures and
 the unit-suffixed table names actually on disk. Keying a per-instance list on the plugin's name
-discarded nine of ten units in a dict comprehension and presented the survivor under the cohort's
+discarded every unit but one in a dict comprehension and presented the survivor under the cohort's
 name; nothing counted the loss and nothing could recover it afterwards.
 
 ---

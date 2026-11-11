@@ -26,7 +26,7 @@ KERNEL_DIRNAME = "kernels"
 # ------------------------------------------------------------------ where a plugin's output goes
 #
 # ONE PLUGIN, ONE DIRECTORY, WITH ITS OWN LAYERS. A run mounts several methods and they answer
-# different questions on different evidence. Pooling their documents put four plugins' report
+# different questions on different evidence. Pooling their documents put every plugin's report
 # pages, one manuscript covering all of them and one review ledger for the whole run at the top
 # of the run directory, so nothing could be handed to a reader as "the cell-cell communication
 # result" without also handing them the rest.
@@ -299,9 +299,9 @@ class Kernel:
 
         Some methods infer their own output vocabulary from the data they are given. SCENIC is the
         clear case: each fit discovers its own regulon set, so two units' AUC columns are not the
-        same quantity and cannot be compared - measured on a ten-sample cohort, regulon
-        counts ran 37 to 111 and two samples shared 17% of their transcription factors (Jaccard
-        0.17). Per-unit fits answer "what operates in this animal"; only a cohort fit yields ONE
+        same quantity and cannot be compared - measured on a real cohort, regulon
+        counts differed widely between samples and pairs of samples shared few transcription
+        factors. Per-unit fits answer "what operates in this sample"; only a cohort fit yields ONE
         vocabulary, which is what a between-condition question needs.
 
         Both are kept because they answer different questions and check each other: a regulon
@@ -960,8 +960,8 @@ def _budget(wave, budget):
 
     IDEMPOTENT, and it has to be, because it is applied twice: once when the plan is computed and
     again over the instances that survive a wave's filters. Scaling the ALREADY-SCALED number the
-    second time compounded - a six-instance wave in which nothing was filtered out went from a
-    planned velocity(2c) to a run velocity(1c), so the fix for over-division became an
+    second time compounded - a wave in which nothing was filtered out ran velocity on fewer
+    cores than its plan had given it, so the fix for over-division became an
     under-division whenever the filters removed nothing. Every division is from `declared`.
     """
     if not wave:
@@ -972,14 +972,14 @@ def _budget(wave, budget):
     # it. Dividing the budget across the WHOLE wave assumed the whole wave runs at once, and it
     # does not: `concurrency` admits a subset. Doing both charged every instance for the presence
     # of instances that were not running yet, and the arithmetic collapsed on any wave larger than
-    # the budget - 37 instances declaring 313 cores against a budget of 12 gave scenic
-    # `int(16 * 12 / 313)` = 0 -> 1, so a tool that declares 16 and scales nearly linearly ran
-    # single-threaded while eleven other single-core instances sat beside it.
+    # the budget - a wave declaring many times the budget in cores gave scenic
+    # `int(16 * budget / declared_total)` = 0 -> 1, so a tool that declares 16 and scales nearly
+    # linearly ran single-threaded while single-core instances sat beside it.
     #
     # A DECLARATION READ AND THEN DISCARDED IS WORSE THAN ONE NEVER READ, because the plan prints
     # the discarded number's consequence and nothing prints the declaration. Measured on cycle
-    # 6's third run: ten GRNBoost2 fits, every gene of the object a target in each, at one core
-    # apiece, still unfinished after 4h23m of a 12h timeout.
+    # 6's third run: per-unit GRNBoost2 fits, every gene of the object a target in each, at one
+    # core apiece, still unfinished long into the job's timeout.
     for i in wave:
         i["cores"] = max(1, min(int(i["declared"] or 1), int(budget)))
     return wave
@@ -994,10 +994,10 @@ def concurrency(instances, budget):
     exist - so a wave that is larger than the budget was scaled to one core each and then all
     launched together.
 
-    Measured on the shipped set, ten samples and an eight-core allocation: nine plugins, three of
-    them `per_unit`, is 35 instances. Thirty-five subprocesses, each opening a 3 GB object, on a
-    node that was asked for eight cores. Every one of them is correctly told `cores: 1` and the
-    node still runs thirty-five of them, which is the oversubscription the share exists to prevent
+    Measured on the shipped set over a real cohort: nine plugins, three of them `per_unit`,
+    give one instance per sample for each of the three - many times the node's cores in
+    subprocesses, each opening the whole object. Every one of them is correctly told `cores: 1`
+    and the node still runs all of them, which is the oversubscription the share exists to prevent
     wearing the other hat - and the memory failure it causes looks like the plugin's fault.
 
     This is a HEADLINE for the plan, not the scheduler: `CorePool` does the admitting, and it is
@@ -1026,7 +1026,7 @@ def concurrency(instances, budget):
 #: idle memory and a slightly narrower wave - recoverable, and visible in the measured figures
 #: afterwards. Under-estimating gets the job KILLED, typically at the end of its longest step,
 #: with no partial result and an error that names the plugin rather than the allocator. Cycle 6's
-#: third run is the worked example: 260 GB against a 200 GB request, four and a half hours spent,
+#: third run is the worked example: a peak past the job's memory request, late in the run,
 #: nothing kept. So when this number is a guess, it guesses HIGH.
 #:
 #: 24 is double the only measured declaration in the tree (velocity, 12). It is deliberately not
@@ -1086,10 +1086,10 @@ def fit_cores_model(points):
     peak = max(pk) if pk else (max(mn) if mn else None)
     given = max(gv) if gv else None
     # A BURST FAR ABOVE THE SHARE IS THE PLUGIN'S, NOT A NUMBER TO DECLARE (measured on the first
-    # run that measured: one-second peaks of 49 to 61 on a share of 4, a mean of 2.4). The share
+    # run that measured: one-second peaks far above the share, and a mean below it). The share
     # means sustained use; a burst past twice it is threads or workers the plugin did not cap.
     # A TREE OF PROCESSES EACH HONOURING THE SHARE IS NOT A BURST (harness ADR-0022, measured
-    # at the declared 2: a python, its R and the sampler summed to 5.9 for one second). The
+    # at the declared 2: a python, its R and the sampler summed past twice it for one second). The
     # threshold is the share times the tree's largest process count, twice the share where no
     # count was recorded.
     procs = max(pr) if pr else None
@@ -1216,9 +1216,9 @@ def demand(inst, kernel, n_cells):
 
     The interpreter, the imports and the object are paid ONCE whatever n is; only the working
     matrices scale. Modelling this as a pure rate - `rate * n`, through the origin - is what made
-    a measured 15 GB on a 10k-cell instance read as 150 GB per 100k cells, which then predicts
-    ten times the truth for a small instance and, worse, can under-predict a large one whose
-    baseline was folded into the slope.
+    a peak measured on one small instance read as a per-100k rate many times too large, which
+    then predicts many times the truth for a small instance and, worse, can under-predict a
+    large one whose baseline was folded into the slope.
 
     Both terms are optional and both have conservative defaults, because the failure directions
     are not symmetric: over-estimating narrows a wave, under-estimating gets the job killed.
@@ -1254,7 +1254,7 @@ def fit_memory_model(points):
     """(base_gb, gb_per_100k) from [(n_cells, peak_gb), ...] - the two terms, separated.
 
     ONE MEASUREMENT CANNOT SEPARATE A BASELINE FROM A SLOPE, and reporting `peak / n` as though
-    it could is how a rate ends up ten times too large. Two measurements at different sizes can,
+    it could is how a rate ends up many times too large. Two measurements at different sizes can,
     and a per-unit plugin produces one per unit for nothing - so the fit uses what the run
     already collected instead of asking anyone to measure twice.
 
@@ -1262,8 +1262,8 @@ def fit_memory_model(points):
     indeterminate - one equation, two unknowns - and the whole peak is attributed to the RATE.
 
     THAT CHOICE IS ABOUT WHICH WAY IT FAILS. Attributing it to the baseline is exact at the size
-    measured and under-predicts every larger one: 7.2 GB observed at 98,627 cells would charge
-    7.2 GB for 500,000 cells, where the truth is nearer 36 - a five-fold under-request, which is
+    measured and under-predicts every larger one: a peak observed at one size would charge the
+    same peak for five times the cells - a fifth of the truth, a five-fold under-request, which is
     the failure that kills a job at the end of its longest step. Attributing it to the rate
     over-charges the smaller instances instead, where the error is bounded by the baseline and
     nothing dies.
@@ -1301,7 +1301,7 @@ class ResourcePool:
     """Admission on EVERY resource an instance needs, not just cores.
 
     A cores-only pool is blind in the dimension that actually kills jobs. Cycle 6's third run died
-    at 260 GB against a 200 GB request while its ten instances were each correctly holding one core;
+    on a peak past its memory request while its instances were each correctly holding one core;
     the core budget was satisfied throughout and could not have prevented it. Cores bound how fast
     a wave runs, memory bounds whether it runs at all, and a scheduler that models one of them
     reports success for the case it cannot see.
@@ -1485,7 +1485,7 @@ def unmet(kernel, *, obs=(), obsm=(), layers=(), ran=(), has_design=False, keys=
     problems = []
     # REQUIRED CAPABILITIES, which the host resolves and the plugin therefore never checks. The
     # entrypoint refuses without them; until this existed, nothing upstream of the run knew - so
-    # the plan said RUN and the refusal arrived an hour later, in a queue.
+    # the plan said RUN and the refusal arrived later, in a queue.
     for cap in (kernel.injects_required or []):
         if _D.available(cap, keys=keys, obs=obs, obsm=obsm, layers=layers, var=var,
                         has_design=has_design, organism=organism, derived=derived):

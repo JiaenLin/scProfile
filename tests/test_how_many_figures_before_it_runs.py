@@ -3,9 +3,9 @@
 `planner.result_spec` has been able to say what a result should CONTAIN since it was written, and
 its docstring is emphatic that no run is required. Its only caller builds a page out of a
 FINISHED run, so it was always read after the compute it was meant to inform - and it consults
-one field, `report.unit_network`, which is the host's own panels: 84 files of 1187 on a real
-cohort. Nothing looked at the plugin's own inventory before a job was submitted, and nobody could
-have known that plugin would draw 1187 figures without running it.
+one field, `report.unit_network`, which is the host's own panels: a small share of the files on a
+real cohort. Nothing looked at the plugin's own inventory before a job was submitted, and nobody
+could have known how many figures that plugin would draw without running it.
 
 A specification a reader can argue with is not the same as a number that can look wrong.
 """
@@ -28,7 +28,7 @@ def check(ok, msg):
 # Invented families: a planner that passed by recognising a real panel name would fail here.
 SPEC = {"native_plots": {
             # THE DIRECTORY IS WRITTEN ONCE AND THE FILES FOLLOW IT, in English. Requiring
-            # `figures/` on every name dropped a whole family of 18 files from a real plan.
+            # `figures/` on every name dropped a whole family of files from a real plan.
             "fnPerUnit": {"use": "figures/perunit_thing.png and perunit_other.png",
                           "at_most": {"perunit_thing": 2, "perunit_other": 1}},
             "fnPerPair": {"use": "figures/percontrast__<item>.png", "at_most": 12},
@@ -36,7 +36,7 @@ SPEC = {"native_plots": {
                        "at_most": {"perunit_two": 1, "percontrast_two": 6}},
             "fnCohort": {"use": "figures/wholedesign_x.png", "at_most": 3},
             # A BRACE FAMILY NAMES AS MANY FILES AS IT HAS MEMBERS, and needs no ceiling to say
-            # so. Counting one undercounted five real families by 84 files.
+            # so. Counting one undercounted every real brace family.
             "fnBrace": {"use": "figures/perunit_brace_{a,b,c}.png"},
             "fnSkipped": {"skip": "not_applicable", "use": "figures/never.png"},
             "fnTable": {"use": "tables/numbers.csv"}},
@@ -60,7 +60,7 @@ check(by["percontrast"]["files"] == 72, "a per-contrast ceiling did not multiply
 check(by["wholedesign_x"]["files"] == 3, "a cohort family was multiplied by something")
 
 # A CEILING PER FAMILY, because one upstream entry can name several. Declared as one number,
-# `netVisual_aggregate` bounded both its families at 6 and over-counted the per-unit one by 90.
+# `netVisual_aggregate` bounded both its families at 6 and over-counted the per-unit one.
 check(by["perunit_two"]["files"] == 10 and by["percontrast_two"]["files"] == 36,
       f"a per-family ceiling was not read: {by['perunit_two']}, {by['percontrast_two']}")
 
@@ -69,12 +69,12 @@ check("never" not in by and "numbers" not in by, f"skipped or non-figure entries
 
 # THE VECTOR COPY IS ONLY POSSIBLE WHERE THE HOST WRITES THE FIGURE. An upstream plot arrives as
 # a PNG from the wrapped tool's own device and there is no vector to write; counting one for
-# every family overstated one cohort by 171 files that were never going to exist.
+# every family overstated a real cohort's count by files that were never going to exist.
 check(by["percontrast"]["vector"] == 0,
       "an upstream family was given a vector copy it cannot have")
 check(by["OWN1"]["vector"] == 10, "a plugin-drawn family the paper cites lost its vector copy")
 check(by["OWN2"]["vector"] == 0,
-      "a plugin-drawn family placed `appendix` still got a vector copy - the 180 files on one "
+      "a plugin-drawn family placed `appendix` still got a vector copy - the files on a real "
       "cohort this exists to stop")
 check(by["OWN2"]["files"] == 10, "an appendix family stopped being drawn; it is not hidden")
 
@@ -93,7 +93,7 @@ check(by["perunit_brace"]["files"] == 30,
 # THE PLUGIN'S OWN R SITE IS NOT THE HOST'S EMIT PATH. A plan entry drawn by the plugin in R -
 # the difference of two differences CellChat has no plot for - is written by the generated
 # companion's device, and the host writes no vector copy for it; counting one per such panel
-# claimed eleven files on one cohort that no run has ever produced. The host's own panel keeps
+# claimed files on a real cohort that no run has ever produced. The host's own panel keeps
 # its copy.
 rspec = {"report": {"figures": [
     {"id": "own_r", "drawn_by": "plugin", "axis": "cohort", "position": "conclusion", "at_most": 2,

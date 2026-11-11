@@ -26,8 +26,8 @@ found:  [host] a ONE-FILE plugin was executed directly instead of through `_entr
               to `.X` silently → 2807f90
         [host] `plan` truncated the upstream constraint on use at 100 characters, cutting the
               "it must NOT" clause — the half that says what may not be claimed → 2807f90
-        [host] a run in which every plugin refused still wrote a 3.21 GB `cohort_profiled.h5ad`
-              that was a copy of its input → 2807f90
+        [host] a run in which every plugin refused still wrote a `cohort_profiled.h5ad`
+              that was a whole copy of its input → 2807f90
         [method] velocity's guard refused because `--assay` was neither passed nor detectable.
               NOT a defect — the guard is correct and the job script should pass `--assay`.
 
@@ -35,7 +35,7 @@ not observed: the repair loop. The deliberate breakage never ran, because the as
         velocity before the environment was touched. The chain diagnose → rebuild → retry-once →
         report-drift remains UNWITNESSED end to end.
 
-clean:  6 suites, validate 0 errors. cellcycle ran to completion on the whole cohort in 63 s;
+clean:  6 suites, validate 0 errors. cellcycle ran to completion on the whole cohort;
         all 6 environments that ship a selftest passed.
 
 format: nothing in the format needed changing to accommodate the third-party plugin. The host had
@@ -51,26 +51,26 @@ Split in two so the repair loop's rebuild could not eat the walltime of everythi
 tested: cycle 1's four fixes on real data; the repair loop with `--assay` passed so the guard
         would not refuse before the environment was reached
 
-confirmed: the third-party plugin RAN — 51 s, 14 populations, obs + table merged, its own report
+confirmed: the third-party plugin RAN — over every population, obs + table merged, its own report
         page; its selftest ran for the first time and passed; `in.json` carries `counts` and
         `lognorm`; `cellcycle` changed from "Scored from X" to "Scored from `layers['lognorm']`";
         the constraint printed whole, including the "must NOT" clause cycle 1 cut.
 
-**REPAIR LOOP OBSERVED END TO END** (the repair-loop job): `FAILED velocity (3s)` →
+**REPAIR LOOP OBSERVED END TO END** (the repair-loop job): `FAILED velocity (<t>s)` →
         `ModuleNotFoundError: No module named 'scvelo'` → `[environment] a package the plugin
         imports is not in its environment` → `REPAIRING: rebuilding velocity's environment and
         retrying once` → conda rebuild + 16 pinned pip packages → install-time `selftest ok` →
-        `RECOVERED after rebuild (13s)` → `[environment] ... The installed environment had
+        `RECOVERED after rebuild (<t>s)` → `[environment] ... The installed environment had
         DRIFTED` → `repaired: ['velocity']`. Retried once, did not loop, was not silent, right
         layer.
 
 found:  [host] `objects/` was the only mkdir creating the run's output directory; making it
               conditional killed `report.json` on a run where everything refused → b3bbf4e
         [host] `merged_slots` is truthy for a plugin that ran and REFUSED, so the repair-loop job still wrote
-              3.21 GB for a velocity run that contributed nothing → 79e12b4
+              a whole copy of the object for a velocity run that contributed nothing → 79e12b4
         [host] the sentinel guarantee was asserted and unenforceable. Every plugin's caveats said
-              sentinels "are not treated as a population" beside a table whose worst population
-              was `UNRESOLVED` (-0.142, 475 cells). `ctx.real_cells()` is the mechanism,
+              sentinels "are not treated as a population" beside a table that listed
+              `UNRESOLVED` as a population. `ctx.real_cells()` is the mechanism,
               `feedback.sentinel_as_population` the check → 905480f
         [method] velocity refused for want of spliced counts. NOT a defect — `plan` had already
               said `[data] velocity --search <project>` and the flag was not passed.
@@ -87,14 +87,14 @@ tested: the three cycle-2 fixes, each against the exact log line that had shown 
 
 found:  nothing.
 
-        sentinel: `separation_by_label.csv` has 13 rows and no sentinel among them (was 14 with
-        `UNRESOLVED` worst); the host's own check reported nothing; both the host caveat — now
+        sentinel: `separation_by_label.csv` has no sentinel among its rows (it had carried an
+        `UNRESOLVED` row); the host's own check reported nothing; both the host caveat — now
         naming counts, `EXCLUDED <n>, UNRESOLVED <m>` — and the plugin's appear.
         empty run: `README.md`, `report/index.html`, `report.json`, `object: None`, no crash.
         ran-but-produced-nothing: velocity refused, `object: None`, no `cohort_profiled.h5ad`,
         and the message names velocity rather than claiming nothing ran.
 
-open:   a run that produces nothing still leaves its 3.14 GB compatibility copy
+open:   a run that produces nothing still leaves its full-size compatibility copy
         (`input_for_kernels.h5ad`) behind. It is a legitimate cached working file and reusable,
         so it is recorded here rather than deleted on a guess.
 
@@ -115,15 +115,15 @@ tested: resolve + install of a SHARED environment / selftest of all 8 / plan --a
         selftest ran each of them out of that one directory.
 
 **A ONE-FILE PLUGIN WITH ITS OWN ENVIRONMENT RAN THROUGH `_entry.py`** (the run): `decoupler ok
-        281s  674 regulators scored per cell`, `prior: <E> edges, <R> regulators for <organism>`,
-        `merged obsm: X_tf_activity`. Two plugins into one 3.48 GB object, one report, one README.
+        <t>s  <r> regulators scored per cell`, `prior: <E> edges, <R> regulators for <organism>`,
+        `merged obsm: X_tf_activity`. Two plugins into one object, one report, one README.
 
 **THE REPAIR LOOP CLOSED ON A SHARED ENVIRONMENT** (the repair): `scvelo` removed from the resolved
-        environment by hand -> `FAILED velocity (2s)` -> `ModuleNotFoundError: No module named
+        environment by hand -> `FAILED velocity (<t>s)` -> `ModuleNotFoundError: No module named
         'scvelo'` -> `[environment] a package the plugin imports is not in its environment` ->
         `REPAIRING: rebuilding velocity's environment and retrying once` + `that environment is
         scprofile-env-3cd799b82e, SHARED WITH decoupler, liana, pseudotime - all of them are
-        rebuilt and re-proved` -> `proved for 4 of 4 member(s)` -> `RECOVERED after rebuild (12s)`
+        rebuilt and re-proved` -> `proved for 4 of 4 member(s)` -> `RECOVERED after rebuild (<t>s)`
         -> `[environment] ... The installed environment had DRIFTED` -> `repaired: ['velocity']`.
         Retried once, did not loop, was not silent, right layer - and this time it named what a
         `--force` rebuild of a shared environment actually does.
@@ -157,7 +157,7 @@ found:  [host] `install` read the named plugin's own `lock.yml`. Resolution deci
               writes the barcodes; the merge aligns by them, and a per-unit plugin's arrays can
               cross units for the same reason -> 16aaf4b. Log: `decoupler obsm['X_tf_activity']:
               N-n of N cells covered; the rest are NaN`
-        [host] the 3 GB `input_for_kernels.h5ad` was called "a reusable cached working file" and
+        [host] the `input_for_kernels.h5ad` was called "a reusable cached working file" and
               was neither: nothing read it again and nothing named it. A receipt makes it reusable
               and `report.json`/`README` name it as what the plugins ACTUALLY read -> ba9ec53
         [declaration] decoupler reported the annotator sentinel `UNRESOLVED` as a group in
@@ -172,7 +172,7 @@ clean:  7 suites, validate 0 errors. plan --audit over all 10 plugins: `0 error(
         once`, which was impossible before 8ea8c2c.
 
 format: nothing in the plugin format had to change to accommodate anything. The third-party
-        plugin ran unchanged (`silhouette ok 161s`); decoupler needed a builder that could read
+        plugin ran unchanged (`silhouette ok <t>s`); decoupler needed a builder that could read
         the format's own `requires` block, which is a host defect and not a format one.
 
 ## 2026-08-22 — cycle 5
@@ -185,14 +185,14 @@ tested: the sentinel affordance / the compatibility copy's receipt / the whole p
 
 found:  nothing.
 
-        sentinel: `decoupler_activity_by_label.csv` has 13 rows and no sentinel among them (was
-        14, with an `UNRESOLVED` row over m cells), the host's own check reported nothing —
+        sentinel: `decoupler_activity_by_label.csv` has no sentinel among its rows (it had
+        carried an `UNRESOLVED` row over m cells), the host's own check reported nothing —
         `diagnoses: []` where cycle 4 had one — and the caveat `ctx.populations()` attaches is in
         the run: *"m cells carry an annotator sentinel and are NOT summarised as a
         population"*.
         compatibility copy: `reusing the compatibility copy already at input_for_kernels.h5ad
-        (3.14 GB); it was made from this same object` — a 3.14 GB rewrite that every previous run
-        into the same `--out` had done. `report.json` carries `input_read_by_kernels` and the
+        (<s> GB); it was made from this same object` — a whole-object rewrite that every previous
+        run into the same `--out` had done. `report.json` carries `input_read_by_kernels` and the
         README says what that file is.
         merge by barcode, again: `decoupler obsm['X_tf_activity']: N-n of N cells
         covered; the rest are NaN` -> `merged obsm: X_tf_activity`, on the final code.
@@ -236,7 +236,7 @@ found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two wa
               question, in two layers. `plan` walks to depth 14 with 400,000 visits, pruning
               anything whose name CONTAINS `__STARtmp`; the walk a plugin runs went to depth 3,
               4,000 visits, and an exact-name skip list that `S1__STARtmp` does not match.
-              STARsolo delivers `<sample>_Solo.out/Velocyto/filtered/` at DEPTH 9, so the plan
+              STARsolo delivers `<sample>_Solo.out/Velocyto/filtered/` below depth 3, so the plan
               could name the directory holding the spliced counts and the run, given exactly that
               root, could not reach it. Depth, cap and prune list are one statement each now, and
               `find` reports `exhausted` - the run side had never learned what the plan side
@@ -246,9 +246,9 @@ found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two wa
         [host] **THE WAVE STARTED EVERY INSTANCE AT ONCE.** `EXECUTION.md` §4 has stated
               `min(budget / smallest_declared, ready)` since it was written and nothing
               implemented it. `_budget` divides the share each instance is TOLD it has, which is
-              a different question from how many run. Nine plugins, three of them `per_unit`, ten
-              samples: 37 instances, 37 subprocesses, each opening a 3 GB object, on a node asked
-              for eight cores - every one correctly told `cores: 1` → 623d186
+              a different question from how many run. Nine plugins, three of them `per_unit`
+              with one instance per sample: every instance a subprocess opening the whole object,
+              on a node asked for far fewer cores - every one correctly told `cores: 1` → 623d186
         [host] **AND THE SHARE NEVER REACHED THE ONE POOL A PLUGIN CANNOT CONTROL.** numpy's BLAS
               sizes itself from `OMP_NUM_THREADS` at import, before any plugin code runs, and
               inherits what the job script exported for its own sake. Eight instances on sixteen
@@ -256,7 +256,7 @@ found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two wa
               runner sets all six thread variables from the manifest it just wrote → e4dfcf5
         [host] **FIVE PLUGINS READ `(mask, groups)` AS `(populations, dropped)`.** That is one bad
               affordance, not five mistakes: `len(pops)` becomes the CELL COUNT, so a refusal that
-              should fire never does and a headline claims a hundred thousand populations, and
+              should fire never does and a headline claims as many populations as cells, and
               `if dropped:` asks the truth value of an array and raises. liana, cellchat and
               abundance would each have died before reaching their method. It still unpacks as
               `(mask, groups)`, and it now carries `.names` and `.dropped`, which is what all five
@@ -276,7 +276,7 @@ found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two wa
               many defects there are. The selftests now run anyway, reported as DIAGNOSTIC; no
               stamp is written and `install` still refuses → adf7d32
         [host] an aligner writes the same counts twice - `Velocyto/filtered/` beside
-              `Velocyto/raw/` - and `attach` read both: 22 GB of MatrixMarket text parsed and
+              `Velocyto/raw/` - and `attach` read both: the second MatrixMarket copy parsed and
               discarded for identical cells. Cheapest first, from the size the walk already had,
               and a source whose scope is already covered is skipped BEFORE it is opened, which
               is decidable from its path → 5412b66, af1553c
@@ -297,7 +297,7 @@ found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two wa
               slow → 87f89bf
         [host] `sources.attach` had never executed on anything - velocity refused for want of
               counts in every previous cycle - and could not have survived a real object: a
-              `lil_matrix((100_713, 34_290))` per layer is a Python list per row, filled through
+              `lil_matrix((n_cells, n_genes))` per layer is a Python list per row, filled through
               scipy's Python-level fancy-index assignment, one source at a time. Row/column/value
               arrays concatenated once instead; int32 indices, float32 values. The SEARCH half,
               which is the part that was proven, is untouched → 523b934
@@ -313,8 +313,8 @@ found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two wa
               'NMF'` → adf7d32
         [declaration] **scenic started the node's worth of dask workers, once per sample.**
               `client_or_address="local"` builds a LocalCluster sized from
-              `multiprocessing.cpu_count()`; scenic is `per_unit: sample`, so a ten-sample cohort
-              is ten times the machine in workers. `ctx.effect` is the mechanism and the example
+              `multiprocessing.cpu_count()`; scenic is `per_unit: sample`, so an N-sample cohort
+              is N times the machine in workers. `ctx.effect` is the mechanism and the example
               in its own docstring → c49b3f1
         [declaration] cellcycle grouped its per-population figure by the RAW label column, so an
               annotator's refusal to call a cell type appeared as a population with a cycling
@@ -349,14 +349,14 @@ this cycle: the previous attempt's R step failed and `install` raised before any
         forty-four R packages behind CellChat. All three surfaced in a selftest rather than in
         somebody's run, which is what the selftest is for.
 
-**AND THEN THE RUN** (all ten plugins, `--all`, the whole cohort, 12-core budget).
+**AND THEN THE RUN** (all ten plugins, `--all`, the whole cohort).
 
         `plan --audit --report` over every plugin: `checked: all 10 known plugin(s) appear exactly
         once`, `0 error(s), 0 warning(s)`, `wrote .../out/run_plan.html`. Every plugin `runnable`.
-        `plan: 37 instance(s) in 1 wave(s), 12 core(s), 10 unit(s)` and the wave line ends
-        **`[12 at a time of 27]`** - the concurrency cap 623d186 added, biting on a real wave.
+        `plan: <i> instance(s) in 1 wave(s), <c> core(s), <u> unit(s)` and the wave line ends
+        **`[<c> at a time of <w>]`** - the concurrency cap 623d186 added, biting on a real wave.
 
-        [declaration] **scenic's environment had no anndata.** Ten instances, one line each:
+        [declaration] **scenic's environment had no anndata.** Every instance, one line each:
               `NOT RUN scenic[S1] - scenic's interpreter cannot read this object even
               re-encoded`, and above them `the compatibility copy did not help either:
               ModuleNotFoundError: No module named 'anndata'`. `_entry.py` reads the object before
@@ -372,21 +372,21 @@ this cycle: the previous attempt's R step failed and `install` raised before any
         **THE LAYER SEARCH WORKED END TO END, on the real project, in its moved form** - the
         half of velocity that had never run on anything:
 
-            visited 20,064 director(ies), found 503 candidate(s)
-            mtx  filtered: 13,824/13,824 barcodes matched (100.0%) within sample S1   [x10]
-            141 further candidate(s) not opened: every cell was already covered
-            attached from 10 source(s): N-n/N-n cells (100.0%) have spliced/unspliced counts
+            visited <d> director(ies), found <k> candidate(s)
+            mtx  filtered: <b>/<b> barcodes matched (100.0%) within sample S1   [x<u>]
+            <f> further candidate(s) not opened: every cell was already covered
+            attached from <u> source(s): N-n/N-n cells (100.0%) have spliced/unspliced counts
 
         ...and velocity then refused, because of a COLUMN INDEX.
 
         [host] `features.tsv` is `<gene id>	<symbol>	<type>` and `sources.load` read column 0.
-              The object is indexed by SYMBOLS: a few hundred of the object's genes matched,
+              The object is indexed by SYMBOLS: only a small fraction of the object's genes matched,
               `filter_and_normalize` dropped nearly all of them for want of shared counts, and velocity
-              refused because `only 4 genes survived selection` - **a refusal about the DATA whose
+              refused because `only <g> genes survived selection` - **a refusal about the DATA whose
               cause was a column index**, and one that would have been believed. Every field is a
               candidate now and `attach` takes whichever overlaps the object more → b318bcd
         [declaration] de raised `numpy.linalg.LinAlgError: Singular matrix` from inside pydeseq2.
-              `~ age + diet + chemistry + batch`: chemistry takes one value for every sample of one arm
+              `~ a + b + c + batch`: the covariate `c` takes one value for every sample of one arm
               and another for every sample of the other. `RUN_PLAN.md` says an imbalance, a confound, even
               a COMPLETE confound all run with a caveat - so the terms that add no estimable
               column are dropped, in the order given, and NAMED → b318bcd
@@ -430,9 +430,9 @@ harness: **three of my own, all in the job script or the suites, and all of the 
 
 **THE SECOND RUN** (after scenic was given anndata and de learned to check its
 design). `ran: ['abundance', 'cellchat', 'cellcycle', 'de', 'decoupler', 'liana', 'pseudotime',
-'scenic', 'silhouette', 'velocity']` - all ten, one merged object. `de ok 531s  779
-gene-population-term results below padj 0.05 across 10 population(s), formula ~ age + batch +
-diet`: chemistry dropped as aliased with age, and NAMED. Two refusals left, both this host's:
+'scenic', 'silhouette', 'velocity']` - all ten, one merged object. `de ok <t>s  <k>
+gene-population-term results below padj 0.05 across <q> population(s), formula ~ a + batch +
+b`: the covariate aliased with a factor dropped, and NAMED. Two refusals left, both this host's:
 
         [host] **`ctx.reference_for_role()` COULD NEVER RETURN ANYTHING.** `Context` has accepted
               `reference_specs` from the start and NOTHING EVER PASSED THEM - `in.json` carried
@@ -440,25 +440,25 @@ diet`: chemistry dropped as aliased with age, and NAMED. Two refusals left, both
               mapping and answered None for every role, of every plugin, always. That is the whole
               mechanism that keeps a SPECIES out of a plugin, failing closed: the mouse and human
               entries of one reference are different FILES with different NAMES, so asking by name
-              would mean a plugin picking a species. scenic refused on all ten units with `the
+              would mean a plugin picking a species. scenic refused on every unit with `the
               cisTarget references are not available` while its own `in.json` listed all three of
               them, verified, by absolute path → a5314fa
         [host] and the gene-column fix BROKE THE SHAPE IT WAS FIXING. `genes` became a list per
               FIELD of features.tsv, so `len(genes)` was 2, and the orientation check compared
-              the gene count against 2 and refused every source as `matches neither 15,046 barcodes nor 2
+              the gene count against 2 and refused every source as `matches neither <b> barcodes nor 2
               genes`. A fix that turned partial sourcing into none, found on the run that was
               meant to prove it → a5314fa
 
 **THE THIRD RUN**. velocity produces a real result on the real cohort for the first
 time in this project's history: `partial - velocity fitted on 2,000 genes (stochastic); median
-confidence 0.42; unspliced <p>% of counts`, `wrote velocity.h5ad (N-n x 2,000, velocity graph
-included)`, `transitions: 11 directed label transition(s)`. `partial` is the DECLARED behaviour
+confidence <c>; unspliced <p>% of counts`, `wrote velocity.h5ad (N-n x 2,000, velocity graph
+included)`, `transitions: <k> directed label transition(s)`. `partial` is the DECLARED behaviour
 below `min_confidence` 0.5, not a failure.
 
-observation, not a defect: ten `per_unit` GRNBoost2 fits on ONE node get one core each, because
-the budget is divided over a 37-instance wave. That is arithmetic, and `EXECUTION.md` §5 already
-names the answer - the `pbs` executor submits one job per instance, and wave 1 of this cohort is
-up to eighty independent jobs limited by the queue rather than by one node.
+observation, not a defect: the `per_unit` GRNBoost2 fits, one per sample, on ONE node get one core
+each, because the budget is divided over the whole wave. That is arithmetic, and `EXECUTION.md` §5
+already names the answer - the `pbs` executor submits one job per instance, so wave 1 becomes as
+many independent jobs as it has instances, limited by the queue rather than by one node.
 
 conversion: **did the two plugins lose behaviour?** No, and what they GAINED is the point.
 
@@ -491,28 +491,29 @@ clean:  7 suites and `validate` green on the workstation AND on the cluster, at 
 
 ## 2026-08-23 — cycle 6 closed: ten of ten, every one with a result
 
-The run the whole cycle was for, at `bc4a356`, over the whole cohort and ten samples:
+The run the whole cycle was for, at `bc4a356`, over the whole cohort:
 
     ran : ['abundance', 'cellchat', 'cellcycle', 'de', 'decoupler', 'liana',
            'pseudotime', 'scenic', 'silhouette', 'velocity']
     10 plugin(s) ran, 0 did not          <- out/README.md
-    [4 at a time of 37]                  <- the allocator, admitting by CORES
-    wrote .../out/objects/cohort_profiled.h5ad  (3.50 GB)
+    [<c> at a time of <i>]               <- the allocator, admitting by CORES
+    wrote .../out/objects/cohort_profiled.h5ad  (<s> GB)
 
-Every plugin, including the third-party one, produced a result:
+Every plugin, including the third-party one, produced a result (its values elided here; the run's
+own record keeps them):
 
-    scenic[S1]   ok  3149s  111 regulon(s) over 10,837 cells, inferred from this unit  [x10]
-    de               ok   609s  779 gene-population-term results below padj 0.05 across 10
-                                population(s), formula ~ age + batch + diet
-    velocity         partial 530s  velocity fitted on 2,000 genes (stochastic); median
-                                confidence 0.42; unspliced <p>% of counts
-    cellchat[...]    ok         1,654 interactions over 9 populations, CellChatDB.mouse  [x10]
-    liana[...]       ok        27,002 interactions over 9 populations  [x10]
-    abundance        ok    61s  2 credible compositional effect(s) at fdr 0.05
-    cellcycle        ok    89s  45.5% of cells score S or G2M
-    decoupler        ok    69s  674 regulators scored per cell
-    pseudotime       ok    70s  3 terminal state(s) over 96,488 cells
-    silhouette       ok    26s  median silhouette 0.265 over 13 population(s)
+    scenic[S1]   ok  <t>s  <k> regulon(s) over <n> cells, inferred from this unit  [x<u>]
+    de               ok   <t>s  <k> gene-population-term results below padj 0.05 across <q>
+                                population(s), formula ~ a + batch + b
+    velocity         partial <t>s  velocity fitted on 2,000 genes (stochastic); median
+                                confidence <c>; unspliced <p>% of counts
+    cellchat[...]    ok         <k> interactions over <q> populations, CellChatDB.<organism>  [x<u>]
+    liana[...]       ok         <k> interactions over <q> populations  [x<u>]
+    abundance        ok   <t>s  <k> credible compositional effect(s) at fdr 0.05
+    cellcycle        ok   <t>s  <f>% of cells score S or G2M
+    decoupler        ok   <t>s  <r> regulators scored per cell
+    pseudotime       ok   <t>s  <k> terminal state(s) over <n> cells
+    silhouette       ok   <t>s  median silhouette <s> over <q> population(s)
 
 `velocity`'s `partial` is its DECLARED behaviour below `min_confidence` 0.5, not a failure - the
 field is reported as unresolved rather than presented as a direction.
@@ -520,10 +521,10 @@ field is reported as unresolved rather than presented as a direction.
 And the one thing that did NOT reach the object was refused for a reason worth reading:
 
     NOT MERGED: unit 'S1' obsm['X_regulon_auc'] came back with different widths across
-    units ([37, 42, 48, 57, 65, 73, 88, 111]), so the columns are not the same quantity and
+    units ([<w1>, <w2>, ...]), so the columns are not the same quantity and
     stacking them would invent one.
 
-Ten GRN inferences over ten samples find different numbers of regulons; column 12 of one sample's
+GRN inferences over separate samples find different numbers of regulons; column 12 of one sample's
 matrix is not column 12 of another's. The merge says so, keeps each unit's copy in its own
 directory, and records the absence in the object's provenance rather than in a line of console
 output nobody keeps.
@@ -539,44 +540,44 @@ Five defects, each of the same shape: a field that was declared, read, and then 
 
 **The core budget was divided proportionally across a whole wave**, as though every instance in it
 ran at once. Only a resident subset does. On any wave larger than the budget the arithmetic
-collapsed — 37 instances declaring 313 cores against a budget of 12 gave a plugin declaring 16
-`int(16 × 12 / 313)` = 0, floored to 1. Ten GRN fits ran on one core each for 4h23m of a 12h
-timeout, while the plan printed `(1c)` and nothing anywhere printed the 16.
+collapsed — a plugin declaring 16 got `int(16 × budget / sum(declared))`, which is 0 as soon as
+the wave declares more than sixteen times the budget, floored to 1. The GRN fits ran on one core
+each for hours, while the plan printed `(1c)` and nothing anywhere printed the 16.
 
 **A declaration read and then discarded is worse than one never read**, because the plan prints
 its consequence and never prints the declaration. That is the third time the same sentence has
 been written in this log about a different field.
 
 **The allocator was blind to memory entirely.** `memory_gb_per_100k` had existed since the
-executor block and nothing ever read it. A job died at 260 GB against a 200 GB request while each
-of its ten instances correctly held one core: the core budget was satisfied throughout and could
+executor block and nothing ever read it. A job died above its memory request while each
+of its instances correctly held one core: the core budget was satisfied throughout and could
 not have prevented it. `ResourcePool` now admits on cores, memory and GPUs.
 
 **And the memory metric was wrong in the dangerous direction.** `peak / n × 100_000` reads as a
 rate and is not one — memory is a baseline plus a per-cell term, and dividing by `n` charges the
 fixed cost to the slope. On a fixture with a known 6 GB baseline and 12 GB per 100k it reported
-94 GB per 100k off a 7,296-cell instance, eight times the truth.
+several times the true rate off its smallest instance.
 
 Worse, the fix's own first version failed the wrong way: with one point it attributed the whole
 peak to the *baseline* and the docstring called that conservative. It is conservative only at the
-size measured. 7.2 GB at N-n cells would charge 7.2 GB for 500,000, where the truth is nearer
-36 — a five-fold under-request, which is precisely the failure that kills a job at the end of its
-longest step. It now attributes to the rate, which over-charges the smaller instances instead,
-where the error is bounded by the baseline and nothing dies.
+size measured. A peak seen at n cells would charge that same peak for 5n, where the truth is
+nearer five times it — a five-fold under-request, which is precisely the failure that kills a job
+at the end of its longest step. It now attributes to the rate, which over-charges the smaller
+instances instead, where the error is bounded by the baseline and nothing dies.
 
 All nine plugins now declare measured values, fitted from their own instances. The estimate they
 replaced for the most expensive plugin was wrong in **both** terms.
 
 **A cohort fit was added without checking it was tractable.** A method that infers its own output
 vocabulary produces per-unit results that are not comparable with each other — measured: two
-samples shared 17% of their transcription factors — so a shared fit is needed to compare them.
-Added, and then it thrashed: 8,929 garbage-collection warnings and eight lines of progress over
-six hours on an 11 GB dense frame. It does not fail, it thrashes, which is worse — a job that is
-3% productive looks exactly like one that is merely slow. It now infers from a balanced subsample
-and still scores every cell, in chunks, because building one dense frame over all of them is the
-same allocation that caused the thrash.
+samples shared only a small part of their transcription factors — so a shared fit is needed to
+compare them. Added, and then it thrashed: a stream of garbage-collection warnings and almost no
+progress for hours, on one dense frame. It does not fail, it thrashes, which is worse — a job that
+is barely productive looks exactly like one that is merely slow. It now infers from a balanced
+subsample and still scores every cell, in chunks, because building one dense frame over all of
+them is the same allocation that caused the thrash.
 
-Then the same fit died after 3,867 seconds of *completed* work, writing a caveat, on
+Then the same fit died after its work had *completed*, while writing a caveat, on
 `ctx.constraint` — a name set on `Guard`, thirty lines above `Context` in the same file. Maximum
 cost, minimum signal. Two static checks now make that class impossible: every `ctx.<attr>` a
 plugin names must exist, and no module may read a name nothing defines. Both were verified to
@@ -599,16 +600,16 @@ written directly above it. And a reference check warned on any organism outside 
 list of what this tool knows is not a list of what is valid.
 
 clean:  7 suites green, 415 checks in the contract suite alone; all nine plugins declare memory
-        and pass `declare.check` with no ERROR and no WARN; a run of all ten plugins at 38/38
-        instances, 0 failures, 0 merge refusals, 0 tool-drift refusals.
+        and pass `declare.check` with no ERROR and no WARN; a run of all ten plugins, every
+        instance ok, 0 failures, 0 merge refusals, 0 tool-drift refusals.
 
 ### The same day, after the entry above
 
 **The drift check was proven, and the diagnosis it produced pointed at the wrong thing.** A run
 deliberately started with the snapshot disabled, so it read the live checkout; two files touched
-while its wave was in progress. Six instances refused, each in 0s, naming exactly the two files
-that moved, while the four launched before the touch completed normally. An unfired safety check
-is indistinguishable from a broken one, and this one is no longer unfired.
+while its wave was in progress. Every instance launched after the touch refused at once, naming
+exactly the two files that moved, while those launched before it completed normally. An unfired
+safety check is indistinguishable from a broken one, and this one is no longer unfired.
 
 It also classified every refusal `[method] … the plugin is the place to start`. The plugin was
 untouched; a `git pull` was not. Now `host`, not repairable, saying outright not to debug the
@@ -625,7 +626,7 @@ every reader was re-checked.** The others were the core budget, the reference sp
 constraint. It is worth naming, because the fix is never local — changing what a value means is a
 change to every place that reads it, and the compiler will not say so.
 
-clean:  a whole-cohort run — all ten plugins, 38/38 instances, 0 failures, 0 merge refusals, 0 tool-drift
+clean:  a whole-cohort run — all ten plugins, every instance ok, 0 failures, 0 merge refusals, 0 tool-drift
         refusals, Exit_status 0. The fitted memory figures reproduced the previous run's to within
         a rounding step, which is the measurement being repeated rather than carried forward.
 
@@ -698,9 +699,9 @@ for a file dropped in from outside the repository. It meeting the same standard 
 worth more than a tenth method would be; counting it as one is simply wrong, and this entry said
 "ten plugins" until the review that followed it.
 
-`scenic` was the last (exit 0, 5 h 31 m, 56 GB); the rest were already measured.
-`cellcycle` was re-run once (exit 0, **5 m 58 s**, 30 GB) for one reason: to make the
-tenth criterion a real check rather than a claim about one.
+`scenic` was the last (exit 0; its time and memory are in its run's own record); the rest were
+already measured. `cellcycle` was re-run once (exit 0) for one reason: to make the tenth criterion
+a real check rather than a claim about one.
 
 found:  [host] FIVE of the standard's own criteria had at some point measured something other
               than what they claimed — one keyed on an attribute the reporter never emits, one
@@ -741,15 +742,15 @@ found:  [host] FIVE of the standard's own criteria had at some point measured so
 
         [declaration] a plugin that partitions its allocation was told only about cores. The host
               computes a per-instance memory figure and admits the instance on it; the manifest
-              carried `{"cores": n}`. Measured live: dask workers pinned at 11.25 GiB inside a
-              180 GB job, 86% of CPU in garbage collection, 29% utilisation → b309062
+              carried `{"cores": n}`. Measured live: dask workers pinned at a small slice of
+              the job's memory, most of the CPU in garbage collection, the job mostly idle → b309062
 
-        [declaration] a memory model fitted on a floor. Self-measurement 14.4 GB against 42.7 GB
-              billed — 3.0× — and the declaration sized from it got the plugin killed. Two
+        [declaration] a memory model fitted on a floor. Self-measurement read a fraction of what
+              the scheduler billed, and the declaration sized from it got the plugin killed. Two
               measurements of one cost now resolve to the LARGER, named → 5216a73
 
-        [portability] the tool's own prose named the development cohort's two factors and their
-              crossing, one diet level, its animal count, and the alias between a biological
+        [portability] the tool's own prose named the development cohort's factors and their
+              crossing, a level of one of them, its sample count, and the alias between a biological
               factor and the reagent lot — an unpublished analytical finding about someone's data,
               in a public repository. Twelve sentences; every lesson survives being told about
               `a` and `b` → 02ee150. The leak scan was line-based and could not see a phrase the
@@ -772,29 +773,29 @@ many hats, and the last one was written while fixing the one before it.
 ## 2026-08-28/29 — reuse across runs, and the group becomes a unit
 
 tested: eight jobs on 2026-08-28 and seven on 2026-08-29, every one against the same real
-        ten-sample cohort, one cellchat run per commit. This entry was written on 2026-08-29
+        cohort, one cellchat run per commit. This entry was written on 2026-08-29
         covering thirty commits, which is twenty-nine more than an entry should cover — the log
         is per cycle, and a log written in arrears is a reconstruction.
 
 **The group became a unit, and it is the change that matters.** Until 6d52b0b a unit was a
 sample and the four arms of a 2×2 design were something the reporter pooled after the fact.
-`units.resolve()` now reads the axis from the design, so the runs from then on scheduled **fourteen
-instances — the ten samples and the four arms** — and a plugin invoked on an arm sees that arm's
+`units.resolve()` now reads the axis from the design, so the runs from then on scheduled **an
+instance per sample and one per arm** — and a plugin invoked on an arm sees that arm's
 pooled cells. It is the correct unit of single-cell inference and it had never been one here.
 
 **Reuse across runs works, on real output, by hardlink.** Not a fixture: a second run adopted
-**eight instances, 13 files each, from the first**, and a fourth adopted six from a third. The
+**instances from the first, every file of each**, and a fourth adopted some from a third. The
 refusals are as informative as the adoptions — the third declined every candidate with *"grade None
 is below the minimum this adoption accepts ('provisional')"*, which is the licence layer doing
 its job on a run whose figures nobody had looked at.
 
-**Figures: 101 → 140 → 181.** The between-arm comparisons (`C1_diff_*`, `C3_flow`,
+**Figures grew from run to run.** The between-arm comparisons (`C1_diff_*`, `C3_flow`,
 `C4_role_shift`) and the per-arm networks (`N1_circle`, `N2_chord`) are drawn by the HOST from a
-plugin's `unit_network` declaration, so 41 of the 181 name no method anywhere in host code.
+plugin's `unit_network` declaration, so none of them names a method anywhere in host code.
 liana declares the same key and inherits them; it has not yet been run.
 
-        [host] the exit standard failed four consecutive runs on ONE criterion — `caveats`, 876
-              words against a cap of 800 — while every other criterion passed and the pages
+        [host] the exit standard failed four consecutive runs on ONE criterion — `caveats`, over
+              its cap of 800 words — while every other criterion passed and the pages
               themselves were getting better. A fixed cap on the one section that must stay
               visible penalises a page for covering more ground; it now scales with what the
               page covers → c414c4f. MET again on the closing run (below).
@@ -830,16 +831,16 @@ liana declares the same key and inherits them; it has not yet been run.
               twelve standing errors → d64cb00.
 
         [method] `[0]PETSC ERROR: Caught signal number 13 Broken Pipe` in the install log of
-              the first fourteen-instance run, after the selftest it belongs to had computed its terminal states and
+              the first run with arms, after the selftest it belongs to had computed its terminal states and
               reported 100%. SIGPIPE at interpreter teardown in the GPCCA solver, not a failure
               of anything. Said here because a PETSc banner in a log reads like a crash.
 
-clean:  the closing run, at `621d439` — fourteen instances, all `ok`, 181 figures, 196 tables, exit
-        standard MET, 7 m 30 s wall, no criterion outstanding. Eight suites green; four new
-        guards each broken deliberately and watched go red.
+clean:  the closing run, at `621d439` — every instance `ok`, exit standard MET, no criterion
+        outstanding; its own record keeps its figure and table counts and its wall time. Eight
+        suites green; four new guards each broken deliberately and watched go red.
 
 **Two things this cycle did NOT establish.** No figure from any of these runs has been promoted —
-`results/04_profile/` does not exist and no number in them may be quoted. And 5 of 181 figures
+`results/04_profile/` does not exist and no number in them may be quoted. And few of the figures
 carry a recorded look, so no licence in this stage can reach `full`; every adoption above ran at
 `provisional` or was refused.
 
@@ -848,7 +849,7 @@ carry a recorded look, so no licence in this stage can reach `full`; every adopt
 
 ## 2026-08-29 — the checkers that were wrong, the panels that were owed
 
-tested: one job, on the same real ten-sample cohort, at `67499d2`. It is the first run of this
+tested: one job, on the same real cohort, at `67499d2`. It is the first run of this
         stage to reuse EVERYTHING, so it measures reuse rather than compute.
 
         [declaration] `validate` demanded a url and a sha256 from a reference that ships inside a
@@ -875,17 +876,16 @@ tested: one job, on the same real ten-sample cohort, at `67499d2`. It is the fir
               because each arm's populations came from its own edges → 67499d2
 
         [method] the union of populations across arms immediately paid for itself on real data -
-              one population has no link in one arm and a different one none in the other, and
-              the chord names them instead of the axis quietly omitting them. Not a defect: a
-              measurement the previous layout could not express.
+              where a population has no link in one arm, the chord names it instead of the axis
+              quietly omitting it. Not a defect: a measurement the previous layout could not express.
 
-clean:  **221 figures with ZERO instances recomputed.** All fourteen adopted by hardlink,
-        inode verified shared (`links=2`), 9 m 32 s of compute replaced by 3 m 28 s, PBS mem
-        35.3 GB against 42.7. Exit standard MET, card `ok` on every instance, eight suites green,
-        `check --deep` 33 green.
+clean:  **A larger figure set with ZERO instances recomputed.** Every instance adopted by
+        hardlink, inode verified shared (`links=2`), the compute replaced by a fraction of its time;
+        the run's own record keeps its times and its PBS memory. Exit standard MET, card `ok` on
+        every instance, eight suites green, `check --deep` 33 green.
 
 **The property this run was submitted to test.** If every instance is adopted from a run made by
-older code, does the report freeze at that code's figure set? **No** - 181 figures became 221
+older code, does the report freeze at that code's figure set? **No** - the figure set grew
 with nothing recomputed, because a plugin's output is adopted and the HOST'S PANELS ARE REDRAWN
 EVERY TIME. Had it gone the other way, a reuse-heavy project would have quietly stopped receiving
 tool improvements while its report went on looking complete, which is this log's recurring shape:

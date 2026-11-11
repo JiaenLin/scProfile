@@ -97,7 +97,7 @@ def page_name(plugin=""):
     """
     return "paper.html" if not plugin else f"{plugin}_paper.html"
 
-#: A claim shorter than this is a label, not a claim. "Diet matters" asserts nothing checkable.
+#: A claim shorter than this is a label, not a claim. "Dose matters" asserts nothing checkable.
 MIN_CLAIM_WORDS = 8
 
 #: And a review that does not say what was examined is not a review.
@@ -169,14 +169,14 @@ def claim(out, text, cites, *, author="", plugin=""):
     missing = [c for c in cites if not (root / c).is_file()]
     if missing:
         # THE REFUSAL NAMES THE FORM (harness ADR-0020, blind 0007): the brief and the page
-        # number the figures, a writer cited "15,16,17", and this said only that no such
+        # number the figures, a writer cited them by number, and this said only that no such
         # figure exists. A figure is cited by its run-relative path.
         raise Refused(f"no such figure in this run: {', '.join(missing)}. A figure is cited by "
                       f"its run-relative path (kernels/<plugin>/figures/<file>.png), as "
                       f"kernels/<plugin>/FIGURES.txt and the brief list them - not by the "
                       f"number the page gives it.")
     # A CLAIM CANNOT REST ON A PLATE THE RUN'S OWN RECORD CALLS WRONG (harness ADR-0018).
-    # Blind 0004 wrote claims on two-panel heatmaps its own lookers had condemned an hour
+    # Blind 0004 wrote claims on two-panel heatmaps its own lookers had condemned
     # earlier, and the reviewer withdrew them for the lookers' reason. The eye comes first.
     from . import review as _RV
     try:
@@ -288,7 +288,7 @@ def summarise(out, plugin=""):
     rows = status(out, plugin)
     if not rows and not plugin:
         # THE CLAIMS ARE PER PLUGIN. Asked without one, this said NO CLAIMS RECORDED about a
-        # run whose plugin ledger held 33 defended claims (blind 0004): a tool statement
+        # run whose plugin ledger held defended claims (blind 0004): a tool statement
         # contradicting its own, one flag apart. Name the ledgers that exist.
         held = []
         for led in sorted(Path(out).glob(f"kernels/*/{LEDGER[:-6]}.*.jsonl")):
@@ -379,8 +379,8 @@ def brief(out, plugin=""):
     for p in plugins:
         f = root / "kernels" / p / _B.NAME
         # REFRESHED EVERY TIME IT IS PRINTED. The brief marks which figures are not yet looked
-        # at; written once at report time and printed as it lay, it told a writer that 62 of the
-        # 90 numbered figures had never been opened on a run where every one of them had (blind
+        # at; written once at report time and printed as it lay, it told a writer that
+        # figures it numbered had never been opened on a run where every one of them had (blind
         # 0004). It is derived from the run, so printing it means writing it.
         fresh, why = None, ""
         try:
@@ -482,7 +482,7 @@ def next_step(out, plugin=""):
                     _cmd(out, plugin, "--render"))
         # A PAGE OLDER THAN WHAT IT RENDERS IS NOT THE RENDERED RESULT (harness ADR-0020, blind
         # 0007): the rerun's page was rendered at seal time, the writer carried a section in and
-        # the reviewer recorded eleven verdicts an hour later, and this said nothing was
+        # the reviewer recorded verdicts after it, and this said nothing was
         # outstanding. The page renders the section and the ledger; either newer means render.
         try:
             newest = max(q.stat().st_mtime for q in (_root(out, plugin) / draft_name(plugin),
@@ -493,7 +493,7 @@ def next_step(out, plugin=""):
                         "into the run again.", _cmd(out, plugin, "--render"))
         except (OSError, ValueError):
             pass
-        # A NARROWED CLAIM IS A CLAIM THAT CHANGED (blind 0007): ten of eleven narrowed read as
+        # A NARROWED CLAIM IS A CLAIM THAT CHANGED (blind 0007): narrowed claims read as
         # "survived unchanged" because only the withdrawn were counted.
         withdrawn = [c for c, st, _n, _t in rows if st == WITHDRAWN]
         narrowed = [c for c, st, _n, _t in rows if st == NARROWED]
@@ -542,7 +542,7 @@ def write_draft(out, text, *, author="", plugin=""):
     figure a run does not regenerate is a draft - was not being applied to the writing. A
     written result kept in a scratchpad has no run key, cannot be traced to the figures it was
     read off, and disappears with the session that produced it. It is a draft by the tool's own
-    definition, and the ledger without it holds four sentences and four verdicts but not the
+    definition, and the ledger without it holds the sentences and their verdicts but not the
     section they came from: not the numbers, not the caveats, not why those figures and not
     others.
 
@@ -561,7 +561,7 @@ def write_draft(out, text, *, author="", plugin=""):
     # a figure the run's own record calls wrong is cited by nothing until it is redrawn.
     # BY PANEL WHERE A PANEL IS NAMED (harness ADR-0024): `Fig. 4b` cites one plate, `Fig. 4`
     # every plate of the figure. The check keyed on the number and the writer of the second run
-    # wrote around four whole figures for one flagged panel in each.
+    # wrote around whole figures for a flagged panel in each.
     cited_panels = {}
     for m in re.finditer(r"\bFig(?:ure|s|\.)?\s*(\d+)([a-z](?:\s*[,\u2013-]\s*[a-z])*)?", body):
         n = int(m.group(1))
@@ -815,7 +815,7 @@ def render(out, *, run_key="", title="", plugin=""):
     # THE FIGURES, LETTERED, WITH THE LEGEND A JOURNAL PRINTS. The composites and their legends
     # come from the figure set - the same index the prose cites through, so "Fig. 3b" in a
     # sentence and the panel lettered b under Figure 3 are one object by construction.
-    # THE SET IS REBUILT WHEN THE PAGE IS, from the run's own records: it is derived, a minute's
+    # THE SET IS REBUILT WHEN THE PAGE IS, from the run's own records: it is derived, cheap
     # work, and a page rendered by newer code over a set laid out by older code would number
     # its figures one way and letter its panels another. The brief follows it, so the list a
     # writer works from and the page agree on every letter.
@@ -1044,7 +1044,7 @@ def panel(out, *, run_key="", plugin=""):
     """Write `report/<plugin>_panel.html`: ONE PLATE PER EVIDENCE NEED, PER COMPARISON.
 
     THE FIGURE PANEL IS A DELIVERABLE AND IT WAS NOT BEING PRODUCED. The run writes an arms page
-    carrying every between-arm figure it drew - on this cohort, 426 of them - which is an
+    carrying every between-arm figure it drew, which is an
     appendix, not a panel. A panel is the subset a reader is asked to look at, and until now the
     only way to get one was to pick figures by hand into a document with no run key. That is a
     draft by this project's own rule, whatever it looks like.
@@ -1111,7 +1111,7 @@ def panel(out, *, run_key="", plugin=""):
     cmps = _cmps(des, controls=pay.get("controls"))
     # A FIGURE IS PLACED ONCE. Several evidence needs can route to the same panel - the presence
     # map answers three of them - and the panel emitted it for every need of every comparison:
-    # one figure, twenty-one times, which reads as though absence were the finding. Once is
+    # one figure, many times over, which reads as though absence were the finding. Once is
     # enough for the reader; the needs it also answers are named beside it instead.
     placed_at, also = {}, {}
     H = [f"<h1>Figure panel &mdash; {_e(plugin or 'this run')}</h1>"]
@@ -1121,8 +1121,8 @@ def panel(out, *, run_key="", plugin=""):
                  f'needs, chosen by the route the plugin declares for that need, not by hand. '
                  f'The full set of between-arm figures is on the arms page.</p>')
     n_plate, n_gap = 0, 0
-    # ALIASING IS STATED ONCE. It was printed at the head of every comparison it affects - four
-    # times on this design - which put a design fact where the finding should be and read as
+    # ALIASING IS STATED ONCE. It was printed at the head of every comparison it affects - once
+    # per comparison - which put a design fact where the finding should be and read as
     # though the comparison had been withheld. It has not been: the contrast is drawn and the
     # result stands; the aliasing is a fact about attribution and belongs in one line.
     _alias = {}
@@ -1191,8 +1191,8 @@ def panel(out, *, run_key="", plugin=""):
                 if key in placed_at:
                     also.setdefault(placed_at[key], []).append(title)
                     # A CROSS-REFERENCE, NOT A SILENT SKIP. Placing a plate once is right - one
-                    # cohort-wide panel answering three needs across seven comparisons appeared
-                    # twenty-one times and read as though absence were the finding. But `continue`
+                    # cohort-wide panel answering three needs across every comparison appeared
+                    # over and over and read as though absence were the finding. But `continue`
                     # left the LATER comparisons showing neither a plate nor the "no plate" gap
                     # beside it, so a need that WAS answered looked like a need nobody had routed.
                     # The note that a plate "also answers" something was written onto the FIRST

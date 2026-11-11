@@ -33,12 +33,12 @@ def pool(per_unit_edges, members, *, unit_members=None):
 
     THE HOST'S TABLE AND THE TOOL'S FIGURE WERE DESCRIBING DIFFERENT OBJECTS UNDER THE SAME
     WORDS. This concatenated the per-SAMPLE edge lists, so "total interaction strength" in the
-    table was a sum over animals, while the tool's comparison figures beside it were drawn from
-    the arm's own fit on POOLED cells. Measured on one cohort the two differed by a factor of
-    2.5 - 57.5 against 23.3 for the same arm - and both appeared on the same page.
+    table was a sum over samples, while the tool's comparison figures beside it were drawn from
+    the arm's own fit on POOLED cells. The two can differ several-fold for the same arm - and
+    both appeared on the same page.
 
-    They are different quantities, not one right and one wrong: a sum over animals weights each
-    animal's network equally, and a pooled fit weights each CELL equally. But a reader cannot
+    They are different quantities, not one right and one wrong: a sum over samples weights each
+    sample's network equally, and a pooled fit weights each CELL equally. But a reader cannot
     compare a number from one against a figure from the other, so where a unit exists whose
     members are exactly this side, its own edge list is used, and the source is returned so the
     table can say which it was.
@@ -96,9 +96,9 @@ def arm_pairs(design, factors=None, technical=None, controls=None):
     out = []
     for f in facs:
         # THE CONTROL IS THE REFERENCE, and the difference is computed against it. This took
-        # `sorted(levels[f])`, so the reference was alphabetical. Measured on a real two-factor
-        # study, that put the TREATED level of both factors in the baseline position - backwards
-        # on both, and invisibly, because a difference computed the wrong way round looks exactly
+        # `sorted(levels[f])`, so the reference was alphabetical. On a real study, that put
+        # the TREATED level of every factor in the baseline position - backwards
+        # on each, and invisibly, because a difference computed the wrong way round looks exactly
         # like one computed the right way: same figure, same colours, opposite meaning.
         a, _basis = _control(levels[f], declared=(controls or {}).get(f))
         b = next(x for x in sorted(levels[f]) if x != a)
@@ -146,9 +146,9 @@ def contrast_confounds(design, lo_members, hi_members, exclude=()):
 
     ALIASING IS A PROPERTY OF THE CONTRAST, NOT ONLY OF THE FACTOR PAIR. Two factors can be
     perfectly crossed over the whole design and still be aliased inside one conditional
-    contrast, because conditioning throws away the samples that crossed them. Measured on a real
-    two-factor study: a treatment factor and a technical factor were balanced over the whole
-    cohort, yet one of the conditional contrasts compared one technical level against the other
+    contrast, because conditioning throws away the samples that crossed them. A treatment factor
+    and a technical factor can be balanced over the whole cohort, yet a conditional contrast
+    can compare one technical level against the other
     with NO OVERLAP at all - every sample on one side from one level, every sample on the other
     side from the other. A reader told only that the design is "crossed" would take that
     contrast at face value, and the crossing is a property of the cohort rather than of the
@@ -202,11 +202,11 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
     as every plugin did before the declaration existed; a list draws those and no other.
 
     WHERE THE WEIGHT IS NORMALISED WITHIN EACH UNIT, EVERY WEIGHT-DERIVED PANEL IS DRAWN ON
-    SHARES. Measured on a real cohort: two arms of one contrast had total inferred strength of
-    23.4 and 7.8 - a factor of THREE - so a raw difference between them is mostly the difference
-    in totals, and the largest "effect" on the page was the smaller arm being smaller. On the
-    same pathway the raw comparison said the effect of one factor DISAPPEARED under the other
-    (-4.15 against +0.16) while the share comparison said it REVERSED (-8.6 pp against +8.7 pp).
+    SHARES. On a real cohort two arms of one contrast differed several-fold in total inferred
+    strength, so a raw difference between them is mostly the difference in totals, and the
+    largest "effect" on the page was the smaller arm being smaller. On one pathway the raw
+    comparison said the effect of one factor DISAPPEARED under the other while the share
+    comparison said it REVERSED.
     Same numbers, opposite conclusions, and the difference is entirely the denominator.
 
     Counts are left as counts - a count of significant interactions is not a normalised weight -
@@ -284,8 +284,8 @@ def draw_contrast(per_unit_edges, design, spec, out_dir, prefix, *, weight="prob
     #
     # This was first fixed by keeping the union and HATCHING the rows and columns that could not
     # hold a difference, so that a reader could see they were absent. That was honest and it was
-    # still the wrong panel: on a real cohort it put two full rows and two full columns of hatch
-    # through the middle of a 13x13 matrix - 48 of its 169 tiles, 28% of the figure - carrying no
+    # still the wrong panel: on a real cohort it put full rows and full columns of hatch
+    # through the middle of the matrix - a large share of its tiles - carrying no
     # comparison, and breaking every real block in half. A cell that cannot hold a difference
     # should not occupy the space where differences are read.
     #
@@ -533,7 +533,7 @@ def arms_in(design, pairs):
 
     A marginal contrast's two arms and a conditional contrast's two arms are all arms worth a
     network of their own, and several contrasts share one - drawing an arm once per contrast
-    would render the same pooled network four times and invite a reader to compare two
+    would render the same pooled network several times and invite a reader to compare two
     renderings of identical data.
     """
     out = {}
@@ -550,9 +550,9 @@ def contrast_populations(pooled):
     THE SET IS THE INTERSECTION, NOT THE UNION, AND IT IS DECIDED HERE RATHER THAN IN THE PLOT.
 
     The union was drawn first, with the arms' missing populations hatched so a reader could see
-    they were absent. That is honest and it is still the wrong panel: on a real cohort it put two
-    fully hatched rows and two fully hatched columns into a 13x13 matrix - 48 of its 169 tiles,
-    28% of the panel - carrying no comparison at all, and it put them THROUGH the middle of the grid so
+    they were absent. That is honest and it is still the wrong panel: on a real cohort it put
+    fully hatched rows and fully hatched columns into the matrix - a large share of its tiles
+    carrying no comparison at all, and it put them THROUGH the middle of the grid so
     every real block was broken in half. A cell that cannot hold a difference should not be drawn
     where a difference goes.
 
@@ -617,9 +617,9 @@ def draw_arm_networks(per_unit_edges, design, arms, out_dir, prefix, *, min_edge
     pops, dropped = contrast_populations(pooled)
 
     # THE GRID MAXIMUM, COMPUTED BEFORE ANY PANEL IS DRAWN (panels.R1). Each arm was scaled to
-    # its own maximum, so four arms of a factorial design drawn side by side all showed their
-    # widest edge at full width whatever it was worth - the defect this project has measured at
-    # 3.2x on a nine-panel grid and the one a design comparison is most damaged by.
+    # its own maximum, so the arms of a factorial design drawn side by side all showed their
+    # widest edge at full width whatever it was worth - the defect this project has measured on
+    # its own grids and the one a design comparison is most damaged by.
     #
     # AND WHAT A SHARED SCALE DOES NOT LICENCE IS DECLARED, NOT ASSUMED (panels.R5). Where the
     # weight is normalised within each object - which is the usual case for a communication
@@ -692,7 +692,7 @@ def interaction_specs(design, factors=None, technical=None, controls=None):
 
     A FACTORIAL DESIGN'S HEADLINE IS THE INTERACTION AND NOTHING DREW IT. Six two-arm contrasts
     were drawn for a 2x2 - each factor marginally and each held at every level of the other - and
-    a reader was left to compare two of them in their head. "Does the diet effect depend on age"
+    a reader was left to compare two of them in their head. "Does A's effect depend on B"
     is not the difference of two panels a page apart; it is one panel, and the marginal effect
     can be flat while both simple effects are large and opposite, which is the case a design like
     this most often exists to find.
@@ -767,10 +767,10 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
             t = (e.assign(_k=e["source"].astype(str) + " → " + e["target"].astype(str))
                   .groupby("_k")[weight].sum())
         # SHARES WHERE THE WEIGHT IS PER-OBJECT, AND THIS PANEL IS WHERE IT DECIDED THE ANSWER.
-        # On a real cohort the raw version put one pathway at -4.15 within one level and +0.16
-        # within the other - an effect that DISAPPEARS - while the same pathway on shares was
-        # -8.6 pp against +8.7 pp, an effect that REVERSES. The four arms' totals spanned 7.8 to
-        # 30.4, so the raw version was largely reporting which arm was smallest.
+        # On a real cohort the raw version put one pathway's effect in one level and near zero
+        # in the other - an effect that DISAPPEARS - while the same pathway on shares changed
+        # sign, an effect that REVERSES. The four arms' totals differed several-fold, so the raw
+        # version was largely reporting which arm was smallest.
         return (100.0 * t / (t.sum() or 1.0)).to_dict() if rel else t.to_dict()
 
     what = (group_col or "pathway").replace("_", " ") if group_col else "population pair"
@@ -793,9 +793,9 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     # A SHARE IS COMPOSITIONAL, AND A LINEAR DIFFERENCE OF SHARES RANKS BY WHAT IS ABUNDANT.
     # This panel names the elements furthest from the line, so the ranking IS the claim - and on
     # a real cohort the ranking was not stable. Ranked by percentage points, the largest
-    # interaction was a component holding 14-24% of every arm; ranked by log-ratio, that
-    # component was mid-table and the largest was one holding under 3%, whose swing is small in
-    # points and eight-fold in ratio. Both are correct arithmetic on the same numbers.
+    # interaction was an abundant component; ranked by log-ratio, that
+    # component was mid-table and the largest was a rare one, whose swing is small in
+    # points and large in ratio. Both are correct arithmetic on the same numbers.
     #
     # Neither scale is safe alone: the linear one is dominated by abundant components and the
     # log one by near-zero components. So BOTH are computed and their top ranks compared, and
@@ -854,8 +854,8 @@ def draw_interaction(per_unit_edges, design, spec, out_dir, prefix, *, weight="p
     ax.axvline(0, color=_F.GREY, lw=0.6, zorder=0)
     ax.plot([-lim, lim], [-lim, lim], color=_F.GREY, lw=0.7, ls="--", zorder=0)
     # A REVERSAL NEEDS TWO REAL EFFECTS, NOT TWO SIGNS. Marking every sign disagreement made an
-    # element at (+0.05, -0.02) - noise on both axes - carry the same mark as one that genuinely
-    # flips, so the panel claimed a reversal it could not support. Found by opening it: two of
+    # element just off the origin - noise on both axes - carry the same mark as one that genuinely
+    # flips, so the panel claimed a reversal it could not support. Found by opening it: some of
     # the marked points sat on the origin.
     #
     # THE FLOOR IS DECLARED HERE, ABOVE THE RENDER THAT USES IT: an effect counts only if it
@@ -963,10 +963,10 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob", unit_c
 
     WHY BOTH SCALES. Where a method normalises within each object - the usual case for a
     communication probability - an element's SHARE of its arm and its RAW value answer different
-    questions, and they can disagree in sign. Measured on a real cohort: five of six leading
-    elements reversed direction between the two, because the arm totals differed 3.8-fold and a
-    collapsing total makes whatever shrinks least appear to rise. A section that quotes one scale
-    without the other is reporting an artefact of the denominator half the time.
+    questions, and they can disagree in sign. On a real cohort most of the leading
+    elements reversed direction between the two, because the arm totals differed several-fold and
+    a collapsing total makes whatever shrinks least appear to rise. A section that quotes one
+    scale without the other is reporting an artefact of the denominator whenever they disagree.
 
     So the table carries both and marks the agreement. Nothing here decides which is right - that
     is the reader's - it only makes the disagreement impossible to miss.
@@ -1003,10 +1003,10 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob", unit_c
         # A wrapped tool that draws a differential restricts both arms to the elements they SHARE,
         # because an element only one arm has contributes its whole value as a difference. This
         # table did not, so every ratio a written section quoted was computed over the union while
-        # every panel beside it was drawn over the intersection. Measured on a real cohort: one
-        # contrast read 1.31x in the text and 1.02x - no effect at all - on the populations the
-        # reader could actually see, because two populations present in one arm only carried a
-        # fifth of its total.
+        # every panel beside it was drawn over the intersection. On a real cohort one
+        # contrast read as a clear change in the text and as no effect at all on the populations
+        # the reader could actually see, because populations present in one arm only carried a
+        # large share of its total.
         #
         # Nothing is hidden by this: the elements dropped here are exactly the ones reported as
         # PRESENT IN ONE ARM AND NOT THE OTHER, which is a result and is stated as one. What is
@@ -1033,7 +1033,7 @@ def two_scale_table(per, design, pairs, *, group_col=None, weight="prob", unit_c
         if not (tot_a and tot_b):
             # AN ARM WITH NOTHING IN IT IS NOT A CONTRAST. Substituting 1.0 to avoid dividing by
             # zero wrote a fabricated total into the table, and the written section quoted it:
-            # "Total is 3.00 against 1.00 in the reference arm". The share scale is undefined
+            # a total "against 1.00 in the reference arm". The share scale is undefined
             # here and the ratio is meaningless; the contrast is skipped and said to be skipped.
             print(f"  two-scale: {label} has an arm with no signal at all "
                   f"({lo_lv}={tot_a:g}, {hi_lv}={tot_b:g}); no row written for it")
@@ -1092,7 +1092,7 @@ def decompose_by_member(edges, sizes_arm, sizes_member, *, weight="prob"):
     member also has a fit of its own. Those are different fits, so a panel that draws the arm as
     a bar and its members as points is putting two incomparable quantities on one axis - and
     dividing both by cells does not reconcile them. Measured on a real cohort: the same cells
-    gave one value as a pooled fit and nearly three times it as three separate fits summed, so
+    gave one value as a pooled fit and several times it as the members' separate fits summed, so
     every member point sat above every bar, in every arm, whatever the biology was.
 
     THE RULE. For an ordered pair of populations (i, j) the arm's own value is credited to member

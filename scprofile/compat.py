@@ -180,7 +180,7 @@ def receipt(h5ad):
 
 def reusable(copy, h5ad):
     """Is the copy already on disk the one this source would produce? A pure question, so it can
-    be asked without anndata and tested without writing 3 GB.
+    be asked without anndata and tested without writing a whole object.
 
     False unless the copy exists AND carries a receipt AND the receipt matches this source. Any
     doubt rebuilds: a wrong copy is a run against a different object, and a rebuilt one costs
@@ -207,8 +207,8 @@ def write_compatible(adata, path, *, log=print, source=None):
     IT IS KEPT, AND IT IS NAMED. This file is what the plugins ACTUALLY read, and it is not the
     object the user passed: uns entries are dropped by name and obsp/varm/varp are not carried.
     Deleting it would remove the only on-disk record of what was analysed, which this project's
-    evidence rule does not allow. So it stays - and the run records it, because 3 GB nobody can
-    identify is not a record, it is debris.
+    evidence rule does not allow. So it stays - and the run records it, because a copy
+    nobody can identify is not a record, it is debris.
     """
     import anndata as ad
 
@@ -251,7 +251,7 @@ def handoff_works(python_exe, workdir, *, log=print, timeout=300):
     mismatch correctly at run time: it probes, converts, re-probes, and refuses with a sentence.
     But it does all of that on the user's object, after the environment is built and the run has
     started, and a refusal there costs the whole run - one recorded instance reported
-    `NOT RUN` for all ten units, whose cause was a missing package in one environment.
+    `NOT RUN` for every unit, whose cause was a missing package in one environment.
 
     The same question can be asked of a four-cell object in under a second, and `install` already
     runs each member's selftest for exactly this reason: finding out now is worth more than
@@ -317,8 +317,8 @@ def readable_input(adata, h5ad, python_exe, workdir, *, cache, log=print):
     if conv is None:
         conv = Path(workdir) / "input_for_kernels.h5ad"
         # REUSE IT IF IT IS THE SAME COPY. It was described as a cache and was not one: every run
-        # into the same --out rewrote 3 GB from scratch and nothing ever read the old file again,
-        # so the reason given for keeping it - "reusable" - was not true of it.
+        # into the same --out rewrote the copy from scratch and nothing ever read the old one
+        # again, so the reason given for keeping it - "reusable" - was not true of it.
         if reusable(conv, h5ad):
             log(f"  reusing the compatibility copy already at {conv.name} "
                 f"({conv.stat().st_size / 1e9:.2f} GB); it was made from this same object")

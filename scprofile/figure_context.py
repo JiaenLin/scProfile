@@ -1,6 +1,6 @@
 """What every figure must be able to say about itself, computed once by the host.
 
-WHY THIS EXISTS. An audit of 58 figure kinds across one run found three defects in almost every
+WHY THIS EXISTS. An audit of the figure kinds across one run found three defects in almost every
 one of them, and all three are the same defect wearing different clothes: **the panel does not
 know what the run knows.**
 
@@ -12,7 +12,7 @@ know what the run knows.**
 
 2. **No panel named its unit, its size, or the direction of its contrast.** The host's own
    figures already carried `<arm> - <k> samples pooled - n = <cells>`; not one plugin panel
-   carried the arm or the n, and on two differential panels the title's arm ordering contradicted
+   carried the arm or the n, and on some differential panels the title's arm ordering contradicted
    the sign convention the colours implied. That is not a drawing bug - the plugin was never
    handed the sentence.
 
@@ -49,7 +49,7 @@ from . import captions as _CAP
 #: THE HUE COMES FROM THE LABEL, NOT FROM ITS POSITION. The first version placed hues along the
 #: golden-angle sequence indexed by rank in the sorted label set, and its own suite caught what
 #: that means: drop one label and every label after it shifts rank, so every colour after the gap
-#: changes. A panel drawn on 9 of 13 populations would have recoloured eight of them - the same
+#: changes. A panel drawn on part of the populations would recolour all after a gap - the same
 #: cross-panel mismatch, now produced by the mechanism meant to stop it.
 #:
 #: So the hue is a hash of the label string. A label's colour then depends on the label ALONE:
@@ -61,8 +61,8 @@ HUE_STEPS = 3600
 #: so set-independence is exact everywhere except inside a collision, and a collision is visible
 #: because `colour_map` is a function anyone can call twice.
 #:
-#: A GAP A READER CAN SEE (harness ADR-0024): at 6 of 3600 steps - 0.6 degrees - fourteen labels
-#: drew three populations in one blue and three in one magenta and the map called every colour
+#: A GAP A READER CAN SEE (harness ADR-0024): at 6 of 3600 steps - 0.6 degrees - a run's labels
+#: drew several populations in one blue and several in one magenta and the map called every colour
 #: distinct. Eighteen degrees is the floor, which twenty labels fit inside; past that the circle
 #: is shared evenly and the map says nothing it cannot keep.
 MIN_HUE_GAP = 180
@@ -128,7 +128,7 @@ def stamp(unit=None, unit_kind="", members=(), n_cells=None, contrast=None):
     """One line naming what the panel is OF. Empty string when the host knows nothing.
 
     THE DIRECTION IS PART OF THE IDENTITY OF A DIFFERENCE. `A vs. B` in a title with `B - A` in
-    the data is not a cosmetic mismatch: the audit found two panels where the title's ordering and
+    the data is not a cosmetic mismatch: the audit found panels where the title's ordering and
     the sign convention disagreed, and no reader could recover which way the difference ran. So a
     contrast is never rendered as `A vs B`; it is rendered as an explicit subtraction against a
     named reference.
@@ -158,8 +158,8 @@ def stamp(unit=None, unit_kind="", members=(), n_cells=None, contrast=None):
 def absence(all_labels, drawn_labels):
     """{'absent': [...], 'note': '...'} - what a panel does NOT show, by name.
 
-    A COUNT IS NOT A NAME. "11 of 13 populations" tells a reader something is missing and not what,
-    and the audit found one panel that dropped the arm's TOP-RANKED element with no note at all. A
+    A COUNT IS NOT A NAME. "k of n populations" tells a reader something is missing and not what,
+    and the audit found a panel that dropped the arm's TOP-RANKED element with no note at all. A
     list of names is checkable; a count is not.
 
     Silence here is deliberate: with nothing missing the note is empty, so a panel does not carry
@@ -238,8 +238,8 @@ def build(labels=(), unit=None, unit_kind="", members=(), n_cells=None, contrast
     # laid side by side, and this is the one value that says so in a glance.
     ctx["colour_key"] = hashlib.sha1(
         "|".join(f"{k}={v}" for k, v in sorted(ctx["colours"].items())).encode()).hexdigest()[:12]
-    # THE LEGEND WRITER, HANDED OVER RATHER THAN DESCRIBED. Measured on a sealed run: 711 panels,
-    # 69 written legends, 642 with none - because the host owned the format and shipped no writer
+    # THE LEGEND WRITER, HANDED OVER RATHER THAN DESCRIBED. Measured on a sealed run: most panels
+    # had no written legend - because the host owned the format and shipped no writer
     # for it, so the only implementation in the repository was three copies of it embedded in one
     # plugin's R. A second plugin would have had to read those copies to find out what the four
     # host read sites parse. This is the same block, going to the same place, for the same reason

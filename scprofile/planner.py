@@ -12,7 +12,7 @@ to go and find out, and `audit()` fails it.
 
 SKIP requires a positive statement about the EXPERIMENT ("`treatment` has one level across
 every sample"). BLOCKED requires a positive statement about the SEARCH ("no spliced layer, and no loom
-under the 6 directories listed"). "No design table found" is not a design fact - it is a missing
+under the directories listed"). "No design table found" is not a design fact - it is a missing
 input, and the verdict is BLOCKED.
 
 See docs/RUN_PLAN.md. Nothing here may assume an organism, an assay, a column name, a design
@@ -337,8 +337,8 @@ def decisions_for(kernel, facts):
     A DECISION THE PLUGIN CANNOT RECEIVE IS NOT A DECISION. Every key returned here must be a
     capability the kernel declares in `inject`, because that is the channel it arrives by - and
     the first version of this checked nothing, so the plan printed a contrast, the run delivered
-    it, and both plugins refused the whole run with "no such parameter ['contrast']" three
-    hours into a queue. Deciding something for a plugin that has not said it can be given it is
+    it, and both plugins refused the whole run with "no such parameter ['contrast']" deep
+    into a queue. Deciding something for a plugin that has not said it can be given it is
     a decision made about a plugin rather than for one.
     """
     d = {}
@@ -474,7 +474,7 @@ def resolve_covariates(facts, contrast):
 
     A COVARIATE IS MODELLED OR REFUSED BY NAME, never dropped (GAP-040). Before this the host had
     no word for one: a covariate column of the design table was either removed by `--factor`
-    without a sentence, or read as a factor - a numeric age became as many arms as it had
+    without a sentence, or read as a factor - a numeric covariate became as many arms as it had
     values. Now each `--covariate` is resolved against the contrast it would sit beside:
 
       refused   not a column; a term of the contrast (a term is tested, a covariate adjusted
@@ -1022,11 +1022,12 @@ _P_STEM = _stems()
 #: WHY THIS IS HERE AND NOT IN A REPORT. `result_spec` above says what a result should CONTAIN and
 #: needs no run - and its only caller builds a page out of a finished one, so the specification
 #: was always read after the compute it was meant to inform. It also reads one field,
-#: `report.unit_network`, which is the host's own panels: on a real cohort that is 84 files of
-#: 1187. The other 1103 come from the plugin's own inventory, and nothing looked at it before a
+#: `report.unit_network`, which is the host's own panels: on a real cohort that is a small share of
+#: the files. The rest come from the plugin's own inventory, and nothing looked at it before a
 #: job was submitted.
 #:
-#: MEASURED: one plugin drew 1187 figures. Nobody could have known that without running it.
+#: MEASURED: one plugin drew far more figures than anyone expected. Nobody could have known
+#: that without running it.
 def position_map(plugin_spec):
     """{prefix or id: position} - the declared prefix map, with every plan entry's own `position`
     as an exact key (harness ADR-0016).
@@ -1116,7 +1117,7 @@ def figure_families(plugin_spec):
         # THE DIRECTORY IS WRITTEN ONCE AND THE FILES FOLLOW IT. A `use:` reads
         # "figures/<stem>_count.png and <stem>_weight.png" - English, not a list - and a pattern
         # requiring `figures/` on every name found the first and missed the second, so an entire
-        # family of 18 files was absent from the plan and from every count built on it. The
+        # family of files was absent from the plan and from every count built on it. The
         # extension is what makes a token a figure; a table is excluded by naming .csv.
         for raw in _re.findall(r"(?:figures/)?([A-Za-z0-9_{},<>-]+?)\.(?:png|pdf|svg)",
                                str(rec.get("use") or "")):
@@ -1125,8 +1126,8 @@ def figure_families(plugin_spec):
             # A BRACE FAMILY NAMES AS MANY FILES AS IT HAS MEMBERS, and the declaration was
             # already saying so. `<stem>_{outgoing,incoming}.png` is two files;
             # `<stem>_{count,weight}.png` is two. Collapsing the brace into the stem
-            # and counting one undercounted five families by eighteen and six files each - 84 in
-            # all - and the fix is in this reader, not in any plugin: nothing had to be declared
+            # and counting one undercounted every such family on every unit and contrast -
+            # and the fix is in this reader, not in any plugin: nothing had to be declared
             # that had not been declared already.
             members = 1
             for grp in _re.findall(r"\{([^}]*)\}", raw):
@@ -1141,14 +1142,14 @@ def figure_families(plugin_spec):
         # OWN MEANS THE HOST'S EMIT PATH WROTE IT - a vector copy exists only there. A plan entry
         # drawn by the tool is an upstream PNG from another interpreter's device, and so is the
         # plugin's own R site (`declare.drawn_by_companion`): the companion's device writes it
-        # and the host writes no copy. Counting one per such panel promised eleven conclusion
-        # files on one cohort that no run has produced.
+        # and the host writes no copy. Counting one per such panel promised conclusion
+        # files on a real cohort that no run has produced.
         if not _D.drawn_by_companion(e):
             own.add(fid)
     # WHICH FAMILIES CAN HAVE A VECTOR COPY AT ALL. Only the ones the plugin draws through the
     # host's own figure writer; an upstream plot arrives as a PNG from the wrapped tool's device
-    # and there is no vector to write. Counting one for every family overstated this cohort by
-    # 171 files that were never going to exist.
+    # and there is no vector to write. Counting one for every family overstated a real cohort's
+    # count by files that were never going to exist.
     return [(stem, n, _match(stem, axes, akeys, "unit"),
              _match(stem, place, pkeys, "contrast"), stem in own)
             for stem, n in sorted(fams.items())]
@@ -1159,7 +1160,7 @@ def figure_plan(plugin_spec, *, units=1, contrasts=0, cohort=1, vector_for_paper
     """{rows, files, vector, total} - what a run of this shape will draw, before it is scheduled.
 
     A COUNT IS THE POINT. A specification a reader can argue with is worth having and is not the
-    same as a number that can look wrong: 1187 figures for one plugin is obvious on a screen and
+    same as a number that can look wrong: a figure count for one plugin is obvious on a screen and
     invisible in a list of families. The arithmetic is the declaration's own - a ceiling times
     the number of times its axis occurs - so a plan that disagrees with a run is a defect in one
     of them and can be measured rather than felt.

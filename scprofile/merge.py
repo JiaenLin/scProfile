@@ -52,7 +52,7 @@ def _read_array(path):
 def _array_columns(path):
     """The names of an array's columns, written beside it by `ctx.emit_obsm`.
 
-    Without them a 674-column activity matrix reaches the object as a bare ndarray and every
+    Without them a many-column activity matrix reaches the object as a bare ndarray and every
     figure the host could draw from it would be labelled by position. Absent for an array whose
     columns have no names - a two-column layout has none to give - and that is not an error.
     """
@@ -241,8 +241,8 @@ def merge_many(adata, results, *, log=print):
     import pandas as pd
     # PER-UNIT IS A PROPERTY OF THE RESULT, NOT A COUNT OF THEM. This tested `len(results) == 1`,
     # so a per-unit plugin down to its last surviving unit was routed into merge_one - whose obsm
-    # check requires an array covering EVERY cell, which a single unit's never does. Nine of ten
-    # units failing therefore turned the tenth's valid result into a refusal of the whole plugin,
+    # check requires an array covering EVERY cell, which a single unit's never does. Every unit
+    # but one failing therefore turned that one's valid result into a refusal of the whole plugin,
     # and the more units failed the more likely it became.
     if len(results) == 1 and not results[0][1].get("unit"):
         return merge_one(adata, results[0][0], results[0][1], log=log)
@@ -473,8 +473,8 @@ def fold_payloads(payloads, failed=None):
     """One entry per PLUGIN from a list with one entry per INSTANCE. Keyed by name, keeps units.
 
     The wave rewrite made a per-unit plugin produce N payloads, all carrying the same
-    `payload["kernel"]`. Both consumers still built `{p["kernel"]: p for p in payloads}` - so nine
-    of ten units were dropped by a dict comprehension, and the survivor was rendered under the
+    `payload["kernel"]`. Both consumers still built `{p["kernel"]: p for p in payloads}` - so all
+    units but one were dropped by a dict comprehension, and the survivor was rendered under the
     bare plugin name as though it described the cohort. Nothing counted the loss and nothing could
     recover it from `report.json`.
 
@@ -518,9 +518,9 @@ def fold_payloads(payloads, failed=None):
             # rather than of the result.
             #
             # Which leaves the repetition. A per-unit plugin fires the same refutation on every
-            # unit, and one that names its own unit's count - "so the 8,194 figure above
+            # unit, and one that names its own unit's count - "so the <n> figure above
             # describes size" - produced a DIFFERENT string each time, so exact-match dedup kept
-            # all of them and the page opened with ten near-identical shouting sentences. That
+            # all of them and the page opened with near-identical shouting sentences. That
             # is the repetition `_fold_caveats` exists to remove, reappearing in the one block
             # that must not be folded at render time because the standard matches it verbatim.
             #
@@ -544,8 +544,8 @@ def fold_payloads(payloads, failed=None):
                           "dir": base, "n_figures": len(pl.get("figures") or [])})
 
         # UNITS THAT FAILED HAVE NO PAYLOAD, so folding only what came back described a plugin
-        # that ran on seven samples of ten as plainly "ok" - in report.json, in the report page and
-        # in uns['scprofile'], while the merged column held NaN for the other three. A status
+        # that ran on part of its samples as plainly "ok" - in report.json, in the report page and
+        # in uns['scprofile'], while the merged column held NaN for the rest. A status
         # computed from the survivors is a status computed from the good news.
         gone = sorted({str(u) for u in (failed or {}).get(name, []) if u is not None})
         sts = {u["status"] for u in units}

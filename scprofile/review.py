@@ -6,7 +6,7 @@ suite was green through all of them: a chord whose ribbon geometry was inverted 
 a starburst of spikes; ring labels sitting on top of the nodes they named; arrowheads painted
 over by their own destination markers, so direction - the whole content of the panel - was
 legible only from the legend; and a decluttering fix, correct in itself, applied where the
-geometry did not need it, which drove ten of twelve labels off the axes and passed every test
+geometry did not need it, which drove most of the labels off the axes and passed every test
 before and after.
 
 Nothing here can verify that the agent moved its eyes. What it CAN do is make the
@@ -20,7 +20,7 @@ THREE PROPERTIES DO THE WORK.
    that cannot be talked around: a panel cannot be reviewed once and then quietly change.
 
 2. A NOTE MUST SAY SOMETHING. An empty note, a note shorter than a few words, or a note
-   IDENTICAL TO ANOTHER FIGURE'S in the same ledger is refused. Copying one line across forty
+   IDENTICAL TO ANOTHER FIGURE'S in the same ledger is refused. Copying one line across many
    panels is the obvious way to defeat this, so it is the one thing checked directly.
 
 3. THE UNREVIEWED SET IS REPORTED AS A COUNT AND AS NAMES. A number is ignorable; a list of
@@ -46,7 +46,7 @@ LEDGER = "FIGURE_REVIEW.jsonl"
 #: A review is bound to a figure's sha256, so an unchanged image IS the same image and a look at
 #: it is still a look. But the ledger lived only inside the run directory, so a run that reused
 #: every fitted object and redrew nothing still reported every one of its figures as never looked
-#: at - on this cohort, 672 of them, per run. Honouring that means re-reviewing an unchanged
+#: at, on every run. Honouring that means re-reviewing an unchanged
 #: figure set on every run, which nobody will do, so the step gets skipped: a gate that demands
 #: the impossible is a gate that is off.
 #:
@@ -77,7 +77,7 @@ def ledger_path(out, plugin=""):
 
 
 #: The shape of a run key: a UTC stamp, the tool and its commit, then the stage and a slug -
-#: `20260913T133001Z__scprofile-b751000__04_profile__written`. A writing run is named like this.
+#: `20260101T000000Z__scprofile-abc1234__04_profile__written`. A writing run is named like this.
 RUN_KEY_RE = re.compile(r"^\d{8}T\d{6}Z__[A-Za-z][\w]*-[0-9a-f]{7,}__")
 
 
@@ -138,7 +138,7 @@ def read_carried(out, plugin=""):
     """
     # THE LATEST LOOK PER IMAGE, WHICHEVER SIBLING TOOK IT (harness ADR-0022): the first
     # sibling's record won before, so an older run's defect look outranked the plain look a
-    # later run's looker had settled it with, and eighteen settled figures were sent back.
+    # later run's looker had settled it with, and settled figures were sent back.
     seen = {}
     for run in sibling_runs(out):
         for rel, rec in read_ledger(run, plugin).items():
@@ -239,7 +239,7 @@ def read_answers(out, plugin=""):
     seen = _own(out)
     # AND THE SIBLINGS', BY THE IMAGE'S BYTES (harness ADR-0019, found on the rerun of blind
     # 0006): the looks and the findings carried from the run beside this one by sha256 and not
-    # one of the author's 21 answers did, so the answered plates were not outstanding for a fresh
+    # one of the author's answers did, so the answered plates were not outstanding for a fresh
     # look and the worksheet would have asked the same kinds again. An answer is bound to the
     # bytes like a look is: on the same bytes it carries, with the run it was given on named.
     by_sha = {}
@@ -461,7 +461,7 @@ def _norm(text):
 def answer(out, figure, why, *, by="", plugin="", stated=False, plugin_file=None):
     """Record why a figure the eye marked should stay as it is. Returns the record.
 
-    STATED, AND CLOSED (harness ADR-0022): thirteen of sixteen surviving kinds named the
+    STATED, AND CLOSED (harness ADR-0022): most of the surviving kinds named the
     upstream's own drawing - a legend it does not draw, labels the plugin cannot reach through
     its plan - and their only exit was a looker's fresh look, which kept finding what is there.
     With `stated=True` the answer is a disclosure: the words must appear in the plan entry that
@@ -515,7 +515,7 @@ def stated_answers(out, plugin="", plugin_file=None):
     re-marked. These CLOSE the finding (see `answer`).
 
     A DISCLOSURE IS A SENTENCE IN THE LEGEND, WHATEVER THE BYTES (harness ADR-0026): closure by
-    bytes alone let 33 findings sleep through a legend rewrite until the next run redrew the
+    bytes alone let findings sleep through a legend rewrite until the next run redrew the
     plates, and the maker read `audited done` over them. With the words gone from the
     declaration in this tree, the finding is open before any run; a declaration this tree
     cannot read leaves the old closure by bytes."""
@@ -557,7 +557,7 @@ def stated_answers(out, plugin="", plugin_file=None):
         if w and _norm(rec.get("answer")) not in w:
             continue                       # the legend no longer says it
         out_[rel] = rec
-    # AND BY THE ENTRY, TO ANY RENDERING (harness ADR-0022): seventeen plates of one scan set
+    # AND BY THE ENTRY, TO ANY RENDERING (harness ADR-0022): some plates of one scan set
     # render differently on every run, so a disclosure bound to bytes reopened with nothing
     # changed but the pixels. The disclosure is about the entry's drawing by the upstream's
     # design; it holds for every rendering while the legend carries the words, and that is
@@ -569,8 +569,8 @@ def stated_answers(out, plugin="", plugin_file=None):
         recs = by_kind.get(kind) or []
         if not recs:
             continue
-        # ONE READ OF THE DECLARATION PER KIND: read per figure, the worksheet took two minutes
-        # on 945 figures, loading the plugin's file for each. THE RECORD THAT FITS, LATEST FIRST
+        # ONE READ OF THE DECLARATION PER KIND: read per figure, the worksheet took minutes on
+        # a run's figures, loading the plugin's file for each. THE RECORD THAT FITS, LATEST FIRST
         # (harness ADR-0026): a kind stated twice - once in a legend's old words, once in its
         # new - carries by the record whose words the legend still holds, not by whichever a
         # sibling's ledger happened to list last.
@@ -600,7 +600,7 @@ def answered(out, plugin=""):
             continue                       # the answer was about other bytes
         # THE LOOK THAT SETTLED IT CARRIES WITH IT (harness ADR-0022): held against this run's
         # own ledger alone, a figure a looker had settled on the run before read "needs a look"
-        # again on identical bytes - eighteen of them on one rerun.
+        # again on identical bytes - many of them, on one rerun.
         look = looks.get(rel) or (carried.get(now) if now else None) or {}
         if str(look.get("at") or "") > str(rec.get("at") or ""):
             continue                       # a looker marked it again after the answer
@@ -678,7 +678,7 @@ def status(out, plugin=""):
     ans = answered(out, plugin)
     # A DISCLOSURE CLOSES THE FINDING; IT IS NOT A LOOK (harness ADR-0022): the status once
     # read a stated figure as reviewed whether or not any eye had opened that rendering, and
-    # station 7 disagreed by forty figures. A figure's state here is the eye's: its look, the
+    # station 7 disagreed with it. A figure's state here is the eye's: its look, the
     # carried look on its bytes, or nothing yet.
     rows = []
     for rel in figures(out):
@@ -716,7 +716,7 @@ def status(out, plugin=""):
 def defects(out, plugin="", plugin_file=None):
     """[(relpath, note, reviewer, run)] - looks marked a defect whose image is unchanged.
 
-    THE EYE'S VERDICT, MACHINE-READABLE (harness ADR-0018). Fifty-eight of one run's 139 notes
+    THE EYE'S VERDICT, MACHINE-READABLE (harness ADR-0018). Many of one run's notes
     named a defect and nothing could count them. The latest look per figure decides: a later
     clean look on the same bytes supersedes a defect; a redraw clears it, as it clears every
     look; a sibling run's look on the same bytes carries. `run` names the sibling when it does.
@@ -790,7 +790,7 @@ def _plugin_file(plugin):
 def worksheet(out, plugin, plugin_file=None):
     """The audit's worksheet: every open finding, by kind, with an owner and the two answers.
 
-    A FINDING IS NOT YET WORK (harness ADR-0019). Seventy findings on 46 kinds had three owners
+    A FINDING IS NOT YET WORK (harness ADR-0019). Findings on many kinds had three owners
     and the ledger named none: the HOST's own composed panels (mechanism - nothing to paste),
     the TOOL's plates drawn with a plan entry's arguments, size and legend (the plan, the
     author's), and the PLUGIN's own drawing (its file, the author's). This groups the open
@@ -981,7 +981,7 @@ def scan_set(out, plugin=""):
     every kind the paper does not show. Run-relative paths, sorted.
 
     ONE SELECTION (harness ADR-0017). Station 7 asked for every kind's largest and smallest
-    instance and printed eight names; the agenda asked for the figures the paper cites;
+    instance and printed a handful of names; the agenda asked for the figures the paper cites;
     `--shards` split a third list; the station and the sampler each had their own definition of
     a kind. An agent that did exactly what one said was told by the other that nothing was
     done. This is the one set every reader counts: what a reader is shown - `FIGURES.txt`,
@@ -1015,15 +1015,15 @@ def scan_set(out, plugin=""):
 def by_kind(out, plugin="", per_kind=1, only=None):
     """Up to `per_kind` OUTSTANDING figures of every kind. Coverage before volume.
 
-    A RUN DRAWS ONE KIND MANY TIMES. This cohort has 81 kinds across 819 figures: a circle plot
+    A RUN DRAWS ONE KIND MANY TIMES. A run has many kinds across many more figures: a circle plot
     per unit, a role heatmap per contrast, and so on. A defect in how a kind is drawn - a colour
     bar with no negative half, an absence rendered as a zero, a label over its own node - is in
-    every instance of that kind, so opening one finds it and opening the other eighteen finds it
+    every instance of that kind, so opening one finds it and opening every other instance finds it
     again. Reading in path order spends the whole budget inside the first few kinds and never
-    reaches the rest: here, 31 kinds had been looked at and 50 had never been opened at all.
+    reaches the rest: on a real run, most kinds had never been opened at all.
 
     So this samples ACROSS kinds first. It is not a substitute for looking at everything - two
-    instances cannot show that the nineteenth is fine - and `shards` still splits the whole
+    instances cannot show that the next one is fine - and `shards` still splits the whole
     outstanding set when that is what is wanted. It is what to do FIRST, and it is what to do
     when the figures are about to be redrawn: a review dies when its image changes, so a full
     sweep before a fix round is a sweep that gets thrown away.

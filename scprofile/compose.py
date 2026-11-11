@@ -410,9 +410,9 @@ DEFAULT_POSITION = "contrast"
 #: panel is still produced, still placed on the pages, still reviewable. It is not NUMBERED, so
 #: no sentence can cite it and the writing step does not wait on it.
 #:
-#: WHY THIS HAD TO BE SAYABLE. This cohort draws 1187 figures of 81 kinds - one circle plot per
-#: unit, one chord per pathway per contrast, 72 of that kind alone. Every one was gating the
-#: result section, so writing 24 claims required opening 1019 images, and 50 of the 81 kinds are
+#: WHY THIS HAD TO BE SAYABLE. A real run draws figures of many kinds - one circle plot per
+#: unit, one chord per pathway per contrast, many of that kind alone. Every one was gating the
+#: result section, so writing the claims required opening every image, and many of the kinds are
 #: never cited by any sentence the composer writes. The host cannot know which those are: it has
 #: no idea what a chord diagram per pathway is for. The plugin does, and now says so.
 APPENDIX = "appendix"
@@ -536,8 +536,8 @@ def reference_unit(design, controls, available=()):
     the run already knows which that is.
 
     IT IS THE ARM, NOT A SAMPLE IN IT. The first version scanned `design` - which is keyed by
-    SAMPLE - and returned the first animal whose row happened to sit at every control level. That
-    animal is one replicate; the manuscript's reference is the pooled arm, fitted once on all of
+    SAMPLE - and returned the first sample whose row happened to sit at every control level. That
+    sample is one replicate; the manuscript's reference is the pooled arm, fitted once on all of
     its cells, and it is the arm every contrast is actually measured against. Describing a single
     sample instead would put a control profile in the paper that no comparison is read against.
 
@@ -604,8 +604,8 @@ def _limitations(run, plugin, alias=None, comp=None, arms=()):
     orders. Written fresh, a limitations paragraph drifts from the data the moment either
     changes, and on a different cohort it would be wrong rather than merely stale.
 
-    Deduplication is most of the work: a caveat the plugin emits per unit arrives eighteen times
-    with a different prefix each time, and eighteen copies of one sentence is not eighteen
+    Deduplication is most of the work: a caveat the plugin emits per unit arrives many
+    times, with a different prefix each time, and many copies of one sentence are not many
     limitations. The unit tag is dropped and the sentence counted once.
     """
     import json as _json
@@ -621,8 +621,8 @@ def _limitations(run, plugin, alias=None, comp=None, arms=()):
     for c in raw:
         t = _re.sub(r"^\s*\[[^\]]+\]\s*", "", str(c)).strip()
         # THE SAME SENTENCE ABOUT DIFFERENT UNITS IS ONE LIMITATION. Numbers differ per unit, so
-        # sentences are keyed on their words with the digits removed - otherwise "576 cells" and
-        # "412 cells" are two limitations and the paragraph fills with one caveat counted twice.
+        # sentences are keyed on their words with the digits removed - otherwise "<n> cells" and
+        # "<m> cells" are two limitations and the paragraph fills with one caveat counted twice.
         key = _re.sub(r"\d[\d,.]*", "#", t.lower())
         if t and key not in seen:
             seen.add(key)
@@ -765,12 +765,12 @@ def section(run, plugin, spec=None, design=None, run_key=""):
     by_size = sorted(ranked, key=lambda l: -f[l]["ratio"])
     L = [COMPOSED_MARK, "", "# Results", ""]
 
-    # THE SUMMARY FIRST. A reader should not have to assemble the shape of the result from six
+    # THE SUMMARY FIRST. A reader should not have to assemble the shape of the result from its
     # subsections; the run knows which contrast is largest and can say so.
     def _cell(x):
         # A CONTRAST LABEL CAN CONTAIN A PIPE - a simple effect is named `<factor> | <other>
         # in this design and in every other - and a pipe is the column separator. Unescaped, the
-        # four conditional rows carried six cells against a five-column header, so the table a
+        # conditional rows carried six cells against a five-column header, so the table a
         # reader meets first rendered with its contrast names split in half. Escaped the standard
         # way; `_md` unescapes when it splits.
         return str(x).replace("|", "\\|")
@@ -837,12 +837,12 @@ def section(run, plugin, spec=None, design=None, run_key=""):
                       "per-observation column; a claim about total burden from the other.**", ""]
     # THE COMPOSITION AND THE SETTINGS, ONCE. Both are properties of the RUN, so they go here and
     # not under each comparison. A constant printed under every finding is the failure this
-    # section has already had twice - the aliasing line four times, the alignment sentence on a
+    # section has already had twice - the aliasing line repeated, the alignment sentence on a
     # panel with no populations - and it buries the sentence that actually describes the result.
     # BY UNIT, NOT BY LEVEL. `reference`/`against` are factor LEVELS: two contrasts both read
     # the same two LEVELS while meaning different objects, so looking a side up by level name
     # returned the MARGINAL unit for every conditional contrast. The composition table listed
-    # four marginal arms while telling the reader every comparison is read against it, and the
+    # the marginal arms while telling the reader every comparison is read against it, and the
     # per-contrast composition caveat was computed from the wrong pair every time.
     _arms = []
     for lab in order:
@@ -875,7 +875,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         SUPP += ["| **total cells** | " + " | ".join(f"**{int(tot[c]):,}**" for c in cols) + " |", ""]
     # WHAT THIS RUN DECLINED TO COMPARE, ONCE. Every comparison here restricts itself to the
     # elements its arms share, and an element dropped for that reason is invisible in the result:
-    # a panel drawn on nine populations and one drawn on eleven look identical. Named rather than
+    # a panel drawn on fewer populations and one drawn on more look identical. Named rather than
     # described, because a category cannot be argued with and a list can.
     try:
         from . import removals as _RM
@@ -899,7 +899,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
             # biological one, and that is not a judgement the person making the removal can make.
             #
             # GROUPED BY ELEMENT, because one element aligns with several factors whenever those
-            # factors are aliased - and listing every pair separately produced eleven clauses in
+            # factors are aliased - and listing every pair separately produced many clauses in
             # one sentence, ending in a singular "its" after a list. The fact is about the
             # element; the factors it lines up with are its predicate.
             _byel = {}
@@ -929,7 +929,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
 
     # THE THING EVERY DIFFERENCE IS A DIFFERENCE FROM, DESCRIBED FIRST. Without it the document
     # opens on a comparison and the reader has nothing to attach it to. The panels exist per unit
-    # and were filed under no contrast, so nothing cited them: 144 profile panels in the run and
+    # and were filed under no contrast, so nothing cited them: every profile panel in the run and
     # none in the manuscript.
     _ref = reference_unit(design, ctl, _unit_dirs(run, plugin))
     _reffigs = [p_ for p_ in profile_figures(run, plugin, spec, _ref) if p_ in idx]
@@ -948,7 +948,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
         d = f[lab]
         # THE HEADING NAMES THE COMPARISON; THE FINDING IS THE FIRST SENTENCE UNDER IT.
         #
-        # It used to be the finding - "<arm> carries 3.2x the strength of <arm>" - which reads
+        # It used to be the finding - "<arm> carries <k>x the strength of <arm>" - which reads
         # well and makes the document's SHAPE depend on its outcome: two runs of one design
         # produce differently-titled sections and nothing can be laid side by side or referred
         # to across runs. The requirement that a reader meets the result immediately has not
@@ -1054,7 +1054,7 @@ def section(run, plugin, spec=None, design=None, run_key=""):
                               if str(c.get("factor")) == fac and c.get("other")), ""))
                   for fac, _ls in sorted(inter)]
         # ONE PAIR, NAMED ONCE: the response of A by B and of B by A are one interaction, and a
-        # 2x2 lists both, so the heading read "age and diet; diet and age" on the first run.
+        # 2x2 lists both, so the heading read "A and B; B and A" on the first run.
         _seen, _uniq = set(), []
         for a, b in _pairs:
             key = frozenset((a, b)) if b else frozenset((a,))
@@ -1273,7 +1273,7 @@ def claims(run, plugin, spec=None, design=None):
         d = f[label]
         # THE SENTENCE AND ITS EVIDENCE ARE ONE CLAIM (found by a cold reviewer, blind 0004):
         # a total cited the per-pair network and the per-pathway ranking, on which no total
-        # appears, and was narrowed thirteen times over; the plate that shows the totals is the
+        # appears, and was narrowed time after time; the plate that shows the totals is the
         # `how_much_total` route's. The network and the ranking follow, as the reading of it.
         if d["ratio"]:
             cites = figs_for(label, ("how_much_total", "who_changed", "what_carries_it"),
@@ -1306,7 +1306,7 @@ def claims(run, plugin, spec=None, design=None):
                     f"test, led by {names}.", cites))
         # AN ELEMENT DETECTED IN ONE ARM IS SHOWN WHERE ELEMENTS ARE SHOWN PER ARM - the ranking
         # and the pair plates - not on the population presence grid, which has no element on it
-        # and which seven such claims cited and were withdrawn for (blind 0004).
+        # and which such claims cited and were withdrawn for (blind 0004).
         if d["only_against"] or d["only_reference"]:
             cites = figs_for(label, ("what_carries_it", "specificity"))
             if cites:

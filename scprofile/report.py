@@ -142,8 +142,8 @@ def _panel(f, index, *, note=""):
         extra.append('<span class="nosrc">no source data</span>')
     unit = f.get("unit")
     head = f"Figure {index}." + (f" <code>{_e(unit)}</code>" if unit else "")
-    # THE CLAIM VISIBLE, THE REST ONE CLICK AWAY. Captions were 65% of every word on the page -
-    # 13,172 of 20,545 on the worst - so the figures were surrounded by more text than a reader
+    # THE CLAIM VISIBLE, THE REST ONE CLICK AWAY. Captions were most of the words on a page,
+    # so the figures were surrounded by more text than a reader
     # will read, and the sentence that says what the panel SHOWS was buried in it. Nothing is
     # thrown away: the remainder is still on the page, behind a disclosure.
     lead, rest = _split_caption(f.get("caption") or "")
@@ -209,7 +209,7 @@ def _figure_section(figs, spec):
                 "for, or that one is missing.</p>" + panels)
 
     # BY ID, AND A LIST PER ID. A per-unit plugin emits the same panel once per unit, and folding
-    # them to one would report nine units' work as one figure and silently pick whichever came
+    # them to one would report every unit's work as one figure and silently pick whichever came
     # back first.
     by_id = {}
     for f in figs:
@@ -270,7 +270,7 @@ def _constraint_block(constraint, binds):
     if not (constraint and binds):
         return ""
     # THE PROHIBITION VISIBLE, THE WHOLE TEXT KEPT. Printing the entire constraint on every
-    # bound page put ~250 words of it in front of a reader six times over, and the sentence that
+    # bound page put all of it in front of a reader once per page, and the sentence that
     # actually forbids something was inside them. The prohibition is what binds; the rest is
     # context, and it is one click away rather than gone.
     text = str(constraint)
@@ -286,7 +286,7 @@ def _constraint_block(constraint, binds):
 
 
 def _num(v):
-    """A number a reader can read. `:,.4g` renders 38,895 as `3.89e+04`, which is a count.
+    """A number a reader can read. `:,.4g` renders 34,567 as `3.457e+04`, which is a count.
 
     Counts are the commonest thing a plugin reports per unit, and scientific notation on a
     count is not a rounding choice - it makes two numbers a reader is meant to compare look
@@ -302,7 +302,7 @@ def _num(v):
         return f"{f:.4g}"
     if abs(f - round(f)) < 1e-9:
         return f"{round(f):,d}"
-    # `.4g` counts SIGNIFICANT digits, so 23543.5 comes out as 2.354e+04 - the same defect one
+    # `.4g` counts SIGNIFICANT digits, so 34567.5 comes out as 3.457e+04 - the same defect one
     # decimal place further on. Above 1, fix the decimals; below it, significant digits are what
     # a reader wants.
     return f"{f:,.2f}" if abs(f) >= 1 else f"{f:.4g}"
@@ -342,7 +342,7 @@ def _crossed_factors(units, design):
 
     THE BINDING WAS COMPUTED FROM WHAT A PLUGIN DECLARES, AND THE PAGE CROSSES THE DESIGN
     WHETHER IT DECLARES ANYTHING OR NOT. `_units_by_arm` builds its panels from any per-unit
-    metric a plugin happens to emit, so the host crosses age and diet on the plugin's behalf -
+    metric a plugin happens to emit, so the host crosses every factor on the plugin's behalf -
     and `constraint_binds` never heard about it, because it was asked only what the plugin's own
     contrast tests. A plugin declaring neither `needs_design` nor `needs_representation` was
     therefore exempt from a constraint while the host drew, on its page, a comparison across the
@@ -431,7 +431,7 @@ def _arm_content(units, design, spec, *, native_plots=None, out_dir=None, name="
                  host_kinds=None):
     """({"contrast": [...], "arm": [...]}) - every between-arm and per-arm figure, drawn.
 
-    THE COHORT PAGE CARRIED ONE FIGURE while the per-sample appendix carried a hundred. On a
+    THE COHORT PAGE CARRIED ONE FIGURE while the per-sample appendix carried the rest. On a
     factorial design that is backwards: the comparison between arms is the question and it had
     no picture. Everything here is drawn from cells POOLED WITHIN EACH ARM, so no panel is gated
     on any single sample supporting an inference by itself.
@@ -457,7 +457,7 @@ def _arm_content(units, design, spec, *, native_plots=None, out_dir=None, name="
         # A UNIT'S `dir` IS RECORDED RELATIVE TO THE RUN DIRECTORY. Resolving it against the
         # process's working directory found nothing on a real run, so every arm panel was
         # silently skipped and the page fell back to one figure - while a local re-render, whose
-        # fixture had been given absolute paths, produced all forty. THE FIXTURE WAS MORE
+        # fixture had been given absolute paths, produced all of them. THE FIXTURE WAS MORE
         # CONVENIENT THAN REALITY, which is the only reason the bug survived a check written to
         # catch it. Absolute paths are honoured as-is so an out-of-tree unit still resolves.
         base = Path(d)
@@ -481,8 +481,8 @@ def _arm_content(units, design, spec, *, native_plots=None, out_dir=None, name="
     # Both a network's edge count and its total weight rise with the observations behind them - a
     # permutation test has more power, and a probability is computed over more expressing cells -
     # so an arm assembled from more samples can carry a larger network with nothing biological
-    # behind it. Measured on a real cohort: one arm had six animals against another's four, and a
-    # marginal ratio of 2.58x on raw edges was 2.13x per thousand cells.
+    # behind it. An arm with more samples than another can show a marginal ratio on raw edges
+    # that shrinks once both are taken per thousand cells.
     #
     # The host cannot compute this itself. It hands the whole object to the plugin, which does its
     # own subsetting and its own minimum-size filtering, so only the plugin knows how many
@@ -557,7 +557,7 @@ def _arm_content(units, design, spec, *, native_plots=None, out_dir=None, name="
                                   weight_scale=net.get("weight_scale", "per_object"),
                                   kinds=host_kinds)
     # THE INTERACTION, ONCE PER CROSSED PAIR OF TWO-LEVEL FACTORS. It is the question a factorial
-    # design is built to answer and the one nothing drew: the six two-arm contrasts were all
+    # design is built to answer and the one nothing drew: the two-arm contrasts were all
     # there and a reader had to hold two of them side by side in their head. A marginal effect
     # can be flat while both simple effects are large and opposite.
     inter = []
@@ -604,7 +604,7 @@ def _arm_figs_html(name, items):
 def _arm_appendix(name, content, plugin_arm_figs=()):
     """The arm pages' body: every contrast, then every arm's own network.
 
-    ITS OWN PAGE, FOR THE REASON THE PER-SAMPLE PANELS HAVE ONE. Six contrasts times four panels
+    ITS OWN PAGE, FOR THE REASON THE PER-SAMPLE PANELS HAVE ONE. Every contrast's panels
     plus a network for every arm is far past the count a single page can carry, and the exit
     standard says so. Nothing is deleted and nothing is capped away: the main page keeps the
     design summary and links here.
@@ -658,7 +658,7 @@ def _arm_appendix(name, content, plugin_arm_figs=()):
             b.append(_figs(items))
     # THE PLUGIN'S OWN PER-ARM PANELS, which used to be filed with the per-SAMPLE ones. They are
     # the method's full figure set computed on an arm's pooled cells - the group-level result -
-    # and they belong beside the between-arm comparisons rather than among the animals.
+    # and they belong beside the between-arm comparisons rather than among the samples.
     if plugin_arm_figs:
         by_unit = {}
         for f in plugin_arm_figs:
@@ -699,7 +699,7 @@ def _phase_env(exe, *, inp=None, cores=None):
     reporter, which launches the same plugin with the same entry point, did not - the same door,
     one room over.
 
-    One env object was also built once and reused for all three launches. It is built per launch
+    One env object was also built once and reused for every launch. It is built per launch
     now, because `SCPROFILE_IN` names THIS launch's manifest and a shared one can only name at
     most one of them.
     """
@@ -765,9 +765,9 @@ def _compare_launch(*, exe, entry, plugin_file, cdir, spec, kernel, version, kin
     executable, the same entry point, the same environment as the run phase - once per arm pair
     and once over every crossed arm, and it left behind a directory of PNGs and nothing else: no
     `in.json` saying what it was handed, no `out.json` saying it finished, no duration, no core
-    share, no row in the schedule. `18 instances in 1 wave` is what the RUN phase did; the
-    reporter then launched the plugin again, three more times on a 2x2 design, and the run's own
-    execution record was short by exactly those launches.
+    share, no row in the schedule. The plan's instances and waves are what the RUN
+    phase did; the reporter then launched the plugin again, once per arm pair and over the
+    crossed arms, and the run's own execution record was short by exactly those launches.
 
     Three separate defects followed from the missing `out.json` alone:
 
@@ -776,7 +776,7 @@ def _compare_launch(*, exe, entry, plugin_file, cdir, spec, kernel, version, kin
       - it was invisible to the resume machinery, which iterates plan instances only;
       - and the directory it created, holding files and no `out.json`, was read back by
         `resume.discover` as an instance that DIED, so a run in which everything succeeded
-        reported `1 died` BECAUSE the reporting had worked.
+        reported a `died` instance BECAUSE the reporting had worked.
 
     `spec` is written as this launch's `in.json` in the launch directory rather than to a
     temporary file. A manifest in /tmp is a manifest that is gone by the time anyone asks what
@@ -908,8 +908,8 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
     # found on the rerun of blind 0006). The run's own report launched the phase and recorded
     # its plates; the declared after-line `scprofile report --out` then rebuilt the pages with no
     # --prefix, resolved no interpreter, returned here, and wrote panels.json with `native: []` -
-    # so the drawing station read 249 plates "recorded by nothing". An interpreter is needed to
-    # launch a comparison; recording one that is on disk needs none.
+    # so the drawing station read every plate as "recorded by nothing". An interpreter is
+    # needed to launch a comparison; recording one that is on disk needs none.
     if not exe:
         print(f"  native compare: no interpreter resolved for {name}; nothing is launched, and "
               f"the comparisons already on disk are recorded")
@@ -977,9 +977,9 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
               f"the shell exports (a job script's OMP_NUM_THREADS=$NCPUS reaches it). Rebuild "
               f"from a report.json that records `cores`, or cap the threads in the environment.")
     udir = {str(u.get("unit")): u.get("dir") for u in (units or []) if u.get("unit")}
-    # THE SHARE EACH LAUNCH RUNS UNDER, AND HOW MANY RUN AT ONCE (harness ADR-0026). Seven
-    # launches of ~72 s each ran one after another on a 64-core node, each handed the whole
-    # budget and using one core: 505 s of R, 13.5 minutes of phase, in every rerun. The run
+    # THE SHARE EACH LAUNCH RUNS UNDER, AND HOW MANY RUN AT ONCE (harness ADR-0026). The
+    # launches ran one after another on a many-core node, each handed the whole budget and
+    # using one core, so the phase took the sum of its launches, in every rerun. The run
     # phase already schedules its instances by the plugin's declared `cores` under the run's
     # budget; this phase launches the same plugin and takes the same share. A plugin declaring
     # no `cores` keeps the old shape - one launch at a time under the whole budget - because
@@ -1047,12 +1047,12 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             # per-unit script alone left three mutually inconsistent palettes in one run - the
             # per-unit natives, the comparison bars, and the host's own F-series - which is the
             # exact cross-family mismatch the block exists to remove, surviving in the layer where
-            # a reader is most likely to carry a colour across. Found by opening 62 figure kinds
-            # after two panels from one family had been taken as evidence for all of them.
+            # a reader is most likely to carry a colour across. Found by opening every figure
+            # kind after two panels from one family had been taken as evidence for all of them.
             "figure_context": _fig_ctx(out_dir),
             # THE PLUGIN'S OWN DECLARATION, so the compare phase can be governed by it the way
             # the per-unit phase is. Without it `figure_ceiling` resolved to nothing here and a
-            # family declared `at_most: 8` drew 77 panels in one contrast, the guard never
+            # family declared `at_most: 8` drew far more panels in one contrast, the guard never
             # firing because it had no table to consult.
             "plugin_spec": ((_k.spec or {}) if _k is not None else {}),
         }
@@ -1085,10 +1085,10 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
     # AND ONCE OVER EVERY ARM THE DESIGN CROSSES, not only two at a time.
     #
     # Some of a tool's own comparison functions take N objects, and asking them for one pair at
-    # a time produces a figure per contrast that says less than one figure would. Measured here:
-    # the total-interactions bar drawn per pair was twelve plates carrying, between them, exactly
-    # the four numbers that fit on one axis - and a reader comparing arm three with arm four had
-    # to hold two plates side by side to do it.
+    # a time produces a figure per contrast that says less than one figure would. Drawn per
+    # pair, the total-interactions bar was a stack of plates carrying, between them, only the
+    # one number per arm that fits on one axis - and a reader comparing two arms had to hold
+    # two plates side by side to do it.
     #
     # The crossed arms are the design's own: the label every sample gets from all its biological
     # factors together, which `units.group_label` already computes and the resolver already ran
@@ -1136,9 +1136,9 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         _considered += 1
         base = Path(out_dir)
         cdir = kdir / _RS.COMPARE_DIRNAME / _COHORT_COMPARE
-        # WHO IS INSIDE EACH ARM, AND WHAT EACH ONE CARRIES. An axis of four arm bars says
-        # nothing about whether the animals inside an arm agree, and on a real cohort one animal
-        # carried more of its arm's network than the whole of the opposite arm. The host already
+        # WHO IS INSIDE EACH ARM, AND WHAT EACH ONE CARRIES. An axis of arm bars says
+        # nothing about whether the samples inside an arm agree, and one sample can carry
+        # more of its arm's network than the whole of the opposite arm. The host already
         # computes these totals for `unit_totals` from the plugin's declared `unit_network`, so
         # handing them over costs nothing and keeps one arithmetic rather than two.
         #
@@ -1211,7 +1211,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             "pair": _COHORT_COMPARE,
             # THE PLUGIN'S OWN DECLARATION, so the compare phase can be governed by it the way
             # the per-unit phase is. Without it `figure_ceiling` resolved to nothing here and a
-            # family declared `at_most: 8` drew 77 panels in one contrast, the guard never
+            # family declared `at_most: 8` drew far more panels in one contrast, the guard never
             # firing because it had no table to consult.
             "plugin_spec": ((_k.spec or {}) if _k is not None else {}),
             "interactions": _inter,
@@ -1225,8 +1225,8 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
             # per-unit script alone left three mutually inconsistent palettes in one run - the
             # per-unit natives, the comparison bars, and the host's own F-series - which is the
             # exact cross-family mismatch the block exists to remove, surviving in the layer where
-            # a reader is most likely to carry a colour across. Found by opening 62 figure kinds
-            # after two panels from one family had been taken as evidence for all of them.
+            # a reader is most likely to carry a colour across. Found by opening every figure
+            # kind after two panels from one family had been taken as evidence for all of them.
             "figure_context": _fig_ctx(out_dir),
         }
         print(f"  native compare across {len(_cross)} crossed arm(s): " + ", ".join(_cross))
@@ -1244,7 +1244,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         _unlaunchable.append({"pair": _COHORT_COMPARE, "why": _across_gate})
     # ---------------------------------------------------------------------------------------
     # WHAT THIS PHASE COMPRISES, WRITTEN DOWN. Its cardinality was stated nowhere: the run's plan
-    # says "18 instances in 1 wave" about the run phase, and this phase then launched the plugin
+    # states its instances and waves for the run phase, and this phase then launched the plugin
     # again once per launchable arm pair plus, on a design crossing more than two arms, once more
     # over all of them. Nothing said how many that was, whether they ran, or why one did not.
     _phase_dir = kdir / _RS.COMPARE_DIRNAME
@@ -1336,7 +1336,7 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi, spec=None):
                       "panels, and in this contrast's alignment file.")
     # THE LEGEND, WHERE ONE WAS WRITTEN. Whatever drew a figure knows what it shows; the host
     # knows only which function produced the file. Deriving a caption from the filename produced
-    # "interaction flow age response by diet, drawn by the tool itself" - which is a filename,
+    # "interaction flow F response by G, drawn by the tool itself" - which is a filename,
     # and whose last clause is FALSE for a panel the plugin drew from the tool's numbers. The
     # fallback stays for anything undescribed, so a plugin that has not been changed is unaffected.
     from . import captions as _CAP
@@ -1353,7 +1353,7 @@ def _native_panels(figdir, label, declared, out_dir, lo, hi, spec=None):
                     + (f" {_prov}" if _prov else ""))
         else:
             # AN ABSENT LEGEND IS STATED, NOT INVENTED. This branch used to print the filename
-            # with its underscores removed - "interaction flow age response by diet" - in the
+            # with its underscores removed - "interaction flow F response by G" - in the
             # place a description goes, so a path read as a sentence about the figure. It names
             # no axis, no encoding, no direction and no caveat, and nothing on the page said it
             # was a fallback. The clause after it asserted the tool had drawn the panel, which
@@ -1457,10 +1457,10 @@ def _units_by_arm(units, design, declared, *, out_dir=None, name="", design_grid
 
     A per-unit plugin already records one comparable number per unit, and the units already sit
     on one axis. What was missing was the join: the reporter had the numbers and the arm NAMES
-    and no way to put a unit in an arm, so three plugins could show ten dots and not say which
-    of them belonged to which arm.
+    and no way to put a unit in an arm, so three plugins could show a dot per unit and not say
+    which of them belonged to which arm.
 
-    Median per arm, and the units behind it. NOT a test - two arms of five samples compared by
+    Median per arm, and the units behind it. NOT a test - two arms of a few samples compared by
     eye is a description, and the page says so.
     """
     if not design:
@@ -1470,7 +1470,7 @@ def _units_by_arm(units, design, declared, *, out_dir=None, name="", design_grid
     # produced two panels with byte-identical numbers and no note - a reader with two panels
     # showing the same difference under two names has, on the page, two pieces of evidence for
     # one. The per-CELL path already collapsed them; this one did not, so the same cohort got
-    # the honest treatment on four pages and the duplicated one on three.
+    # the honest treatment on some pages and the duplicated one on others.
     from .design_panel import aliased as _aliased
     _alias = _aliased(design)
     factors, _seen = [], set()
@@ -1506,13 +1506,13 @@ def _units_by_arm(units, design, declared, *, out_dir=None, name="", design_grid
                 recs.append({"level": lvl, "n": len(xs), "median": m,
                              "q1": xs[0], "q3": xs[-1], "min": xs[0], "max": xs[-1]})
             q = (named.get(k) or {}).get("question") or ""
-            # DRAWN UP TO THE CAP, TABULATED IN FULL. Two metrics across four factors is eight
-            # panels of one shape, and the page budget is twelve for everything. Every pair is
+            # DRAWN UP TO THE CAP, TABULATED IN FULL. Every metric across every factor is a
+            # panel of one shape, and the page budget is twelve for everything. Every pair is
             # still in the table below, so capping the drawing loses no number.
             # EVERY PAIR, NOT THE ALPHABETICALLY FIRST THREE. The cap took whichever factors
-            # sorted first and named nothing it dropped, so on this cohort `diet` - the factor
-            # with the LARGEST split on two of the three plugins that use this path, 3.0x on
-            # one - was the one comparison with no picture, and a second measure got no panel
+            # sorted first and named nothing it dropped, so the factor with the LARGEST
+            # split on the plugins that use this path could be the one comparison with no
+            # picture, and a second measure got no panel
             # at all. A page budget is a reason to spend one figure on many strips, not a
             # reason to hide the largest effect in the study.
             _ali = _alias.get(fac) or []
@@ -1591,9 +1591,9 @@ def _across_units(units, declared):
     A per-unit plugin runs separately on each unit and its page is that many single-unit
     reports in sequence. Every panel on it is true, and the one question a cohort study asks -
     do the units agree? - is answered nowhere, because the numbers never share an axis.
-    Measured on a real cohort: one plugin's per-unit interaction count ran from 8,194 to
-    38,895, a 4.7-fold range across the units of a single tissue, and a reader taking the strongest
-    interaction off the first unit's panel had nothing on the page to warn them.
+    On a real cohort one plugin's per-unit interaction count spanned a several-fold range across
+    the units of a single tissue, and a reader taking the strongest interaction off the first
+    unit's panel had nothing on the page to warn them.
 
     So the host renders it rather than each plugin: one implementation, no per-plugin drawing
     code to drift, and it appears for a plugin written next year without that plugin doing
@@ -1726,7 +1726,7 @@ def _by_arm_block(by_arm, *, aware, out_dir=None, name="", design=None, design_g
     Of nine plugins on the cohort that motivated this, the two that test the design reported
     across it and the other seven reported per population and per cell - never once splitting a
     result by the factor the study exists to ask about. Two of the seven DECLARED that they
-    report per arm and between them had fourteen panels, none of them about an arm.
+    report per arm and between them had a page of panels, none of them about an arm.
 
     Rendered by the host from the per-cell columns a plugin already writes, so a plugin gets
     this by producing its output and writing no code for it.
@@ -1745,12 +1745,12 @@ def _by_arm_block(by_arm, *, aware, out_dir=None, name="", design=None, design_g
         return ""
     # EVERY PAIR, IN ONE FIGURE. This drew ONE `<figure>` per (column, factor) pair and capped
     # the count at three, because a page's whole budget is twelve figures - so a plugin with
-    # three per-cell columns over a four-factor design showed three of twelve comparisons and
-    # named the other nine in a sentence. On the cohort this was written for, that meant ONE
-    # column was ever compared and two design factors appeared on no page at all.
+    # several per-cell columns over a multi-factor design showed three of its comparisons and
+    # named the rest in a sentence. On the cohort this was written for, that left columns
+    # never compared and whole design factors on no page at all.
     #
     # The cap was the wrong lever. These panels are inline SVG strips a few rows tall, not
-    # plots; what cost twelve figures was wrapping each in its own `<figure>`. Collected into a
+    # plots; what cost the figures was wrapping each in its own `<figure>`. Collected into a
     # single figure they cost ONE against the budget and NOTHING is dropped - which is the whole
     # reason the study exists, and the one thing a reader was not being shown.
     blocks, omitted = [], []
@@ -1779,7 +1779,7 @@ def _by_arm_block(by_arm, *, aware, out_dir=None, name="", design=None, design_g
     if not blocks:
         return ""
     # THE HONEST n, WHERE THE RUN RECORDED IT. Everything above summarises over CELLS, so a
-    # panel reads `n = 54,093 vs 44,534` from a handful of replicates - the unit of
+    # panel reads an n of cells per arm from a handful of replicates - the unit of
     # replication is the
     # sample, and this is the most-documented error in the field. `inputs.by_arm` now carries
     # the per-sample value beside the cell-level summary, so the same figure the per-unit
@@ -1866,7 +1866,7 @@ def _concordance_block(name, recs):
 def _lede(text):
     """The headline's claim, with the rest under it.
 
-    A per-unit plugin's headline is every unit's headline concatenated - sixty words of
+    A per-unit plugin's headline is every unit's headline concatenated - a paragraph of
     per-sample detail in the first line of the page, before a reader has been told what the
     cohort is. The lead is the claim; the per-unit half is in the appendix and here.
     """
@@ -1898,12 +1898,12 @@ def _headline_without(p):
 def _contradiction_block(items):
     """What the plugin said against its own headline, beside the headline, never collapsed.
 
-    Two pages on a real cohort carried a claim their own figures refute - "45.5% of cells score
-    S or G2M" in post-mitotic tissue, "3 terminal states" over cells whose fate entropy sits at
-    the maximum three states allow. Neither page was dishonest: the evidence against each was
+    Pages have carried a claim their own figures refute - a share of cells scored as cycling in
+    a tissue that does not divide, a count of terminal states over cells whose fate entropy sits
+    at the maximum that count allows. Neither page was dishonest: the evidence against each was
     plotted, correctly, further down.
 
-    It reached the page as one sentence among ten in the caveat list, and before that it was
+    It reached the page as one sentence among many in the caveat list, and before that it was
     prefixed onto the headline - where `_lede` splits at the first clause and folds the rest
     into a disclosure, so a refutation longer than the lead was rendered CLOSED. A mechanism
     that survives only while the sentence is short is not a mechanism.
@@ -1923,14 +1923,14 @@ def _fold_caveats(caveats):
     """Caveats identical apart from their `[unit]` tag, folded into one line naming the units.
 
     A per-unit plugin emits its caveats once per unit and the merge tags each with the unit it
-    came from, so a ten-sample run put the same sentence on the page ten times - 106 caveats on
-    one page, of which a handful were distinct. Every unit is still named; what goes is the
+    came from, so a run put the same sentence on the page once per unit - a page of
+    caveats of which a handful were distinct. Every unit is still named; what goes is the
     repetition, not the information.
     """
     import re as _re
-    # IDENTICAL APART FROM THEIR NUMBERS COUNTS AS IDENTICAL. Ten units emit the same sentence
-    # with their own counts in it - "576 cells carry an annotator sentinel", "412 cells ..." -
-    # so folding on exact text left 42 distinct lines from 106, and a thousand words of the same
+    # IDENTICAL APART FROM THEIR NUMBERS COUNTS AS IDENTICAL. Every unit emits the same sentence
+    # with its own counts in it - "<n> cells carry an annotator sentinel", one n per unit -
+    # so folding on exact text left most lines distinct, and a page of words of the same
     # handful of statements. The numbers are not lost: each varying position is rendered as the
     # RANGE across the units it came from.
     _NUM = _re.compile(r"\d[\d,\.]*")
@@ -1979,8 +1979,8 @@ def _fold_caveats(caveats):
         elif len(units) == 1:
             out.append(f"[{units[0]}] {body}")
         else:
-            # ALL OF THEM IS NOT A LIST. Naming every unit on every folded caveat put ten names
-            # on seventeen lines - two hundred words of the same ten strings, on a page whose
+            # ALL OF THEM IS NOT A LIST. Naming every unit on every folded caveat put every name
+            # on every folded line - the same strings over and over, on a page whose
             # per-sample appendix already names them all. A SUBSET is still listed, because
             # which units a caveat applies to is the whole of its meaning when it is not all.
             total = len(order_units) if order_units else len(units)
@@ -1999,8 +1999,8 @@ def _overview_block(payload, *, plugin=None, by_arm=None):
     plugins write none.
 
     The page then said "No design factor was resolved, so nothing on this page is a comparison
-    between groups" over a cohort whose design resolved perfectly - ten samples, four factors,
-    two levels each - and said it directly above its own per-arm panels. A
+    between groups" over a cohort whose design resolved perfectly, and said it directly above
+    its own per-arm panels. A
     reader is told the study has no groups by the one block whose job is to say what the groups
     are.
 
@@ -2050,7 +2050,7 @@ def _native_unit_panels(out_dir, name, declared, axis, spec=None):
 
     THESE WERE DRAWN AND PLACED NOWHERE. A plugin's own panels arrive through its payload, but the
     figures the wrapped tool writes go straight to disk from another interpreter and are recorded
-    by nothing - measured on a real run, 192 of them, on no page, in no manifest, cited by nothing.
+    by nothing - on a real run, every one of them on no page, in no manifest, cited by nothing.
     The comparison phase had already learned this lesson and discovers its panels the same way;
     the per-unit half had not.
 
@@ -2124,7 +2124,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # ONCE ON THE PAGE, AT THE TOP. `ctx.contradiction` records into `caveats` as well, so that
     # a refutation survives into any document built from the payload by something that has
     # never heard of the newer field. On the page that is the same sentence twice, once in a
-    # block that shouts and once ninth in a list - and the list copy is charged to the caveat
+    # block that shouts and once deep in a list - and the list copy is charged to the caveat
     # budget, so saying it properly would cost a page its `caveats` criterion.
     _contra = {str(c).strip() for c in (p.get("contradictions") or [])}
     # THE FOLD TAGS A PER-UNIT CAVEAT WITH ITS UNIT AND LEAVES THE CONTRADICTION UNTAGGED - it
@@ -2238,7 +2238,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
             # THE MARGINAL COMPARISONS GO ON THE PAGE A READER READS; the conditional ones and
             # the per-arm networks go one click away. Moving ALL of them off left the cohort
             # page with a single strip again, which is the state this whole section exists to
-            # fix - and putting all forty on it fails the count criterion for the reason the
+            # fix - and putting all of them on it fails the count criterion for the reason the
             # criterion is right: above a dozen, a reader stops. The split is by what the panel
             # answers, not by what fits: a marginal contrast is the question the design asks
             # first, and its simple effects refine it.
@@ -2277,7 +2277,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                               design_grid=_host("across_design")))
     body.append(_concordance_block(name, concordance))
     # PER-SAMPLE PANELS GO TO AN APPENDIX, AND ARE LINKED. Three plugins here run once per
-    # sample, so their pages carried the same five plots ten times over - 140 of 191 figures in
+    # sample, so their pages carried the same plots once per sample - most of the figures in
     # the report this was written for. Worse, two of those three INFER PER SAMPLE, so the
     # panels are not comparable with each other even in principle. Nothing is deleted: every
     # panel is still rendered, on its own page, one click away.
@@ -2290,9 +2290,9 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                                         (payload_all or {}).get("unit_axis") or {},
                                         spec=p.get("spec") or {})
     figs_all += _native_units
-    # AN ARM IS NOT AN ANIMAL, AND THEY WERE ROUTED TO THE SAME PAGE. Both carry a `unit`, so a
-    # single truthiness test sent a plugin's four pooled-arm panels into an appendix titled "per
-    # sample", interleaved with ten single-animal panels and nothing distinguishing them. The
+    # AN ARM IS NOT A SAMPLE, AND THEY WERE ROUTED TO THE SAME PAGE. Both carry a `unit`, so a
+    # single truthiness test sent a plugin's pooled-arm panels into an appendix titled "per
+    # sample", interleaved with the single-sample panels and nothing distinguishing them. The
     # arm panels are the GROUP-LEVEL RESULT - the thing the design exists to produce - and they
     # were filed as the consistency check, while the cohort page said in a red box that the
     # plugin "has none over the cohort", which by then was false.
@@ -2352,8 +2352,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # THE PROFILE PAGE: what is active in each unit, on its own.
     #
     # Every other page in this report is about a DIFFERENCE. None of them says what a single arm
-    # or a single animal actually does, and a reader who wants to describe one group has nowhere
-    # to look - the arms page holds a hundred panels of everything, and the per-sample appendix
+    # or a single sample actually does, and a reader who wants to describe one group has nowhere
+    # to look - the arms page holds every panel of everything, and the per-sample appendix
     # was retired for being an appendix.
     #
     # So this is a SUBSET, declared by the plugin: the few figures it marks `profile`, for every
@@ -2430,7 +2430,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     if _links:
         body.append("<p class='sub'>" + ". ".join(_links) + ".</p>")
     if p.get("per_unit") and units:
-        # Nine of ten unit payloads used to be discarded by a dict comprehension keyed on the
+        # All but one unit payload used to be discarded by a dict comprehension keyed on the
         # plugin name, and the survivor was rendered under that name as though it described the
         # cohort. Every unit gets a row, including the ones that produced nothing.
         per_unit_table = (
@@ -2446,9 +2446,9 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
                 f"<td>{_e(u.get('n_figures', 0))}</td>"
                 f"<td class='sub'>{len(u.get('caveats') or [])}</td></tr>"
                 for u in units) + "</table></div>")
-        # BESIDE THE PANELS IT DESCRIBES. Ten rows of per-sample headlines is per-sample detail,
-        # and it was 551 words on the page a reader opens - more than a third of everything
-        # visible there - describing figures that are no longer on it.
+        # BESIDE THE PANELS IT DESCRIBES. A row of headline per sample is per-sample detail,
+        # and it was a large share of everything visible on the page a reader opens -
+        # describing figures that are no longer on it.
         if per_unit_figs:
             per_unit_extra = per_unit_table
         else:
@@ -2460,8 +2460,8 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     # WHAT THE REPORTER ITSELF PUT ON EACH PAGE, RECORDED. The host draws the design panel, the
     # census, the between-arm comparisons and the interaction at RENDER time, so they appear in
     # no plugin's payload and nothing downstream can see them. The writing brief read the
-    # payload and reported "this plugin drew no cohort-level panel" for a page carrying nine of
-    # them - the nine a reader meets first. A page's contents are a fact about the run and
+    # payload and reported "this plugin drew no cohort-level panel" for a page carrying several
+    # of them - the ones a reader meets first. A page's contents are a fact about the run and
     # belong beside it.
     def _rec(t):
         return _panel_record(t, out_dir=out_dir)
@@ -2512,7 +2512,7 @@ def write_kernel(out_dir, name, payload, cannot_show, summary="", merged=None, p
     if per_unit_figs:
         ap = ["<h1>" + _e(name) + " &mdash; per sample</h1>",
               "<p class='sub'>The same panels, once per sample. They are here rather than on "
-              "the plugin's page because a page carrying one plot ten times hides its own "
+              "the plugin's page because a page carrying one plot once per sample hides its own "
               "result &mdash; and where the method is fitted per sample, these are not "
               "comparable with each other. <b>Every panel below describes ONE SAMPLE.</b> The "
               "group-level version of the same panels &mdash; each arm's pooled cells &mdash; "
@@ -2546,8 +2546,8 @@ def _schedule_block(payload, phases=()):
     AND THE SECOND EXECUTION PHASE, WHICH THIS TABLE DID NOT HAVE A ROW FOR. `payload["schedule"]`
     is the RUN phase: the waves the planner sized and `run` executed. The reporter then launches
     the same plugins again for their `compare` phase, and those launches were nowhere - so a page
-    headed "How this ran" answered the question with 18 of the run's 21 launches, and the three
-    it omitted were the ones nobody had budgeted, timed or bounded. `phases` comes from
+    headed "How this ran" answered the question with the run phase's launches alone, and the
+    ones it omitted were the ones nobody had budgeted, timed or bounded. `phases` comes from
     `resume.phases`, which reads the records those launches now write, so this works on a
     rebuild months later exactly as it does on the run itself.
     """
@@ -2558,8 +2558,8 @@ def _schedule_block(payload, phases=()):
         for inst in w:
             n = inst.get("plugin")
             # THIS INSTANCE'S OWN TIME. Reading `seconds[plugin]` put the plugin's whole runtime
-            # on every one of its unit rows - ten rows of "1000s over 10 instance(s)" for 1,000s
-            # of work - and gave that same time to rows for units that never ran at all.
+            # on every one of its unit rows - the whole total on each row, for one total's
+            # worth of work - and gave that same time to rows for units that never ran at all.
             if inst.get("seconds") is not None:
                 took = f"{inst['seconds']:.0f}s"
                 if inst.get("outcome") == "failed":
@@ -2611,7 +2611,7 @@ def write_index(out_dir, payload):
     """The index: EVERY known kernel, with its state and what it cannot show."""
     ran = list(payload.get("ran") or [])
     # ACCUMULATE. Built as a dict comprehension this was last-wins, so a plugin that failed on
-    # every one of ten units showed exactly one reason and the `[:3]` slice below could never
+    # every one of its units showed exactly one reason and the `[:3]` slice below could never
     # show more than that one.
     skipped, sk_units = {}, {}
     for s in (payload.get("skipped") or []):
@@ -2626,8 +2626,8 @@ def write_index(out_dir, payload):
     for n in known:
         if n in ran and n in skipped:
             # THE FOURTH STATE, and the one that was missing. `ran` was tested first, so a plugin
-            # that succeeded on seven samples of ten rendered as a plain "ran / ok" carrying one
-            # sample's headline - while the merged column held NaN for the other three and the
+            # that succeeded on most of its samples rendered as a plain "ran / ok" carrying one
+            # sample's headline - while the merged column held NaN for the rest and the
             # `elif` that would have named them was unreachable. A partial result presented as a
             # whole one is worse than a missing one: nothing about it looks wrong.
             p = kern.get(n, {})

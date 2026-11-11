@@ -88,9 +88,9 @@ def _tree_gb(pid, proc="/proc", page=None):
     """(GB, basis) - the memory of `pid` AND EVERY DESCENDANT, summed; (None, "") without /proc.
 
     THE FLOOR UNDERCOUNTS CONCURRENT WORKERS AND THE CGROUP COUNTER IS THE WHOLE JOB'S (harness
-    ADR-0018). RUSAGE_CHILDREN is the largest single reaped child, so eight concurrent workers
-    are counted as one; the scheduler's counter is exact for the job, so eighteen instances in
-    one job all report the same figure and nothing can be fitted. The instance's own process
+    ADR-0018). RUSAGE_CHILDREN is the largest single reaped child, so concurrent workers
+    are counted as one; the scheduler's counter is exact for the job, so every instance in
+    one job reports the same figure and nothing can be fitted. The instance's own process
     tree - self and every descendant, read from /proc - is attributable AND includes the
     workers, the two properties each of the others lacks.
 
@@ -174,7 +174,7 @@ def _tree_procs(pid, proc="/proc"):
     """How many processes the tree of `pid` holds right now; None without /proc.
 
     THE BURST IS READ AGAINST THE TREE'S SIZE (harness ADR-0022): a python, its R and the
-    sampler each honouring a share of 2 sum to a one-second peak of 6, which "twice the
+    sampler each honouring the share sum to a one-second peak of three times it, which "twice the
     share" read as threads uncapped. The count is sampled with the CPU, by the same walk.
     """
     walked = _tree_walk(pid, proc)
@@ -303,13 +303,13 @@ def _cgroup_peak_gb(root=None, procfile=None, total=None):
 
     THE BUG THIS EXISTS TO NOT REPEAT. This read `/sys/fs/cgroup/memory.peak` by absolute path.
     Under cgroup v2 with no namespace - which is what a PBS job on a shared node gets - that
-    path IS THE ROOT CGROUP, so it reports the whole machine rather than the job. On a 1 TB node
-    it returned the whole node's ~1 TB for all ten instances of a run whose real cost was about
-    4 GB each, and every one of them was identical, because it was the same node-wide number ten
-    times.
+    path IS THE ROOT CGROUP, so it reports the whole machine rather than the job. On a large node
+    it returned the whole node's memory for every instance of a run whose real cost was a few
+    GB each, and every one of them was identical, because it was the same node-wide number each
+    time.
 
-    That number then became advice. The declaration was 3.5-3.8 GB and correct - PBS billed the
-    entire job 42.7 GB - and the tool told its maintainer to raise it to ~1 TB, which is
+    That number then became advice. The declaration was correct - PBS billed the entire job a
+    fraction of the node - and the tool told its maintainer to raise it to the node's, which is
     larger than the biggest queue on that cluster accepts. FOLLOWING THE ADVICE WOULD HAVE MADE
     EVERY FUTURE RUN UNSCHEDULABLE: the failure it warns about is a job that gets killed, and
     the fix it proposed is a job that can never start. A wrong measurement is bad; a wrong
@@ -338,7 +338,7 @@ def _cgroup_peak_gb(root=None, procfile=None, total=None):
     total = _mem_total_gb() if total is None else total
     for f in paths:
         # A RELATIVE PATH OF "" MEANS THE ROOT, and the root is the machine. Skip it rather than
-        # read it: this is the exact shape that produced the ~1 TB above.
+        # read it: this is the exact shape that produced the node-wide reading above.
         try:
             if f.parent.resolve() in (root.resolve(), (root / "memory").resolve()):
                 continue
@@ -462,7 +462,7 @@ def _compare(plugin_path, spec_path):
         cores=int((spec.get("resources") or {}).get("cores", 1) or 1),
         # THE SAME TWO THE PER-UNIT CONTEXT GETS, resolved by the same reader the plan uses.
         # `_compare_spec` carries the plugin's declaration in `spec`; without these the compare
-        # phase wrote no ceiling rows and a family declared at 8 drew 77 in one contrast.
+        # phase wrote no ceiling rows and a family declared at 8 drew far more in one contrast.
         # THE ONE MAP, with every plan entry's own position folded in (ADR-0016).
         figure_position=_PLN.position_map(spec.get("plugin_spec") or {}),
         figure_ceiling={f: n for f, n, _a, _p, _o in
@@ -638,8 +638,8 @@ def main(argv):
                   references=inp.get("references"),
                   # BY ROLE, NOT BY NAME. `Context` accepted these from the beginning and nothing
                   # ever passed them, so `ctx.reference_for_role(...)` returned None for every
-                  # role of every plugin - and scenic, the only plugin that asks, refused on all
-                  # ten units of a real cohort with "the cisTarget references are not available"
+                  # role of every plugin - and scenic, the only plugin that asks, refused on
+                  # every unit of a real cohort with "the cisTarget references are not available"
                   # while `in.json` listed all three of them, verified, by absolute path.
                   reference_specs=inp.get("reference_specs"), params=inp.get("params"),
                   design=inp.get("design"), sentinels=sentinels, config=config,
@@ -718,11 +718,11 @@ def main(argv):
         import resource
         # CHILDREN TOO. RUSAGE_SELF is the calling process ALONE, and the libraries these
         # plugins wrap parallelise with SUBPROCESSES - joblib, loky, pynndescent - so the memory
-        # that actually decides whether a job survives is invisible to it. Measured on a real
-        # cohort: a plugin reported a 14.4 GB peak in three separate runs, its declaration was
+        # that actually decides whether a job survives is invisible to it. On a real
+        # cohort a plugin reported the same peak in separate runs, its declaration was
         # fitted to that number, the host scheduled on the declaration, and the plugin was
-        # SIGKILLed at 48 GB while computing neighbours. Its own measurement was wrong by more
-        # than threefold, in the direction that gets a run killed and keeps nothing.
+        # SIGKILLed at several times that while computing neighbours. Its own measurement was
+        # wrong several-fold, in the direction that gets a run killed and keeps nothing.
         #
         # RUSAGE_CHILDREN is the maximum of any single REAPED child, not the sum of concurrent
         # ones, so this is still a floor - but a floor that includes the workers beats a ceiling
@@ -740,17 +740,17 @@ def main(argv):
         # THE RAW PAIR, AND NOT A RATE. `peak / n * 100_000` reads as "GB per 100k cells" and is
         # not one: memory is a BASELINE plus a per-cell term - interpreter, imports and the
         # object are paid once, whatever n is - and dividing by n attributes all of that fixed
-        # cost to the per-cell slope. On instances of 10-25k cells it produced 157 GB/100k for a
-        # plugin whose real per-cell demand is a fraction of that, which is wrong in the
+        # cost to the per-cell slope. On small instances it produced a GB/100k for a
+        # plugin many times its real per-cell demand, which is wrong in the
         # dangerous direction for the small instances and the safe one for the large.
         #
         # ONE MEASUREMENT CANNOT SEPARATE THE TWO. Two at different sizes can, and a per-unit
         # plugin produces one per unit for free - so the host fits them afterwards
         # (`kernels.fit_memory_model`) and this reports only what it actually observed.
         # AND THE KERNEL'S OWN COUNTER, WHERE THERE IS ONE. Measured against PBS's accounting
-        # on a real job: the process tree reported 14.374 GB and `resources_used.mem` was
-        # 42.7 GB - THREE TIMES more - because RUSAGE_CHILDREN is the largest single reaped
-        # child, not the sum of eight concurrent workers. Adding children narrows that gap and
+        # on a real job: `resources_used.mem` was several times what the process tree
+        # reported, because RUSAGE_CHILDREN is the largest single reaped
+        # child, not the sum of the concurrent workers. Adding children narrows that gap and
         # does not close it, and a floor presented as a peak is what got this plugin killed by
         # its own declaration.
         #

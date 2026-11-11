@@ -39,7 +39,7 @@ DETERMINING = ("plugin", "version", "unit", "input", "input_size", "input_mtime"
 #: THE HOST'S OWN VERSION IS PART OF WHAT DETERMINES A RESULT, and leaving it out cost a whole
 #: mechanism. The key covered the PLUGIN's version and nothing about the code that writes an
 #: instance - so when the host gained a drawing audit that every panel was supposed to carry, the
-#: next run adopted 14 of 15 instances from before it existed, the audit never ran, and the
+#: next run adopted instances from before it existed, the audit never ran, and the
 #: station reading it reported "no panel carries an audit" on a tool that had just grown one.
 #: Nothing was wrong except that reuse was too permissive, and nothing said so.
 #:
@@ -50,9 +50,9 @@ DETERMINING = ("plugin", "version", "unit", "input", "input_size", "input_mtime"
 #: invalidate every cached result on every commit and the reuse layer would be worth nothing.
 #: THE RULE, so the next module is judged rather than remembered: a module belongs here if its
 #: code can change what an INSTANCE contains. `figure.py` was left out on the first attempt and
-#: the loop caught it within the hour - a fix to the drawing audit did not invalidate reuse, so
-#: the next run adopted fourteen of fifteen instances carrying the flaw the fix removed, and the
-#: station reported the same 154 false positives on a tool that had just stopped producing them.
+#: the loop caught it quickly - a fix to the drawing audit did not invalidate reuse, so
+#: the next run adopted instances carrying the flaw the fix removed, and the
+#: station reported the same false positives on a tool that had just stopped producing them.
 #:
 #: What is NOT here and must not be: the reporter and the panel modules. They draw at REPORT
 #: time from the payload, on every render, so a change to them reaches an adopted instance
@@ -185,8 +185,8 @@ def match(want, have):
     # EVERY CANDIDATE IS CONSIDERED, NEWEST FIRST, AND THE SEARCH DOES NOT STOP AT THE FIRST
     # UNTRUSTED ONE. It did, and the newest copy is often an IN-PROGRESS run - which has no card
     # yet, is therefore `unknown`, and so shadowed every completed older run behind it. Measured:
-    # ten units whose determining fields were IDENTICAL to a finished earlier run were all
-    # reported unusable because a run started minutes earlier had not finished writing.
+    # units whose determining fields were IDENTICAL to a finished earlier run were all
+    # reported unusable because a run started just before had not finished writing.
     rejected = []
     for h in cands:
         if h["key"] != want["key"] or h["state"] not in resume.FINISHED:
