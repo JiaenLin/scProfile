@@ -59,8 +59,8 @@ two units' probabilities on one axis.
 {0, 0.01, 0.02, 0.03, 0.04}. It cannot rank and it cannot be corrected as though continuous.
 
 **THE ASSAY COST IS VISIBLE IN `annotation` AND NO PANEL DRAWS IT.** CellChatDB is roughly 60%
-secreted signalling; on one nucleus unit the RETURNED edges were 59% ECM-Receptor, 21% cell-cell
-contact and **17% secreted**. The caveat this plugin states in prose is measurable in its own
+secreted signalling; on nuclei the RETURNED edges can be mostly ECM-Receptor and cell-cell
+contact, with **secreted a minority**. The caveat this plugin states in prose is measurable in its own
 output table, and a class-composition panel would show it rather than assert it.
 
 IT RUNS PER UNIT. An inference pooled over a cohort describes the average of its conditions and
@@ -131,8 +131,8 @@ PLUGIN = {
     # host's share is spent, not what the inference computes - `seed.use = 1L` and every other
     # inference argument are untouched.
     # 0.37.0: the worksheet's third kind was this plugin's - `native_signalingRole_heatmap_out`'s
-    # colour-key floor is the plate's own minimum and not comparable across arms (0.1 on one arm,
-    # 0 on another), and the upstream function exposes no argument that reaches it, so the finding
+    # colour-key floor is the plate's own minimum and not comparable across arms (each arm's plate
+    # sets its own), and the upstream function exposes no argument that reaches it, so the finding
     # is disclosed in the legend and closed `--stated`; the other two kinds are the host's own
     # colour-map fix and are skipped here. Two decisions the layout trim could not make by itself:
     # the one kept circle entry now draws STRENGTH rather than count (`native_circle_count`
@@ -144,7 +144,7 @@ PLUGIN = {
     # direction's section finds the panel rather than only one of them (`at_most` raised 3 -> 6 to
     # match; the interaction axis still reads under its budget of 20). Three cheap answers from
     # the lookers' unmarked notes: F2_population_power's panel (b) axis now fits the data instead
-    # of a fixed 0-1 that compressed every real value into its first tenth; the count heatmap
+    # of a fixed 0-1 that compressed every small value into a sliver of it; the count heatmap
     # gains a `Targets (Receiver)` column title at the draw level beside its tool-drawn `Sources
     # (Sender)` row title, the same lever the differential heatmaps already use; the aggregate
     # circle per pathway gains the on-image colour/width key its single-arm sibling already has.
@@ -153,7 +153,7 @@ PLUGIN = {
     # reader, no tool naming itself - with every disclosure the earlier rounds won preserved in
     # substance. Still no number changes: every edit is presentation or which plate gets drawn,
     # never what a table computes.
-    # 0.38.0: the worksheet on the 0.37.0 rerun, 33 findings on 12 kinds, most of them a legend
+    # 0.38.0: the worksheet on the 0.37.0 rerun, findings on 12 kinds, most of them a legend
     # rewritten in the last round no longer carrying a disclosure an earlier round had won - the
     # words moved, the fact did not, and six kinds closed `--stated` on text already standing in
     # this file (the shared-weight aggregate ring, the bubble's own label/key trade-off, the
@@ -166,7 +166,7 @@ PLUGIN = {
     # colour ceiling another unit's copy carries. Two kinds got an actual edit rather than a
     # sentence, because the eye found more than an undisclosed default: the differential heatmaps
     # on count and on weight print a colour key that can drop the whole negative half of a
-    # diverging scale - a real run's own key ran 0 to 40 in red alone while the grid held solid
+    # diverging scale - a real run's own key ran from zero upward in red alone while the grid held solid
     # blue cells - so `color.heatmap = "RdBu"` is now named explicitly rather than left to
     # auto-detection, the way the tool's own tutorial calls this exact comparison plot; both also
     # gained the same restricted-roster sentence the interaction matrix already carries. NEITHER
@@ -174,18 +174,18 @@ PLUGIN = {
     # room - so both differential-heatmap kinds are left OPEN for the next rerun rather than
     # closed here; every other kind's ledger record is written against this run's own bytes.
     # 0.39.0: the 0.38.0 redraw named the guess wrong. `color.heatmap = "RdBu"` failed on the
-    # cluster on all six contrasts of both differential heatmaps - "invalid color name 'RdBu'" -
+    # cluster on every contrast of both differential heatmaps - "invalid color name 'RdBu'" -
     # because this function's `color.heatmap` on a merged object is a vector of actual colours,
     # not a palette name, and the tool already draws the two-colour diverging pair by default;
-    # the run fell from 122 plates to 110 on exactly these two kinds. Reverted both `expr`s to
+    # the run lost exactly these two kinds' plates. Reverted both `expr`s to
     # what they were before that guess, byte for byte. The asymmetric-looking key most of the
     # worksheet's instances actually named is the tool's own legend on an asymmetric range, not a
     # missing argument, so it is disclosed instead: one sentence on each of the two legends says
     # the printed ticks follow only the larger-magnitude sign and a cell of the other sign is
     # coloured below the first tick, off the labelled scale, naming which colour is which
-    # direction. The roster sentence from 0.38.0 is kept on both. Eleven `--stated` records close
+    # direction. The roster sentence from 0.38.0 is kept on both. `--stated` records close
     # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
-    "version": "0.46.0",
+    "version": "0.48.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. Its reproduction job gave every
     # numeric table byte-identical, and a direct compare against the run before the change put
@@ -430,11 +430,11 @@ PLUGIN = {
         "channels": ["conda-forge", "bioconda"],
     },
 
-    "cost": "high", "cores": 2,  # measured in 20260913T170934Z__scprofile-7c188a4__04_profile__rerun
+    "cost": "high", "cores": 2,  # measured: the sustained use (CPU over wall) of a run's instances
 
-    # Measured, not estimated: fitted from this plugin's own instances in one run on one real cohort, named on the line below. ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
+    # Measured, not estimated: fitted from this plugin's own instances in one run (`scprofile capacity --declare`); which run is in that cohort's record, not here. ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
     # Fitted from that run's per-sample instances.
-    "memory_gb_base": 3.2, "memory_gb_per_100k": 14.3,  # measured in 20260915T084449Z__scprofile-dc9bb46__04_profile__rerun, +10%; the envelope over earlier runs
+    "memory_gb_base": 3.2, "memory_gb_per_100k": 14.3,  # measured: fitted as baseline + per-cell over a run's instances, +10%; the envelope over earlier runs
 
     # WHAT ITS PAGE SHOULD CONTAIN. Three checks then two answers, and the order is the whole
     # point: every failure this method has returns a well-formed edge table, so the edge table on
@@ -498,7 +498,7 @@ PLUGIN = {
             # AND THE PLAN'S OWN PANELS, BY ENTRY. The interaction heatmaps, the flow and the
             # pair panels are this plugin's R over the tool's numbers - `drawn_by: plugin` on
             # the plan, under no tool function - so a `native:` route cannot reach them, and
-            # on the first reproduction eleven of them were drawn and placed in no document.
+            # on the first reproduction they were drawn and placed in no document.
             # `plan:<id>` is the route to an entry itself (the maker's plan worksheet names
             # every unrouted one).
             "who_changed": ["native:netVisual_diffInteraction", "native:netVisual_heatmap",
@@ -595,8 +595,8 @@ PLUGIN = {
         #   interaction panels are a difference of two differences for which CellChat provides
         #   no plot and no test, and the ligand-receptor interaction panels are this plugin's own.
         #   `at_most` on a per-item family is FILES PER OCCURRENCE OF THE AXIS - eight chord
-        #   diagrams per contrast, four pathways in each arm, and P16 of the reproduction asks
-        #   for exactly eight; `netAnalysis_signalingChanges_scatter` was the one loop that was
+        #   diagrams per contrast, four pathways in each arm - eight
+        #   in all; `netAnalysis_signalingChanges_scatter` was the one loop that was
         #   genuinely unbounded: its panel count grows with the populations.
         #   `generated: False` is `estimationNumCluster`: CellChat's NMF rank estimation writes
         #   it while the plugin is clustering pathways - nobody's panel, declared so the
@@ -604,7 +604,7 @@ PLUGIN = {
         #   `skips` is every export CellChat offers that this plugin does not call, each with a
         #   reason from the closed vocabulary in scprofile/native.py: ggPalette draws nothing
         #   (it matched the discovery pattern on `gg`); the spatial mode was never initialised on
-        #   dissociated nuclei; StackedVlnPlot takes a Seurat object and plotGeneExpression is
+        #   dissociated cells or nuclei; StackedVlnPlot takes a Seurat object and plotGeneExpression is
         #   the CellChat entry point that builds one and calls it; netVisual(layout = "hierarchy")
         #   is the documented way into the two halves this plugin calls directly.
         "figures": [
@@ -642,8 +642,8 @@ PLUGIN = {
                 # THE CAPTION'S OWN CLAIM WAS WRONG, NOT JUST CLIPPED. The audit found most
                 # names coloured for one arm on real runs still showing a visible bar segment of
                 # the other arm - present and tested in BOTH arms - which the caption's
-                # "found only in that arm, untested in the other" directly contradicts, on more
-                # than a dozen pathways across two separate contrasts, not a one-off. `do.stat =
+                # "found only in that arm, untested in the other" directly contradicts, on many
+                # pathways across separate contrasts, not a one-off. `do.stat =
                 # TRUE` colours a pathway's NAME by a SIGNIFICANT SHIFT toward one arm on
                 # `rankNet`'s own paired test of relative information flow, not by exclusivity -
                 # a bar can carry both arms' segments and still have its name coloured, if the
@@ -664,7 +664,7 @@ PLUGIN = {
             # THE COLOUR KEY NEEDS SYMMETRIC LIMITS, NOT JUST A SYMMETRIC PALETTE. `midpoint = 0`
             # centres the diverging palette, but ggplot2's own break algorithm still picks ticks
             # from the DATA's own range, and on a run where every plotted point happened to be
-            # zero or negative it printed only 0, -1, -2, -3 - no positive tick a reader could
+            # zero or negative it printed only zero and negative ticks - no positive tick a reader could
             # place a point of the positive colour against, even though the palette itself is
             # diverging. Reproduced with a minimal ggplot2 script in this room (no CellChat
             # needed: `scale_colour_gradient2()` on data spanning -3.2..0.3 gives breaks
@@ -686,7 +686,7 @@ PLUGIN = {
                 # already the x/y axis titles and this very legend, where nothing truncates - as
                 # one long line, and a long line runs off the fixed-width PNG device that
                 # `ggsave`/`png()` does not auto-expand for, unlike matplotlib's
-                # `bbox_inches="tight"`. Found clipped mid-sentence on a real run, both instances
+                # `bbox_inches="tight"`. Found clipped mid-sentence on a real run, in every instance
                 # of this figure. The short form keeps the one fact a reader needs while looking
                 # at the plot and cannot get from the axis labels alone: which side of the line is
                 # which arm.
@@ -707,8 +707,8 @@ PLUGIN = {
                 'w': 2000,
                 'h': 1900,
                 # THE WIDE MARGIN IS ONE OUTLIER, NOT WASTED SPACE, AND NOT CLIPPED TO HIDE IT.
-                # Found on a real run: axes reaching about +/-6 with every point sitting inside
-                # roughly 0-3, unlike its additive sibling which crops tightly. `lim2` is computed
+                # Found on a real run: axes reaching far past where every point sat,
+                # unlike its additive sibling which crops tightly. `lim2` is computed
                 # the identical way that sibling's own range is - the max absolute value actually
                 # plotted - so this panel's range is exactly as tight as its data allows; a log2
                 # fold change has a far longer tail than a bounded probability difference does; a
@@ -737,7 +737,7 @@ PLUGIN = {
                 # carries the change so a file name says what is on the plate.
                 # SMALLER LABELS, THE TOOL'S OWN LEVER FOR IT. `vertex.label.cex` (default 1) is
                 # `netVisual_circle`'s own argument for node-label size; at the roster sizes this
-                # ring draws (up to thirteen full hierarchical names spaced evenly around one
+                # ring draws (every population's full hierarchical name spaced evenly around one
                 # circle) two adjacent long names can run into each other with no gap between
                 # them - found on a real run, two same-branch siblings merging into one illegible
                 # run of text at the top of the ring. Shrinking every label is the remedy this
@@ -795,7 +795,7 @@ PLUGIN = {
                 'w': 2400,
                 'h': 1800,
                 # NOT A PALETTE ARGUMENT - REVERTED. `color.heatmap = "RdBu"` was tried here on
-                # the reasoning that the printed key ran 0 to 40 in red alone while the grid held
+                # the reasoning that the printed key ran from zero upward in red alone while the grid held
                 # solid blue cells; it failed on the cluster on every contrast of both differential
                 # heatmaps - "invalid color name 'RdBu'" - because this function's `color.heatmap`
                 # on a merged object takes a vector of actual colours, not a palette name, and the
@@ -913,13 +913,13 @@ PLUGIN = {
                 'position': 'contrast',
                 # MORE DEVICE, NOT SMALLER TEXT. Padding the shared axes 8% fixed a label pushed
                 # past the edge; it does nothing for several labels stacking on each other near
-                # one corner, found on four different contrasts of this same panel - the low-
+                # one corner, found on several contrasts of this same panel - the low-
                 # strength corner is where most populations sit, so it is also where names
                 # collide most. This family draws at the default 2000x1600 for a TWO-PANEL
                 # patchwork, roughly 1000px per arm; more physical room between the same relative
                 # coordinates is the same lever `native_hierarchy`'s own two-up `mfrow` and
                 # `nativecmp_diffInteraction`'s device already use for crowding, applied here
-                # instead of guessing at which four names to stop labelling.
+                # instead of guessing at which names to stop labelling.
                 'w': 2600,
                 'h': 1700,
                 # THE SHARED RANGE NEEDS PADDING TOO, THE SAME BUG AS F6's Y-AXIS. `lim` was the
@@ -929,7 +929,7 @@ PLUGIN = {
                 # clipped at the right edge of one arm's panel. Padded 8% on both ends of the one
                 # shared range that already feeds both `xlim` and `ylim` here, so it grows both
                 # axes together and does not touch the panels' shared aspect.
-                # A FOURTH LOOK, SAME TWO MECHANISMS, NO NEW LEVER. Found on four contrasts this
+                # A FOURTH LOOK, SAME TWO MECHANISMS, NO NEW LEVER. Found on several contrasts this
                 # round: labels centred between two touching dots with no leader saying which is
                 # which, and two populations in a near-identical hue. `role` already builds each
                 # panel with `label.size = 2.4` (lowered once already) and `color.use =
@@ -960,10 +960,10 @@ PLUGIN = {
             },
             # BOTH HEATMAPS OVER THE SAME PATHWAY SET, or ComplexHeatmap refuses to draw them side by
             # side: "`nrow` of all heatmaps ... should be the same". The two arms rarely detect the same
-            # pathways - measured here, 48 and 41 with a union of 49 - so this is the normal case.
+            # pathways, so this is the normal case.
             # THE MARGINAL BARS NEED A SHARED LIMIT, not only the rows. With the rows aligned and the
-            # bars left to themselves the top axes ran 0-4 against 0-2 and the side axes 0-15 against
-            # 0-1.5 - a tenfold difference - so a bar of equal length meant ten times as much on one
+            # bars left to themselves the two panels' top and side axes ran to different maxima, so a
+            # bar of equal length meant a different amount on each
             # side of the same figure. `ylim.top` and `ylim.right` are CellChat's own arguments for it.
             # Computed from the same centrality the panels draw, over both objects.
             {
@@ -1014,8 +1014,8 @@ PLUGIN = {
                 # LOSING THEM. Unlike the interaction-flow subtitle beside this one, nothing here
                 # duplicates the legend - the title is the only place on the plate that states
                 # the comparison - so the fix is more device, not less text. At the default 1800px
-                # width a title of this length clipped mid-word on a real run, both arms of both
-                # factors; +400px was enough headroom for either factor's level names.
+                # width a title of this length clipped mid-word on a real run, in every arm;
+                # +400px was enough headroom for the level names it carried.
                 'w': 2200,
                 'file': 'paste0("interaction_lr__", safe)',
                 'expr': '{\n dd <- lr$d\n dd$label <- factor(dd$label, levels = rev(dd$label))\n ggplot2::ggplot(dd, ggplot2::aes(x = label, y = ix, fill = ix > 0)) +\n ggplot2::geom_col(show.legend = FALSE) +\n ggplot2::geom_hline(yintercept = 0, linewidth = 0.3) +\n ggplot2::coord_flip() +\n ggplot2::scale_fill_manual(values = c(`TRUE` = "#b2182b", `FALSE` = "#2166ac")) +\n ggplot2::labs(x = NULL,\n y = paste0(eff_lbl, " within ", st[1], " minus the same within ", st[2],\n "\\n(percentage points of each arm\'s total communication ",\n "probability)"),\n title = paste0("Which ligand-receptor pairs respond to ", fac,\n " differently between ", st[1], " and ", st[2], "?"),\n subtitle = paste0("RED: the ", fac, " response is larger in ", st[1],\n "    BLUE: larger in ", st[2],\n "\\n", nrow(dd), " of ", lr$n_all,\n " pairs present in all four arms, of ", lr$n_any,\n " seen in any")) +\n ggplot2::theme_classic() +\n ggplot2::theme(axis.text.y = ggplot2::element_text(size = 7))\n }',
@@ -1023,14 +1023,14 @@ PLUGIN = {
             },
             # ONE RANGE FOR BOTH AXES. The dashed diagonal only MEANS "no interaction" if a unit on
             # one axis is a unit on the other, so equal scaling is not a style choice here. But
-            # `coord_equal()` on its own kept each axis's own range - -9..+2 against -3..+6 - and
+            # `coord_equal()` on its own kept each axis's own, different range - and
             # squared the panel by stretching it, which stranded the data in one corner and blew the
             # shaded quadrants up to fill the plate. A shared symmetric-about-the-data range keeps
             # the diagonal honest AND uses the space.
             # LABELS ARE REPELLED, NOT PLACED BY HAND. Anchoring them on the side facing the middle
             # kept them inside the panel, and did nothing about each other: the reversals cluster
             # near the origin - their values are small beside the two outliers that set the shared
-            # range - so a dozen names landed on the same square inch and became an unreadable mass.
+            # range - so many names landed on the same square inch and became an unreadable mass.
             # `ggrepel` pushes them apart and draws a leader back to the point, which is the whole
             # problem solved by a package already declared among this plugin's dependencies.
             # ONLY THE LARGEST REVERSALS ARE NAMED, said out loud rather than left to
@@ -1053,7 +1053,7 @@ PLUGIN = {
                 # WIDER, FOR THE SAME REASON AS THE LR BAR CHART BESIDE THIS ONE: the title names
                 # both arms and is the longest on this page - "Does any ligand-receptor pair
                 # respond to X in OPPOSITE directions between A and B?" - and clipped mid-word on
-                # a real run, both instances. `coord_equal()` fixes the PANEL's own aspect ratio,
+                # a real run, in every instance. `coord_equal()` fixes the PANEL's own aspect ratio,
                 # not the device, so widening this does not distort the square scatter - it only
                 # gives the title (and the sibling panel's own margin) more device to sit in.
                 'w': 2400,
@@ -1135,7 +1135,7 @@ PLUGIN = {
                 # like its sibling rank functions in this file (`nativecmp_diff_signalingRole`
                 # captures one the same way) and its own theme blanks the x-axis tick labels,
                 # leaving only the ranking legible and not the distance - the same defect noted on
-                # the laminin `native_contribution` plot elsewhere in this run, and given the same
+                # a `native_contribution` plot elsewhere in this file, and given the same
                 # fix. A later `element_text()`/`element_line()` in a ggplot `theme()` replaces an
                 # earlier `element_blank()` outright, so this only ever adds the numbers back; it
                 # cannot make a working axis worse.
@@ -1220,7 +1220,13 @@ PLUGIN = {
                 'w': 'max(1500, 340 * length(objs))',
                 'h': 1300,
                 'expr': 'g',
-                'legend': 'Total {if (ms == "count") "number of inferred interactions" else "interaction strength"} in each arm the design crosses, one bar per arm, from one fit on that arm\'s pooled cells. Open points are the individual samples inside each arm, each its own separate fit: the bar is not their sum or their mean, and on this cohort an arm\'s fit finds fewer interactions than its samples do separately. Nothing here is tested; these are totals with no interval.',
+                'legend': 'Total {if (ms == "count") "number of inferred interactions" else '
+                          '"interaction strength"} in each arm the design crosses, one bar per '
+                          'arm, from one fit on that arm\'s pooled cells. Open points are the '
+                          'individual samples inside each arm, each its own separate fit: the '
+                          'bar is not their sum or their mean, and an arm\'s fit can find '
+                          'fewer interactions than its samples do separately. Nothing here is '
+                          'tested; these are totals with no interval.',
             },
             # THE SAME TOTALS PER 1,000 CELLS, drawn in the same loop by the same site as the raw
             # panel: the prose bounded `compareInteractions_<measure>` at four over both, so the
@@ -1317,7 +1323,13 @@ PLUGIN = {
             'netVisual': {'skip': 'duplicate_of', 'same_as': 'netVisual_hierarchy1'},
             'netVisual_chord_cell_internal': {'skip': 'duplicate_of', 'same_as': 'netVisual_chord_cell'},
             'netVisual_hierarchy2': {'skip': 'duplicate_of', 'same_as': 'netVisual_hierarchy1'},
-            'netVisual_spatial': {'skip': 'not_applicable', 'evidence': "single-nucleus dissociated data; the object carries no spatial coordinates and CellChat's spatial mode was never initialised"},
+            'netVisual_spatial': {'skip': 'not_applicable', 'evidence': "dissociated cells or "
+                                                                        "nuclei; the object "
+                                                                        "carries no spatial "
+                                                                        "coordinates and "
+                                                                        "CellChat's spatial "
+                                                                        "mode is never "
+                                                                        "initialised"},
         },
         # THE PAIRING. Both answer the same question from a different database and a different
         # score, and the published comparison of the two families (Dimitrov et al., Nat Commun
@@ -1374,7 +1386,7 @@ _MEAN_TYPES = {"triMean": 0.25, "truncatedMean": None, "thresholdedMean": None}
 #:
 #: *A pair was a COLUMN until the panel was transposed, and the reason it had to be is the reason
 #: this constant is small: a pair of annotation paths is the longest label on the page, and as a
-#: rotated column label a full roster of them took half the height of the figure.*
+#: rotated column label a full roster of them took a large share of the figure's height.*
 _DOT_PAIRS = 15
 
 # THE DRAWING PROTOCOL AND THE PLAN ARE GENERATED, NOT WRITTEN HERE. `kernels/cellchat.draw.R`
@@ -1435,7 +1447,7 @@ cat("database:", nrow(d), "interactions,",
 #: THE HOST'S SHARE - WHAT R CAN HONESTLY CAP ITSELF, ONCE, SUBSTITUTED INTO EVERY SCRIPT THAT
 #: NEEDS IT. THE THREAD CAP (BLAS/OpenMP) IS NOT HERE ANY MORE. It was, briefly, as
 #: `Sys.setenv(OMP_NUM_THREADS = ...)` and the rerun's own `cores` gate still measured a
-#: 61.68-core peak with it in place: OpenBLAS/MKL/OpenMP each read their thread-count variable
+#: peak far past the share with it in place: OpenBLAS/MKL/OpenMP each read their thread-count variable
 #: once, WHEN THE LIBRARY LOADS, at the very start of the R process - before a single line of a
 #: launched script has run. `Sys.setenv()` from inside that same process is always too late to
 #: reach it. The cap that actually works is in the ENVIRONMENT THE PROCESS IS STARTED WITH, which
@@ -1898,7 +1910,7 @@ try_write("pathway_prob", {
 
 # centrality per pathway and population, CellChat's own netAnalysis_computeCentrality
 # NOT EVERY MEASURE IS A NAMED VECTOR OF THE SAME LENGTH. The first version assumed it was and
-# died on "arguments imply differing number of rows: 1, 0, 8" - a centrality slot can hold an
+# died on "arguments imply differing number of rows" - a centrality slot can hold an
 # empty measure, and one empty entry took the whole table with it. Each measure is now built
 # alone and the empty ones are dropped, so a pathway missing one measure still contributes the
 # rest.
@@ -2387,13 +2399,13 @@ def _similarity(arr, pathways):
     CellChat then multiplies by a shared-nearest-neighbour mask, and `netEmbedding` refuses to
     place any pathway whose MASKED off-diagonal similarities are all zero - with no message.
     Those are the most distinctive pathways in the object. They are returned as `dropped` so a
-    page can name them instead of quietly embedding 65 points and captioning it 68.
+    page can name them instead of quietly embedding fewer points than its caption counts.
 
     THE MASK IS THE WHOLE POINT, and this function did not apply it. Until it did, `dropped` was
     computed from the raw Jaccard graph - which is dense, so nothing is ever isolated and the
     list came back empty on every real object. A returned list that is structurally always
     empty is worse than no list: the page prints "none dropped" and the reader believes it.
-    Measured on one real cohort, the mask drops three of sixty-eight where the raw graph
+    Measured on a real object, the mask drops pathways where the raw graph
     dropped none.
     """
     import numpy as np
@@ -2468,11 +2480,11 @@ def _fig_coverage(ctx, db, var_names, detected, edges, thresh):
     y = np.arange(len(rows))
     vals = [r["n_interactions"] for _, r in rows]
     # TWO PANELS, BECAUSE ONE CHANNEL CANNOT CARRY BOTH CLAIMS. The counts panel shows the
-    # attrition - the whole database narrowing to what came back - and on a real arm the last
-    # bar was 3% of the first, which makes the CLASS COMPOSITION INSIDE IT unreadable. That
+    # attrition - the whole database narrowing to what came back - and the last bar can be a
+    # small fraction of the first, which makes the CLASS COMPOSITION INSIDE IT unreadable. That
     # composition is the point: this plugin's caveats state that the classes are not equally
     # measurable here and quote the shift, and the panel that was supposed to show it drew it
-    # in a sliver two pixels wide. Found by opening the image on a real cohort.
+    # in a sliver. Found by opening the image on a real cohort.
     #
     # So the right panel normalises every stage to 100%. The counts say how much survived; the
     # shares say WHAT survived, and the second is invisible in the first by construction.
@@ -2612,7 +2624,7 @@ def _fig_population_power(ctx, names, n_cells, sent, received, above_floor, min_
     #
     # AND THE NAME CARRIES ITS DENOMINATOR. It was `frac_db_genes_above_floor`, measured over the
     # database genes PRESENT IN THIS OBJECT and labelled as though it were over the database: on
-    # an object matching a third of CellChatDB a population read 0.9 while two thirds of the
+    # an object matching part of CellChatDB a population read high while most of the
     # database was never testable at all, and F1 is the only panel that said so.
     if above_floor is not None:
         d["frac_present_db_genes_above_floor"] = [float(above_floor[p]) for p in names]
@@ -2633,7 +2645,7 @@ def _fig_population_power(ctx, names, n_cells, sent, received, above_floor, min_
     bh = min(0.72, 0.12 * len(src) + 0.26)
 
     # (a) CELLS, ON A LOG AXIS, and that is the whole panel working or not working. Population
-    # sizes inside one object routinely span three orders of magnitude, and on a linear axis
+    # sizes inside one object can span orders of magnitude, and on a linear axis
     # every population anywhere near min.cells - which is the entire subject of this panel - is
     # a sliver indistinguishable from the axis line. The populations the reader most needs to
     # see were the ones the scale erased.
@@ -2644,13 +2656,13 @@ def _fig_population_power(ctx, names, n_cells, sent, received, above_floor, min_
     ax.set_xlim(0.7, max(2.0, float(cells.max())) * 2.2)
     ax.axvline(float(min_cells), color=F.INK, ls="--", lw=0.6, zorder=3)
     # ANCHORED TO THE AXES, NOT TO A ROW NUMBER. At `-0.9` in data coordinates this label sat
-    # just above the top bar on a twelve-population panel and a long way off the top of the
-    # figure on a two-population one, because a data unit is a row and rows are not a fixed size.
+    # just above the top bar on a panel of many rows and a long way off the top of the
+    # figure on one of few rows, because a data unit is a row and rows are not a fixed size.
     ax.text(float(min_cells), 1.005, f" min.cells = {min_cells:,}",
             transform=ax.get_xaxis_transform(), fontsize=5.5, color=F.INK, ha="left", va="bottom")
     ax.set_xlabel("cells  (log scale)")
-    # A LOG AXIS DRAWS NINE MINOR TICKS PER DECADE BY DEFAULT, which over four decades is a comb
-    # of forty tick marks under a panel of twelve bars.
+    # A LOG AXIS DRAWS NINE MINOR TICKS PER DECADE BY DEFAULT, which over several decades is a comb
+    # of tick marks under a panel of a few bars.
     ax.tick_params(axis="x", which="minor", length=0)
     # NAMED ON THE FIGURE, NOT ONLY IN THE CAPTION. These populations have no edges in the result
     # for a reason that is technical, and this is the only figure that can say so.
@@ -2664,8 +2676,8 @@ def _fig_population_power(ctx, names, n_cells, sent, received, above_floor, min_
         ax.barh(y, src["frac_present_db_genes_above_floor"].to_numpy(), height=bh,
                 color="#E69F00")
         # FIT TO THE DATA, NOT TO THE THEORETICAL RANGE. This is a fraction and can never exceed
-        # 1, but a fixed `(0, 1)` axis on a cohort where every population sits under 0.1 compresses
-        # every real bar into the first tenth of the panel - found on a real run, panel (b) reading
+        # 1, but a fixed `(0, 1)` axis on a cohort where every population sits near zero compresses
+        # every real bar into a sliver of the panel - found on a real run, panel (b) reading
         # as nearly blank beside its two working neighbours. Padded 15% past the largest bar and
         # capped at 1 so a cohort that genuinely approaches full coverage is not clipped.
         ax.set_xlim(0, min(1.0, max(0.05,
@@ -2699,7 +2711,7 @@ def _fig_population_power(ctx, names, n_cells, sent, received, above_floor, min_
         # to be able to point at.
         ax.set_title("abc"[i], loc="left", fontweight="bold", fontsize=8, pad=3)
     # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL, as F4 and F5 already do. These are annotation
-    # PATHS, and at full length they took a third of a double-column figure's width for text that
+    # PATHS, and at full length they took a large share of a double-column figure's width for text that
     # repeats the same prefix down every row. The full path stays in the source table.
     _short = F.short_labels(list(src.index))
     axs[0].set_yticks(y)
@@ -2870,14 +2882,14 @@ def _fig_network(ctx, edges, names):
     disp = [names[i] for i in order]
     M = counts.loc[disp, disp].to_numpy()
 
-    # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL. These categories are annotation paths, sixty
-    # characters before a real name is reached, and rotated ninety degrees they took three
-    # quarters of the figure height - squeezing the data into a strip. The full path stays in
+    # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL. These categories are annotation paths, many
+    # characters before a real name is reached, and rotated ninety degrees they took most
+    # of the figure height - squeezing the data into a strip. The full path stays in
     # the source table.
     _short = F.short_labels(disp)
     # ADAPTIVE, SO A CELL STAYS BIG ENOUGH TO SEE, AND THE LABELS GET THEIR OWN ROOM. Fixed at
-    # the single-column width, twelve populations gave 4 mm cells and twenty would have given
-    # 2 mm - and because `constrained` fits the tick labels FIRST, a long annotation path was
+    # the single-column width, every population added shrank every cell, and a long roster
+    # left them too small to see - and because `constrained` fits the tick labels FIRST, a long annotation path was
     # taken out of the matrix rather than out of the page. Measured off the labels that will
     # actually be drawn: at 6 pt a character is about 0.042 in, and at 45 degrees it contributes
     # 0.7 of that to the height.
@@ -2901,7 +2913,7 @@ def _fig_network(ctx, edges, names):
     ax.set_xlabel("receiver")
     ax.set_ylabel("sender")
     ax.tick_params(length=0)
-    # CELL BOUNDARIES. A twelve by twelve block of flat colour has no landmarks, and tracing a
+    # CELL BOUNDARIES. A large square block of flat colour has no landmarks, and tracing a
     # cell back to its row and its column is the only operation a reader performs on it.
     ax.set_xticks(np.arange(n + 1) - 0.5, minor=True)
     ax.set_yticks(np.arange(n + 1) - 0.5, minor=True)
@@ -3027,7 +3039,7 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
     if has_p:
         # A p-VALUE THAT IS NOT THERE IS THE WEAKEST POINT ON THE PANEL, NOT THE STRONGEST.
         # Non-finite entries were once replaced by `floor` - the SMALLEST attainable p-value - so
-        # an edge whose p-value could not be read drew at 87% of the largest area on the figure,
+        # an edge whose p-value could not be read drew near the largest area on the figure,
         # in the direction of more evidence rather than less. The table was filtered at `thresh`,
         # so `thresh` is what a surviving edge is known to be no worse than, and it is the honest
         # stand-in.
@@ -3076,7 +3088,7 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
     F, plt = ctx.figure, ctx.plot()
     # PAIRS ON THE Y AXIS, INTERACTIONS ON THE X. A sender -> receiver category is a PAIR of
     # annotation paths and is the longest label anywhere on this page; rotated ninety degrees
-    # under the panel, those labels took HALF the height of the whole figure - the data was drawn
+    # under the panel, those labels took MUCH of the height of the whole figure - the data was drawn
     # in a strip and then shrunk again to fit the column. On y they read horizontally and cost
     # margin WIDTH, which a double-column figure has and height it does not, and the ranking then
     # runs top to bottom, which is the order a reader wants them in anyway.
@@ -3094,8 +3106,8 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
     ax.set_axisbelow(True)
     ax.grid(True, color="#EDEDED", lw=0.4)
     # A LINEAR SCALE WITH ONE LARGE OUTLIER MAKES EVERY OTHER VALUE THE SAME COLOUR. Measured
-    # by opening this panel: a single self-signalling pair sat at 0.28 while the other ~200 dots
-    # were under 0.06, so the ramp spent four fifths of its range on one mark and the channel
+    # by opening this panel: a single self-signalling pair sat far above every
+    # other dot, so the ramp spent most of its range on one mark and the channel
     # could not be decoded anywhere else. The colour is the METHOD's probability and is not
     # touched; what changes is the range the ramp is spread over.
     #
@@ -3117,7 +3129,7 @@ def _fig_dotplot(ctx, edges, top_n, nboot, thresh):
         F.rasterize_points(ax)
     ax.set_yticks(np.arange(len(pairs)))
     # SHORTENED TO THE SHORTEST UNAMBIGUOUS TAIL. These categories are PAIRS of
-    # annotation paths, sixty characters before a real name is reached. The full path
+    # annotation paths, many characters before a real name is reached. The full path
     # stays in the source table.
     _short = F.short_labels(pairs)
     ax.set_yticklabels([_short[p] for p in pairs])
@@ -3303,7 +3315,7 @@ def _fig_signaling_roles(ctx, pre, names):
     fig.text(0.0, -0.055, "above the line: receives more than it sends",
              transform=fig.transFigure, fontsize=5.0, color="#8A8A8A", ha="left", va="top")
     # AND ONLY THE STRONGEST ARE NAMED. With every population labelled, the drawing audit found
-    # two pairs of names printed over each other - horizontal neighbours at equal height, which
+    # pairs of names printed over each other - horizontal neighbours at equal height, which
     # the radial declutter cannot separate because it moves labels vertically by design. Eight
     # is the same answer the similarity panel and the host role scatter already use, and every
     # position stays in the source table.
@@ -3311,7 +3323,7 @@ def _fig_signaling_roles(ctx, pre, names):
     _named6 = {pops[i] for i in _rank6[:8]}
     # THE OMISSION SAYS WHY, NOW. The audit found unlabelled dots with nothing on the plate
     # explaining why they, and not their neighbours, carry no name - a fair reading of a panel
-    # that names eight populations out of a roster that can run past a dozen with no footnote at
+    # that names eight populations out of a longer roster with no footnote at
     # all. This is the same on-image footnote mechanism as the line above it (`fig.text`, figure
     # coordinates, so `bbox_inches="tight"` grows the canvas to hold it), stating the rule the
     # labels above already follow rather than leaving a reader to infer it from what is missing.
@@ -3343,8 +3355,8 @@ def _fig_signaling_roles(ctx, pre, names):
         ox, oy = _reach * dx / norm, _reach * dy / norm
         # OUTWARD FROM THE CENTRE, UNLESS OUTWARD LEAVES THE PANEL. A population near the left
         # edge is pushed further left by the radial rule and its name lands on the y-axis title
-        # or off the figure entirely - which is what a thirteen-population arm did to four
-        # labels that a nine-population sample never exposed. Near an edge the anchor flips
+        # or off the figure entirely - which is what a larger arm did to
+        # labels that a smaller sample never exposed. Near an edge the anchor flips
         # INWARD: slightly worse placement, still readable, still attached to its own point.
         #
         # THE FLIP USES THE SAME RADIUS-AWARE REACH, NOT THE RADIAL PROJECTION. A population
@@ -3488,7 +3500,7 @@ def _fig_pathway_roles(ctx, pre, top_n=18):
         # ABSENCE IS NOT A LOW SCORE (`panels.R2`). A population that does not appear in a
         # pathway's network at all has centrality exactly 0, and so does one that appears and is
         # peripheral - the same pale cell for "never in it" and "in it, weakly". Found by
-        # opening the panel: three populations were pale across almost the whole sender side,
+        # opening the panel: populations were pale across almost the whole sender side,
         # which reads as "these barely signal" and means "these are not in these pathways".
         #
         # Off the ramp and crossed, the way the sender-by-receiver matrix already marks a pair
@@ -3693,7 +3705,7 @@ def _fig_similarity(ctx, pre):
     # near-collinear chains this similarity produces, so the labels overprinted each
     # other and ran off the axes. A panel that labels everything illegibly names nothing. Every
     # pathway keeps its coordinates in the source table, so nothing is lost but the clutter.
-    # EIGHT, NOT TWELVE. The drawing audit named three label collisions here, each a pair of
+    # EIGHT, NOT TWELVE. The drawing audit named label collisions here, each a pair of
     # horizontal neighbours at equal height, which the declutter cannot fix because it separates
     # vertically by design. Fewer labels is the honest fix: every position stays in the source
     # table.
@@ -3788,7 +3800,7 @@ def _cap_env(ctx):
     ...])` and no `env=` of its own, so the child inherits whatever THIS PROCESS's environment
     already is when that call is made - the only place a thread cap can land. `Sys.setenv()`
     from inside the launched script was tried first and measured not to work: the maker's
-    `cores` gate still found a 61.68-core peak with it in place, because OpenBLAS/MKL/OpenMP
+    `cores` gate still found a peak far past the share with it in place, because OpenBLAS/MKL/OpenMP
     each read their own thread-count variable once, when the library LOADS - at the very start
     of the R process, before the script that calls `Sys.setenv()` has run a single line. Setting
     it here, in Python, before `ctx.rscript` is ever called, means the child process is STARTED
@@ -3824,7 +3836,7 @@ def run(ctx):
 
     # `ctx.populations()` unpacks as (mask, groups); `.names` and `.dropped` are what this wants.
     # Read as (populations, dropped) this made `len(pops)` the CELL COUNT - so the refusal below
-    # could never fire and the headline claimed a hundred thousand populations - and `if dropped:`
+    # could never fire and the headline claimed one population per cell - and `if dropped:`
     # asked the truth value of a numpy array, which raises.
     pop = ctx.populations()
     if len(pop.names) < 2:
@@ -3856,7 +3868,7 @@ def run(ctx):
     var_names = np.asarray(A.var_names).astype(str)
     # ---------------------------------------------------------- what the database can reach
     #
-    # BEFORE ANYTHING IS WRITTEN OR SCORED, because this is the failure that costs an hour and
+    # BEFORE ANYTHING IS WRITTEN OR SCORED, because this is the failure that costs the whole inference and
     # then reads like a result. It touches no expression data and takes seconds.
     db_csv = ctx.out / "cellchat_db.csv"
     p0 = ctx.rscript(_R_DB, [db, str(db_csv)], name="cellchat_db")
@@ -4078,8 +4090,8 @@ def run(ctx):
     drew_coverage = _fig_coverage(ctx, db_frame, var_names, detected, df, float(C["thresh"]))
     # HOW THE UNIT'S OBSERVATIONS SPLIT OVER ITS POPULATIONS, written out. A network's totals
     # are sums over ordered pairs of populations, so two arms that differ in composition differ
-    # in the sum before any per-cell behaviour differs - and on a real cohort one arm had twelve
-    # percentage points fewer of its largest population than the other. That is a fact a reader
+    # in the sum before any per-cell behaviour differs - and two arms can differ by many
+    # percentage points in the share of their largest population. That is a fact a reader
     # of a comparison needs and it was in no file the run wrote.
     if n_cells:
         ctx.emit_table("cellchat_composition", pd.DataFrame(
@@ -4404,7 +4416,7 @@ a <- readRDS(rds_a); b <- readRDS(rds_b)
 # absent from the other shifts every row below it. When the two matrices happen to be the same
 # SIZE the subtraction succeeds and silently compares one population against a different one;
 # when the sizes differ it fails with "non-conformable arrays". Both were observed on the same
-# run - two contrasts erroring and two producing quietly misaligned figures, which is the worse
+# run - some contrasts erroring and others producing quietly misaligned figures, which is the worse
 # outcome because nothing reports it.
 #
 # A POPULATION ONLY ONE ARM HAS CANNOT BE COMPARED, SO IT IS NOT IN A COMPARISON FIGURE.
@@ -4412,7 +4424,7 @@ a <- readRDS(rds_a); b <- readRDS(rds_b)
 # The first version lifted both arms to the UNION, on the reasoning that the intersection would
 # delete a population from the comparison. That reasoning was wrong about what a comparison
 # figure IS. A lifted-in group carries zero edges on the side it was absent from, so its
-# "difference" is the whole of the arm that has it - and on a real cohort that made the two
+# "difference" is the whole of the arm that has it - and on a real cohort that made the
 # arm-specific populations the largest red column and the largest blue row in every differential
 # panel. Neither was a change.
 #
@@ -4496,7 +4508,7 @@ cat("merged:", name_a, "and", name_b, "\n")
 # `absent` NAMES ONE REASON A POPULATION IS MISSING FROM THE RING AND NOT THE ONLY ONE. A
 # population present in BOTH arms is still missing from a DIFFERENCE network if every one of its
 # edges is unchanged between them - identically absent in both counts as unchanged too - because
-# there is then no difference to draw an edge for. Found on a real run: two cell types silently
+# there is then no difference to draw an edge for. Found on a real run: cell types silently
 # missing from both the ring and this disclosure, present in both arms' rosters throughout the
 # rest of the page. Computed straight from the two arms' own matrices, already restricted to the
 # shared populations by this point (the `stopifnot` above), one set per measure since a
@@ -4575,7 +4587,7 @@ try({
 #    CellChat's own comparison vignette draws it exactly this way: the per-object function,
 #    twice, with a common axis limit computed over both.
 # A SMALLER LABEL, THE SAME FIX AS THE SINGLE-ARM VERSION OF THIS PLOT. Found on a real run in
-# all three contrasts this ran on: one population's label sitting directly on its own point
+# every contrast this ran on: one population's label sitting directly on its own point
 # rather than beside it, and once, a visible leader line where the repel algorithm had to push a
 # neighbouring label aside to make room for it. Smaller text needs less clearance to avoid a
 # neighbour, which is the one lever `label.size` (this function's own argument) gives without
@@ -4597,11 +4609,11 @@ for (pat in c("outgoing", "incoming")) {
 # 7. the ligand-receptor pairs themselves, both arms on one bubble plot. CellChat's own
 #    comparison mode for the question "which specific pairs differ".
 # THE OVERVIEW, MADE READABLE. Every enriched pair against every population pair is the whole
-# point of this panel and also what made its axes illegible: several hundred rows of
-# ligand-receptor labels in the space of a page. `remove.isolate` drops the pairs with nothing
+# point of this panel and also what made its axes illegible: a row of ligand-receptor
+# labels for every enriched pair, in the space of a page. `remove.isolate` drops the pairs with nothing
 # to show, the canvas is given room per row, and the x labels are rotated.
-# THE X AXIS CARRIES EVERY ORDERED PAIR OF POPULATIONS, ONCE PER ARM. On this cohort that is
-# 13 x 13 x 2 - several hundred columns of "A -> B (arm)" in the width of a page, collapsed into
+# THE X AXIS CARRIES EVERY ORDERED PAIR OF POPULATIONS, ONCE PER ARM. That is twice the
+# square of the population count - a column of "A -> B (arm)" for each, in the width of a page, collapsed into
 # a solid diagonal ramp of overprinted text taller than the plot itself, with not one label
 # readable. Making the canvas taller fixed the ROWS, which were never the problem.
 #
@@ -4781,15 +4793,15 @@ m <- mergeCellChat(objs, add.names = nms)
 # CellChat's own total-interactions bar, in the mode that takes every object at once. `group`
 # is the position of each arm in the merged object, which is what its own vignette passes.
 #
-# EACH ANIMAL AS A POINT ON ITS ARM'S BAR. Four bars say what each arm carries and nothing about
-# whether the animals inside it agree - and on a real cohort one animal carried more than the
+# EACH ANIMAL AS A POINT ON ITS ARM'S BAR. The bars say what each arm carries and nothing about
+# whether the animals inside it agree - and one animal can carry more than the
 # whole of the opposite arm, which a reader of the bars alone would never suspect.
 #
 # The points are ANNOTATION on CellChat's own plot, not a reimplementation of it: the function
 # returns a ggplot and this adds a layer, the same move as the colour key added to the
 # differential network. The values are the host's, computed from this plugin's own declared edge
 # table, and they agree with the bars because they are the same quantity - verified on a real
-# run, 1743 both ways.
+# run, the same totals both ways.
 #
 # AND THE BAR IS NOT THE MEAN OF THE POINTS. An arm is one fit on its members' pooled cells;
 # each point is a separate fit. The caption says so, because the geometry says the opposite.
@@ -4806,10 +4818,10 @@ cells <- if (!is.null(armv) && "cells" %in% names(armv))
   d$x <- match(d$arm, nms); d$y <- yy[is.finite(yy)]
   # A DETERMINISTIC OFFSET, NOT A JITTER. Drawing the point layer before the text layer (below)
   # was tried and the audit still found a replicate circle sitting on a bar's own value label -
-  # on real runs, a '406' with its middle digit obscured and an '8.086' whose leading 8 fully
+  # on real runs, a count with its middle digit obscured and a value whose leading digit fully
   # merged with a circle. Z-order was never the cause: `compareInteractions`'s own value label is
   # centred on the bar, and a JITTER SYMMETRIC around that same centre lands within the label's
-  # width on a large share of draws, worse with as few as three or four replicates per arm. A
+  # width on a large share of draws, even with only a few replicates per arm. A
   # fixed offset removes the coincidence instead of gambling on it - every point sits clearly to
   # one side of the label's own x, which a centred jitter can never guarantee.
   pt <- ggplot2::geom_point(data = d, ggplot2::aes(x = x, y = y), inherit.aes = FALSE,
@@ -4820,7 +4832,7 @@ cells <- if (!is.null(armv) && "cells" %in% names(armv))
   # prints each bar's total as a `GeomText` layer already baked into `g`; simply adding this
   # layer, as every other annotation in this file is added, put it LAST and so ON TOP - and a
   # jittered animal that landed near its arm's own total then sat on the digits and hid them,
-  # found on a real run ('406' partly covered by its own replicate dot). Layer order is z-order
+  # found on a real run (a bar's total partly covered by its own replicate dot). Layer order is z-order
   # in ggplot2, so drawing the point BEFORE whichever layer is text leaves the text on top
   # regardless of where the jitter lands. `GeomLabel` is included for the same reason on a plot
   # that used a boxed value instead of bare text. No text layer found is not an error - some
@@ -4885,8 +4897,8 @@ for (ms in c("count", "weight")) {
           sd_ <- smp[keep, , drop = FALSE]; sd_$x <- match(sd_$arm, nms); sd_$y <- sv[keep]
           # A DETERMINISTIC OFFSET, NOT A JITTER - THE SAME CORRECTION AS `.points()` ABOVE.
           # Adding the value-label layer last (below) was ALREADY this exact fix once, for the
-          # '0.8'-covers-'0.8' defect the comment there describes, and the audit still found two
-          # more labels ('36.46', '0.80') with a digit covered by a replicate circle on a later
+          # covered-digit defect the comment there describes, and the audit still found
+          # more labels with a digit covered by a replicate circle on a later
           # run. Z-order was never enough: a jitter symmetric around the label's own centred x
           # still lands within it on a real share of draws. Nudged off-centre instead, so no
           # point can ever share the label's x regardless of how few replicates an arm has.
@@ -4904,7 +4916,7 @@ for (ms in c("count", "weight")) {
       # replicate circle. Moved here, after every point, so nothing drawn
       # earlier can cover it; the label's own definition (position, size) is unchanged.
       # TWO DECIMAL PLACES, NOT ONE. Found on a real run: two arms whose per-1,000-cell values
-      # were close but visibly different in bar height rounded to the identical printed "0.8" at
+      # were close but visibly different in bar height rounded to the identical printed value at
       # one decimal, so the text hid a real difference the bars still showed. Verified with the
       # same rounding this call uses: sprintf("%.1f", c(0.75, 0.849)) gives "0.8" "0.8", while
       # sprintf("%.2f", ...) gives "0.75" "0.85" - a second digit is enough to tell them apart at
@@ -4938,8 +4950,8 @@ for (ms in c("count", "weight")) {
 #
 # BOTH SCALES, BECAUSE AN INTERACTION IS NOT SCALE-FREE. On the additive scale "no interaction"
 # means the same absolute change in both strata; on the multiplicative scale it means the same
-# fold change. They disagree - measured on a real cohort, only two of the top eight pathways were
-# shared between them - and neither is wrong. The additive scale is always defined and is drawn
+# fold change. They disagree - measured on a real cohort, the two scales' top pathways
+# overlapped only in part - and neither is wrong. The additive scale is always defined and is drawn
 # for every pathway; the multiplicative one is undefined wherever an arm holds none of a pathway,
 # and those are exactly the presence differences, so it is drawn as a companion and never alone.
 # =============================================================================================
@@ -4948,8 +4960,8 @@ if (!is.null(inter) && nrow(inter)) {
   #
   # `rankNet` in comparison mode fails outright when the two objects carry different numbers of
   # cell groups - "number of items to replace is not a multiple of replacement length" - and the
-  # matrix subtraction below fails for the same reason. Measured: two of a design's four arms
-  # held fewer populations than the other two, so the framing whose strata paired unequal arms failed
+  # matrix subtraction below fails for the same reason. Measured: where a design's arms
+  # held different numbers of populations, the framing whose strata paired unequal arms failed
   # while the framing that paired like with like succeeded, and only half the interaction was
   # drawn. The heatmaps failed silently, which is worse than failing loudly.
   #
@@ -5110,9 +5122,9 @@ if (!is.null(inter) && nrow(inter)) {
     # normalised WITHIN its own object - the law of mass action runs over the cells present - so
     # two arms' weights are not on one scale and differencing them raw reports, in large part,
     # which arm was smallest. The host's own interaction panel converts to shares before
-    # differencing for exactly this reason, and had measured the consequence: one pathway read
-    # -4.15 against +0.16 raw, an effect that DISAPPEARS, and -8.6 pp against +8.7 pp on shares,
-    # an effect that REVERSES. The two documents were answering one question by two arithmetics.
+    # differencing for exactly this reason, and had measured the consequence: one pathway's
+    # effect DISAPPEARS on raw weights and
+    # REVERSES on shares. The two documents were answering one question by two arithmetics.
     #
     # A COUNT IS NOT PER-OBJECT. It counts L-R pairs that cleared a threshold, so it is already
     # comparable and converting it would invent a proportion nothing measured. Hence a table and

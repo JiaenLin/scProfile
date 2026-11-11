@@ -627,7 +627,7 @@ ndev <- function(id, expr, w = .figcfg$w, h = .figcfg$h, res = .figcfg$res,
   items = quote(c("count", "weight")),
   file = quote(paste0("compareInteractions_", ms)),
   expr = quote(g),
-  legend = "Total {if (ms == \"count\") \"number of inferred interactions\" else \"interaction strength\"} in each arm the design crosses, one bar per arm, from one fit on that arm's pooled cells. Open points are the individual samples inside each arm, each its own separate fit: the bar is not their sum or their mean, and on this cohort an arm's fit finds fewer interactions than its samples do separately. Nothing here is tested; these are totals with no interval.")
+  legend = "Total {if (ms == \"count\") \"number of inferred interactions\" else \"interaction strength\"} in each arm the design crosses, one bar per arm, from one fit on that arm's pooled cells. Open points are the individual samples inside each arm, each its own separate fit: the bar is not their sum or their mean, and an arm's fit can find fewer interactions than its samples do separately. Nothing here is tested; these are totals with no interval.")
 .plan[["nativecmp_compareInteractions_per1k"]] <- list(
   id = "nativecmp_compareInteractions_per1k",
   axis = "interaction",
