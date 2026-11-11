@@ -185,9 +185,9 @@ PLUGIN = {
     # coloured below the first tick, off the labelled scale, naming which colour is which
     # direction. The roster sentence from 0.38.0 is kept on both. Eleven `--stated` records close
     # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
-    "version": "0.42.0",
+    "version": "0.43.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
-    # rises when the same inputs would give different output. PBS 710085 reproduced all 90
+    # rises when the same inputs would give different output. Its reproduction job gave all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
     # 386 of 404 tables byte-identical - the 18 that differ are `cellchat_net_embedding.csv`,
     # which differs between any two runs because the UMAP is not seeded.
@@ -4871,7 +4871,7 @@ for (ms in c("count", "weight")) {
         sn <- suppressWarnings(as.numeric(smp$cells))
         # THE DECOMPOSED VALUE WHERE THE HOST COULD COMPUTE IT. `smp[[ms]]` is the animal's OWN
         # fit, which is not the arm's fit and cannot share this axis with the bar - measured, the
-        # same cells give 30.56 pooled and 84.28 as separate fits summed, which is why every
+        # same cells' separate fits summed sat well above the pooled fit, which is why every
         # point sat above every bar. `<ms>_of_arm` is the ARM's matrix credited to that animal by
         # its share of the arm's cells: it partitions exactly, so the bar IS the cell-weighted
         # mean of these points. Falls back to the independent fit where the host could not

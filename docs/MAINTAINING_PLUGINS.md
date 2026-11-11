@@ -118,6 +118,22 @@ followers this repository declares under `plan.after_edit` in `DEVPOINTS.yaml` r
 at the first that refuses. Edit the file by hand only where the verb has no action for the
 change, and say so in the commit.
 
+### Editing the prose: `scprofile prose`
+
+A comment, a docstring, and a comment of an embedded R script are prose, and they too change
+through the maker (harness autodev W035): `scprofile prose <plugin> --replace OLD NEW --why
+<reason>`. OLD must occur exactly once; `--replace` repeats; `--dry` prints the diff. The edit is
+admitted only when the code is unchanged - Python's tokens with comments and docstrings set
+aside, each embedded R script compared by its code with its comments set aside (strings,
+backtick names, raw strings and `__SPLICE__` markers are code) - and refused, naming the line,
+otherwise. It is made on a committed file and recorded in `kernels/<plugin>.design.json` like a
+design answer, as `kind: prose`. The record keeps only the lines the edit wrote and names every
+other line by its digest, so a leak taken out of a plugin does not move into its record. The
+record check reads the file before back from git. Then the `plan.after_edit` followers run, the
+same list `sch dev edit` runs (`--no-follow` prints them instead). The record needs an anchor in
+DEVPOINTS (`rules.held_out.spent` for a spent plugin, `rules.end_to_end.anchor` for cellchat), so
+a held-out plugin is refused until its own migration.
+
 Three declarations a plugin owes the maker's readings: `produces` in the grammar its readers
 read (a table by name, `slot[name]`, a trailing `?` for an optional output); `cache` naming the
 span of source that determines a saved object and the config parameters in its key, so
