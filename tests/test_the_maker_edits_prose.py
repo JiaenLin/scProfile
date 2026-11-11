@@ -540,7 +540,7 @@ TRUE = {"a method rule":
         "In the published benchmark (Author et al., 2022), the method was measured on 16 "
         "datasets and recovered 62% of the curated interactions.",
         "the reference database's size":
-        "Observed in the reference dataset, the database holds 1,280 of 3,379 mouse interactions.",
+        "Observed in the reference dataset, the database holds 2,000 of 4,000 interactions.",
         "a synthetic-fixture sentence":
         "Measured on the synthetic fixture's two samples, the selftest recovers 100% of the "
         "planted edges.",
