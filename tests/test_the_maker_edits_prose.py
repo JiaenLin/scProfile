@@ -63,7 +63,7 @@ if not HAVE:
 # A plugin as the format writes one: a declaration with a comment in it, docstrings, Python code,
 # and an R script long enough for the suite's own rule to read as R (tests/subject.py).
 R = ('\nlibrary(stats)\n'
-     '# THE FIRST COMMENT, measured as 30.56 on somebody\'s cohort\n'
+     '# THE FIRST COMMENT, measured as 12.34 on somebody\'s cohort\n'
      'f <- function(a) {\n'
      '  b <- "#not a comment"   # a trailing comment\n'
      '  `odd # name` <- 2\n'
@@ -74,7 +74,7 @@ R = ('\nlibrary(stats)\n'
 PLUG = ('"""The module\'s docstring."""\n'
         'PLUGIN = {\n'
         '    "api": 1,\n'
-        '    # a comment inside the declaration, PBS 123456\n'
+        '    # a comment inside the declaration, a job 123456\n'
         '    "version": "0.1.0",\n'
         '}\n'
         '\n'
@@ -95,10 +95,10 @@ def edit(old, new, text=PLUG):
 print("\n2. what is prose, and what is code")
 prose = {
     "a comment on Python code": ("# a comment on code", "# a comment, reworded"),
-    "a comment inside the declaration": ("PBS 123456", "a job"),
+    "a comment inside the declaration": ("a job 123456", "a job"),
     "the module's docstring": ("The module's docstring.", "Reworded."),
     "a function's docstring": ("The function's docstring.", "Reworded, longer\n    and two lines."),
-    "a whole-line R comment": ("measured as 30.56 on somebody's cohort", "measured on a cohort"),
+    "a whole-line R comment": ("measured as 12.34 on somebody's cohort", "measured on a cohort"),
     "a trailing R comment": ("# a trailing comment", "# reworded"),
     "an R comment line added": ("f <- function(a) {\n", "f <- function(a) {\n  # a new line\n"),
 }
@@ -155,7 +155,7 @@ print("\n3. an edit is recorded, and the record admits it again")
 with tempfile.TemporaryDirectory() as td:
     k = repo(td, "demo", PLUG)
     quiet = []
-    rc = V.prose_answer(k, [("measured as 30.56 on somebody's cohort", "measured on a cohort")],
+    rc = V.prose_answer(k, [("measured as 12.34 on somebody's cohort", "measured on a cohort")],
                         "", root=td, log=quiet.append)
     ck("refused: an edit with no reason", rc == 1 and k.path.read_text() == PLUG, quiet)
     rc = V.prose_answer(k, [("a comment", "x")], "why", root=td, log=quiet.append)
@@ -165,19 +165,31 @@ with tempfile.TemporaryDirectory() as td:
     ck("refused through the verb: R code, and nothing is written",
        rc == 1 and k.path.read_text() == PLUG, quiet[-2:])
     log = []
-    rc = V.prose_answer(k, [("measured as 30.56 on somebody's cohort", "measured on a cohort"),
-                            ("PBS 123456", "a job")], "a cohort's value and a job id out",
+    rc = V.prose_answer(k, [("measured as 12.34 on somebody's cohort", "measured on a cohort"),
+                            ("a job 123456", "a job")], "a cohort's value and a job id out",
                         root=td, log=log.append)
     after1 = k.path.read_text()
     ck("an R comment and a declaration comment, in one call", rc == 0
-       and "30.56" not in after1 and "PBS 123456" not in after1, log)
+       and "12.34" not in after1 and "a job 123456" not in after1, log)
+    rtext = V.design_record_path(k).read_text()
+    ck("the record carries no text the edit removed (a removed leak does not move into it)",
+       "12.34" not in rtext and "123456" not in rtext, rtext[:300])
     ck("the version is the maker's minor bump", '"version": "0.2.0"' in after1, after1[:200])
     rec = V._read_record(k)
     a = (rec.get("answers") or [{}])[-1]
     ck("recorded in the plugin's maker record, as prose, with its reason and digests",
        a.get("kind") == "prose" and a.get("why") == "a cohort's value and a job id out"
        and a.get("before") == V._sha(PLUG) and a.get("after") == V._sha(after1)
-       and "30.56" in a.get("diff", ""), a)
+       and "+# THE FIRST COMMENT, measured on a cohort" in a.get("diff", "")
+       and len(a.get("made_on") or "") == 40, a)
+    rc = V.prose_answer(k, [("# a comment on code", "# reworded")], "a second", root=td,
+                        log=log.append)
+    ck("refused: an answer on a file that differs from its commit", rc == 1, log[-1:])
+    g = ["git", "-C", str(td), "-c", "user.name=t", "-c", "user.email=t@t",
+         "-c", "commit.gpgsign=false"]
+    subprocess.run(g + ["add", "-A"], check=True, capture_output=True, env=GITENV)
+    subprocess.run(g + ["commit", "-q", "-m", "answer 1"], check=True, capture_output=True,
+                   env=GITENV)
     rc = V.prose_answer(k, [("# a comment on code", "# reworded")], "a second", root=td,
                         log=log.append)
     ok, said = V.design_record_check(k, root=td)

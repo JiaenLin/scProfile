@@ -1101,6 +1101,30 @@ def _design_record_check(kernel, root):
             why = _declaration_literal(cur)
             if why:
                 return False, f"the file answer {ans.get('n')} made: {why}"
+            if ans.get("kind") == "prose":
+                # A PROSE ANSWER CARRIES NO TEXT THE PLUGIN NO LONGER CARRIES (W035): its file
+                # before is read back from git at the commit it was made on, its recorded diff
+                # must turn that file into this one, and the prose rule admits the change again.
+                prev, how = _git_show(root, str(ans.get("made_on") or ""), f"kernels/{path.name}")
+                if prev is None:
+                    return False, (f"answer {ans.get('n')} (prose): the file it was made on "
+                                   f"cannot be read ({how})")
+                if _sha(prev) != ans.get("before"):
+                    return False, (f"answer {ans.get('n')} (prose): the file at its commit is not "
+                                   f"the file it records it was made on")
+                try:
+                    redo = _apply_unified(prev, str(ans.get("diff") or ""))
+                except ValueError as e:
+                    return False, f"answer {ans.get('n')} (prose): its diff does not apply ({e})"
+                if redo != cur:
+                    return False, (f"answer {ans.get('n')} (prose): its diff does not make the "
+                                   f"file the record says it made")
+                why = "; ".join(prose_refusals(prev, cur)) or (
+                    "it changes nothing" if prev == cur else "")
+                if why:
+                    return False, f"answer {ans.get('n')} is not admissible as prose: {why}"
+                cur = prev
+                continue
             try:
                 prev = _apply_unified(cur, _reverse_diff(str(ans.get("diff") or "")))
             except ValueError as e:
@@ -1111,14 +1135,6 @@ def _design_record_check(kernel, root):
             why = _declaration_literal(prev)
             if why:
                 return False, f"the file answer {ans.get('n')} was made on: {why}"
-            if ans.get("kind") == "prose":
-                # A PROSE ANSWER IS ADMITTED AGAIN BY THE PROSE RULE (W035): it changes no code.
-                why = "; ".join(prose_refusals(prev, cur)) or (
-                    "it changes nothing" if prev == cur else "")
-                if why:
-                    return False, f"answer {ans.get('n')} is not admissible as prose: {why}"
-                cur = prev
-                continue
             try:
                 _ops, sites, refusals, _n = _admit(prev, cur)
             except SyntaxError as e:
@@ -1470,7 +1486,8 @@ def _apply_unified(text, diff):
                 continue
             tag, body = row[:1], row[1:]
             if tag in (" ", "-"):
-                if i >= len(src) or src[i] != body:
+                if i >= len(src) or not (src[i] == body or (body.startswith(REDACTED)
+                                                            and body.strip() == REDACTED + _sha(src[i]))):
                     raise ValueError(f"line {i + 1} is not the line the answer was made against")
                 if tag == " ":
                     out.append(src[i])
@@ -1753,11 +1770,22 @@ def prose_answer(kernel, replacements, why, *, as_version=None, dry=False, log=p
         log(diff.rstrip("\n"))
         log(f"  a dry run: nothing written (version {vold} -> {new_version} when applied)")
         return 0
+    # MADE ON A COMMITTED FILE, so the record need not keep the text it removed: an edit that
+    # takes a leak out of a plugin would otherwise put the same leak into its record. The record
+    # check reads the file back from git at this commit, as it reads the anchor.
+    head, how = _git_head(root)
+    shown = _git_show(root, head, f"kernels/{path.name}")[0] if head else None
+    if shown != before:
+        log(f"  refused: kernels/{path.name} differs from the commit it would be made on "
+            f"({how}) - commit it first: the record check reads a prose answer's file back from "
+            f"git, so the record carries only the lines the edit writes")
+        return 1
     rec = _read_record(kernel)
     n = len(rec["answers"]) + 1
     rec["answers"].append({"n": n, "kind": "prose", "why": str(why), "sites": [],
                            "version": new_version, "before": _sha(before), "after": _sha(after),
-                           "diff": diff, "after_declaration": _declaration_text(after)})
+                           "made_on": head, "diff": _redact(diff),
+                           "after_declaration": _declaration_text(after)})
     path.write_text(after, encoding="utf-8")
     _write_record(kernel, rec)
     log(f"  answer {n} (prose) applied to kernels/{path.name}; version {vold} -> {new_version}; "
@@ -1789,3 +1817,35 @@ def after_edit_followers(root):
         except ValueError:
             break
     return out
+
+
+#: How a recorded diff names a line it does not carry: by the digest of the line (`_sha`).
+REDACTED = "\u2063sha256:"
+
+
+def _redact(diff):
+    """A unified diff with every line it did not WRITE - context and removed lines - replaced by
+    its digest: the record of a prose answer carries no text but what the edit put in."""
+    out = []
+    for row in _lines(diff):
+        if row[:1] in (" ", "-") and not row.startswith("--- "):
+            body = row[1:]
+            out.append(row[:1] + REDACTED + _sha(body) + "\n")
+        else:
+            out.append(row if row.endswith("\n") else row + "\n")
+    return "".join(out)
+
+
+def _git_head(root):
+    """(commit, how) of HEAD in the repository at `root`, or (None, why)."""
+    import os
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    try:
+        r = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True,
+                           text=True, timeout=60, env=env)
+    except (OSError, subprocess.SubprocessError) as e:
+        return None, f"git rev-parse HEAD: {e}"
+    if r.returncode:
+        return None, f"git rev-parse HEAD: {(r.stderr.strip().splitlines() or ['failed'])[-1]}"
+    return r.stdout.strip(), f"HEAD {r.stdout.strip()[:12]}"
