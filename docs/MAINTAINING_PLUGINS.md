@@ -145,8 +145,20 @@ An answer whose diff carries a line as text fails the check, so a record that pa
 a leak taken out of a plugin, by `prose`, `design --answer` or `sch dev edit`, does not move into
 or stay in its record. The maker rewrites every such answer in this form whenever it writes a
 record, and a verb checks the record in the form it is about to write. Two answers predate this:
-de's, made in W013 on files that were never committed, so they keep their full diffs and the
-declaration they left; they carry no cohort or site string. The limit of this: a line an answer
+de's, made in W013 on files that were never committed, so they keep their full diffs, and each is
+undone from the file that follows it, which must be the file it made byte for byte. They also
+kept a copy of the declaration they left, and with it one cohort's description that the plugin
+no longer carried (harness autodev W047). No record keeps a copy now, and a record holds only the
+keys the maker writes: a copy, or any key the maker never writes, fails the check by name
+whatever it carries - a field nothing reads passes anything. A record an older maker wrote is
+rewritten through the maker, never by hand: `scprofile design <plugin> --rewrite-record` writes
+it in the current form with no answer, leaves the plugin untouched, is refused unless the
+rewritten record passes its check, and compares each dropped copy with the declaration of the
+file its answer made, as the check rebuilds it from git and the record. The check reads git with
+replace refs off (`git --no-replace-objects`; the object store follows no ref), and the anchor
+DEVPOINTS names must be a whole commit id. The limits of this: a declaration edit after an older
+LAST answer, with no answer made on a committed file in between, fails closed (no record has that
+shape: de's last answer is made on one, which pins the link). And a line an answer
 wrote that a declaration edit then changes before the next answer is made - a trailing comment
 on a value's line, its value then edited - is in no file that follows the answer, so the check
 fails closed, naming the line, and the prose verb refuses. Undoing the declaration edit (the old

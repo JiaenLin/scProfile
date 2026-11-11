@@ -531,28 +531,36 @@ def _as_written(kernel):
     yet digests - is held to the form it is about to be written in, and migrates."""
     import json
     rec = _read_record(kernel)
-    for a in rec.get("answers") or []:
-        if isinstance(a, dict) and a.get("made_on"):
-            a.pop("after_declaration", None)
-            if isinstance(a.get("diff"), str):
-                a["diff"] = _redact(a["diff"])
+    _current_form(rec)
     return json.loads(json.dumps(rec))
 
 
-def _write_record(kernel, rec):
-    """Write the record. A RECORD KEEPS NO COPY OF A DECLARATION IT CAN READ BACK (W035 fix round
-    1): an answer made on a committed file (`made_on`) is rebuilt from git by the record check, so
-    the copy of the declaration it left is dropped whenever the maker writes the record - a copy
-    kept what a later edit took out of the plugin, a cohort's value included. AND IT KEEPS NO
-    LINE OF THE PLUGIN (fix round 2): every row of such an answer's diff - the lines it wrote
-    too - is rewritten as its digest (`_redact`), the answers recorded before this included, since
-    a written line stayed in its row after a later answer took it out of the plugin."""
-    import json
+def _current_form(rec):
+    """`rec`, in place, in the form the maker writes now: NO ANSWER KEEPS A COPY OF A DECLARATION
+    (W035 fix round 1 for an answer made on a committed file; W047 for every answer), and every
+    row of an answer made on a committed file is its digest (fix round 2). A key no maker ever
+    wrote is left as it is, for the record check to refuse by name - the maker does not tidy a
+    record someone else edited."""
     for a in rec.get("answers") or []:
-        if isinstance(a, dict) and a.get("made_on"):
+        if isinstance(a, dict):
             a.pop("after_declaration", None)
-            if isinstance(a.get("diff"), str):
+            if a.get("made_on") and isinstance(a.get("diff"), str):
                 a["diff"] = _redact(a["diff"])
+    return rec
+
+
+def _write_record(kernel, rec):
+    """Write the record. A RECORD KEEPS NO COPY OF A DECLARATION (W035 fix round 1; W047): an
+    answer made on a committed file (`made_on`) is rebuilt from git by the record check, and an
+    older one (de's two from W013) from the file that follows it, which git keeps - so the copy
+    of the declaration an answer left is dropped whenever the maker writes the record: a copy
+    kept what a later edit took out of the plugin, a cohort's value included, and the check read
+    it only where a declaration edit had followed an older last answer. AND IT KEEPS NO LINE OF
+    THE PLUGIN (fix round 2): every row of an answer made on a committed file - the lines it
+    wrote too - is rewritten as its digest (`_redact`), the answers recorded before this
+    included, since a written line stayed in its row after a later answer took it out."""
+    import json
+    _current_form(rec)
     design_record_path(kernel).write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n",
                                           encoding="utf-8")
 
@@ -834,9 +842,13 @@ def _git_show(root, commit, relpath):
     # THE REPOSITORY AT `root`, AND NO OTHER: git exports GIT_INDEX_FILE (relative), and may
     # export GIT_DIR, to whatever runs under a hook - the commit gate runs the suite under one.
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    # THE OBJECT THE ID NAMES, NEVER A REPLACEMENT FOR IT (W047; ATTACKS 22): `git replace` makes
+    # `git show <id>` give another commit's tree, so a record check that honoured replace refs
+    # read whatever history a local ref put under the anchor and every `made_on` - a smuggled
+    # code line passed. The object store read below follows no ref at all.
     try:
-        r = subprocess.run(["git", "-C", str(root), "show", f"{commit}:{relpath}"],
-                           capture_output=True, timeout=60, env=env)
+        r = subprocess.run(["git", "--no-replace-objects", "-C", str(root), "show",
+                            f"{commit}:{relpath}"], capture_output=True, timeout=60, env=env)
         if r.returncode == 0:
             try:
                 return r.stdout.decode("utf-8"), f"git show {commit}:{relpath}"
@@ -1087,18 +1099,37 @@ def _declaration(src):
     return None if (why or node is None) else (node.lineno, node.end_lineno)
 
 
-def _lone_declaration(text):
-    """None when `text` is ONE declaration and nothing else - what a record's `after_declaration`
-    must be, since it is swapped into the plugin as its declaration's lines - or why it is not."""
-    from .kernels import declaration_node
-    why = _declaration_literal(text)
-    if why:
-        return why
-    tree, _node, _w = declaration_node(text)
-    if len(tree.body) != 1:
-        return f"it holds {len(tree.body)} statements, not the declaration alone"
-    if not str(text).endswith("\n"):
-        return "it does not end its last line"
+#: THE KEYS THE MAKER WRITES INTO A RECORD, and nothing else (W047): the record's own; an
+#: answer's - `kind` on a prose answer, `made_on` on every answer since W035's fix round 1; a
+#: statement's, from `--confirm` or an answer. `after_declaration`, a copy of the declaration an
+#: answer left, was written until W047; `scprofile design <plugin> --rewrite-record` drops it.
+RECORD_KEYS = frozenset({"plugin", "answers", "statements"})
+ANSWER_KEYS = frozenset({"n", "kind", "why", "sites", "version", "before", "after", "diff",
+                         "made_on"})
+STATEMENT_KEYS = frozenset({"site", "how", "why"})
+
+
+def _unwritten_keys(rec):
+    """None, or the first key in `rec` the maker never writes, named with where it is."""
+    extra = sorted(set(rec) - RECORD_KEYS)
+    if extra:
+        return f"it carries {extra}, which the maker never writes"
+    for a in rec.get("answers") or []:
+        extra = sorted(set(a) - ANSWER_KEYS)
+        if extra:
+            return (f"answer {a.get('n')} carries {extra}, which the maker never writes"
+                    + ("; a copy of the declaration, which no record keeps since W047 - "
+                       "`scprofile design <plugin> --rewrite-record` writes the record without it"
+                       if extra == ["after_declaration"] else ""))
+    statements = rec.get("statements")
+    if not isinstance(statements, dict):
+        return "its statements are not a mapping"
+    for digest, s in statements.items():
+        if not isinstance(s, dict):
+            return f"statement {str(digest)[:16]} is not an entry"
+        extra = sorted(set(s) - STATEMENT_KEYS)
+        if extra:
+            return f"statement {str(digest)[:16]} carries {extra}, which the maker never writes"
     return None
 
 
@@ -1135,9 +1166,11 @@ def _reverse_diff(diff):
     return "".join(out)
 
 
-def design_record_check(kernel, root=None, rec=None):
+def design_record_check(kernel, root=None, rec=None, files=None):
     """(ok, sentence) - does the worksheet's record account for the plugin as it ships? `rec`, when
-    given, is the record as a verb is about to write it (`_as_written`), read in place of the file.
+    given, is the record as a verb is about to write it (`_as_written`), read in place of the file;
+    `files`, when given (a dict), receives `{n: (file before, file made)}` of every answer the
+    check rebuilt - what `--rewrite-record` compares a dropped copy with.
 
     THE RECORD VERIFIES ITSELF WHEREVER IT IS READ (W013's verifier, fix-ups 4 and 5), from the
     repository alone:
@@ -1152,14 +1185,18 @@ def design_record_check(kernel, root=None, rec=None):
          Such an answer whose diff carries a line as text fails: so a record that passes holds no
          line of the plugin at all - none a later answer took out - and no copy of the
          declaration (W035 fix round 2). An older answer (de's two, made in W013 on files never
-         committed) is undone from the next file, its recorded declaration set back first, and
-         keeps its text: nothing else can rebuild it. Each answer is admitted again by its rule:
-         the prose rule, or at the sites it records;
+         committed) keeps its text, since nothing else can rebuild it, and is undone from the
+         next file, which must be the file it made byte for byte: no answer keeps a copy of the
+         declaration it left (W047), and a record holds only the keys the maker writes, so a
+         field nothing reads cannot carry a value past the check. Each answer is admitted again
+         by its rule: the prose rule, or at the sites it records;
       3. THE CHAIN'S END IS ANCHORED: the first answer's `before` - or, with no answer yet, the
          shipped file - is, outside its declaration, the plugin at the commit its blind record was
          taken at, as DEVPOINTS `rules.held_out.spent` declares it and git keeps it. A record
          rewritten to start from a doctored file, or a hand edit before the first answer, does not
          meet it. Where that commit cannot be read the base is not established, and this fails.
+         The anchor is a whole commit id, and git is read with replace refs off (W047): a local
+         `git replace` under the anchor and every `made_on` passed a smuggled code line.
     The declaration is the maker's verb's to change after an answer; it is compared nowhere but
     in step 1 - and step 1 holds it to the host's own reader (`kernels.read_declaration`): one
     binding of `PLUGIN`, alone on its lines, a pure literal, in the shipped file and in every file
@@ -1169,13 +1206,13 @@ def design_record_check(kernel, root=None, rec=None):
     holds - a diff that is not text, sites that are not a list - is a sentence and a failure.
     """
     try:
-        return _design_record_check(kernel, root, rec)
+        return _design_record_check(kernel, root, rec, files)
     except Exception as e:                                       # noqa: BLE001 - fail closed
         return False, (f"the design record of {kernel.name} cannot be checked "
                        f"({type(e).__name__}: {e})")
 
 
-def _design_record_check(kernel, root, rec=None):
+def _design_record_check(kernel, root, rec=None, files=None):
     path = Path(kernel.path)
     root = Path(root) if root else path.parent.parent
     try:
@@ -1196,6 +1233,13 @@ def _design_record_check(kernel, root, rec=None):
     if not isinstance(answers, list) or not all(isinstance(a, dict) for a in answers):
         return False, (f"the record {design_record_path(kernel).name}'s answers are not a list "
                        f"of entries")
+    # A RECORD HOLDS ONLY THE KEYS THE MAKER WRITES (W047; ATTACKS 13 and 21): a key nothing
+    # reads passes whatever it carries. de's two copies of the declaration were read nowhere once
+    # the shipped file was answer 2's own, and a declaration nobody declared, carrying a planted
+    # count, passed in their place; any other key would carry a value the same way.
+    bad = _unwritten_keys(rec)
+    if bad:
+        return False, bad
     anchor = _spent_commit(root, kernel.name)
     if not answers and anchor is None:
         return True, ("no answer recorded, and not spent: DEVPOINTS names no blind-record commit "
@@ -1203,6 +1247,12 @@ def _design_record_check(kernel, root, rec=None):
     if anchor is None:
         return False, (f"a record with no anchor: DEVPOINTS `rules.held_out.spent` names no "
                        f"blind-record commit for {kernel.name}")
+    # THE ANCHOR IS A COMMIT, NOT A NAME FOR ONE (W047; ATTACKS 21: the rule fix round 2 set for
+    # `made_on`, at the other end of the chain): an abbreviation or a ref resolves to whatever
+    # the repository makes of it that day, and DEVPOINTS itself asks for the whole hash.
+    if not COMMIT_ID.match(str(anchor)):
+        return False, (f"the anchor DEVPOINTS names for {kernel.name}, {str(anchor)[:60]!r}, is "
+                       f"not a commit id - all its hex digits, never a ref or an abbreviation")
     cur = shipped
     for i, ans in enumerate(reversed(answers)):
         # THE NEXT FILE - the shipped one, or the file the next answer was made on - meets this
@@ -1277,18 +1327,22 @@ def _design_record_check(kernel, root, rec=None):
                                    + ("; ".join(refusals) if refusals else
                                       f"it touches {sites or 'no site'}, the record says "
                                       f"{ans.get('sites')}"))
+            if files is not None:
+                files[ans.get("n")] = (prev, made)
             cur = prev
             continue
         # AN ANSWER RECORDED BEFORE W035's FIX ROUND 1 (de's two, made on files never committed):
-        # its diff carries its lines, and the declaration it left is set back into the next file.
-        if _sha(cur) != ans.get("after") and ans.get("after_declaration"):
-            why = _lone_declaration(ans["after_declaration"])
-            if why:
-                return False, (f"answer {ans.get('n')}'s recorded declaration is not one "
-                               f"declaration alone: {why}")
-            cur = _swap_declaration(cur, ans["after_declaration"])
+        # its diff carries its lines, and it is undone from the file that follows it, which is
+        # the file it made BYTE FOR BYTE, declaration included. It kept a copy of the declaration
+        # it left, set back here where a declaration edit had followed it (W047: no record keeps
+        # one; de's next answer is made on a committed file, which pins that link for good).
         if _sha(cur) != ans.get("after"):
-            return False, missed
+            return False, (missed if i else
+                           f"kernels/{path.name} is not the file its last recorded answer "
+                           f"({ans.get('n')}) made: an answer recorded before W035's fix round 1 "
+                           f"is met by its own file, declaration included - changed since by "
+                           f"hand, by a declaration edit with no answer made on a committed file "
+                           f"after it, or by an answer the worksheet did not record")
         why = _declaration_literal(cur)
         if why:
             return False, f"the file answer {ans.get('n')} made: {why}"
@@ -1311,6 +1365,8 @@ def _design_record_check(kernel, root, rec=None):
                            + ("; ".join(refusals) if refusals else
                               f"it touches {sites or 'no site'}, the record says "
                               f"{ans.get('sites')}"))
+        if files is not None:
+            files[ans.get("n")] = (prev, cur)
         cur = prev
     base, how = _git_show(root, anchor, f"kernels/{path.name}")
     if base is None:
@@ -1705,6 +1761,63 @@ def design_confirm(kernel, line, why, log=print):
                                       "why": str(why)}
     _write_record(kernel, rec)
     log(f"  statement:{s['line']} confirmed as it stands; recorded by its digest {s['digest']}")
+    return 0
+
+
+def design_rewrite_record(kernel, log=print, root=None):
+    """Write the record in the form the maker writes now, with no answer (W047). Returns 0 or 1.
+
+    THE ROUTE FOR A RECORD AN OLDER MAKER WROTE, for any plugin. A record changes form only when
+    a verb writes it, so a record with nothing left to answer kept what the maker no longer
+    writes: de's two W013 answers each kept a copy of the declaration they left, and with it one
+    cohort's description that the plugin itself no longer carried. This drops every copy and
+    writes every row of an answer made on a committed file as its digest (`_current_form`); a
+    key no maker ever wrote is not tidied away - the check refuses it by name. The plugin file is
+    not touched. It is refused, nothing written, unless the record as rewritten passes the record
+    check; and each dropped copy is compared with the declaration of the file its answer made, as
+    the check rebuilt that file from git and the record, and the verb says whether they are the
+    same byte for byte - so what the record proved, it still proves without the copy. A record
+    already in that form is left as it is.
+    """
+    import json
+    path = Path(kernel.path)
+    root = Path(root) if root else path.parent.parent
+    rp = design_record_path(kernel)
+    if not rp.is_file():
+        log(f"  nothing to rewrite: kernels/{rp.name} does not exist")
+        return 0
+    rec_before = rp.read_text(encoding="utf-8")
+    old = _read_record(kernel)
+    if old.get("unreadable"):
+        log(f"  refused: the record {old['unreadable']} does not parse")
+        return 1
+    copies = {a.get("n"): a["after_declaration"] for a in old.get("answers") or []
+              if isinstance(a, dict) and "after_declaration" in a}
+    rec = _as_written(kernel)
+    files = {}
+    ok, why_not = design_record_check(kernel, root=root, rec=rec, files=files)
+    if not ok:
+        log(f"  refused: the record as the maker writes it does not pass its check ({why_not}); "
+            f"nothing written")
+        return 1
+    text = json.dumps(rec, indent=1, sort_keys=True) + "\n"
+    if text == rec_before:
+        log(f"  kernels/{rp.name} is already as the maker writes it: nothing written")
+        return 0
+    for n, copy in copies.items():
+        made = files.get(n, (None, None))[1]
+        same = isinstance(copy, str) and made is not None and _declaration_text(made) == copy
+        log(f"  answer {n}: its copy of the declaration dropped - "
+            + ("the file it made, rebuilt from git and the record, carries that declaration "
+               "byte for byte" if same else
+               "it is NOT the declaration of the file the answer made, as the check rebuilt that "
+               "file from git and the record: the record carried a copy no file of its chain had"))
+    plugin_before = path.read_text(encoding="utf-8")
+    _write_record(kernel, rec)
+    if _keep_or_restore(kernel, root, plugin_before, rec_before, log):
+        return 1
+    log(f"  kernels/{rp.name} rewritten in the maker's current form ({len(rec_before):,} -> "
+        f"{len(text):,} characters); kernels/{path.name} not touched")
     return 0
 
 

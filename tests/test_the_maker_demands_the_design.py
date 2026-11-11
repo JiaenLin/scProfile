@@ -438,8 +438,9 @@ if hasattr(V, "design_answer"):
             "n": len(rec["answers"]) + 1, "why": "x", "sites": ["fit:1406"],
             "version": rec["answers"][-1]["version"], "before": V._sha(shipped),
             "after": V._sha(edited),
-            "diff": "".join(difflib.unified_diff(V._lines(shipped), V._lines(edited), "a", "b")),
-            "after_declaration": rec["answers"][-1].get("after_declaration", "")})
+            "diff": "".join(difflib.unified_diff(V._lines(shipped), V._lines(edited), "a", "b"))})
+        # (no copy of the declaration: no record keeps one since W047, and the check refuses a
+        # key the maker never writes before it reaches the sites - this entry is refused at them)
         V.design_record_path(kd).write_text(json.dumps(rec), encoding="utf-8")
         d = rooted(V.design_sites, kd)
         ck("the same edit with a forged entry claiming a site: the design stage owes",

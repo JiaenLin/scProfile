@@ -1639,21 +1639,25 @@ def _design(a):
     if bad:
         print(f"scprofile: unknown plugin(s) {bad}", file=sys.stderr)
         return REFUSE
-    acts = [x for x in ("answer", "confirm", "replay_into") if getattr(a, x, None)]
+    acts = [x for x in ("answer", "confirm", "replay_into", "rewrite_record")
+            if getattr(a, x, None)]
     if acts:
         # THE WORKSHEET IS ANSWERED THROUGH THE MAKER, AND THE MAKER RECORDS IT (GAP-C47): an
         # answer is applied only inside a named site (`validate._admit`), a confirmation is bound
         # to the digest of the sentence it confirms, and the record replays onto a copy rebuilt
-        # from the base, every diff admitted again.
+        # from the base, every diff admitted again. A record an older maker wrote is rewritten
+        # in the current form through the maker too, never by hand (W047).
         if len(names) != 1 or len(acts) > 1:
-            print("scprofile design: --answer, --confirm and --replay-into take ONE plugin, one "
-                  "at a time", file=sys.stderr)
+            print("scprofile design: --answer, --confirm, --replay-into and --rewrite-record take "
+                  "ONE plugin, one at a time", file=sys.stderr)
             return REFUSE
         k = ks[names[0]]
         if a.answer:
             return V.design_answer(k, a.answer, a.why, as_version=a.as_version)
         if a.confirm:
             return V.design_confirm(k, a.confirm, a.why)
+        if a.rewrite_record:
+            return V.design_rewrite_record(k)
         return V.design_replay(k, a.replay_into)
     print("does each design-aware plugin take its model from the host? (GAP-039, GAP-040, "
           "GAP-C47)")
@@ -4594,6 +4598,11 @@ def main(argv=None):
     dz.add_argument("--replay-into", metavar="FILE", default=None,
                     help="apply every recorded answer, in order, to FILE - a copy of the plugin "
                          "rebuilt from its base by the maker's verb calls")
+    dz.add_argument("--rewrite-record", action="store_true",
+                    help="write the plugin's record in the form the maker writes now, with no "
+                         "answer: no copy of a declaration, every row of a made-on answer a "
+                         "digest; refused unless the record as rewritten passes its check; the "
+                         "plugin is not touched")
     dz.set_defaults(fn=_design)
     pz = sub.add_parser("prose", help="[maintainer] edit a plugin's prose through the maker - a "
                                       "comment, a docstring, a comment of its embedded R - "
