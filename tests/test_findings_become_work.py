@@ -312,7 +312,7 @@ with tempfile.TemporaryDirectory() as td:
         ck("and reopens when the legend no longer carries the words",
            F_TOOL in R.open_findings(b, PLUG), str(R.open_findings(b, PLUG)))
         # ONE READ OF THE DECLARATION PER KIND, NOT PER FIGURE (found on the carried run: the
-        # worksheet took two minutes on 945 figures, loading the plugin's file for each).
+        # worksheet took minutes on a full run's figures, loading the plugin's file for each).
         for i in range(60):
             q = b / f"kernels/p/U{i}/figures/native_ring.png"
             q.parent.mkdir(parents=True, exist_ok=True)

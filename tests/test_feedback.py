@@ -214,7 +214,9 @@ print("\na declaration that under-sizes what the run cost is a defect the run ca
 # THE ONE FAILURE THAT PRODUCES NO EVIDENCE. A kernel killed by the OOM killer at its largest
 # step leaves no traceback, so nothing downstream can classify it - which is why this is caught
 # from a run that SUCCEEDED, using what it measured, before the next one is sized to die.
-# The numbers are real: 14.374 GB reported by the process, 42.7 GB billed by the scheduler.
+# The case is a real one - the scheduler billed several times what the process reported. The
+# numbers below are synthetic and keep its shape: the process's own floor sits within noise of
+# the declaration, and the job's counter far above it.
 
 
 class _Kern:
@@ -223,9 +225,9 @@ class _Kern:
     executor = {"memory_gb_base": 8.0, "memory_gb_per_100k": 6.0}
 
 
-_both = {"n_cells": 100_713, "peak_rss_gb": 14.374, "cgroup_peak_gb": 42.7}
+_both = {"n_cells": 80_000, "peak_rss_gb": 13.0, "cgroup_peak_gb": 39.0}
 ck("two measurements of one cost: the LARGER is taken",
-   FB.peak_measurement(_both)[0] == 42.7, str(FB.peak_measurement(_both)))
+   FB.peak_measurement(_both)[0] == 39.0, str(FB.peak_measurement(_both)))
 ck("and it says which one that was", "scheduler" in FB.peak_measurement(_both)[1],
    FB.peak_measurement(_both)[1])
 ck("a floor on its own is still usable", FB.peak_measurement({"peak_rss_gb": 3.0})[0] == 3.0)
@@ -255,31 +257,32 @@ ck("a small overshoot is noise and is not reported",
 
 
 print("\na job-wide counter is never charged to one instance")
-# THE SECOND HALF OF THE SAME DEFECT. Fixing the cgroup PATH made the number right - 45.0 GB
-# against PBS's own 42.7 GB for the job - and it was still attributed to each of ten concurrent
-# instances, so all ten reported 45.0 GB over inputs of about 7 to 12 thousand cells and the advice was
-# to raise a 3.8 GB declaration elevenfold. An even split puts the true figure near 4.5 GB, which
-# is 1.18x the declaration: it was right all along.
+# THE SECOND HALF OF THE SAME DEFECT. Fixing the cgroup PATH made the number right - it agreed
+# with PBS's own figure for the job - and it was still attributed to each of the concurrent
+# instances, so every one reported the job's whole figure over inputs of different sizes, and the
+# advice was to raise by an order of magnitude a declaration that was right all along. The case
+# below is synthetic with the same shape: eight instances share a 48 GB job, so an even split
+# puts each near 6.0 GB, within noise of a 5.0 GB declaration.
 class _K:
     name = "p"
-    executor = {"memory_gb_base": 3.8, "memory_gb_per_100k": 0.0}
+    executor = {"memory_gb_base": 5.0, "memory_gb_per_100k": 0.0}
 
 
-_pl = {"measured": {"n_cells": 12000, "cgroup_peak_gb": 45.0, "peak_rss_gb": 4.1}}
-_shared = FB.memory_drift(_K(), _pl, concurrent=10)
+_pl = {"measured": {"n_cells": 9000, "cgroup_peak_gb": 48.0, "peak_rss_gb": 5.2}}
+_shared = FB.memory_drift(_K(), _pl, concurrent=8)
 _alone = FB.memory_drift(_K(), _pl, concurrent=1)
 ck("with several instances in one job it is not a declaration defect",
    len(_shared) == 1 and _shared[0].layer == FB.HOST, str([d.layer for d in _shared]))
 ck("and it says so in the words that stop the wrong fix",
    "must not be raised to it" in _shared[0].why, _shared[0].why[:90])
 ck("it names the per-instance bound an even split implies",
-   "4.5 GB" in _shared[0].why, _shared[0].why[-120:])
+   "6.0 GB" in _shared[0].why, _shared[0].why[-120:])
 ck("with ONE instance the counter is exact and the declaration IS checked",
    len(_alone) == 1 and _alone[0].layer == FB.DECLARATION,
    str([d.layer for d in _alone]))
 ck("the floor measurement is never suppressed - only the job-wide one",
-   FB.memory_drift(_K(), {"measured": {"n_cells": 12000, "peak_rss_gb": 45.0}},
-                   concurrent=10)[0].layer == FB.DECLARATION,
+   FB.memory_drift(_K(), {"measured": {"n_cells": 9000, "peak_rss_gb": 48.0}},
+                   concurrent=8)[0].layer == FB.DECLARATION,
    "the process's own floor belongs to the process, however many share the job")
 
 from pathlib import Path as _Path                                            # noqa: E402
@@ -448,10 +451,10 @@ ck("without smaps_rollup the resident set is summed and the basis says so",
 _gb3, _basis3 = _E._tree_gb(100, proc=_P(_tf.mkdtemp()) / "absent", page=4096)
 ck("and where there is no /proc at all nothing is invented", _gb3 is None, str(_gb3))
 
-_three = {"n_cells": 12000, "peak_rss_gb": 4.1, "cgroup_peak_gb": 45.0, "tree_peak_gb": 7.2,
+_three = {"n_cells": 9000, "peak_rss_gb": 5.2, "cgroup_peak_gb": 48.0, "tree_peak_gb": 6.6,
           "tree_basis": "pss"}
 ck("the tree peak is preferred over both the floor and the job's counter",
-   FB.peak_measurement(_three)[0] == 7.2, str(FB.peak_measurement(_three)))
+   FB.peak_measurement(_three)[0] == 6.6, str(FB.peak_measurement(_three)))
 ck("and named as the instance's own", "tree" in FB.peak_measurement(_three)[1],
    FB.peak_measurement(_three)[1])
 _d_tree = FB.memory_drift(_K(), {"measured": _three}, concurrent=10)

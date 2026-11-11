@@ -2,8 +2,8 @@
 
 WHAT THIS COST: the host's table summed the per-SAMPLE networks while the tool's comparison
 figures beside it were drawn from the arm's fit on POOLED cells. Both were labelled "total
-interaction strength". Measured on one cohort they differed by a factor of 2.5 - 57.5 against
-23.3 for the same arm - and a reader comparing the table against the figure on the same page
+interaction strength". Measured on one cohort they differed by a large factor for the same
+arm - and a reader comparing the table against the figure on the same page
 would have been comparing two different quantities.
 
 Neither is wrong: a sum over animals weights each animal equally, a pooled fit weights each cell

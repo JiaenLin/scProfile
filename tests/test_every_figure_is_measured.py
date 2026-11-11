@@ -180,10 +180,10 @@ with tempfile.TemporaryDirectory() as td:
        nxt[:160])
 
 print("\na rebuild of the pages records the compare plates already drawn, with no interpreter to launch")
-# FOUND ON THE RERUN OF BLIND 0006: the run's own report recorded the compare phase's 249 plates
+# FOUND ON THE RERUN OF BLIND 0006: the run's own report recorded the compare phase's plates
 # as the companion's (`measured: False`), then the declared after-line `scprofile report --out`
 # rebuilt the pages with no --prefix, resolved no interpreter, returned before the pair loop and
-# wrote panels.json with `native: []` - and station 6b read 249 figures "recorded by nothing".
+# wrote panels.json with `native: []` - and station 6b read every one "recorded by nothing".
 # An interpreter is needed to LAUNCH a comparison; recording one that is on disk needs none.
 with tempfile.TemporaryDirectory() as td:
     from scprofile.kernels import discover as _disc
@@ -213,9 +213,9 @@ with tempfile.TemporaryDirectory() as td:
        and recs[0][-1].get("drawn_by") == "tool", str(recs[0][-1] if recs else recs))
 
 print("\nthe eye station counts a look carried from the run beside on the same bytes")
-# FOUND ON THE RERUN OF BLIND 0006: the review read 37 of the scan set as "reviewed (carried)" -
-# looks taken on the old replay on identical bytes - and station 7 read them as unlooked (102 of
-# 139), because it counted only this run's own ledger. A carried look is a look; the maker's
+# FOUND ON THE RERUN OF BLIND 0006: the review read part of the scan set as "reviewed (carried)" -
+# looks taken on the old replay on identical bytes - and station 7 read them as unlooked, because
+# it counted only this run's own ledger. A carried look is a look; the maker's
 # `looked_at` stayed owing after the whole scan set had been seen.
 with tempfile.TemporaryDirectory() as td:
     import hashlib

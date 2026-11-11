@@ -60,7 +60,7 @@ ck("and one inside it is not",
 
 # THE FALSE POSITIVE IT SHIPPED WITH. A provenance stamp is placed below the figure so the tight
 # bbox grows to hold it, and `Text.clip_on` is True by default at figure level - so the first
-# version reported every correctly-stamped panel as clipped, on all 223 of a real run.
+# version reported every correctly-stamped panel of a real run as clipped.
 ck("a figure-level stamp below the canvas is NOT called clipped",
    "off_canvas" not in codes(lambda ax, f: f.text(0.0, -0.006, "unit · one sample · n = 1,000",
                                                   fontsize=5.2)))
@@ -90,7 +90,7 @@ ck("and it REPORTS rather than refusing",
    "a gate that blocks a run over a stray label is one somebody removes")
 
 print("\nand it survives the trip from the plugin into the run")
-# IT RAN ON 223 PANELS AND NONE OF IT ARRIVED. The manifest serialiser copies a fixed set of keys
+# IT RAN ON EVERY PANEL OF A REAL RUN AND NONE OF IT ARRIVED. The manifest serialiser copies a fixed set of keys
 # - which is right, a plugin must not inject arbitrary keys into the payload - and the new one
 # was not on the list. A measurement that does not reach the run is a measurement nobody has.
 from scprofile import manifest as _M                                            # noqa: E402

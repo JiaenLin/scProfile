@@ -924,7 +924,7 @@ ck("the declaration check REFUSES a per-unit plugin that declares none",
    "a per-unit plugin with no unit_metrics must be an ERROR, not a WARN")
 
 print("\nthe host draws that comparison, so no plugin writes its own version of it")
-_units = [{"unit": f"u{i}", "metrics": {"m": v}} for i, v in enumerate([8194, 17957, 38895])]
+_units = [{"unit": f"u{i}", "metrics": {"m": v}} for i, v in enumerate([4000, 11000, 19000])]   # synthetic, a 4.75x range
 _html = _RP._across_units(_units, [{"id": "m", "question": "how many?"}])
 ck("it renders from the units alone, with no plotting library",
    "<svg" in _html and "import matplotlib" not in inspect.getsource(_RP))
@@ -936,7 +936,7 @@ ck("it renders from the units alone, with no plotting library",
 # section must still come back with its numbers in it.
 import scprofile.design_panel as _DP2                                           # noqa: E402
 _u2 = [{"unit": f"u{i}", "metrics": {"m": float(v)}}
-       for i, v in enumerate([8194, 17957, 38895, 12000, 30000, 9000])]
+       for i, v in enumerate([4000, 11000, 19000, 12000, 30000, 9000])]
 _d2 = {f"u{i}": {"g": ("a" if i < 3 else "b")} for i in range(6)}
 _real = _DP2.draw
 try:
@@ -957,7 +957,7 @@ ck("a per-unit plugin that recorded nothing is NAMED as uncomparable, not omitte
 ck("one unit is not a comparison",
    "cannot be put on one axis" in _RP._across_units([{"unit": "a", "metrics": {"m": 1}}], []))
 ck("counts are not rendered in scientific notation",
-   _RP._num(38895) == "38,895" and "e+" not in _RP._num(23543.5))
+   _RP._num(47213) == "47,213" and "e+" not in _RP._num(31416.5))
 ck("the comparison is placed BEFORE the per-unit panels",
    inspect.getsource(_RP.write_kernel).index("_across_units")
    < inspect.getsource(_RP.write_kernel).index("_figure_section"))
@@ -1402,9 +1402,9 @@ ck("a raising candidate does not propagate out of the search", _raised is not Tr
 # THE MEMORY A JOB ACTUALLY USES INCLUDES ITS CHILDREN. `RUSAGE_SELF` is the calling process
 # alone, and every library these plugins wrap parallelises with SUBPROCESSES - so the memory that
 # decides whether a job survives was invisible to the number the host schedules on. One plugin
-# reported a 14.4 GB peak in three separate runs, its declaration was fitted to that, and it was
-# SIGKILLed at 48 GB computing neighbours: wrong by more than threefold, in the direction that
-# gets a run killed and keeps nothing.
+# reported, in three separate runs, a peak that was a fraction of its real cost; its declaration
+# was fitted to that, and it was SIGKILLed at its request computing neighbours: wrong several-fold,
+# in the direction that gets a run killed and keeps nothing.
 print("\nthe memory measurement counts the children")
 _ent = read_or_fail(Path(__file__).resolve().parents[1] / "scprofile" / "_entry.py",
                     "scprofile/_entry.py")
@@ -1413,8 +1413,8 @@ ck("RUSAGE_CHILDREN is counted, not only RUSAGE_SELF",
 ck("and they are added, not compared",
    "float(_self) + float(_kids)" in _ent)
 # ADDING CHILDREN NARROWS THE GAP AND DOES NOT CLOSE IT. Measured against PBS's own accounting:
-# the process tree reported 14.374 GB where `resources_used.mem` was 42.7 GB - THREE TIMES more -
-# because RUSAGE_CHILDREN is the largest single reaped child, not the sum of eight concurrent
+# the process tree reported a fraction of what `resources_used.mem` billed - several times less -
+# because RUSAGE_CHILDREN is the largest single reaped child, not the sum of the concurrent
 # workers. The scheduler's own counter is recorded ALONGSIDE, never instead, so the discrepancy
 # is visible rather than silent.
 ck("the scheduler's own counter is read where it exists",

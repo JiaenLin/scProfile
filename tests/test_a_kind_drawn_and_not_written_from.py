@@ -1,9 +1,10 @@
 """A plugin can say a figure kind is drawn and no result is written from it, and the writing
 step waits only on the figures the paper is written from.
 
-WHAT THIS COST. One cohort drew 1187 figures of 81 kinds - a circle plot per unit, a chord
-diagram per pathway per contrast, 72 of that one kind. Every figure gated the result section, so
-writing 24 claims meant opening 1019 images; 50 of the 81 kinds are cited by no sentence the
+WHAT THIS COST. One cohort drew a figure set many times larger than its paper - a circle plot
+per unit, a chord diagram per pathway per contrast, dozens of that one kind. Every figure gated
+the result section, so writing a handful of claims meant opening every image, and most kinds are
+cited by no sentence the
 composer writes. `review.shards` had said for as long as it had existed that "the brief's list
 holds the ones the PAPER is written from, which is a smaller set and the one the writing step
 actually blocks on" - and the agenda gated on every panel drawn. The behaviour and the sentence

@@ -1879,7 +1879,7 @@ def test_a_refutation_survives_every_hop_to_the_verdict():
         # criterion whose whole job is to notice a real one. Both sides are unescaped; asserted
         # rather than assumed, because it is invisible until a claim contains punctuation.
         punct = ["A cell's entropy & its ceiling differ by <2%.",
-                 'A "quoted" claim: 45.5% of cells score S/G2M.']
+                 'A "quoted" claim: 37.5% of cells score S/G2M.']
         pl2 = {"kernel": "k", "status": "ok", "headline": "Fine.", "caveats": [],
                "contradictions": punct, "absent": [], "figures": [], "tables": [], "units": []}
         w2 = report.write_kernel(d, "k2", pl2, [], payload_all={})
@@ -1906,7 +1906,7 @@ def test_a_refutation_survives_every_hop_to_the_verdict():
         # Measured on a real run: 2.
         claim3 = "DEPTH, NOT CYCLING: the fraction falls as detection rises."
         pl3 = {"kernel": "k", "status": "ok", "contradictions": [claim3],
-               "headline": f"{claim3} 45.5% of cells score S or G2M.", "caveats": [claim3],
+               "headline": f"{claim3} 37.5% of cells score S or G2M.", "caveats": [claim3],
                "absent": [], "figures": [], "tables": [], "units": []}
         w3 = report.write_kernel(d, "k3", pl3, [], payload_all={})
         h3 = Path(w3).read_text(encoding="utf-8")
@@ -1916,7 +1916,7 @@ def test_a_refutation_survives_every_hop_to_the_verdict():
               v3.lower().count("depth, not cycling") == 1,
               f"rendered {v3.lower().count('depth, not cycling')} times")
         check("chain/the-plugins-own-claim-survives",
-              "45.5% of cells score S or G2M" in v3,
+              "37.5% of cells score S or G2M" in v3,
               "stripping the refutation took the headline with it")
         # MEASURED-AND-CLEAN IS NOT THE SAME AS NOT-MEASURED. A report directory copied away
         # from its run has no payload beside it; reading that as "no contradictions" would make

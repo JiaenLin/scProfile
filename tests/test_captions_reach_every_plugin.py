@@ -1,6 +1,6 @@
 """The host owns the legend format, so the host must be able to HAND a plugin a writer for it.
 
-THE DEFECT, MEASURED ON A SEALED RUN. 711 panels carried 69 written legends and 642 carried none,
+THE DEFECT, MEASURED ON A SEALED RUN. Most panels carried no written legend at all,
 and the reason was structural. `scprofile/captions.py` had four read sites in the host and no
 writer in production: its own `write` was dead code, and the only thing in the repository that
 produced a `captions.tsv` was R embedded inside ONE plugin, which had copied the format into three

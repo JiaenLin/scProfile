@@ -2,7 +2,7 @@
 
 A review is bound to a figure's sha256 - redraw it and the review is gone, which is right. But
 the ledger lived only INSIDE the run directory, so a run that reused every fitted object and
-redrew nothing still reported every figure as never looked at: 672 of them, on every run.
+redrew nothing still reported every figure as never looked at: all of them, on every run.
 
 Honouring that means re-reviewing an unchanged figure set every time, which nobody does. A gate
 that demands the impossible is a gate that is off, and this one had been off since it was built.

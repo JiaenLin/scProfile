@@ -2,8 +2,8 @@
 (harness ADR-0024, step 3).
 
 THE HOST DREW EVERY KIND IT OWNS FOR EVERY PLUGIN WITH A NETWORK: three panels per contrast,
-seven per arm, three for the cohort, the interaction - 84 files on a 2x2 cohort beside the
-plan's own 143, most of them twins of a plate the wrapped tool draws itself. The layout decides
+seven per arm, three for the cohort, the interaction - dozens of files on a real cohort beside the
+plan's own, most of them twins of a plate the wrapped tool draws itself. The layout decides
 which of the host's kinds a reader is handed (`host_keep` in the tool's DEVPOINTS) and writes
 the decision into the plugin as `report.host_panels`; the host reads it at every one of its
 draw sites. A plugin that declares none gets every kind, as before - the eight plugins not yet

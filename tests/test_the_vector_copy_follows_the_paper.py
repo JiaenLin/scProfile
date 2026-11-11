@@ -2,7 +2,7 @@
 
 The PDF beside each PNG is not redundant - the report offers it as a "vector (PDF)" download, and
 a reader preparing a manuscript wants it. It was being written for EVERY panel. Measured on one
-cohort: 360 files for 180 diagnostic plates, ten per unit across eighteen units, in two formats,
+cohort: two files for every diagnostic plate, several per unit across every unit, in two formats,
 and the composed section cites none of them.
 
 Which kinds those are is not the host's to know. The plugin already says, by placing a kind
@@ -32,7 +32,7 @@ PLACED = {"diag": "appendix", "diag_keep": "contrast", "head": "overview"}
 check(_wants_vector(PLACED, "head_totals") is True,
       "a figure the paper is written from lost its vector copy")
 check(_wants_vector(PLACED, "diag_permutation") is False,
-      "an `appendix` kind still got a vector copy - the 180 files this exists to stop")
+      "an `appendix` kind still got a vector copy - the per-unit copies this exists to stop")
 check(_wants_vector(PLACED, "diag_keep_this") is True,
       "the longer prefix did not win, so a family cannot be withheld with one member kept")
 

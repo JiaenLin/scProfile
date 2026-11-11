@@ -536,7 +536,8 @@ ck("an empty wave does not divide by zero", concurrency([], 8) == 1)
 
 print("\na plugin whose output vocabulary is INFERRED also gets one cohort fit")
 # SCENIC discovers its regulon set per fit, so two units' AUC columns are not the same quantity.
-# Measured on ten samples: 37-111 regulons, Jaccard 0.17 between two of them. The cohort fit is
+# Measured on a real cohort: the per-sample regulon counts differed several-fold, and two samples
+# shared a small fraction of their regulons. The cohort fit is
 # the one comparable vocabulary; the per-unit fits are the only independent check on it, so it is
 # an EXTRA instance and never a replacement.
 import types as _types                                                        # noqa: E402
@@ -642,27 +643,28 @@ _big.release(_g)
 print("\nand memory is charged against the cells the instance actually touches")
 # MEMORY IS A BASELINE PLUS A PER-CELL TERM. This asserted the cohort instance cost more than
 # SIX TIMES the per-unit one, which is only true if the baseline is zero - the very model that
-# made a 15 GB measurement on a 10k-cell instance read as 150 GB per 100k. Both instances pay the
+# made, for instance, a 10 GB measurement on a 5k-cell instance read as 200 GB per 100k. Both
+# instances pay the
 # baseline, so the ratio compresses; what must hold is that the DIFFERENCE is the per-cell term
 # times the difference in cells.
 _km = _types.SimpleNamespace(executor={"cores": 8, "memory_gb_per_100k": 12,
                                        "memory_gb_base": 6, "gpus": 0})
-_whole = demand({"cores": 8}, _km, 100_713)
-_unit = demand({"cores": 8}, _km, 13_824)
+_whole = demand({"cores": 8}, _km, 90_000)          # synthetic sizes: a cohort, and one unit
+_unit = demand({"cores": 8}, _km, 12_000)
 ck("a cohort instance is charged more than a per-unit one",
    _whole["memory_gb"] > _unit["memory_gb"],
    f"{_whole['memory_gb']:.1f} vs {_unit['memory_gb']:.1f} GB")
-_expected = 12 * (100_713 - 13_824) / 100_000
+_expected = 12 * (90_000 - 12_000) / 100_000
 ck("and the difference is exactly the per-cell term over the extra cells",
    abs((_whole["memory_gb"] - _unit["memory_gb"]) - _expected) < 0.01,
    f"{_whole['memory_gb'] - _unit['memory_gb']:.2f} vs {_expected:.2f} GB")
 ck("and both pay the baseline, so neither is charged from zero",
-   _unit["memory_gb"] > 6, f"{_unit['memory_gb']:.1f} GB for 13,824 cells")
+   _unit["memory_gb"] > 6, f"{_unit['memory_gb']:.1f} GB for 12,000 cells")
 
 print("\nand the two-term model is FITTED from the run, never divided from one point")
 from scprofile.kernels import fit_memory_model                                 # noqa: E402
 _truth_b, _truth_r = 6.0, 12.0
-_pts = [(n, _truth_b + _truth_r * n / 100_000) for n in (7_296, 10_837, 13_824, 25_000)]
+_pts = [(n, _truth_b + _truth_r * n / 100_000) for n in (6_000, 9_000, 12_000, 25_000)]
 _b, _r = fit_memory_model(_pts)
 ck("the fit recovers a known baseline", abs(_b - _truth_b) < 0.01, f"{_b} vs {_truth_b}")
 ck("and a known per-cell rate", abs(_r - _truth_r) < 0.01, f"{_r} vs {_truth_r}")
@@ -671,19 +673,19 @@ ck("the OLD single-point rate would have been many times the truth",
    (_g0 * 100_000 / _n0) > _truth_r * 5,
    f"{_g0 * 100_000 / _n0:.1f} GB/100k against a true {_truth_r}")
 # ONE POINT CANNOT SPLIT THE TWO, and which way it fails is the whole question. Attributing it
-# to the BASELINE is exact at the size measured and under-predicts every larger one - 7.2 GB seen
-# at 98,627 cells would charge 7.2 GB for 500,000, where the truth is nearer 36. That is the
-# five-fold under-request that kills a job at the end of its longest step. Attributing it to the
+# to the BASELINE is exact at the size measured and under-predicts every larger one - 6.0 GB seen
+# at 80,000 cells (synthetic) would charge 6.0 GB for 500,000, where the rate puts it near 37.5.
+# That is the several-fold under-request that kills a job at the end of its longest step. Attributing it to the
 # RATE over-charges smaller instances instead, where the error is bounded by the baseline and
 # nothing dies. An earlier version did the opposite and called it conservative; it was
 # conservative only at the one size it had seen.
-_b1, _r1 = fit_memory_model([(98_627, 7.2)])
+_b1, _r1 = fit_memory_model([(80_000, 6.0)])
 ck("one point is attributed to the RATE, not the baseline", _b1 is None and _r1 is not None,
    f"base={_b1} rate={_r1}")
 ck("and that rate reproduces the observation at the size it was measured",
-   abs(_r1 * 0.98627 - 7.2) < 0.05, f"{_r1 * 0.98627:.2f} vs 7.2 GB")
+   abs(_r1 * 0.8 - 6.0) < 0.05, f"{_r1 * 0.8:.2f} vs 6.0 GB")
 ck("so a larger dataset is charged MORE, not the same",
-   _r1 * 5.0 > 7.2 * 3, f"{_r1 * 5.0:.1f} GB at 500k cells")
+   _r1 * 5.0 > 6.0 * 3, f"{_r1 * 5.0:.1f} GB at 500k cells")
 ck("several points at ONE size are equally indeterminate",
    fit_memory_model([(10_000, 8.0), (10_000, 8.2)])[0] is None)
 # and the indeterminate rate is BOUNDED: largest peak over the LARGEST size, not the smallest.
@@ -782,7 +784,7 @@ _f = merge.fold_payloads(_pl)["k"]
 ck("the fold leaves the contradiction untagged", _f["contradictions"] == [_claim],
    str(_f["contradictions"]))
 # AND DEDUPES ON THE STATEMENT, NOT THE STRING. A per-unit plugin that names its own unit's
-# count in the refutation - "so the 8,194 figure above describes size" - emits a DIFFERENT
+# count in the refutation - "so the <count> figure above describes size" - emits a DIFFERENT
 # string per unit, so exact-match dedup kept every one and the page opened with that many
 # near-identical shouting sentences. It cannot be folded at RENDER time, because the standard
 # matches it verbatim, so the two forms are reconciled in the fold.
