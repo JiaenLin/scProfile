@@ -185,7 +185,7 @@ PLUGIN = {
     # coloured below the first tick, off the labelled scale, naming which colour is which
     # direction. The roster sentence from 0.38.0 is kept on both. Eleven `--stated` records close
     # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
-    "version": "0.44.0",
+    "version": "0.45.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. Its reproduction job gave all 90
     # numeric tables byte-identical, and a direct compare against the run before the change put
@@ -379,7 +379,7 @@ PLUGIN = {
         # pin numpy below 2, so cellchat ran on 1.26.4 for its whole life; unplugged it resolved
         # to 2.5.3 and crossed a major version with nothing declaring that this was allowed. The
         # range is what there is evidence for: the sealed reference produced its 90 numeric
-        # tables on 1.26.4 and runs 709905/709939 reproduced all 90 byte-identical on 2.5.3.
+        # tables on 1.26.4, and its reproduction on 2.5.3 gave all 90 byte-identical.
         "packages": {"anndata": ">=0.12,<0.13", "pandas": ">=2.0,<3", "scipy": ">=1.10",
                      "matplotlib": ">=3.7,<4", "umap-learn": ">=0.5,<0.6",
                      "numpy": ">=1.24,<3"},
@@ -1698,8 +1698,8 @@ cc <- netAnalysis_computeCentrality(cc, slot.name = "netP")
 # finished writing.
 if (.from_cache) {
   # NOTHING TO WRITE. The object came from this exact path under this exact stamp, so the bytes
-  # and the stamp on disk are already the ones this branch would produce. Measured on a
-  # cohort of eighteen units: 1.02 GB rewritten byte-identical per run, every mtime moved.
+  # and the stamp on disk are already the ones this branch would produce. Before this, a
+  # cache hit rewrote the object byte-identical on every run and moved every mtime.
   cat("object store: cache hit,", format(round(file.info(rds)$size / 1e6), big.mark = ","),
       "MB not rewritten\n")
 } else {
