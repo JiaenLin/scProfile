@@ -196,6 +196,13 @@ rules:
   # the held-out set, and the two lists may not quietly grow into each other.
   end_to_end:
     names: [cellchat]
+    # THE COMMIT ITS MAKER RECORD STARTS FROM (autodev W035). cellchat was never held out, so it
+    # has no blind record; its prose became editable through the maker (`scprofile prose`) here,
+    # and from this commit every change to it outside its declaration is an answer in
+    # kernels/cellchat.design.json, walked back to this file by the record check as a spent
+    # plugin's is walked back to its blind record. Read from git, never from the record.
+    anchor:
+      cellchat: 6f970e5cc6991f6e98b37c324f088b28c3fa9cb6
     means: >
       the end-to-end exercise is cellchat alone, with the other eight unplugged - which is also
       what made the environment it had always borrowed from resolve to one member and exposed two

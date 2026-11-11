@@ -915,14 +915,26 @@ class _ObjectStore:
 
 
 def _spent_commit(root, name):
-    """The commit `name`'s blind record was taken at, as DEVPOINTS `rules.held_out.spent`
-    declares it - never as the record says, so the record cannot move its own anchor."""
+    """The commit `name`'s record is anchored at, as DEVPOINTS declares it - never as the record
+    says, so the record cannot move its own anchor. A spent plugin's is the commit its blind
+    record was taken at (`rules.held_out.spent`); the plugin that was never held out is anchored
+    at the commit its record starts from (`rules.end_to_end.anchor`, W035). A held-out plugin
+    has neither, so nothing can record an answer for it before its own migration."""
+    for want in (["rules", "held_out", "spent"], ["rules", "end_to_end", "anchor"]):
+        v = _devpoints_value(root, want, name)
+        if v:
+            return v
+    return None
+
+
+def _devpoints_value(root, want, name):
+    """The scalar at `want` -> `name` in DEVPOINTS.yaml, or None."""
     f = Path(root) / "DEVPOINTS.yaml"
     if not f.is_file():
         return None
     # READ AS TEXT, as every suite here reads DEVPOINTS (the host depends on numpy and pandas
-    # only), and by its path: `rules:` -> `held_out:` -> `spent:` -> `<name>: <commit>`.
-    path, want = [], ["rules", "held_out", "spent"]
+    # only), and by its path: e.g. `rules:` -> `held_out:` -> `spent:` -> `<name>: <commit>`.
+    path = []
     for raw in f.read_text(encoding="utf-8").split("\n"):
         line = raw.split("#", 1)[0].rstrip()
         if not line.strip() or line.lstrip().startswith("- "):
@@ -1099,6 +1111,14 @@ def _design_record_check(kernel, root):
             why = _declaration_literal(prev)
             if why:
                 return False, f"the file answer {ans.get('n')} was made on: {why}"
+            if ans.get("kind") == "prose":
+                # A PROSE ANSWER IS ADMITTED AGAIN BY THE PROSE RULE (W035): it changes no code.
+                why = "; ".join(prose_refusals(prev, cur)) or (
+                    "it changes nothing" if prev == cur else "")
+                if why:
+                    return False, f"answer {ans.get('n')} is not admissible as prose: {why}"
+                cur = prev
+                continue
             try:
                 _ops, sites, refusals, _n = _admit(prev, cur)
             except SyntaxError as e:
@@ -1483,7 +1503,18 @@ def design_replay(kernel, target, log=print):
             return 1
         # THE RECORD IS NOT TRUSTED: each diff is admitted again against the sites of the file
         # it meets, as `--answer` admitted it, so a record edited to carry a change outside every
-        # site does not replay (W013's verifier, fix-up 2).
+        # site does not replay (W013's verifier, fix-up 2). A prose answer, by the prose rule.
+        if ans.get("kind") == "prose":
+            refusals = prose_refusals(text, new)
+            if refusals:
+                log(f"  answer {ans['n']}: refused on replay - " + "; ".join(refusals))
+                return 1
+            text = new
+            if _sha(text) != ans["after"]:
+                log(f"  answer {ans['n']}: applied, and the result is not the file it made")
+                return 1
+            log(f"  answer {ans['n']} replayed (prose) -> {ans['after']}")
+            continue
         _ops, sites, refusals, _n = _admit(text, new)
         if refusals or not sites or sites != sorted(ans.get("sites") or []):
             log(f"  answer {ans['n']}: refused on replay - "
@@ -1498,3 +1529,263 @@ def design_replay(kernel, target, log=print):
     t.write_text(text, encoding="utf-8")
     log(f"  {len(rec['answers'])} answer(s) replayed into {t}")
     return 0
+
+
+# ------------------------------------------------------------------------- prose (W035, GAP-C80)
+# A PLUGIN'S PROSE IS EDITED THROUGH THE MAKER TOO. A cohort's measured value sat in a comment of
+# cellchat's R script, and no verb could reach it: `sch dev edit` edits the declaration by span,
+# `design --answer` the sites the worksheet names, and a comment is neither - so the only way left
+# was a hand edit, which the round's first rule forbids. By the rule of 2026-09-14 ("anything in a
+# plugin that cannot be edited easily from the maker is a suite or maker design defect") the
+# defect was the maker's. `prose_answer` is the verb: what it may change is PROSE, and everything
+# else is CODE and refused, with its line.
+
+#: An embedded script, as the suite reads one (tests/subject.py): a string of at least this many
+#: characters holding `library(` and `<-` or `function(`.
+R_SCRIPT_MIN = 200
+
+#: A splice marker: text the plugin's own Python replaces in a script (`.replace("__R_CAP__", ...)`).
+#: It is code wherever it sits, a comment included, so no prose edit may change one.
+SPLICE_MARKER = re.compile(r"__[A-Za-z0-9]+(?:_[A-Za-z0-9]+)*__")
+
+_R_RAW = re.compile(r"""[rR](["'])(-*)([(\[{])""")
+_R_CLOSE = {"(": ")", "[": "]", "{": "}"}
+_HEADER = re.compile(r"^#!|^[ \t\f]*#.*?coding[:=]")
+
+
+def _is_r(value):
+    return (isinstance(value, str) and len(value) >= R_SCRIPT_MIN and "library(" in value
+            and ("<-" in value or "function(" in value))
+
+
+def _r_code(text):
+    """An R script's CODE: its non-blank lines, each without its comment and trailing space.
+
+    A `#` starts a comment only outside a string, a backtick name and a raw string (`r"(...)"`,
+    with its dashes and brackets), as R reads it; a blank line and trailing space say nothing to
+    R. So two scripts with the same code differ only in comments, which is what a prose edit may
+    change and nothing else."""
+    out, i, n, q = [], 0, len(text), None
+    while i < n:
+        c = text[i]
+        if q:
+            out.append(c)
+            if c == "\\" and i + 1 < n:
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if c == q:
+                q = None
+            i += 1
+            continue
+        if c == "#":
+            j = text.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if c in "rR" and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] in "._")):
+            m = _R_RAW.match(text, i)
+            if m:
+                close = _R_CLOSE[m.group(3)] + m.group(2) + m.group(1)
+                j = text.find(close, m.end())
+                end = n if j < 0 else j + len(close)
+                out.append(text[i:end])
+                i = end
+                continue
+        if c in "'\"`":
+            q = c
+        out.append(c)
+        i += 1
+    return [ln.rstrip() for ln in "".join(out).split("\n") if ln.strip()]
+
+
+def _prose_view(src):
+    """[(what, line)] - the file as a prose edit must leave it: every Python token but comments
+    and line breaks inside a statement; a docstring as `<docstring>`; the declaration's
+    `version` as `<version>` (the maker raises it); an embedded R script as its code
+    (`_r_code`) and its splice markers; the header lines (a shebang, an encoding cookie) as
+    they stand. Raises SyntaxError when the file does not parse."""
+    import ast
+    import io
+    import tokenize
+    from .kernels import declaration_node
+    tree = ast.parse(src)
+    docs = set()
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) \
+                and body and isinstance(body[0], ast.Expr) \
+                and isinstance(body[0].value, ast.Constant) and isinstance(body[0].value.value, str):
+            docs.add((body[0].value.lineno, body[0].value.col_offset))
+    vpos = None
+    _t, decl, why = declaration_node(src)
+    if decl is not None and not why and isinstance(decl.value, ast.Dict):
+        for k, v in zip(decl.value.keys, decl.value.values):
+            if isinstance(k, ast.Constant) and k.value == "version" and isinstance(v, ast.Constant):
+                vpos = (v.lineno, v.col_offset)
+    lines = src.split("\n")
+    view = []
+    try:
+        toks = list(tokenize.generate_tokens(io.StringIO(src).readline))
+    except (tokenize.TokenError, IndentationError) as e:
+        raise SyntaxError(str(e))
+    for t in toks:
+        row, col = t.start
+        if t.type == tokenize.COMMENT:
+            if row <= 2 and _HEADER.match(lines[row - 1]):
+                view.append((("header", t.string), row))
+            continue
+        if t.type in (tokenize.NL, tokenize.ENCODING):
+            continue
+        if t.type == tokenize.STRING:
+            pos = (row, len(lines[row - 1][:col].encode("utf-8")))       # ast counts bytes
+            if pos in docs:
+                view.append((("docstring",), row))
+                continue
+            if pos == vpos:
+                view.append((("version",), row))
+                continue
+            try:
+                value = ast.literal_eval(t.string)
+            except (ValueError, SyntaxError):
+                value = None
+            if _is_r(value):
+                view.append((("R", tuple(_r_code(value)), tuple(SPLICE_MARKER.findall(value))),
+                             row))
+                continue
+        view.append(((tokenize.tok_name[t.type], t.string), row))
+    return view
+
+
+def prose_refusals(before, after):
+    """[] when `after` differs from `before` in prose alone: a Python comment (inside the
+    declaration too), a docstring, a comment of an embedded R script. Otherwise one sentence
+    naming the first line of `after` whose code differs. Never raises."""
+    try:
+        a = _prose_view(before)
+    except SyntaxError as e:
+        return [f"line 1: the file as it stands does not parse ({e})"]
+    lb = _line_breaks(after)
+    if lb and not _line_breaks(before):
+        return [f"line 1: the edit carries {', '.join(lb)}, which moves the lines the record counts"]
+    try:
+        b = _prose_view(after)
+    except SyntaxError as e:
+        return [f"line {getattr(e, 'lineno', None) or 1}: the edit leaves a file that does not "
+                f"parse ({e})"]
+    if [x for x, _r in a] == [x for x, _r in b]:
+        return []
+    i = next((j for j, (x, y) in enumerate(zip(a, b)) if x[0] != y[0]), min(len(a), len(b)))
+    row = b[i][1] if i < len(b) else (b[-1][1] if b else 1)
+    old = a[i][0] if i < len(a) else None
+    new = b[i][0] if i < len(b) else None
+    if old and new and old[0] == "R" and new[0] == "R":
+        what = ("a splice marker changed in the embedded R script" if old[2] != new[2] else
+                "the embedded R script's code changed, not only its comments")
+        k = next((j for j, (p, q) in enumerate(zip(old[1], new[1])) if p != q), None)
+        if k is not None:
+            what += f" (`{old[1][k].strip()[:60]}` -> `{new[1][k].strip()[:60]}`)"
+        return [f"line {row}: {what} - code, which a prose edit may not change"]
+    if (old and old[0] == "header") or (new and new[0] == "header"):
+        return [f"line {row}: the file's header line (a shebang or an encoding cookie) is code"]
+    show = (lambda x: "nothing" if x is None else
+            "a docstring" if x[0] == "docstring" else
+            f"`{str(x[1])[:60]}`" if len(x) > 1 else x[0])
+    return [f"line {row}: code changed ({show(old)} -> {show(new)}) - a prose edit changes only "
+            f"a comment, a docstring, or a comment of an embedded script"]
+
+
+def prose_answer(kernel, replacements, why, *, as_version=None, dry=False, log=print, root=None):
+    """The maker's verb for a plugin's prose: apply each `(old, new)` - `old` occurring exactly
+    once - and record the edit, or refuse it. Returns 0 or 1.
+
+    Admitted only when the edit changes prose alone (`prose_refusals`). Recorded like every
+    answer outside the declaration, in the plugin's maker record (`design_record_path`), as
+    `kind: prose`, with its diff, both digests, the reason and the declaration it left; the
+    version is the maker's minor bump, or `as_version`. The record needs an anchor, as a design
+    answer does: a plugin DEVPOINTS anchors nowhere - every held-out plugin - is refused, so the
+    verb cannot spend one before its own migration."""
+    import difflib
+    path = Path(kernel.path)
+    root = Path(root) if root else path.parent.parent
+    if _spent_commit(root, kernel.name) is None:
+        log(f"  refused: DEVPOINTS anchors no record for {kernel.name} (`rules.held_out.spent` or "
+            f"`rules.end_to_end.anchor`) - a held-out plugin's file changes only in its own "
+            f"migration, after it is spent")
+        return 1
+    if not str(why or "").strip():
+        log("  refused: --why is the edit's reason, and a recorded edit carries one")
+        return 1
+    if not replacements:
+        log("  refused: nothing to change - give --replace OLD NEW")
+        return 1
+    ok, why_not = design_record_check(kernel, root=root)
+    if not ok:
+        log(f"  refused: the record does not meet kernels/{path.name} as it stands - {why_not}")
+        return 1
+    with open(path, encoding="utf-8", newline="") as fh:
+        before = fh.read()
+    text = before
+    for old, new in replacements:
+        n = text.count(old) if old else 0
+        if n != 1:
+            log(f"  refused: {old[:80]!r} occurs {n} time(s) in kernels/{path.name}; name it by "
+                f"enough of its text to occur exactly once")
+            return 1
+        text = text.replace(old, new, 1)
+    if text == before:
+        log("  refused: the edit changes nothing")
+        return 1
+    refusals = prose_refusals(before, text)
+    if refusals:
+        for x in refusals:
+            log(f"  refused: kernels/{path.name} {x}")
+        return 1
+    _vl, vold = _version_node(before)
+    new_version = as_version or _bump(vold)
+    after = _set_version(text, new_version) if vold else text
+    bad = _declaration_literal(after)
+    if bad:
+        log(f"  refused: the edit leaves a declaration the host cannot load - {bad}")
+        return 1
+    diff = "".join(difflib.unified_diff(_lines(before), _lines(after),
+                                        f"a/kernels/{path.name}", f"b/kernels/{path.name}", n=3))
+    if dry:
+        log(diff.rstrip("\n"))
+        log(f"  a dry run: nothing written (version {vold} -> {new_version} when applied)")
+        return 0
+    rec = _read_record(kernel)
+    n = len(rec["answers"]) + 1
+    rec["answers"].append({"n": n, "kind": "prose", "why": str(why), "sites": [],
+                           "version": new_version, "before": _sha(before), "after": _sha(after),
+                           "diff": diff, "after_declaration": _declaration_text(after)})
+    path.write_text(after, encoding="utf-8")
+    _write_record(kernel, rec)
+    log(f"  answer {n} (prose) applied to kernels/{path.name}; version {vold} -> {new_version}; "
+        f"recorded in kernels/{design_record_path(kernel).name}")
+    return 0
+
+
+def after_edit_followers(root):
+    """The followers the tool declares for a maker edit, in order: DEVPOINTS `plan.after_edit`,
+    each a list of strings - the list `sch dev edit` runs after its own edits. Read as text, as
+    `_spent_commit` reads DEVPOINTS: each entry is one `- [...]` line of quoted strings."""
+    import json
+    f = Path(root) / "DEVPOINTS.yaml"
+    if not f.is_file():
+        return []
+    out, ind0 = [], None
+    for raw in f.read_text(encoding="utf-8").split("\n"):
+        s = raw.strip()
+        if ind0 is None:
+            if s == "after_edit:":
+                ind0 = len(raw) - len(raw.lstrip())
+            continue
+        if not s or s.startswith("#"):
+            continue
+        if len(raw) - len(raw.lstrip()) <= ind0 or not s.startswith("- ["):
+            break
+        try:
+            out.append([str(x) for x in json.loads(s[2:s.rindex("]") + 1])])
+        except ValueError:
+            break
+    return out

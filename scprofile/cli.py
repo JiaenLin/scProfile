@@ -1681,6 +1681,47 @@ def _design(a):
     return V.design_report(ks[names[0]])
 
 
+def _prose(a):
+    """The maker's verb for a plugin's prose (W035, GAP-C80): a comment, a docstring, a comment
+    of its embedded R. Admitted only where the edit changes no code; recorded in the plugin's
+    maker record like every answer outside the declaration; then the tool's declared followers
+    (`plan.after_edit` in DEVPOINTS.yaml, the list `sch dev edit` runs) run in order with this
+    interpreter, stopping at the first that fails. Exits 0, or 1 on a refusal or a failed
+    follower - the file then carries the edit, and the record with it."""
+    import subprocess
+    from . import validate as V
+    from .kernels import discover
+    ks = discover()
+    if a.name not in ks:
+        print(f"scprofile: unknown plugin {a.name!r}", file=sys.stderr)
+        return REFUSE
+    k = ks[a.name]
+    rc = V.prose_answer(k, [tuple(x) for x in a.replace], a.why, as_version=a.as_version,
+                        dry=a.dry)
+    if rc or a.dry:
+        return rc
+    root = Path(k.path).resolve().parent.parent
+    fill = {"{python}": sys.executable, "{name}": k.name, "{root}": str(root)}
+    for cmd in V.after_edit_followers(root):
+        argv = [x for x in cmd]
+        for key, val in fill.items():
+            argv = [x.replace(key, val) for x in argv]
+        if a.no_follow:
+            print("  next: " + " ".join(argv[1:] if argv[0] == sys.executable else argv))
+            continue
+        r = subprocess.run(argv, cwd=str(root), capture_output=True, text=True)
+        tail = (r.stdout + r.stderr).strip().splitlines()
+        print(f"  after: exit {r.returncode} - {' '.join(argv[1:])}"
+              + (f"  ({tail[-1][:120]})" if tail else ""))
+        if r.returncode:
+            for x in [x for x in tail if "FAIL" in x or "ERROR" in x or "refus" in x.lower()][:6]:
+                print(f"        {x.strip()[:220]}")
+            print("  the followers after this one did not run; the file and its record carry "
+                  "the edit - `git diff` shows both, `git checkout` takes both back")
+            return 1
+    return 0
+
+
 def _validate(a):
     """Static checks on plugins and their references. Runs nothing."""
     from . import validate as V
@@ -4551,6 +4592,21 @@ def main(argv=None):
                     help="apply every recorded answer, in order, to FILE - a copy of the plugin "
                          "rebuilt from its base by the maker's verb calls")
     dz.set_defaults(fn=_design)
+    pz = sub.add_parser("prose", help="[maintainer] edit a plugin's prose through the maker - a "
+                                      "comment, a docstring, a comment of its embedded R - "
+                                      "recorded, its followers run; an edit of code is refused")
+    pz.add_argument("name")
+    pz.add_argument("--replace", nargs=2, action="append", default=[], metavar=("OLD", "NEW"),
+                    help="OLD, occurring exactly once in the plugin, becomes NEW (repeatable; "
+                         "applied in order and recorded as one edit)")
+    pz.add_argument("--why", default="", help="the edit's reason, recorded with it")
+    pz.add_argument("--as-version", default=None,
+                    help="the version the author states, instead of the maker's minor bump")
+    pz.add_argument("--dry", action="store_true", help="print the diff, write nothing")
+    pz.add_argument("--no-follow", action="store_true",
+                    help="print the declared followers (`plan.after_edit`) as the next step "
+                         "instead of running them")
+    pz.set_defaults(fn=_prose)
     va = sub.add_parser("validate", help="[maintainer] static checks on plugins and their references")
     va.add_argument("name", nargs="?", default=None,
                     help="plugin name(s), comma-separated. Default: all")
