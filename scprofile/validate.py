@@ -1476,15 +1476,16 @@ def _version_refusal(as_version):
 
 
 def _made_on(root, path, before):
-    """(commit, None) when `before` is the plugin as committed at HEAD - the commit an answer is
-    MADE ON, from which the record check reads it back - or (None, why it is not)."""
+    """(commit, None) when `before` is the plugin as committed at HEAD, or at the commit its
+    record is anchored at (a first answer made over the plugin as it was blind) - the commit an
+    answer is MADE ON, from which the record check reads it back - or (None, why it is not)."""
     head, how = _git_head(root)
-    shown = _git_show(root, head, f"kernels/{path.name}")[0] if head else None
-    if shown != before:
-        return None, (f"kernels/{path.name} differs from the commit it would be made on ({how}) - "
-                      f"commit it first: the record check reads an answer's file back from git, so "
-                      f"the record carries only the lines the answer writes")
-    return head, None
+    for commit in (head, _spent_commit(root, path.stem)):
+        if commit and _git_show(root, commit, f"kernels/{path.name}")[0] == before:
+            return commit, None
+    return None, (f"kernels/{path.name} differs from the commit it would be made on ({how}) - "
+                  f"commit it first: the record check reads an answer's file back from git, so "
+                  f"the record carries only the lines the answer writes")
 
 
 def _keep_or_restore(kernel, root, before, rec_before, log):
