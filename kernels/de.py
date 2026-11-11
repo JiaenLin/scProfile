@@ -26,7 +26,7 @@ which genes left the answer before it was computed. The result comes after them.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.5.0",
+    "version": "0.6.0",
     "state_version": 2,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "which genes change, per cell type, across the design",
     "when_to_use": "you have a design table with replicates and want differential expression",
@@ -196,7 +196,7 @@ PLUGIN = {
 
     "cost": "medium", "cores": 4,
 
-    # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
+    # Measured, not estimated: fitted from this plugin's own instances in one run on a real cohort. ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
     # Fitted from one instance; the split is indeterminate.
     "memory_gb_per_100k": 7.3,
 
@@ -352,7 +352,7 @@ UNTESTED_REASONS = ("tested", "independent filtering", "Cook's outlier", "no cou
                     "below min_counts")
 
 #: The order F4 STACKS them in, left to right, which is the reverse of the order above and is a
-#: different question. Ordering on the accounting puts `tested` - two thirds of every bar - at the
+#: different question. Ordering on the accounting puts `tested` - most of every bar - at the
 #: left, so all four removal routes start at a different x in every row and none of them can be
 #: compared between rows by eye. Stacking the routes OUT of the test first anchors each of them at
 #: zero, and the answer becomes the remainder, which is what it is.
@@ -569,7 +569,7 @@ def _decade_label(v, _pos=None):
     The axis holds log10 of a count, and it printed log10 of a count: `0 1 2 3 4 5`, which every
     reader has to exponentiate in their head before the panel answers the question it was drawn
     for. The transform is kept - it is what folds the sub-one dust into one decade instead of
-    spending five of eight decades on it - and only the label is changed.
+    spending most of the axis's decades on it - and only the label is changed.
     """
     e = int(round(float(v)))
     if abs(float(v) - e) > 1e-6:
@@ -661,7 +661,7 @@ def _fig_replicates(ctx, units, term):
     for ax, col, xlab in (
             (axs[0][0], "n_cells", "cells summed into the pseudobulk sample"),
             (axs[0][1], "total_counts", "counts in the pseudobulk sample")):
-        # BANDED ROWS. Twelve populations across 174 mm, twice, with a jitter that deliberately
+        # BANDED ROWS. Every population across 174 mm, twice, with a jitter that deliberately
         # blurs the row boundary: without a band a reader tracking one point back to its tick
         # label lands a row out, and the two panels are read as different populations.
         for i in range(len(pops)):
@@ -938,8 +938,8 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
     # THE CAP THE SHARED SCALE IS ALLOWED, measured before anything is drawn because the panels
     # need it and the union below has to be tested against it. It is a high quantile of |log2
     # fold change| over every panel drawn: unshrunken values at low counts are unbounded, and the
-    # union of nine autoscaled panels is therefore set by a dozen genes rather than by twenty
-    # thousand. Whether it is USED is decided after the union is known - see MA_CLIP_TRIGGER.
+    # union of the grid's autoscaled panels is therefore set by a few genes rather than by the
+    # thousands. Whether it is USED is decided after the union is known - see MA_CLIP_TRIGGER.
     pieces = [np.asarray(res[(res["population"] == p) & (res["term"] == t)]["log2FoldChange"],
                          dtype=float) for p, t in drawn]
     allv = np.concatenate(pieces) if pieces else np.zeros(1)
@@ -996,8 +996,8 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
     _r = max(abs(_lo), abs(_hi)) or 1.0
     _xhi = max((float(a.get_xlim()[1]) for a in axes[:len(drawn)]), default=1.0)
     # AND THEN CAPPED, WHICH THE UNION ON ITS OWN COULD NOT BE. Unshrunken fold changes at low
-    # counts are unbounded: a dozen genes at |lfc| 12 set the union, and every panel then drew
-    # twenty thousand genes inside the middle fifth of its own axis - one scale, shared, and
+    # counts are unbounded: a few genes at extreme |lfc| set the union, and every panel then drew
+    # every other gene inside a narrow middle band of its own axis - one scale, shared, and
     # useless. The cap is a high quantile of |lfc| over the panels drawn, and what falls outside
     # it is not dropped: the loop below draws each one as a triangle ON the boundary, at its own
     # expression level, so the reader sees that there are more and where they sit.
@@ -1141,7 +1141,7 @@ def _fig_hits(ctx, hits):
     ax.axvline(0.0, color=F.INK, lw=0.6, zorder=4)
     span = float(max(up.max() if up.size else 0.0, down.max() if down.size else 0.0, 1.0))
     ax.set_xlim(-span * 1.16, span * 1.16)
-    # THE COUNT, ON THE BAR. A bar chart of gene counts spanning three orders of magnitude down
+    # THE COUNT, ON THE BAR. A bar chart of gene counts spanning orders of magnitude down
     # the rows leaves everything below the top few as a stub a reader cannot measure against a
     # tick - and the number is the finding.
     for i in range(len(d)):
@@ -1173,7 +1173,7 @@ def _fig_hits(ctx, hits):
     ax.set_yticks(y)
     ax.set_yticklabels(rows)
     ax.set_ylim(len(d) - 0.5, -0.5)
-    # ABSOLUTE ON BOTH SIDES. The axis counts genes, and half of it was labelled -200, -150, -100
+    # ABSOLUTE ON BOTH SIDES. The axis counts genes, and half of it was labelled with negative ticks
     # - numbers that exist nowhere in the data and read as negative counts. The side carries the
     # direction; the tick carries the count.
     from matplotlib.ticker import FuncFormatter
