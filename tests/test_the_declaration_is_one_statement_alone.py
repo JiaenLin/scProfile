@@ -98,25 +98,81 @@ def swap(old, new):
     return edit
 
 
-def chain_before(shipped, record):
-    """Answer 1's `before`, by undoing the recorded answers from the shipped file."""
-    texts = [V._swap_declaration(shipped, record["answers"][-1]["after_declaration"])]
+def chain_before(shipped, record, root=ROOT):
+    """`[the file the last answer made, its file before, ..., answer 1's before]` (`chain`)."""
+    c = chain(shipped, record, root)
+    return [c[-1][1]] + [before for before, _made in reversed(c)]
+
+
+def chain(shipped, record, root=ROOT):
+    """`[(file before, file made)]` of every answer, in the record's order, rebuilt as the record
+    check rebuilds them, from what the record and git hold.
+
+    AN ANSWER MADE ON A COMMITTED FILE (`made_on`, every answer since W035's fix round 1) keeps
+    no text and no copy of the declaration: its file before is read from git at that commit, and
+    the file it made is that file with its diff applied, each written row read back by its digest
+    from the file that follows it. AN OLDER ANSWER (de's two from W013) is undone by its diff
+    from the file that follows it, its recorded declaration set back first only where that file
+    is not its own - the check's own order. Every file is held to the digest the record states,
+    so a rebuild that went wrong stops here rather than feeding an attack below a wrong file
+    (W047: this read the last answer's declaration copy, which a made-on answer does not keep,
+    and failed with a KeyError once de's prose was answered)."""
+    out, cur = [], shipped
     for ans in reversed(record["answers"]):
-        texts.append(V._apply_unified(texts[-1], V._reverse_diff(ans["diff"])))
-    return texts
+        if ans.get("made_on"):
+            prev, how = V._git_show(root, ans["made_on"], "kernels/de.py")
+            assert prev is not None, how
+            made = V._apply_unified(prev, ans["diff"],
+                                    written=V._written(cur, prev, ans.get("version")))
+        else:
+            made = cur
+            if V._sha(cur) != ans["after"] and ans.get("after_declaration"):
+                made = V._swap_declaration(cur, ans["after_declaration"])
+            prev = V._apply_unified(made, V._reverse_diff(ans["diff"]))
+        assert V._sha(made) == ans["after"] and V._sha(prev) == ans["before"], ans.get("n")
+        out.append((prev, made))
+        cur = prev
+    return out[::-1]
 
 
-def doctored():
-    """D1a: the out-of-site edit pushed under answer 1, every digest recomputed."""
-    rec = json.loads(RECORD)
-    texts = chain_before(SHIPPED, rec)
-    cur, forged = texts[-1].replace(FILTER, FILTER2, 1), json.loads(RECORD)
-    for ans in forged["answers"]:
-        nxt = V._apply_unified(cur, ans["diff"])
+def forge_commit(repo, text, rel="kernels/de.py"):
+    """A commit of `repo` whose `rel` is `text`, made with git's plumbing - no checkout, no hook,
+    an index of its own - and reachable from nothing: the commit a forger's record names."""
+    env = dict(GITENV, GIT_INDEX_FILE=str(Path(tempfile.mkdtemp(prefix="w047-forge-")) / "i"))
+
+    def git(*a, inp=None):
+        return subprocess.run(["git", "-C", str(repo), "-c", "user.name=f", "-c",
+                               "user.email=f@f", *a], input=inp, capture_output=True,
+                              check=True, env=env).stdout.decode("utf-8").strip()
+    blob = git("hash-object", "-w", "--stdin", inp=text.encode("utf-8"))
+    git("read-tree", "HEAD")
+    git("update-index", "--cacheinfo", f"100644,{blob},{rel}")
+    return git("commit-tree", git("write-tree"), "-m", "forged")
+
+
+def doctored(repo):
+    """D1a: the out-of-site edit pushed under answer 1, every digest recomputed - AND THE FORGER
+    WRITES HISTORY TOO: every answer made on a committed file is re-made on a commit, in `repo`,
+    of its doctored file (W047). Without that, a made-on answer's own link to git refused the
+    forgery first, and the anchor - what this attack is for - was never reached. Every file of
+    the forged chain is checked here to be the one its forged digests name, so the only thing
+    left that can refuse it is the blind-record commit."""
+    forged, last = json.loads(RECORD), None
+    for (before, made), ans in zip(chain(SHIPPED, json.loads(RECORD)), forged["answers"]):
+        assert FILTER in before and FILTER in made, ans.get("n")
+        cur, nxt = before.replace(FILTER, FILTER2, 1), made.replace(FILTER, FILTER2, 1)
+        assert last is None or cur == last, ans.get("n")     # each answer meets the one before
+        if ans.get("made_on"):
+            ans["made_on"] = forge_commit(repo, cur)
+            again = V._apply_unified(cur, ans["diff"],
+                                     written=V._written(nxt, cur, ans.get("version")))
+        else:
+            again = V._apply_unified(cur, ans["diff"])
+        assert again == nxt, ans.get("n")
         ans["before"], ans["after"] = V._sha(cur), V._sha(nxt)
-        ans["after_declaration"] = V._declaration_text(nxt)
-        cur = nxt
-    return cur, json.dumps(forged, indent=1, sort_keys=True) + "\n"
+        ans.pop("after_declaration", None)    # each file is its answer's own: no copy is read
+        last = nxt
+    return last, json.dumps(forged, indent=1, sort_keys=True) + "\n"
 
 
 EMPTY = json.dumps({"plugin": "de", "answers": [], "statements": {}})
@@ -124,8 +180,7 @@ A, B = span(SHIPPED)
 
 # (tag, what, de.py as text or bytes, the record (None: deleted), what the refusal must say)
 ATTACKS = [
-    ("D1a", "a record rewritten to start from a doctored answer-1 `before`", *doctored(),
-     "blind-record commit"),
+    # D1a is made below, once the clone it writes its forged commits into exists
     ("D1b", "an empty record over the blind plugin, hand-edited outside every site",
      BASE.replace(FILTER, FILTER2, 1), EMPTY, "blind-record commit"),
     ("D1b2", "the record deleted over the same hand edit", BASE.replace(FILTER, FILTER2, 1), None,
@@ -200,6 +255,9 @@ subprocess.run(["git", "-C", str(clone), "config", "core.hooksPath", "setup/gith
                check=True, capture_output=True, env=GITENV)
 ENV = dict(GITENV, PYTHONPATH=str(clone))
 DE, REC = clone / "kernels" / "de.py", clone / "kernels" / "de.design.json"
+ATTACKS.insert(0, ("D1a", "a record rewritten to start from a doctored answer-1 `before`, its "
+                          "made-on answers re-made on forged commits", *doctored(clone),
+                   "blind-record commit"))
 ROW = "every shipped plugin's declaration loads, and its design record accounts"
 
 

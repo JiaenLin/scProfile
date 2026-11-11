@@ -477,29 +477,85 @@ if hasattr(V, "design_answer"):
         fn = getattr(V, "design_record_check", None)
         return None if fn is None else rooted(fn, k)
 
+    def chain(shipped, record, root=ROOT):
+        """`[(file before, file made)]` of every answer, in order, rebuilt as the record check
+        rebuilds them, from what the record and git hold (W047): an answer made on a committed
+        file read from git at its `made_on`, its written rows resolved by digest from the file
+        that follows it; an older one undone by its diff, its recorded declaration set back first
+        only where that file is not its own. Each file is held to the digest the record states.
+        This read the last answer's copy of the declaration, which a made-on answer does not
+        keep, and failed with a KeyError once de's prose was answered."""
+        out, cur = [], shipped
+        for ans in reversed(record["answers"]):
+            if ans.get("made_on"):
+                prev, how = V._git_show(root, ans["made_on"], "kernels/de.py")
+                assert prev is not None, how
+                made = V._apply_unified(prev, ans["diff"],
+                                        written=V._written(cur, prev, ans.get("version")))
+            else:
+                made = cur
+                if V._sha(cur) != ans["after"] and ans.get("after_declaration"):
+                    made = V._swap_declaration(cur, ans["after_declaration"])
+                prev = V._apply_unified(made, V._reverse_diff(ans["diff"]))
+            assert V._sha(made) == ans["after"] and V._sha(prev) == ans["before"], ans.get("n")
+            out.append((prev, made))
+            cur = prev
+        return out[::-1]
+
+    def forge_commit(repo, text, rel="kernels/de.py"):
+        """A commit of `repo` whose `rel` is `text`, made with git's plumbing (no checkout, no
+        hook, an index of its own) and reachable from nothing: the commit a forger names."""
+        env = dict(GITENV, GIT_INDEX_FILE=str(Path(tempfile.mkdtemp(prefix="w047-")) / "i"))
+
+        def git(*a, inp=None):
+            return subprocess.run(["git", "-C", str(repo), "-c", "user.name=f", "-c",
+                                   "user.email=f@f", *a], input=inp, capture_output=True,
+                                  check=True, env=env).stdout.decode("utf-8").strip()
+        blob = git("hash-object", "-w", "--stdin", inp=text.encode("utf-8"))
+        git("read-tree", "HEAD")
+        git("update-index", "--cacheinfo", f"100644,{blob},{rel}")
+        return git("commit-tree", git("write-tree"), "-m", "forged")
+
     shipped = (ROOT / "kernels" / "de.py").read_text(encoding="utf-8")
     record = json.loads(V.design_record_path(_de).read_text(encoding="utf-8"))
+    pairs = chain(shipped, record)
+    texts = [pairs[-1][1]] + [before for before, _made in reversed(pairs)]
     with tempfile.TemporaryDirectory() as td:
         de_copy = Path(td) / "de.py"
         kd = Stub(de_copy, _de.spec)
         rp = V.design_record_path(kd)
-        # 1. THE DOCTORED BASE: the hand edit pushed under answer 1, every digest recomputed
-        # (from the file the last answer made: the verb may have edited the declaration since)
-        texts = [V._swap_declaration(shipped, record["answers"][-1]["after_declaration"])]
-        for ans in reversed(record["answers"]):
-            texts.append(V._apply_unified(texts[-1], V._reverse_diff(ans["diff"])))
-        cur, forged = texts[-1].replace(UP, UP2, 1), json.loads(json.dumps(record))
-        for ans in forged["answers"]:
-            nxt = V._apply_unified(cur, ans["diff"])
+        # 1. THE DOCTORED BASE: the hand edit pushed under answer 1, every digest recomputed, AND
+        # HISTORY WRITTEN TOO (W047): each answer made on a committed file is re-made on a commit
+        # of its doctored file, in a clone, so its own link to git cannot refuse the forgery
+        # first and the anchor is the only thing left that can. Every forged file is checked here
+        # to be the one its forged digests name.
+        repo = Path(td) / "repo"
+        subprocess.run(["git", "clone", "-q", "--no-local", str(ROOT), str(repo)], check=True,
+                       capture_output=True, env=GITENV)
+        shutil.copyfile(ROOT / "DEVPOINTS.yaml", repo / "DEVPOINTS.yaml")
+        forged, last = json.loads(json.dumps(record)), None
+        for (before, made), ans in zip(pairs, forged["answers"]):
+            assert UP in before and UP in made, ans.get("n")
+            cur, nxt = before.replace(UP, UP2, 1), made.replace(UP, UP2, 1)
+            assert last is None or cur == last, ans.get("n")
+            if ans.get("made_on"):
+                ans["made_on"] = forge_commit(repo, cur)
+                again = V._apply_unified(cur, ans["diff"],
+                                         written=V._written(nxt, cur, ans.get("version")))
+            else:
+                again = V._apply_unified(cur, ans["diff"])
+            assert again == nxt, ans.get("n")
             ans["before"], ans["after"] = V._sha(cur), V._sha(nxt)
-            ans["after_declaration"] = V._declaration_text(nxt)
-            cur = nxt
-        de_copy.write_text(cur, encoding="utf-8")
-        rp.write_text(json.dumps(forged), encoding="utf-8")
-        r = check_of(kd)
-        ck("a record rewritten to start from a doctored base does not meet the blind-record "
-           "commit", r is not None and not r[0] and "blind-record commit" in r[1], r)
-        ck("and the design stage owes", sites_of(kd)["owes"])
+            ans.pop("after_declaration", None)    # each file is its answer's own
+            last = nxt
+        (repo / "kernels" / "de.py").write_text(last, encoding="utf-8")
+        (repo / "kernels" / "de.design.json").write_text(json.dumps(forged), encoding="utf-8")
+        kf = Stub(repo / "kernels" / "de.py", _de.spec)
+        r = V.design_record_check(kf, root=repo)
+        ck("a record rewritten to start from a doctored base, its made-on answers re-made on "
+           "forged commits, does not meet the blind-record commit",
+           not r[0] and "blind-record commit" in r[1], r)
+        ck("and the design stage owes", V.design_sites(kf, root=repo)["owes"])
         # 2. AN EMPTY RECORD AND A HAND EDIT: the plugin as it was blind, edited outside the sites
         # (read with git here, so the check is what is tested, at any commit)
         g = subprocess.run(["git", "-C", str(ROOT), "show", "f5175ea:kernels/de.py"],
