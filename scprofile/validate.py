@@ -525,25 +525,32 @@ def _read_record(kernel):
     return rec
 
 
-def _as_written(kernel):
+def _as_written(kernel, drop_copies=False):
     """The record as the maker would write it now (`_write_record`'s rewriting, in memory): what a
     verb checks before it adds an answer, so a record an older maker wrote - its rows' text not
-    yet digests - is held to the form it is about to be written in, and migrates."""
+    yet digests - is held to the form it is about to be written in, and migrates. A copy of a
+    declaration is dropped only for `--rewrite-record` (`drop_copies`), which proves and records
+    each one it drops."""
     import json
     rec = _read_record(kernel)
-    _current_form(rec)
+    _current_form(rec, drop_copies=drop_copies)
     return json.loads(json.dumps(rec))
 
 
-def _current_form(rec):
-    """`rec`, in place, in the form the maker writes now: NO ANSWER KEEPS A COPY OF A DECLARATION
-    (W035 fix round 1 for an answer made on a committed file; W047 for every answer), and every
-    row of an answer made on a committed file is its digest (fix round 2). A key no maker ever
-    wrote is left as it is, for the record check to refuse by name - the maker does not tidy a
-    record someone else edited."""
+def _current_form(rec, drop_copies=False):
+    """`rec`, in place, in the form the maker writes now: every row of an answer made on a
+    committed file is its digest (fix round 2). NO ANSWER KEEPS A COPY OF A DECLARATION (W035 fix
+    round 1 for an answer made on a committed file; W047 for every answer), and only
+    `--rewrite-record` drops one (`drop_copies`), after the record check has rebuilt the file
+    the copy's answer made and found the copy to be its declaration byte for byte, with a trace
+    in `rewrites` (W047 fix round): every other verb that writes a record keeps a copy it finds,
+    for the check to refuse by name, since a copy dropped by whichever verb wrote next left no
+    trace of what it had held. A key no maker ever wrote is left as it is, for the record check
+    to refuse by name - the maker does not tidy a record someone else edited."""
     for a in rec.get("answers") or []:
         if isinstance(a, dict):
-            a.pop("after_declaration", None)
+            if drop_copies:
+                a.pop("after_declaration", None)
             if a.get("made_on") and isinstance(a.get("diff"), str):
                 a["diff"] = _redact(a["diff"])
     return rec
@@ -552,10 +559,12 @@ def _current_form(rec):
 def _write_record(kernel, rec):
     """Write the record. A RECORD KEEPS NO COPY OF A DECLARATION (W035 fix round 1; W047): an
     answer made on a committed file (`made_on`) is rebuilt from git by the record check, and an
-    older one (de's two from W013) from the file that follows it, which git keeps - so the copy
-    of the declaration an answer left is dropped whenever the maker writes the record: a copy
-    kept what a later edit took out of the plugin, a cohort's value included, and the check read
-    it only where a declaration edit had followed an older last answer. AND IT KEEPS NO LINE OF
+    older one (de's two from W013) from the file that follows it, which git keeps - so no verb
+    writes a copy of the declaration an answer left: a copy kept what a later edit took out of
+    the plugin, a cohort's value included, and the check read it only where a declaration edit
+    had followed an older last answer. A copy an older maker wrote is kept here, for the check to
+    refuse, and dropped only by `--rewrite-record`, which proves and records it (W047 fix
+    round). AND IT KEEPS NO LINE OF
     THE PLUGIN (fix round 2): every row of an answer made on a committed file - the lines it
     wrote too - is rewritten as its digest (`_redact`), the answers recorded before this
     included, since a written line stayed in its row after a later answer took it out."""
@@ -1102,11 +1111,16 @@ def _declaration(src):
 #: THE KEYS THE MAKER WRITES INTO A RECORD, and nothing else (W047): the record's own; an
 #: answer's - `kind` on a prose answer, `made_on` on every answer since W035's fix round 1; a
 #: statement's, from `--confirm` or an answer. `after_declaration`, a copy of the declaration an
-#: answer left, was written until W047; `scprofile design <plugin> --rewrite-record` drops it.
-RECORD_KEYS = frozenset({"plugin", "answers", "statements"})
+#: answer left, was written until W047; `scprofile design <plugin> --rewrite-record` drops it,
+#: and says so in `rewrites`: one entry per rewrite that changed the record, each with exactly
+#: REWRITE_KEYS (W047 fix round: a rewrite that left no trace made the record say nothing of
+#: what had been taken out of it). EACH FIELD IS HELD TO THE FORM THE MAKER WRITES IT IN as well
+#: (`_form_before_chain`, `_form_after_chain`): an allowed key nothing reads carried any value.
+RECORD_KEYS = frozenset({"plugin", "answers", "statements", "rewrites"})
 ANSWER_KEYS = frozenset({"n", "kind", "why", "sites", "version", "before", "after", "diff",
                          "made_on"})
 STATEMENT_KEYS = frozenset({"site", "how", "why"})
+REWRITE_KEYS = frozenset({"version", "commit", "why", "dropped"})
 
 
 def _unwritten_keys(rec):
@@ -1119,7 +1133,9 @@ def _unwritten_keys(rec):
         if extra:
             return (f"answer {a.get('n')} carries {extra}, which the maker never writes"
                     + ("; a copy of the declaration, which no record keeps since W047 - "
-                       "`scprofile design <plugin> --rewrite-record` writes the record without it"
+                       "`scprofile design <plugin> --rewrite-record --why \"...\"` writes the "
+                       "record without it, once each copy is proved the declaration of the file "
+                       "its answer made, and says so in the record"
                        if extra == ["after_declaration"] else ""))
     statements = rec.get("statements")
     if not isinstance(statements, dict):
@@ -1130,6 +1146,170 @@ def _unwritten_keys(rec):
         extra = sorted(set(s) - STATEMENT_KEYS)
         if extra:
             return f"statement {str(digest)[:16]} carries {extra}, which the maker never writes"
+    rewrites = rec.get("rewrites", [])
+    if not isinstance(rewrites, list) or not all(isinstance(t, dict) for t in rewrites) \
+            or ("rewrites" in rec and not rewrites):
+        return "its rewrites are not a list of entries, one per rewrite"
+    for j, t in enumerate(rewrites, 1):
+        extra = sorted(set(t) - REWRITE_KEYS)
+        if extra:
+            return f"rewrite {j} carries {extra}, which the maker never writes"
+    return None
+
+
+#: The form a field is written in, named in each refusal of `_form_before_chain` and
+#: `_form_after_chain`: what the maker writes there, and so all a record may hold there.
+FORM = "a field the maker writes holds the form it writes it in"
+DIGEST = re.compile(r"\A[0-9a-f]{16}\Z", re.ASCII)
+
+
+def _is_text(x):
+    return isinstance(x, str) and bool(x.strip())
+
+
+def _form_before_chain(rec, answers, name):
+    """None, or the first field whose form needs no file of the chain, named: the record's
+    `plugin`; each answer's `n` (its position), `kind` (absent, or `prose`), `why` (text) and, on
+    a prose answer, `sites` (empty). W047 fix round (ATTACKS 13 and 21): these were read by
+    nothing, or only by a branch, and carried any value past the check."""
+    if rec.get("plugin") != name:
+        return f"the record's `plugin` is {str(rec.get('plugin'))[:60]!r}, not {name!r} - {FORM}"
+    for pos, a in enumerate(answers, 1):
+        if type(a.get("n")) is not int or a.get("n") != pos:
+            return (f"answer {pos}'s `n` is {str(a.get('n'))[:60]!r}, not its position {pos} - "
+                    f"{FORM}")
+        if "kind" in a and a.get("kind") != "prose":
+            return (f"answer {pos}'s `kind` is {str(a.get('kind'))[:60]!r}: the maker writes "
+                    f"`prose` there or no `kind` at all - {FORM}")
+        if not _is_text(a.get("why")):
+            return f"answer {pos}'s `why` is not a reason (text) - {FORM}"
+        if a.get("kind") == "prose" and a.get("sites") != []:
+            return (f"answer {pos} (prose)'s `sites` is {str(a.get('sites'))[:60]!r}: a prose "
+                    f"answer is made at no site, and the maker writes [] - {FORM}")
+    return None
+
+
+def _maker_diff(before, after, fname, made_on):
+    """The diff the maker writes for an answer from `before` to `after`: the unified diff with
+    three lines of context under the plugin's own name, every row its digest for an answer made
+    on a committed file (`_redact`), its text for one recorded before W035's fix round 1."""
+    import difflib
+    diff = "".join(difflib.unified_diff(_lines(before), _lines(after), f"a/kernels/{fname}",
+                                        f"b/kernels/{fname}", n=3))
+    return _redact(diff) if made_on else diff
+
+
+def _form_after_chain(rec, answers, built, shipped, base, root, fname):
+    """None, or the first field whose form is read from the files the check rebuilt (`built`:
+    {position: (file before, file made)}), named. W047 fix round (ATTACKS 13 and 21): an
+    answer's `version` (the version the file it made declares), its design `sites` (the
+    admission's list, in its order) and its `diff` (exactly the diff the maker writes from the
+    two files: a header, a hunk's tail or its counts were read by nothing); each statement - its
+    digest one the worksheet names in a file of the chain, its `site` the line it starts at
+    there, its `how` a confirmation or a recorded design answer whose file holds it, its `why`
+    text, and that answer's own for `answer N`; and each rewrite's trace (`_rewrite_form`)."""
+    for pos, a in enumerate(answers, 1):
+        prev, made = built[pos]
+        try:
+            v_made = _version_node(made)[1]
+        except SyntaxError:
+            v_made = None
+        if not VERSION_FORM.match(str(a.get("version") or "")) or (
+                v_made is not None and a.get("version") != v_made):
+            return (f"answer {pos}'s `version` is {str(a.get('version'))[:60]!r}, not the version "
+                    f"the file it made declares ({v_made!r}) - {FORM}")
+        if a.get("kind") != "prose":
+            sites = _admit(prev, made)[1]
+            if a.get("sites") != sites:
+                return (f"answer {pos}'s `sites` is {str(a.get('sites'))[:80]!r}, not the sites "
+                        f"its change is admitted at, in the admission's order ({sites}) - {FORM}")
+        if a.get("diff") != _maker_diff(prev, made, fname, a.get("made_on")):
+            return (f"answer {pos}'s `diff` is not the diff the maker writes from the file it was "
+                    f"made on to the file it made (a header, a hunk's counts or its tail, or a "
+                    f"row the maker never writes) - {FORM}")
+    chain = [shipped, base] + [f for pair in built.values() for f in pair]
+    where = {}
+    for f in chain:
+        for s in _scan(f)[1]:
+            where.setdefault(s["digest"], set()).add(s["line"])
+    for digest, s in rec.get("statements", {}).items():
+        d = str(digest)[:16]
+        if not DIGEST.match(str(digest)) or digest not in where:
+            return (f"statement {d} is no statement the worksheet names in any file of the "
+                    f"record's chain (the shipped file, the base, each answer's two files) - "
+                    f"{FORM}")
+        m = re.fullmatch(r"statement:([1-9][0-9]*)", str(s.get("site")), re.ASCII)
+        how = str(s.get("how"))
+        h = re.fullmatch(r"answer ([1-9][0-9]*)", how, re.ASCII)
+        if how != "confirmed" and not (h and int(h.group(1)) <= len(answers)
+                                       and answers[int(h.group(1)) - 1].get("kind") != "prose"):
+            return (f"statement {d}'s `how` is {how[:60]!r}: the maker writes `confirmed`, or "
+                    f"`answer N` for a recorded design answer - {FORM}")
+        lines = where[digest]
+        if h:
+            lines = {x["line"] for x in _scan(built[int(h.group(1))][1])[1]
+                     if x["digest"] == digest}
+            if not lines:
+                return (f"statement {d} is recorded as answered by {how}, and the file that answer "
+                        f"made holds no such statement - {FORM}")
+        if not m or int(m.group(1)) not in lines:
+            return (f"statement {d}'s `site` is {str(s.get('site'))[:60]!r}, not the line that "
+                    f"statement starts at in the file it was recorded on ({sorted(lines)}) - "
+                    f"{FORM}")
+        if not _is_text(s.get("why")) or (h and s.get("why") != answers[int(h.group(1)) - 1]
+                                          .get("why")):
+            return (f"statement {d}'s `why` is not "
+                    + (f"the reason of {how}, which the maker writes there" if h else "a reason")
+                    + f" - {FORM}")
+    return _rewrite_form(rec, answers, built, root)
+
+
+def _rewrite_form(rec, answers, built, root):
+    """None, or what is wrong with the record's trace of its rewrites, named (W047 fix round).
+    Each entry is what `--rewrite-record` wrote: the tool's `version`, the `commit` it ran on -
+    a whole id git holds, replace refs off, whose VERSION file reads that version - its `why`,
+    and `dropped`: the digest of each copy of a declaration it took out, by answer number, which
+    must be the digest of the declaration of the file that answer made, as rebuilt here. An
+    answer recorded before W035's fix round 1 was written with such a copy, so each one is named
+    by exactly one entry: a trace removed, or one of its entries, fails here by name."""
+    older = {str(pos) for pos, a in enumerate(answers, 1)
+             if not a.get("made_on") and a.get("kind") != "prose"}
+    named = []
+    for j, t in enumerate(rec.get("rewrites", []), 1):
+        missing = sorted(REWRITE_KEYS - set(t))
+        if missing:
+            return f"rewrite {j} lacks {missing}, which the maker writes in every rewrite - {FORM}"
+        if not COMMIT_ID.match(str(t["commit"])):
+            return (f"rewrite {j}'s `commit` is {str(t['commit'])[:60]!r}, not a commit id - all "
+                    f"its hex digits - {FORM}")
+        version, how = _git_show(root, t["commit"], "VERSION")
+        if version is None:
+            return (f"rewrite {j}'s `commit` {t['commit']} cannot be read ({how}): the trace "
+                    f"names the commit the rewrite ran on, and git keeps it")
+        if not VERSION_FORM.match(str(t["version"])) or t["version"] != version.strip():
+            return (f"rewrite {j}'s `version` is {str(t['version'])[:60]!r}, and the tool at the "
+                    f"commit it names is {version.strip()[:20]!r} - {FORM}")
+        if not _is_text(t["why"]):
+            return f"rewrite {j}'s `why` is not a reason (text) - {FORM}"
+        if not isinstance(t["dropped"], dict):
+            return f"rewrite {j}'s `dropped` is not a mapping of answer to digest - {FORM}"
+        for n, dg in t["dropped"].items():
+            if n not in older:
+                return (f"rewrite {j} says it dropped a copy from answer {str(n)[:20]!r}, which is "
+                        f"no answer recorded before W035's fix round 1 - only those kept a copy")
+            want = _sha(_declaration_text(built[int(n)][1]))
+            if dg != want:
+                return (f"rewrite {j} says answer {n}'s copy of the declaration had the digest "
+                        f"{str(dg)[:20]!r}; the declaration of the file answer {n} made, as this "
+                        f"check rebuilds it, has {want}: the trace is not of this record")
+            named.append(n)
+    for n in sorted(older, key=int):
+        if named.count(n) != 1:
+            return (f"answer {n} was recorded before W035's fix round 1, with a copy of its "
+                    f"declaration, and {'no' if not named.count(n) else 'more than one'} rewrite "
+                    f"in the record says it dropped it - a copy is dropped only by "
+                    f"`scprofile design <plugin> --rewrite-record --why \"...\"`, which records "
+                    f"what it dropped")
     return None
 
 
@@ -1187,9 +1367,20 @@ def design_record_check(kernel, root=None, rec=None, files=None):
          declaration (W035 fix round 2). An older answer (de's two, made in W013 on files never
          committed) keeps its text, since nothing else can rebuild it, and is undone from the
          next file, which must be the file it made byte for byte: no answer keeps a copy of the
-         declaration it left (W047), and a record holds only the keys the maker writes, so a
-         field nothing reads cannot carry a value past the check. Each answer is admitted again
-         by its rule: the prose rule, or at the sites it records;
+         declaration it left (W047), and a record holds only the keys the maker writes, each in
+         the form the maker writes it (W047 fix round: `n` its position, a prose answer's
+         `sites` empty, `version` and `diff` exactly what the maker writes from the rebuilt
+         files, a statement one the worksheet names in a file of the chain, at its line, and so
+         on - `_form_before_chain`, `_form_after_chain`). What that cannot hold is a reason:
+         each `why` is the author's words, held only to being text, so a value written into a
+         reason passes here and is read as any text of the repository is. Each answer is
+         admitted again by its rule: the prose rule, or at the sites it records;
+      2b. A COPY DROPPED IS ACCOUNTED FOR (W047 fix round): every answer recorded before W035's
+         fix round 1 was written with a copy of its declaration, and a record without it names,
+         in exactly one entry of `rewrites`, the rewrite that dropped it: the tool's version,
+         the commit it ran on (git holds it, and its VERSION file reads that version), a reason,
+         and the copy's digest - which must be the digest of the declaration of the file the
+         answer made, as rebuilt here (`_rewrite_form`);
       3. THE CHAIN'S END IS ANCHORED: the first answer's `before` - or, with no answer yet, the
          shipped file - is, outside its declaration, the plugin at the commit its blind record was
          taken at, as DEVPOINTS `rules.held_out.spent` declares it and git keeps it. A record
@@ -1240,8 +1431,19 @@ def _design_record_check(kernel, root, rec=None, files=None):
     bad = _unwritten_keys(rec)
     if bad:
         return False, bad
+    # AND EACH KEY HOLDS THE FORM THE MAKER WRITES IT IN (W047 fix round; ATTACKS 13 and 21): an
+    # allowed key nothing read - an answer's `n`, a prose answer's `sites`, a statement keyed by
+    # a digest no line has - passed whatever it carried. What needs no file is read here; the
+    # rest once the chain is rebuilt (`_form_after_chain`).
+    bad = _form_before_chain(rec, answers, kernel.name)
+    if bad:
+        return False, bad
     anchor = _spent_commit(root, kernel.name)
+    built = {}
     if not answers and anchor is None:
+        bad = _form_after_chain(rec, answers, built, shipped, shipped, root, path.name)
+        if bad:
+            return False, bad
         return True, ("no answer recorded, and not spent: DEVPOINTS names no blind-record commit "
                       f"for {kernel.name}")
     if anchor is None:
@@ -1327,6 +1529,7 @@ def _design_record_check(kernel, root, rec=None, files=None):
                                    + ("; ".join(refusals) if refusals else
                                       f"it touches {sites or 'no site'}, the record says "
                                       f"{ans.get('sites')}"))
+            built[len(answers) - i] = (prev, made)
             if files is not None:
                 files[ans.get("n")] = (prev, made)
             cur = prev
@@ -1365,6 +1568,7 @@ def _design_record_check(kernel, root, rec=None, files=None):
                            + ("; ".join(refusals) if refusals else
                               f"it touches {sites or 'no site'}, the record says "
                               f"{ans.get('sites')}"))
+        built[len(answers) - i] = (prev, cur)
         if files is not None:
             files[ans.get("n")] = (prev, cur)
         cur = prev
@@ -1385,6 +1589,9 @@ def _design_record_check(kernel, root, rec=None, files=None):
                        if answers else
                        (f"kernels/{path.name} has changed outside its declaration since its "
                         f"blind-record commit {anchor}, and no answer records it"))
+    bad = _form_after_chain(rec, answers, built, shipped, base, root, path.name)
+    if bad:
+        return False, bad
     if not answers:
         return True, (f"no answer recorded, and outside its declaration kernels/{path.name} is the "
                       f"plugin at its blind-record commit {anchor}")
@@ -1764,7 +1971,7 @@ def design_confirm(kernel, line, why, log=print):
     return 0
 
 
-def design_rewrite_record(kernel, log=print, root=None):
+def design_rewrite_record(kernel, why="", log=print, root=None):
     """Write the record in the form the maker writes now, with no answer (W047). Returns 0 or 1.
 
     THE ROUTE FOR A RECORD AN OLDER MAKER WROTE, for any plugin. A record changes form only when
@@ -1773,15 +1980,26 @@ def design_rewrite_record(kernel, log=print, root=None):
     cohort's description that the plugin itself no longer carried. This drops every copy and
     writes every row of an answer made on a committed file as its digest (`_current_form`); a
     key no maker ever wrote is not tidied away - the check refuses it by name. The plugin file is
-    not touched. It is refused, nothing written, unless the record as rewritten passes the record
-    check; and each dropped copy is compared with the declaration of the file its answer made, as
-    the check rebuilt that file from git and the record, and the verb says whether they are the
-    same byte for byte - so what the record proved, it still proves without the copy. A record
-    already in that form is left as it is.
+    not touched. A record already in that form is left as it is.
+
+    IT LEAVES A TRACE, AND A TAMPERED COPY IS A FINDING (W047 fix round). The first version
+    exited 0 over a copy that was not the declaration its answer made, wrote a record identical
+    to a clean one, and left nothing in it to say that it had been rewritten. Now it is refused,
+    nothing written: without a reason (`--why`); when a copy it would drop is not, byte for
+    byte, the declaration of the file its answer made, as the record check rebuilds that file
+    from git and the record; and unless the record as rewritten - its trace included - passes
+    that check. What it writes carries one more entry in `rewrites`: the tool's version, the
+    commit it was run on, the reason, and the digest of each copy it dropped, which the check
+    validates wherever the record is read (`_rewrite_form`).
     """
     import json
+    from . import __version__
     path = Path(kernel.path)
     root = Path(root) if root else path.parent.parent
+    if not _is_text(why):
+        log("  refused: --why is the rewrite's reason, and the rewritten record carries it; "
+            "nothing written")
+        return 1
     rp = design_record_path(kernel)
     if not rp.is_file():
         log(f"  nothing to rewrite: kernels/{rp.name} does not exist")
@@ -1793,25 +2011,48 @@ def design_rewrite_record(kernel, log=print, root=None):
         return 1
     copies = {a.get("n"): a["after_declaration"] for a in old.get("answers") or []
               if isinstance(a, dict) and "after_declaration" in a}
-    rec = _as_written(kernel)
+    bad = [n for n, c in copies.items() if not isinstance(c, str) or type(n) is not int]
+    if bad:
+        log(f"  refused: answer(s) {bad} carry a copy of the declaration that is not text, or an "
+            f"answer number that is not one; nothing written")
+        return 1
+    rec = _as_written(kernel, drop_copies=True)
+    changed = json.dumps(rec, indent=1, sort_keys=True) + "\n" != rec_before
+    if changed:
+        head, how = _git_head(root)
+        if not head or not COMMIT_ID.match(head):
+            log(f"  refused: a rewrite records the commit it is run on, and there is none here "
+                f"({how}); nothing written")
+            return 1
+        rec.setdefault("rewrites", []).append(
+            {"version": __version__, "commit": head, "why": str(why),
+             "dropped": {str(n): _sha(c) for n, c in sorted(copies.items())}})
     files = {}
     ok, why_not = design_record_check(kernel, root=root, rec=rec, files=files)
+    # A COPY IT WOULD DROP IS THE DECLARATION ITS ANSWER MADE, BYTE FOR BYTE, OR NOTHING IS
+    # WRITTEN: a record carrying a copy no file of its chain had is a finding to report, not a
+    # form to tidy away (the record check refuses it by its digest too, in the trace).
+    for n, copy in sorted(copies.items()):
+        made = files.get(n, (None, None))[1]
+        if made is None or _declaration_text(made) != copy:
+            log(f"  refused: answer {n}'s copy of the declaration is NOT the declaration of the "
+                f"file the answer made, as the record check rebuilt that file from git and the "
+                f"record" + ("" if made is not None else " (it could not rebuild it)")
+                + ": the record carries a copy no file of its chain had - a finding, not a form "
+                  "to tidy; nothing written")
+            return 1
     if not ok:
         log(f"  refused: the record as the maker writes it does not pass its check ({why_not}); "
             f"nothing written")
         return 1
-    text = json.dumps(rec, indent=1, sort_keys=True) + "\n"
-    if text == rec_before:
+    if not changed:
         log(f"  kernels/{rp.name} is already as the maker writes it: nothing written")
         return 0
-    for n, copy in copies.items():
-        made = files.get(n, (None, None))[1]
-        same = isinstance(copy, str) and made is not None and _declaration_text(made) == copy
-        log(f"  answer {n}: its copy of the declaration dropped - "
-            + ("the file it made, rebuilt from git and the record, carries that declaration "
-               "byte for byte" if same else
-               "it is NOT the declaration of the file the answer made, as the check rebuilt that "
-               "file from git and the record: the record carried a copy no file of its chain had"))
+    text = json.dumps(rec, indent=1, sort_keys=True) + "\n"
+    for n, copy in sorted(copies.items()):
+        log(f"  answer {n}: its copy of the declaration dropped - the file it made, rebuilt from "
+            f"git and the record, carries that declaration byte for byte; its digest "
+            f"{_sha(copy)} is kept in the record's rewrite {len(rec['rewrites'])}")
     plugin_before = path.read_text(encoding="utf-8")
     _write_record(kernel, rec)
     if _keep_or_restore(kernel, root, plugin_before, rec_before, log):

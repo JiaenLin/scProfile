@@ -1657,7 +1657,7 @@ def _design(a):
         if a.confirm:
             return V.design_confirm(k, a.confirm, a.why)
         if a.rewrite_record:
-            return V.design_rewrite_record(k)
+            return V.design_rewrite_record(k, a.why)
         return V.design_replay(k, a.replay_into)
     print("does each design-aware plugin take its model from the host? (GAP-039, GAP-040, "
           "GAP-C47)")
@@ -4591,7 +4591,8 @@ def main(argv=None):
     dz.add_argument("--confirm", metavar="LINE", type=int, default=None,
                     help="the statement starting at LINE is true as it stands; recorded by the "
                          "digest of its syntax, with --why")
-    dz.add_argument("--why", default="", help="the answer's or the confirmation's reason")
+    dz.add_argument("--why", default="", help="the answer's, the confirmation's or the rewrite's "
+                                              "reason")
     dz.add_argument("--as-version", default=None,
                     help="with --answer: the version the author states (N.N.N, or refused), instead of "
                          "the minor bump")
@@ -4601,8 +4602,11 @@ def main(argv=None):
     dz.add_argument("--rewrite-record", action="store_true",
                     help="write the plugin's record in the form the maker writes now, with no "
                          "answer: no copy of a declaration, every row of a made-on answer a "
-                         "digest; refused unless the record as rewritten passes its check; the "
-                         "plugin is not touched")
+                         "digest, and a trace of the rewrite in the record (the tool's version, "
+                         "the commit, --why, each dropped copy's digest); refused, nothing "
+                         "written, without --why, when a copy is not the declaration of the "
+                         "file its answer made, or unless the rewritten record passes its "
+                         "check; the plugin is not touched")
     dz.set_defaults(fn=_design)
     pz = sub.add_parser("prose", help="[maintainer] edit a plugin's prose through the maker - a "
                                       "comment, a docstring, a comment of its embedded R - "

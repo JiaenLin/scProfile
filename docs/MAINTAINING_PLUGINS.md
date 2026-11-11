@@ -149,12 +149,19 @@ de's, made in W013 on files that were never committed, so they keep their full d
 undone from the file that follows it, which must be the file it made byte for byte. They also
 kept a copy of the declaration they left, and with it one cohort's description that the plugin
 no longer carried (harness autodev W047). No record keeps a copy now, and a record holds only the
-keys the maker writes: a copy, or any key the maker never writes, fails the check by name
-whatever it carries - a field nothing reads passes anything. A record an older maker wrote is
-rewritten through the maker, never by hand: `scprofile design <plugin> --rewrite-record` writes
-it in the current form with no answer, leaves the plugin untouched, is refused unless the
-rewritten record passes its check, and compares each dropped copy with the declaration of the
-file its answer made, as the check rebuilds it from git and the record. The check reads git with
+keys the maker writes, each in the form the maker writes it: a copy, or any key the maker never
+writes, fails the check by name whatever it carries, and so does a value in a key it does write
+but in another form - an answer's `n` that is not its position, a prose answer's `sites` that is
+not empty, a `version` or `diff` other than the maker's from the rebuilt files, a statement no
+file of the chain has, or one at another line (W047 fix round). A reason (`why`) is the author's
+words, held only to being text: what it says is read as any text of the repository is. A record
+an older maker wrote is rewritten through the maker, never by hand: `scprofile design <plugin>
+--rewrite-record --why "..."` drops each copy of a declaration only once it is, byte for byte,
+the declaration of the file its answer made as the check rebuilds it from git and the record,
+and writes into the record a trace that the check validates (`rewrites`: the tool's version, the
+commit it ran on, the reason, each dropped copy's digest); it is refused, nothing written, with
+no reason, over a copy that is not that declaration (a tampered record is a finding), or unless
+the rewritten record passes its check, and it never touches the plugin. The check reads git with
 replace refs off (`git --no-replace-objects`; the object store follows no ref), and the anchor
 DEVPOINTS names must be a whole commit id. The limits of this: a declaration edit after an older
 LAST answer, with no answer made on a committed file in between, fails closed (no record has that
