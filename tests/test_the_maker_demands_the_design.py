@@ -683,10 +683,14 @@ else:
         ck("a shallow clone, which lacks the commit, cannot give it", gone[0] is None, gone[1])
         ck("with no git, the design record's check passes on a checkout that has the history",
            node[0], node)
-        ck("on a shallow checkout: the base cannot be established, and it fails",
-           not cut[0] and "base cannot be established" in cut[1], cut)
+        # WHICHEVER READ OF THE HISTORY COMES FIRST FAILS IT (W047): the anchor, or - once an
+        # answer is made on a committed file - the file that answer was made on. A shallow clone
+        # at a later head lacks both; a directory that is no repository has neither.
+        closed = ("base cannot be established", "the file it was made on cannot be read")
+        ck("on a shallow checkout: the history it needs is not there, and it fails",
+           not cut[0] and any(s in cut[1] for s in closed), cut)
         ck("in a directory that is no repository: the same", not bare[0]
-           and "base cannot be established" in bare[1], bare)
+           and any(s in bare[1] for s in closed), bare)
         ck("the job's first step, `scprofile design de`, on a checkout, with no git on PATH: "
            "exit 0", cli.returncode == 0, (cli.stdout + cli.stderr)[-600:])
 
