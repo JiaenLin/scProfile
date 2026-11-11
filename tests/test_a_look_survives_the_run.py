@@ -79,7 +79,7 @@ with tempfile.TemporaryDirectory() as td:
     # AND THE LISTING SAYS THE SAME AS THE COUNT (harness ADR-0020, the second rerun): the
     # status counted the carried look as reviewed and the shards left it out, and the listing
     # under it printed the same figure under "have not been looked at ... Open each one" -
-    # fifty-six of them on the rerun, every one already looked at on identical bytes.
+    # every one of them on the rerun already looked at on identical bytes.
     import subprocess
     p = subprocess.run([sys.executable, "-m", "scprofile.cli", "review", "--out", str(b),
                         "--plugin", "p"], capture_output=True, text=True, cwd=str(ROOT),

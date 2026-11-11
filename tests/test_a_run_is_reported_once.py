@@ -3,8 +3,8 @@
 WHAT THE RUNS ON THE CLUSTER SHOWED. `scprofile run` ends by writing the report, the README, the
 section and the capacity record; the job the maker emits then ran `scprofile report --out` as
 its first after-step and built the same pages again - the figure-set line appears twice in every
-job log, about two minutes per run. And every rerun of the arc carried `--no-cache` from the
-audit reference it reproduced, so eighteen units re-inferred CellChat on every redraw: the flag
+job log, and every run built its pages twice. And every rerun of the arc carried `--no-cache` from the
+audit reference it reproduced, so every unit re-inferred CellChat on every redraw: the flag
 that rules the cache out for an audit is the one a redraw must not carry, and this repository
 is the one that knows its own flags. Both are declarations in DEVPOINTS.yaml; this holds them.
 

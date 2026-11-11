@@ -43,8 +43,8 @@ ck("no two labels share a colour", len(set(a.values())) == len(a),
 # must not reach the colour.
 b = FC.colour_map(list(reversed(POPS)))
 ck("the map does not depend on the order the labels arrived in", a == b)
-# AND A SUBSET MUST NOT SHIFT THE REST. A panel drawn on 9 of 13 populations coloured its nine
-# from position 0, so every colour after the first gap moved.
+# AND A SUBSET MUST NOT SHIFT THE REST. A panel drawn on a subset of the populations coloured
+# its subset from position 0, so every colour after the first gap moved.
 sub = FC.colour_map([p for p in POPS if p != "Type four"])
 ck("a panel missing one label keeps every other label's colour",
    all(sub[k] == a[k] for k in sub),
@@ -56,7 +56,8 @@ big = FC.colour_map([f"pop{i}" for i in range(200)])
 ck("200 labels get 200 distinct colours", len(set(big.values())) == 200,
    f"only {len(set(big.values()))} distinct")
 # DISTINCT IS NOT SEPARABLE (harness ADR-0024, found by a looker on the first run with the set):
-# fourteen labels drew three in one blue and three in one magenta, hues 0.6 degrees apart, and
+# a panel's labels drew several in one blue and several in one magenta, hues under a degree
+# apart, and
 # the map called them distinct. A hue gap a reader can see is the floor, up to the point where
 # the circle is full.
 
@@ -193,8 +194,8 @@ _scratch.cleanup()
 print("\nthe HOST's own palette is keyed on the label too, not on its position")
 from scprofile.figure import palette as _pal, CATEGORY_COLOURS as _CC              # noqa: E402
 # THE DEFECT, MEASURED AT PIXEL LEVEL ON A REAL RUN: `palette` indexed by POSITION in the sorted
-# label list, so a panel drawn on eleven populations gave one population the colour a
-# nine-population panel had given another. Its own docstring promised "same label, same colour, in
+# label list, so a panel drawn on one subset of populations gave one population the colour a
+# panel on another subset had given another. Its own docstring promised "same label, same colour, in
 # every figure" - the sentence was true of the intent and false of the code.
 _full = [f"Group{i}/Type {c}" for i, c in enumerate("abcdefghijkl")]
 _sub = [x for i, x in enumerate(_full) if i % 3]
@@ -211,11 +212,11 @@ def _positional(labels):
 _oa, _ob = _positional(_full), _positional(_sub)
 _omoved = [k for k in _ob if _oa[k] != _ob[k]]
 # THE CLAIM IS COMPARATIVE, AND DELIBERATELY NOT "NOTHING MOVES". Exact set-independence needs a
-# colour per label with no probing, and measured on this cohort's thirteen real populations that
-# gives SIX collisions - four populations sharing one colour, which is unusable inside a single
+# colour per label with no probing, and measured on one real cohort's populations that
+# gives several collisions - populations sharing one colour, which is unusable inside a single
 # panel. So a collision takes the next free slot, and the price is that a label colliding with a
 # label that is only sometimes present can move. Measured: the old positional scheme recoloured
-# 9 of 9 populations when four were dropped; this recolours 2.
+# every population when some were dropped; this recolours few.
 ck("the old positional scheme recoloured everything, which is the defect",
    len(_omoved) == len(_ob), f"only {len(_omoved)} of {len(_ob)} moved under the old scheme")
 ck("keying on the label leaves most of them alone", len(_moved) * 3 < len(_ob),

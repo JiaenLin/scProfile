@@ -1,6 +1,6 @@
 """The figure panel must be DERIVED from the design and the plugin's declared routes.
 
-The run writes an arms page carrying every between-arm figure it drew - 426 on one real cohort -
+The run writes an arms page carrying every between-arm figure it drew,
 which is an appendix, not a panel. A panel is the subset a reader is asked to look at, and the
 only way to get one was to pick figures by hand into a document with no run key. That is a draft
 by this project's own rule, whatever it looks like when published.

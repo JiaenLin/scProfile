@@ -7,7 +7,7 @@ and every edit to the inference beneath it, reported as a cache hit on a run tha
 throughout. That is a correctness failure and it is silent.
 
 Hashing the WHOLE script fixed that and cost something else: a figure title, a legend or a colour
-invalidated eighteen fitted objects and bought a two-and-a-half hour re-inference, for an edit
+invalidated every unit's fitted object and bought a full re-inference, for an edit
 the object has never heard of. That is not a correctness failure, it is a workflow that stops
 being used - and a cache nobody can afford to keep warm is a cache that gets turned off.
 

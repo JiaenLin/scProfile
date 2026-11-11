@@ -3,7 +3,7 @@
 WHAT THIS COST: the cache directory was appended as the 11th argument and read in R as
 `args[12]`. R returned nothing for it, the script fell back to the instance directory, and the
 whole cross-run object cache did nothing - on a run where every log line looked normal, every
-figure was correct, and eighteen units each paid for a full inference again. Nothing failed.
+figure was correct, and every unit paid for a full inference again. Nothing failed.
 
 Off-by-one in a positional interface is invisible at runtime by construction, so it is checked
 here: count what the caller appends, count the highest index the script reads, and require them

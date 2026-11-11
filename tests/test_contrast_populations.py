@@ -1,9 +1,9 @@
 """A comparison is drawn on populations BOTH arms have, and the rest are removed at SOURCE.
 
 The union was drawn first, with a missing population's row and column hatched so a reader could
-see it was absent. Honest, and still the wrong panel: on a real cohort it put two full rows and
-two full columns of hatch through the middle of a 13x13 matrix - 48 of its 169 tiles, 28% of the
-figure - carrying no comparison and breaking every real block in half.
+see it was absent. Honest, and still the wrong panel: on a real cohort it put full rows and
+full columns of hatch through the middle of the matrix - a large share of its tiles - carrying
+no comparison and breaking every real block in half.
 
 The rule this locks: a cell that cannot hold a comparison is not drawn where comparisons are
 read. The removal happens before the matrix is built, and what is removed is NAMED.

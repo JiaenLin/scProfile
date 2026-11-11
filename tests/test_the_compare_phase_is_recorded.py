@@ -1,6 +1,6 @@
 """The reporter re-launches the plugin, and that was a SECOND EXECUTION PHASE nobody recorded.
 
-`run` prints "18 instances in 1 wave" and that is the run phase. Building the report then invoked
+`run` prints "N instances in 1 wave" and that is the run phase. Building the report then invoked
 the same plugins again - once per arm pair and, on a design crossing more than two arms, once more
 over all of them - through `report._native_compare`. Those launches had:
 

@@ -1,11 +1,10 @@
 """The compare phase's launches run under the same kind of pool as the units: each at the share
 the plugin declares, as many at once as the run's budget holds (harness ADR-0026, step 1).
 
-MEASURED ON THE CLUSTER. Seven launches of about 72 s each, one after another, each handed all
-64 cores and using one: 505 s of R and 13.5 minutes of phase, in every thirty-minute rerun. The
-run phase already schedules its instances by permits - `cellchat[<unit>](2c)` eighteen at once
-under a budget of 64 - and the compare phase launched the same plugin with the whole budget,
-serially. A plugin that declares no `cores` keeps today's shape: one launch at a time under the
+MEASURED ON THE CLUSTER. The compare launches ran one after another, each handed the whole
+allocation and using one core, in every rerun. The run phase already schedules its instances
+by permits - `cellchat[<unit>](2c)`, as many at once as the run's budget holds - and the compare
+phase launched the same plugin with the whole budget, serially. A plugin that declares no `cores` keeps today's shape: one launch at a time under the
 whole budget, and every earlier pin on the phase record holds unchanged.
 
 Run: python tests/test_the_compare_launches_share_the_pool.py

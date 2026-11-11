@@ -1,9 +1,9 @@
 """Which unit axes get per-unit figures is a RUN setting, and it never changes what is computed.
 
 WHY. A run that draws every panel for every unit spends most of itself drawing. Measured on a
-cohort of eighteen units, ten of them single samples: the per-sample panels were 340 of the
-run's figures and about half its wall clock, and they answer a different question from the group
-panels - they are the consistency check, not the result.
+real cohort: the per-sample panels were most of the run's figures and much of its wall clock,
+and they answer a different question from the group panels - they are the consistency check,
+not the result.
 
 THE DANGEROUS WAY TO FIX THAT is to delete the code that draws them, which takes the capability
 away from every other project and cannot be undone per run. The safe way is a setting whose

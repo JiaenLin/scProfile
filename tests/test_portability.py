@@ -120,8 +120,8 @@ for f in sorted(root.rglob("*")):
     # AND ACROSS THE LINE BREAKS. Prose in this tree is wrapped at 100 columns, so a leak of
     # more than one word has a good chance of being SPLIT - and a line-based scan cannot see a
     # phrase it is split by. Found the day the design vocabulary was added to the pattern: the
-    # guard reported the tree clean while `ten animals of one tissue` sat in `declare.py` with
-    # the break falling between `ten` and `animals`. The same failure as a ruler that cannot
+    # guard reported the tree clean while a count of animals sat in `declare.py` with
+    # the break falling between the number and `animals`. The same failure as a ruler that cannot
     # recognise a real arm figure - an absence reported as confidently as a presence.
     #
     # Comment markers go with the break, or `# ten\n# animals` rejoins as `# ten # animals`.
@@ -898,9 +898,9 @@ ck("the constraint defect asks what a plugin TESTS, not what container it reads"
 #
 # It runs separately on every unit, and its page is that many single-unit reports in sequence.
 # Every panel is true; the question a cohort study asks - do the units agree? - is answered
-# nowhere, because the numbers never share an axis. Measured on a ten-animal cohort: one
-# plugin's per-unit count ran 8,194 to 38,895 across the units of a single tissue, in that many
-# figures, and a reader taking the first unit's strongest result as a finding had nothing on the
+# nowhere, because the numbers never share an axis. Measured on a real cohort: one
+# plugin's per-unit count ran over a several-fold range across the units of a single tissue, in
+# that many figures, and a reader taking the first unit's strongest result as a finding had nothing on the
 # page to warn them.
 # ---------------------------------------------------------------------------------------------
 print("\na per-unit plugin puts its units on one axis")
@@ -1004,7 +1004,7 @@ ck("a PARTIAL run wrote a page and is NOT exempt",
 # Of nine plugins on the cohort this was found on, the two that TEST the design reported across
 # it and the other seven reported per population and per cell, never once splitting a result by
 # the factor the study exists to ask about. Two of the seven DECLARED `design_aware` - "reports
-# per arm without testing across the design" - and between them had fourteen panels, none about
+# per arm without testing across the design" - and between them had many panels, none about
 # an arm. A flag nobody sets and a flag nobody honours fail the same way and only a check
 # against the OUTPUT tells them apart.
 # ---------------------------------------------------------------------------------------------
@@ -1381,12 +1381,12 @@ ck("a raising candidate does not propagate out of the search", _raised is not Tr
 # check. Both harnesses run it now — the gate that decides whether a long run is worth starting,
 # and the run itself, on what it just wrote.
 # AN UNMAPPED LABEL IS NAMED, NEVER DROPPED. The prior supplies a UniProt accession where it
-# has no gene symbol; 123 of 674 regulators arrived that way on a real run and one of them was
+# has no gene symbol; many regulators arrived that way on a real run and one of them was
 # the strongest signal in every population. Dropping them hides a result. Leaving them unremarked
 # lets a reader take `A0A079HLR9` for a gene beside `Gata4`.
-# A HEADLINE ITS OWN DIAGNOSTIC REFUTES. Two pages carried one: "45.5% of cells score S or G2M"
+# A HEADLINE ITS OWN DIAGNOSTIC REFUTES. Two pages carried one: a large share of cells scored S or G2M
 # in post-mitotic tissue, on a panel whose called fraction FALLS as sequencing depth rises; and
-# "3 terminal states" over cells whose fate entropy sits at the ceiling three states allow, which
+# a count of "terminal states" over cells whose fate entropy sits at its ceiling, which
 # is what a uniform fate probability looks like. Neither page was wrong - the evidence was
 # plotted, honestly, further down - but a reader takes the headline, and a limit reachable only
 # by reading every panel is a limit most readers never meet.

@@ -74,7 +74,7 @@ with tempfile.TemporaryDirectory() as td:
     ck("no traceback", "Traceback" not in o.getvalue() + e.getvalue())
 
 print("\nthrough the CLI: a run in which no instance succeeded is failed, not ok")
-# Harness blind 0006's run: every one of 18 instances failed in a second - no plugin
+# Harness blind 0006's run: every instance failed at once - no plugin
 # environment at the prefix it was given - and the run sealed SEALED, status ok, exit 0, headline
 # "kernels ran, results merged, report written", with a run card of zero instances. The report
 # named the absence ("NO OBJECT WRITTEN: no plugin ran") and the seal said the opposite; whichever

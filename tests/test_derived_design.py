@@ -1,9 +1,9 @@
 """A design in the object must not be invisible because no table was passed.
 
 WHAT THIS COST: a run was launched without `--design` on an object whose obs already carried
-the study's two factors and its batch. The host printed "design table NOT GIVEN", resolved no
-arms, scheduled ten per-sample instances instead of eighteen, drew no contrast at all and ran to
-completion. Nothing failed. The comparison the study exists to make was simply absent.
+the study's factors and its batch. The host printed "design table NOT GIVEN", resolved no
+arms, scheduled the per-sample instances and none for the arms, drew no contrast at all and ran
+to completion. Nothing failed. The comparison the study exists to make was simply absent.
 
 A derived design is NOT a replacement for a table - a table can carry factors the object has
 never heard of - so a passed table always wins, and a derived one is always reported as derived.

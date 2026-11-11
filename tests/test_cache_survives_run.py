@@ -3,7 +3,7 @@
 WHAT THIS COST, measured: the plugin saved its fitted object into the instance directory and
 guarded it with a digest of the inference inputs — exactly right, and useless across runs,
 because a new run's instance directory is empty. Every change to a PLOT therefore paid for the
-whole inference again: 2m41s and 7.5 GB per unit, eighteen units, to redraw a figure.
+whole inference again, on every unit, to redraw a figure.
 
 The host says only WHERE. What to keep, under what key, and when the key is still valid are the
 plugin's decisions, because only the plugin knows what determines its result. And the cache is

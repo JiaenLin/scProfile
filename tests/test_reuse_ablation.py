@@ -39,7 +39,7 @@ print("\n" + ("reuse holds" if not FAILED else f"{len(FAILED)} FAILED: {FAILED}"
 #
 # The key covered the PLUGIN's version and nothing about the code that writes an instance. So
 # when the host gained a drawing audit every panel was supposed to carry, the next run adopted
-# fourteen of fifteen instances from before it existed, the audit never ran, and the station
+# all but one of its instances from before it existed, the audit never ran, and the station
 # reading it reported "no panel carries an audit" on a tool that had just grown one. Nothing was
 # broken except that reuse was too permissive, and nothing said so.
 # ============================================================================================
@@ -59,8 +59,8 @@ check("a different host version is a DIFFERENT result",
 check("and an instance written before the host was recorded does not match a current one",
       _LS.reuse_key(_noneho) != _LS.reuse_key(_base))
 # THE RULE, NOT THE LIST. A module belongs in the fingerprint if its code can change what an
-# INSTANCE contains. `figure.py` was omitted on the first attempt and cost an hour: a fix to the
-# drawing audit did not invalidate reuse, the next run adopted fourteen of fifteen instances
+# INSTANCE contains. `figure.py` was omitted on the first attempt and cost a rerun: a fix to the
+# drawing audit did not invalidate reuse, the next run adopted all but one of its instances
 # carrying the flaw, and the station reported the same false positives on a tool that had just
 # stopped producing them.
 check("every module the emit path imports at draw time is in the fingerprint",

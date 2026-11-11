@@ -6,9 +6,9 @@ its whole value as a difference rather than a change. The host's two-scale table
 so every ratio the written section quoted was computed over the UNION while every panel beside it
 was drawn over the INTERSECTION.
 
-Measured on a real cohort, one contrast read 1.31x in the text and 1.02x - no effect at all - on
-the populations a reader could see, because two populations present in one arm only carried a
-fifth of that arm's total. Both numbers were correct; they were answers to different questions,
+Measured on a real cohort, one contrast read as an effect in the text and as no effect at all on
+the populations a reader could see, because populations present in one arm only carried a
+share of that arm's total. Both numbers were correct; they were answers to different questions,
 and only one of them had a picture.
 
 Nothing is hidden by the restriction: the elements it drops are exactly those reported as present
@@ -72,7 +72,7 @@ if rows:
 # 5. THE UNIT, NOT THE LEVEL. `from`/`to` are factor LEVELS - two contrasts can both read
 #    "yearling against adult" and mean different objects - so a consumer resolving a side by that
 #    name reads the MARGINAL unit for every conditional contrast. Found in a real run: the
-#    composition table listed four marginal arms while telling the reader every comparison is
+#    composition table listed the marginal arms while telling the reader every comparison is
 #    read against it, and the per-contrast composition caveat used the wrong pair every time.
 if rows:
     check("unit_from" in rows[0] and "unit_to" in rows[0],

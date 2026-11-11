@@ -2,7 +2,7 @@
 run it follows (harness ADR-0026, step 4 - the kill pass).
 
 A comment inside the inference span, a keyed parameter's default, a legend: two of the three
-cost eighteen units of inference and one costs nothing, and the maker said nothing about any of
+cost every unit its inference and one costs nothing, and the maker said nothing about any of
 them. A plugin that keeps a fitted object declares what keys it - the span of its source that
 determines the object, and the config parameters in the key - and `scprofile cache --forecast`
 reads the working tree against the tool commit the reference run recorded: HIT or MISS, with

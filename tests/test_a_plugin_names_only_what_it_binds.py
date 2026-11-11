@@ -2,8 +2,8 @@
 or a builtin (harness ADR-0026, K-s, found by run F).
 
 A one-line change to a panel function named `Path`, which the module never imports; the
-validator, the suites and the maker's status all passed, and eighteen units each spent five
-minutes inferring before the NameError. Python's own compiler does not check names; this does
+validator, the suites and the maker's status all passed, and every unit ran its whole
+inference before the NameError. Python's own compiler does not check names; this does
 the pyflakes half that matters here - free names in function bodies against what the function,
 its enclosing functions, the module and the builtins bind - and names the function and the line.
 Comprehension and lambda scopes, `global`/`nonlocal`, and names bound by `with`, `for`,

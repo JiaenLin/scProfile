@@ -2,7 +2,7 @@
 drawn-and-promised-by-nobody.
 
 `native.undrawn` has asked the first since a plugin's three declared plots turned out to draw
-nothing on a full run. The second was asked by nothing, and a cohort of 1187 figures carried 24
+nothing on a full run. The second was asked by nothing, and a real cohort's figures carried
 `estimationNumCluster*.pdf` written by the NMF rank estimation inside an upstream function - not
 by any call the plugin makes, named by no declaration, linked from no page, cited by no sentence.
 Nothing in the tool could tell them from output somebody had asked for.
@@ -87,8 +87,8 @@ if _cc is not None:
               "proves nothing")
 
 # A PROMISE IS PER ENTRY, NOT PER FUNCTION (harness ADR-0025, found on the third run): one
-# upstream function drew a per-unit heatmap on every unit and failed on every one of the twelve
-# differential heatmaps it also draws - "invalid color name" on all six contrasts - and the
+# upstream function drew a per-unit heatmap on every unit and failed on every one of the
+# differential heatmaps it also draws - "invalid color name" on every contrast - and the
 # promise read as kept because the FUNCTION had produced a file somewhere. The plan promises by
 # entry; an entry whose family drew nothing anywhere is the broken promise, whoever else the
 # function drew for.
