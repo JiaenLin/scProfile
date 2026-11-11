@@ -178,8 +178,8 @@ def write_brief(run, plugin, spec=None, design=None):
         return str(x).replace("|", "\\|")
 
     def _num(x):
-        # THREE SIGNIFICANT FIGURES, not sixteen. `3.221313010331362` is not more precise than
-        # `3.22`, it is only harder to read, and a brief that is hard to read is skimmed.
+        # THREE SIGNIFICANT FIGURES, not sixteen. `2.718281828459045` is not more precise than
+        # `2.72`, it is only harder to read, and a brief that is hard to read is skimmed.
         try:
             return f"{float(x):.3g}"
         except (TypeError, ValueError):

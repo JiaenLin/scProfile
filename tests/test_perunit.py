@@ -643,7 +643,7 @@ _big.release(_g)
 print("\nand memory is charged against the cells the instance actually touches")
 # MEMORY IS A BASELINE PLUS A PER-CELL TERM. This asserted the cohort instance cost more than
 # SIX TIMES the per-unit one, which is only true if the baseline is zero - the very model that
-# made, for instance, a 10 GB measurement on a 5k-cell instance read as 200 GB per 100k. Both
+# made, for instance, a 10 GB measurement on a 10k-cell instance read as 100 GB per 100k. Both
 # instances pay the
 # baseline, so the ratio compresses; what must hold is that the DIFFERENCE is the per-cell term
 # times the difference in cells.

@@ -107,7 +107,7 @@ peak_gb  ≈  memory_gb_base  +  memory_gb_per_100k × n_cells / 100_000
 ```
 
 The interpreter, the imports and the object are paid once whatever `n` is. Declaring a pure rate
-makes, for instance, a 10 GB measurement on a 5,000-cell instance read as 200 GB per 100k. **Measure both, do
+makes, for instance, a 10 GB measurement on a 10,000-cell instance read as 100 GB per 100k. **Measure both, do
 not estimate them:** every run fits them from its own instances and prints them ready to paste,
 and a per-unit plugin produces one point per unit for nothing. A plugin declaring neither is
 scheduled on a conservative assumption *and the run says it is guessing*, every time.
