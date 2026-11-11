@@ -81,7 +81,8 @@ PLUGIN = {
     # MEMORY IS TWO TERMS, a fixed cost plus a per-cell one:
     #     peak_gb  ~=  memory_gb_base  +  memory_gb_per_100k * n_cells / 100_000
     # The interpreter, the imports and the object are paid once whatever n is. Modelling this as
-    # a pure rate makes a 15 GB measurement on a 10k-cell instance read as 150 GB per 100k.
+    # a pure rate charges the fixed cost to the cells: a small instance's peak then reads as a
+    # rate that over-predicts every small instance and can under-predict a large one.
     #
     # MEASURE THEM ONCE AND DECLARE THEM, AND THAT IS WHY THEY ARE NOT WRITTEN HERE. Left out,
     # the allocator assumes conservative values and prints that it is guessing — which is the

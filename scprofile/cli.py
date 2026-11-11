@@ -325,7 +325,7 @@ def _run(a):
             # THE DECLARATION *AND* ITS REFERENCES. Only `validate_plugin` was called here, so
             # every reference check lived in a maintainer command that no pipeline runs - which
             # is why a checker demanding a url from a bundled database went unnoticed through
-            # eighteen runs. Static: no `dest`, so nothing is hashed and nothing is fetched.
+            # every run. Static: no `dest`, so nothing is hashed and nothing is fetched.
             f = V.validate_plugin(ks[n]) + V.validate_references(
                 ks[n], organism=getattr(a, "organism", None))
             bad = [x for x in f if x.level == "ERROR"]
@@ -434,8 +434,8 @@ def _run(a):
     have_layers = set(manifest.layer_names(A))
     allowed = set(_split(a.allow or ""))
     ran, payloads, skipped = [], [], []
-    # REUSE IS RECORDED, NOT SILENT. A run that reused nine of ten instances and one that
-    # computed all ten produce the same directory; only this list distinguishes them, and the
+    # REUSE IS RECORDED, NOT SILENT. A run that reused most of its instances and one that
+    # computed all of them produce the same directory; only this list distinguishes them, and the
     # report prints it.
     reused = []
     from . import resume as _resume
@@ -445,8 +445,8 @@ def _run(a):
 
         AN INSTANCE THAT IS NOT RECOMPUTED IS STILL PART OF THE RUN. Skipping the computation
         and skipping the COLLECTION are different things, and doing both produced a run whose
-        report.json held `ran: 0, kernels: []` while fourteen complete instances sat in its
-        directory: 140 figures on disk and one page rendered. Reuse that loses the result is
+        report.json held `ran: 0, kernels: []` while every instance sat complete in its
+        directory, its figures on disk and one page rendered. Reuse that loses the result is
         not reuse.
         """
         d = _resume.unit_dir(out, name_, unit_)
@@ -485,7 +485,7 @@ def _run(a):
 
     from . import landscape as _LS, licence as _LCN
 
-    # READ ONCE, NOT PER INSTANCE. Scanning every earlier run for each of fourteen instances
+    # READ ONCE, NOT PER INSTANCE. Scanning every earlier run for each instance
     # would re-walk the same directories fourteen times.
     _have_earlier = (_LS.scan(a.reuse_from, plugins=set(want))
                      if getattr(a, "reuse_from", None) else [])
@@ -579,7 +579,7 @@ def _run(a):
     # A per-unit method sees only the labels present in its own slice, so a population with no
     # cells in one arm is simply not in that arm's result - and every panel then draws the axis
     # it happens to have, with nothing anywhere saying the study has more. Measured on a real
-    # cohort: a plugin reported 8 to 12 populations across 14 units against 15 labels in the
+    # cohort: a plugin reported fewer populations on some units than the labels in the
     # object, and no page named a single one of the missing.
     #
     # The host is the only layer that can say this. A plugin sees one unit by construction and
@@ -625,7 +625,7 @@ def _run(a):
     _dtab = None
     try:
         # SAMPLES, NOT UNITS. A design table has one row per SAMPLE; a unit may now be
-        # a design arm, and passing the unit list made four arm labels look like
+        # a design arm, and passing the unit list made the arm labels look like
         # samples missing from the table - "design table unreadable" on a table that
         # was perfectly readable.
         _dtab, _dkey, _dfactors, _dsrc = inputs.design_or_derive(
@@ -929,10 +929,10 @@ def _run(a):
 
         # STAGE FIRST, THEN BUDGET, THEN WRITE. `schedule` sizes a wave from every requested
         # plugin; five filters then remove instances, and each takes a share of the cores with it.
-        # Measured before this was reordered: `run --all --cores 8` on a 10-sample object built a
-        # wave of 35 instances declaring 301 cores, scaled EVERY instance to 1, and ran velocity
-        # single-threaded on an 8-core allocation - while `plan --cores 8`, which filters first,
-        # printed velocity(7c) for the same command. Two documents of one run disagreeing is how
+        # Measured before this was reordered: `run --all --cores N` on a multi-sample object built a
+        # wave of instances declaring many times N cores, scaled EVERY instance to 1, and ran velocity
+        # single-threaded on an N-core allocation - while `plan --cores N`, which filters first,
+        # printed a multi-core share for velocity for the same command. Two documents of one run disagreeing is how
         # it was found; then a review found the reorder had covered only two of the five filters,
         # while the document it added claimed all of them.
         staged = []
@@ -965,7 +965,7 @@ def _run(a):
         # the instance its core share and nothing about its memory. A plugin that partitions
         # its allocation could only guess, and one of them did: it sized a worker pool from
         # `ctx.cores` with no memory limit, dask divided the machine's memory by that count,
-        # and the workers spent 86% of their CPU in garbage collection while 124 GB of the
+        # and the workers spent most of their CPU in garbage collection while most of the
         # job's own allocation sat unused.
         need = {}
         for inst, _k, _c in staged:
@@ -987,7 +987,7 @@ def _run(a):
             lbl = inst["plugin"] + (f"[{inst['unit']}]" if inst["unit"] else "")
             t0 = _time.perf_counter()
             # THE CODE IS READ AT THIS LAUNCH, not at the start of the run. If the tool directory
-            # moved underneath us - a `git pull` while a three-hour run is spawning instances -
+            # moved underneath us - a `git pull` while a long run is spawning instances -
             # everything after that point runs different code from everything before it, and the
             # run reports one commit for both. Refusing here turns a silent, unattributable
             # mixture into a loud failure naming the files that moved.
@@ -1050,7 +1050,7 @@ def _run(a):
             timings.setdefault(name, []).append(round(secs, 1))
             # ALSO ON THE INSTANCE. `timings` is keyed by plugin, and the report's schedule table
             # has one row per INSTANCE - so it rendered the plugin's whole runtime on every unit's
-            # row, reporting 10,000s of compute for 1,000s of work on a ten-unit plugin, and
+            # row, reporting many times the compute it did on a per-unit plugin, and
             # showing that time even on rows for units that never ran.
             inst["seconds"] = round(secs, 1)
             inst["outcome"] = "failed" if err else "ok"
@@ -1141,7 +1141,7 @@ def _run(a):
                 print(f"      caveat: {c}")
             if pl.get("status") in ("ok", "partial"):
                 # BY UNIT. `upstream[name] = kout` wrote once per instance under the plugin's
-                # name, so a ten-unit upstream left ONE directory - the last that SUCCEEDED, which
+                # name, so a per-unit upstream left ONE directory - the last that SUCCEEDED, which
                 # changes between runs as different units fail - and a downstream plugin read one
                 # sample as the cohort's result with nothing recording which.
                 upstream.setdefault(name, {})[inst["unit"]] = kout
@@ -1187,7 +1187,7 @@ def _run(a):
     #
     # `merged_slots` IS NOT THE TEST, and using it as one was the first version of this. A plugin
     # that ran and refused still gets an entry - {'obs': [], 'obsm': [], 'layers': []} - which is
-    # a truthy dict describing nothing. Cycle 2's repair job wrote 3.21 GB on the strength of it:
+    # a truthy dict describing nothing. Cycle 2's repair job wrote gigabytes on the strength of it:
     # velocity recovered from its environment failure, then refused for want of spliced counts, and
     # the run reported an object it had contributed nothing to. What matters is whether anything
     # LANDED - cell-level data merged into it, or tables and side-car objects written beside it
@@ -1229,8 +1229,8 @@ def _run(a):
             _basis.setdefault(_pl["kernel"], set()).add(_src)
     # A JOB-WIDE COUNTER IS NOT A SET OF POINTS ON A PER-INSTANCE CURVE. Every instance that
     # shared one job reports the SAME figure, so a fit over them is a horizontal line through
-    # one value repeated - which is exactly what "45.0 GB fixed + 0.0 GB/100k" was, from ten
-    # instances spanning about 7 to 12 thousand cells. The fit was not weak; it was measuring
+    # one value repeated - which is exactly what a large fixed cost and a zero rate was, from
+    # instances spanning a narrow range of cells. The fit was not weak; it was measuring
     # nothing, and it printed as a pair of numbers to copy into a declaration.
     #
     # DETECTED FROM THE DATA RATHER THAN PLUMBED THROUGH. Identical peaks at differing sizes is
@@ -1352,7 +1352,7 @@ def _run(a):
     # briefly only one. Widening the SET of bound plugins to include everything with a per-arm
     # section, while still computing the factors as an intersection with the plugin's CONTRAST
     # TERMS, gave every one of them an empty list: a plugin that does not test the design has no
-    # terms to intersect. Four pages went on showing results across age and diet with no
+    # terms to intersect. Pages went on showing results across the design's factors with no
     # constraint on them, and the binding looked as though it had been considered.
     _forbidden = set(inputs.constraint_binds(constraint,
                                              sorted((_run_facts.get("factors") or {}))))
@@ -1431,7 +1431,7 @@ def _run(a):
                # object as written, the host hands it a compatibility copy instead - the matrices
                # in the classic encoding, uns entries dropped BY NAME, obsp/varm/varp not carried.
                # That file is not `input`, and every result in this run came from it. It is kept
-               # for exactly that reason and named here, because 3 GB nobody can identify beside
+               # for exactly that reason and named here, because gigabytes nobody can identify beside
                # an output directory is debris rather than a record.
                "input_read_by_kernels": (str(readable.get("converted"))
                                          if readable.get("converted") else None),
@@ -1468,7 +1468,7 @@ def _run(a):
     # only when someone remembers to type a command is a baseline nobody can be held to.
     _record_capacity(out)
     # A RUN THAT RAN NOTHING IS NOT A RUN THAT RAN. Harness blind 0006's run: every one
-    # of 18 instances failed in a second for want of an environment, the report named it ("NO
+    # of its instances failed in a second for want of an environment, the report named it ("NO
     # OBJECT WRITTEN: no plugin ran"), and the seal said the opposite - SEALED, ok, exit 0,
     # "kernels ran, results merged, report written" - so whichever file a reader opened was the
     # answer. The report, the card and the capacity record above are still written, because they
@@ -2151,7 +2151,7 @@ def _plan(a):
     except Exception:                                                     # noqa: BLE001
         dtab, dfactors = None, []              # already reported above, as a refusal
     # THE PLAN SCHEDULES WHAT THE RUN WILL RUN. `plan` resolved units as samples while `run`
-    # resolved them from the design, so a plan promised ten instances and the run did fourteen.
+    # resolved them from the design, so a plan promised fewer instances than the run did.
     # A preview that disagrees with the action is the defect this project has already fixed
     # once, in the licence.
     _pax, _pwhy = _UNP.resolve(dtab or {}, sample_key=keys["sample"][0], samples=samples,
@@ -2622,10 +2622,10 @@ def _plan(a):
     # CONTAIN, from the design table and the declaration and with no run, since it was written -
     # and its only caller builds a page out of a finished run, so it was always read after the
     # compute it was meant to inform. It also consults one field, `report.unit_network`, which is
-    # the host's own panels: 84 files of 1187 on a real cohort.
+    # the host's own panels: a small share of a real cohort's files.
     #
-    # This is the other 1103. A specification a reader can argue with is worth having and is not
-    # the same as a number that can look wrong: 1187 figures for one plugin is obvious on a screen
+    # This is the rest. A specification a reader can argue with is worth having and is not
+    # the same as a number that can look wrong: an absurd figure count for one plugin is obvious on a screen
     # and invisible in a list of families. It is the design's own arithmetic - a declared ceiling
     # times the number of times its axis occurs - so a plan that disagrees with a run is a defect
     # in one of them, and measurable.
@@ -2692,8 +2692,8 @@ def _write_readme(out, payload):
     d = payload.get("describe") or {}
     ran = payload.get("ran") or []
     # `skipped` holds one entry per INSTANCE; `ran` holds one per PLUGIN. Counting one against the
-    # other printed "0 plugin(s) ran, 10 did not" for ONE ten-unit plugin, and "1 ran, 1 did not"
-    # for a plugin that ran on nine samples of ten and is listed under both headings.
+    # other printed "0 plugin(s) ran, N did not" for ONE plugin of N units, and "1 ran, 1 did not"
+    # for a plugin that ran on all but one of its samples and is listed under both headings.
     by_kernel = {}
     for s in (payload.get("skipped") or []):
         by_kernel.setdefault(s["kernel"], []).append(s)
@@ -2717,7 +2717,7 @@ def _write_readme(out, payload):
           f"Plugins that ran: {', '.join(ran) or 'none'}.", ""]
     if payload.get("input_read_by_kernels"):
         # WHAT THE PLUGINS ACTUALLY READ is not always what was passed in, and the README is the
-        # document somebody opens. A 3 GB file beside the results that no document admits to is
+        # document somebody opens. A large file beside the results that no document admits to is
         # not a record of anything.
         L += [f"The plugins did not read that file directly: their pinned anndata could not, so "
               f"they were given `{Path(payload['input_read_by_kernels']).name}` — the same "
@@ -3499,7 +3499,7 @@ def _review(a):
     print("  " + ", ".join(f"{n} {k}" for k, n in sorted(counts.items())))
     # A CARRIED LOOK IS A LOOK, here as in `outstanding` (harness ADR-0020): the count above
     # said reviewed (carried) and this list said "not looked at ... Open each one" of the same
-    # fifty-six figures on the second rerun.
+    # figures on the second rerun.
     todo = [(r, st, w) for r, st, w in rows if st not in (RV.REVIEWED, RV.CARRIED_OK)]
     # THE ONE SELECTION IS THE LIST (harness ADR-0017; found by a looker in docs/blind/0004):
     # asked for its plugin's status, an agent was handed every unreviewed figure of the run -
@@ -3832,7 +3832,7 @@ def _measured(run, declare=None):
                       f"ceiling was wrong; lower it on purpose with the maker's --set")
             try:
                 write_memory_terms(k.path, new_base, new_rate,
-                                   note=f"measured in {Path(run).name}, +{pct}%"
+                                   note=f"measured: fitted as baseline + per-cell over a run's instances, +{pct}%"
                                         + ("; the envelope over earlier runs" if kept else ""))
             except DeclarationError as e:
                 print(f"scprofile: REFUSED - {e}", file=sys.stderr)
@@ -3914,7 +3914,8 @@ def _cores_gate(run, declare=None):
                 print(f"scprofile: no plugin named {name!r} in this tree", file=sys.stderr)
                 return REFUSE
             try:
-                write_declared_scalar(k.path, "cores", want, note=f"measured in {Path(run).name}")
+                write_declared_scalar(k.path, "cores", want,
+                                      note="measured: the sustained use (CPU over wall) of a run's instances")
             except DeclarationError as e:
                 print(f"scprofile: {e}", file=sys.stderr)
                 return REFUSE
@@ -3974,7 +3975,8 @@ def _cost_gate(run, declare=None):
                 print(f"scprofile: no plugin named {name!r} in this tree", file=sys.stderr)
                 return REFUSE
             try:
-                write_declared_scalar(k.path, "cost", str(band), note=f"measured in {Path(run).name}")
+                write_declared_scalar(k.path, "cost", str(band),
+                                      note="measured: the median wall time per 100,000 cells of a run's instances")
             except DeclarationError as e:
                 print(f"scprofile: {e}", file=sys.stderr)
                 return REFUSE
@@ -4101,7 +4103,7 @@ def _promised(run):
     lit = 0
     for name, ndec, nfile, gaps, decl, files, own in rows:
         # THE HOST'S OWN PANELS ARE NOT THE PLUGIN'S LITTER. They are filed as `<plugin>_<fid>`
-        # beside the plugin's, and a first version of this reported eighty-four of them as
+        # beside the plugin's, and a first version of this reported every one of them as
         # unaccounted for - the check was right and was not told what the host draws.
         acc = set(own) | {f"{name}_{h}" for h in host_ids}
         extra = _N.undeclared(decl, files, ids=acc)
@@ -4229,7 +4231,7 @@ def _capacity(a):
 def _cache(a):
     """Report the reuse cache, and clear it on request.
 
-    A CACHE WITH NO SIZE AND NO OFF SWITCH IS A LIABILITY. This one reached 5 GB unremarked,
+    A CACHE WITH NO SIZE AND NO OFF SWITCH IS A LIABILITY. This one reached gigabytes unremarked,
     with no way to see what was in it or to remove it except by knowing where it lives. It is
     disposable by construction - everything in it is rebuildable and rebuilding is the only cost
     of deleting it - which is exactly why it needs a stated size rather than silent growth.
@@ -4324,7 +4326,7 @@ def main(argv=None):
     # while the children do not, so the log reads in an order the run did not happen in.
     #
     # Measured on a cluster install: `--force: removing <prefix>` was still sitting in the buffer
-    # while conda's solve scrolled past it, so the only evidence that a 3 GB directory had been
+    # while conda's solve scrolled past it, so the only evidence that a large directory had been
     # deleted arrived after the thing that followed it - and the first reading of that log was that
     # the removal had not happened. Four call sites had already been patched with `flush=True` one
     # at a time; this is the general form of the same fix.
@@ -4668,8 +4670,10 @@ def main(argv=None):
                           "only when the declaration is that band or a dearer one")
     cp_.add_argument("--declare", metavar="PLUGIN", default=None,
                      help="with --memory, --cores or --cost: write the measured value into that "
-                          "plugin's own declaration and read it back. The stage's apply; "
-                          "nothing is pasted by hand")
+                          "plugin's own declaration and read it back, with a note saying how it was "
+                          "measured. Which run measured it is printed, for the cohort's record, and "
+                          "never written into the plugin (rule 1). The stage's apply; nothing is "
+                          "pasted by hand")
     cp_.add_argument("--promised", action="store_true",
                      help="instead: which upstream plots this run's plugins DECLARE they draw and "
                           "produced no file for, anywhere in the run")
@@ -4705,7 +4709,7 @@ def main(argv=None):
     # THE PLUGIN'S ENVIRONMENT IS NEEDED TO REBUILD, not only to run. The reporter invokes a
     # plugin's `compare(ctx)` phase in the plugin's own interpreter; without a prefix that
     # interpreter does not resolve, the phase is skipped, and a rebuild QUIETLY DROPS every
-    # comparison figure the wrapped tool had drawn - on this cohort, 266 of them, replaced by
+    # comparison figure the wrapped tool had drawn - every one of them, replaced by
     # nothing and recorded as nothing.
     p.add_argument("--prefix", type=Path,
                    help="the environment root the plugins were installed into. Without it a "

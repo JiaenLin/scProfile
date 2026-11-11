@@ -85,10 +85,13 @@ In order of preference:
 
 - **A check that fails on the defect.** Written so that reintroducing the bug fails it —
   demonstrate that, do not assume it. A check that was never seen to fail proves nothing.
-- **What it cost, in the code.** One or two sentences at the fix, with the measurement: *"11 of
-  18 units", "266 figures", "57.5 against 23.3"*. A comment that says what the code does is
-  worth little; one that says what happened without it survives the next person's judgement
-  about whether the guard is needed.
+- **What it costs, as the method's property.** One or two sentences at the fix saying what
+  happens without it - *"every unit's call fails and the run-level count says nothing"*, *"a
+  pooled fit hides the arm that disagrees"* - so the next person can judge whether the guard is
+  needed. A comment that says what the code does is worth little. **A cohort's measurement is
+  not the method's property:** its unit and figure counts, sizes, times and run names live in
+  the cohort's record (its RUNLOG, its sealed run), which a comment may point to by kind and
+  never quote. The tool carries no cohort's numbers (rule 1).
 
 ### What a minimal fix is not
 

@@ -299,8 +299,8 @@ R_DRAW = r'''# __NAME__ - the host-to-plugin drawing protocol, in R.
 # Ordered, because a plotting function takes a colour vector POSITIONALLY against the object's
 # factor levels and any other order colours the wrong populations. NAMED, because some upstream
 # functions refuse an unnamed one outright while others accept it either way - so the vector
-# satisfies the stricter of them. Dropping the names once cost 36 circle plots across 18 units in
-# one run, and the per-unit tallies reported the failure while the run-level count said nothing.
+# satisfies the stricter of them. Dropping the names makes every such call fail, on
+# every unit, and the per-unit tallies report the failure while the run-level count says nothing.
 #
 # Returns NULL when the host gave no map or when any level is unmapped, because a partial vector is
 # worse than none: the plotting function would recycle it silently.
@@ -315,7 +315,7 @@ R_DRAW = r'''# __NAME__ - the host-to-plugin drawing protocol, in R.
 
 # A PHASE CLOCK, DEFINED AT THE TOP BECAUSE R DOES NOT HOIST. Twice the cost of a round has been
 # diagnosed by assumption and been wrong: the inference was assumed dominant and was not, then the
-# matrix write was, and it takes one to five seconds. Guessing where a run spends its time is what
+# matrix write was, and it was not either. Guessing where a run spends its time is what
 # makes every round of development expensive, so the run measures itself.
 #
 # t0 IS ZERO, NOT "NOW". `proc.time()` elapsed is measured from the moment R STARTED, so anchoring
