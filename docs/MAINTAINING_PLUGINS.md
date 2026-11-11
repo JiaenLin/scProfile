@@ -132,27 +132,41 @@ between the declaration's quotes is code otherwise. Once written, the record che
 failure puts plugin and record back. It is made on a committed file and recorded in
 `kernels/<plugin>.design.json` like a design answer, as `kind: prose`.
 
-**What a record keeps.** Only the lines an answer wrote; every other line is named by its digest,
-and no answer keeps a copy of the declaration. The record check reads each answer's file before
-back from git at the commit it was made on (`made_on`), applies the diff, checks both digests and
+**What a record keeps.** No text of the plugin. Every line an answer's diff names - context,
+removed and the lines it wrote - is named by its digest, and no answer keeps a copy of the
+declaration (harness autodev W035, fix round 2: a line an answer wrote stayed in its row after a
+later answer took it out of the plugin). The record check reads each answer's file before back
+from git at the commit it was made on (`made_on`, a full commit id, never a ref), reads each line
+it wrote back from the file that follows it - the file the next answer was made on, from git, or
+the shipped file; its version line from the answer's own `version` - checks both digests and
 admits the change again by its rule; the shipped file, and each answer's file before, must meet
 the answer before it outside the declaration, which is `sch dev edit`'s to change at any point.
-So a leak taken out of a plugin, by `prose`, `design --answer` or `sch dev edit`, does not move
-into or stay in its record. The maker drops the declaration copy an older record kept whenever it
-writes that record. Two answers predate this: de's, made in W013 on files that were never
-committed, so they keep their full diffs and the declaration they left; they carry no cohort or
-site string. A design answer too is made on a committed file now. Then the `plan.after_edit`
+An answer whose diff carries a line as text fails the check, so a record that passes holds none:
+a leak taken out of a plugin, by `prose`, `design --answer` or `sch dev edit`, does not move into
+or stay in its record. The maker rewrites every such answer in this form whenever it writes a
+record, and a verb checks the record in the form it is about to write. Two answers predate this:
+de's, made in W013 on files that were never committed, so they keep their full diffs and the
+declaration they left; they carry no cohort or site string. A line an answer wrote that a
+declaration edit then changes before the next answer is made (a trailing comment on a value's
+line) is in no file that follows it, and the check fails closed, naming the line: commit an
+answer before editing its declaration. Then the `plan.after_edit`
 followers run, the
 same list `sch dev edit` runs (`--no-follow` prints them instead). The record needs an anchor in
 DEVPOINTS (`rules.held_out.spent` for a spent plugin, `rules.end_to_end.anchor` for cellchat), so
 a held-out plugin is refused until its own migration.
 
 **A value measured on a sample is the sample's.** A sentence in a plugin, string or comment, that
-says what was measured on (or observed in) a sample, cohort, dataset, donor or animal and carries
-a number is that sample's data, which no tool carries and no generated term list holds: a list
-holds names and levels, not values a run computed. `scprofile validate` - every verb's first
-follower - refuses one in a plugin DEVPOINTS anchors, and reports one in a held-out plugin, which
-changes only in its own migration. Say what the run measures and where it shows it.
+says a value was measured on (or observed in, across, over) a stated sample, cohort, run, dataset,
+donor or animal - "on the rerun", "on a real cohort", "on one sample", "across two donors" - and
+carries a number is that sample's data, which no tool carries and no generated term list holds: a
+list holds names and levels, not values a run computed. `scprofile validate` - every verb's first
+follower - reports one as a WARN, never an ERROR, on every plugin: it is a heuristic, and an ERROR
+would refuse every run of the plugin (`scprofile run` validates first). A method's own rule
+("observed in at least 10% of the cells of a sample", "measured across samples"), a cited source
+(an author and year, a benchmark), and a reference, shipped or synthetic dataset are not one. What
+it cannot know: a run's counts with no provenance words ("all 40 tables", "on all 7 units", "2.5
+GB over 30 objects") have the form of a method's own numbers, and are review's to find. Say what
+the run measures and where it shows it.
 
 Three declarations a plugin owes the maker's readings: `produces` in the grammar its readers
 read (a table by name, `slot[name]`, a trailing `?` for an optional output); `cache` naming the

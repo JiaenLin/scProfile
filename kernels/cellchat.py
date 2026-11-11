@@ -53,7 +53,7 @@ the delivered file, not from the vignette.
 **`prob` IS RELATIVE AND THAT IS THE SINGLE MOST CONSEQUENTIAL ROW.** It is computed over the
 cells present in the object being scored, so two units' `prob` columns are on two scales. Every
 panel drawn from it compares WITHIN a unit and rank-orders across units, and no panel may put
-two units' probabilities on one axis. Measured on one unit: 0.000308 to 0.2316, median 0.0115.
+two units' probabilities on one axis.
 
 **`pval` HAS FIVE VALUES.** At `nboot = 100` and `thresh = 0.05` the delivered column is exactly
 {0, 0.01, 0.02, 0.03, 0.04}. It cannot rank and it cannot be corrected as though continuous.
@@ -102,7 +102,7 @@ PLUGIN = {
     # to verify, which this room cannot do. Still no number changes: every edit is presentation.
     # 0.32.0: the third answer, blind8 - 22 kinds owned by this plugin or its tool plate (3 HOST
     # kinds skipped, fixed in the mechanism) plus a 23rd item off the worksheet: the maker's
-    # `cores` gate, measured sustained 2.67 cores on a share of 4 with one-second bursts to 58.7.
+    # `cores` gate, set from a real run's sustained use, whose own record keeps the figures.
     # WHERE A FIRST EDIT HAD ALREADY BEEN TRIED AND THE EYE STILL NAMED THE SAME THING, a
     # different lever was reached for rather than the same one turned again: F10's label crowding
     # was a SPATIAL problem (labels sat in the same cluster) and cutting the count further would
@@ -185,12 +185,12 @@ PLUGIN = {
     # coloured below the first tick, off the labelled scale, naming which colour is which
     # direction. The roster sentence from 0.38.0 is kept on both. Eleven `--stated` records close
     # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
-    "version": "0.45.0",
+    "version": "0.46.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
-    # rises when the same inputs would give different output. Its reproduction job gave all 90
-    # numeric tables byte-identical, and a direct compare against the run before the change put
-    # 386 of 404 tables byte-identical - the 18 that differ are `cellchat_net_embedding.csv`,
-    # which differs between any two runs because the UMAP is not seeded.
+    # rises when the same inputs would give different output. Its reproduction job gave every
+    # numeric table byte-identical, and a direct compare against the run before the change put
+    # every table byte-identical but each unit's `cellchat_net_embedding.csv`, which differs
+    # between any two runs because the UMAP is not seeded. The run's own record keeps the counts.
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
@@ -371,15 +371,15 @@ PLUGIN = {
         # `netEmbedding(..., umap.method = "umap-learn")`, at three sites. It was never declared
         # and worked anyway for as long as this plugin shared an environment with a stack that
         # pulls it in transitively. Alone, `netVisual_embedding` and `netVisual_embeddingZoomIn`
-        # drew nothing on any of 18 units and the run still sealed. `sch dev convert borrowed`
+        # drew nothing on any unit and the run still sealed. `sch dev convert borrowed`
         # names it; `capacity --promised` is what noticed the panels were gone.
         # LOADED AT 25 SITES AND DECLARED BY NOBODY UNTIL NOW. `sch dev convert borrowed` reports
         # it as this plugin's own import; what it could not report is which VERSION, because that
         # was decided by the neighbours. Six of the eight plugins that shared this environment
         # pin numpy below 2, so cellchat ran on 1.26.4 for its whole life; unplugged it resolved
         # to 2.5.3 and crossed a major version with nothing declaring that this was allowed. The
-        # range is what there is evidence for: the sealed reference produced its 90 numeric
-        # tables on 1.26.4, and its reproduction on 2.5.3 gave all 90 byte-identical.
+        # range is what there is evidence for: the sealed reference produced its numeric
+        # tables on 1.26.4, and its reproduction on 2.5.3 gave every one byte-identical.
         "packages": {"anndata": ">=0.12,<0.13", "pandas": ">=2.0,<3", "scipy": ">=1.10",
                      "matplotlib": ">=3.7,<4", "umap-learn": ">=0.5,<0.6",
                      "numpy": ">=1.24,<3"},
@@ -419,7 +419,7 @@ PLUGIN = {
             # `R CMD INSTALL` never refused, because CellChat builds fine without it. Only
             # `plotGeneExpression` needs it, at draw time. In the shared directory it was present
             # anyway, built from source on 2026-08-30 by something that was not this declaration;
-            # alone, that panel failed on all 18 units with "there is no package called Seurat"
+            # alone, that panel failed on every unit with "there is no package called Seurat"
             # and the run sealed exit 0. A Suggests this plugin actually calls is a dependency.
             "r-seurat": "",
             "r-shape": "", "r-patchwork": "", "r-plyr": "", "r-ggpubr": "", "r-ggnetwork": "",
@@ -432,8 +432,8 @@ PLUGIN = {
 
     "cost": "high", "cores": 2,  # measured in 20260913T170934Z__scprofile-7c188a4__04_profile__rerun
 
-    # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
-    # Fitted from ten per-sample instances.
+    # Measured, not estimated: fitted from this plugin's own instances in one run on one real cohort, named on the line below. ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
+    # Fitted from that run's per-sample instances.
     "memory_gb_base": 3.2, "memory_gb_per_100k": 14.3,  # measured in 20260915T084449Z__scprofile-dc9bb46__04_profile__rerun, +10%; the envelope over earlier runs
 
     # WHAT ITS PAGE SHOULD CONTAIN. Three checks then two answers, and the order is the whole
@@ -584,7 +584,7 @@ PLUGIN = {
         #   conclusion  the interaction: the difference of two differences, which is the thing
         #               a 2x2 design exists to reach
         #   appendix    drawn, kept, placed on the pages, reviewable - and no result is written
-        #               from it: per-unit description for eighteen units, per-pathway and
+        #               from it: per-unit description for every unit, per-pathway and
         #               per-population detail, and the ten diagnostic plates
         #
         #   `profile: True` marks the tool's own per-unit plots a reference unit is described by
@@ -597,7 +597,7 @@ PLUGIN = {
         #   `at_most` on a per-item family is FILES PER OCCURRENCE OF THE AXIS - eight chord
         #   diagrams per contrast, four pathways in each arm, and P16 of the reproduction asks
         #   for exactly eight; `netAnalysis_signalingChanges_scatter` was the one loop that was
-        #   genuinely unbounded, 62 panels on this cohort and 240 on one with forty populations.
+        #   genuinely unbounded: its panel count grows with the populations.
         #   `generated: False` is `estimationNumCluster`: CellChat's NMF rank estimation writes
         #   it while the plugin is clustering pathways - nobody's panel, declared so the
         #   accounting is true, and no site is generated for it.
@@ -901,8 +901,8 @@ PLUGIN = {
                 'legend': 'Each population is placed by how much inferred signalling it sends (horizontal) against how much it receives (vertical), for this unit alone. Both axes are scaled to this unit\'s own data and are not matched to any other unit\'s copy of this plot, so a point\'s position cannot be read against the same point on another unit\'s version without checking both axes\' ranges. Distance from the diagonal is how one-sided a population is. Point size is the number of inferred links. Nothing here is a comparison and nothing is tested. Text labels are placed by an automatic label-repel step that can still set a label directly on its own point when several populations sit close together; label size has already been lowered once for a different crowding defect on this same panel, and a further reduction was found not to move a label off the point it sits on, so this is the automatic placement rather than an omission reachable through this call\'s own arguments.',
             },
             # THE SIZE LEGEND MUST BE SHARED TOO. With shared axes but per-panel size scales the two panels
-            # read as comparable and are not: measured on one pair, the left legend ran to 500 and the
-            # right to 150, so an identical dot meant three times the count on one side. Found by opening
+            # read as comparable and are not: on a real pair the two legends ran to different maxima,
+            # so an identical dot meant a different count on each side. Found by opening
             # the figure - no metric reports it.
             {
                 'id': 'nativecmp_signalingRole_scatter_pair',
@@ -1073,7 +1073,7 @@ PLUGIN = {
                 'args': 'm, comparison = c(1, 2), angle.x = 90, remove.isolate = TRUE, font.size = 6, font.size.title = 9, title.name = paste("every enriched pair -", name_a, "against", name_b)',
                 'legend': 'Every enriched ligand-receptor pair, {name_a} against {name_b}. Rows are pairs, columns are sender to receiver within each arm; colour is the communication probability and dot size is the permutation p-value, so size is confidence and not strength. Pairs with nothing to show in either arm are dropped, so an absent row was not tested and found empty. The dot colour key\'s own minimum and maximum labelling is fixed by the underlying routine and is not an argument this call exposes to change, and the wrapped column labels are sized by a canvas-width formula of twenty pixels of device per column at the six-point font already used here, enough to clear a collision a narrower canvas once produced; the column count is set by the page design rather than by this panel, so enlarging the font again would shrink that same margin back toward the overlap it was written to remove.',
             },
-            # THE PATHWAY AXIS NEEDS ROOM. At the default height about forty pathway labels were drawn
+            # THE PATHWAY AXIS NEEDS ROOM. At the default height a long roster of pathway labels was drawn
             # into the same span and overprinted into an illegible block; the heatmap body also sat
             # small in the middle of a large canvas. `height` is CellChat's own argument for the body.
             {
@@ -1182,7 +1182,7 @@ PLUGIN = {
                 'h': 1700,
                 # THE LEGEND NAMED THE WRONG PANEL. `netVisual_barplot` draws ONE BAR PER
                 # POPULATION - CellChat's own title on it, seen on a real run, is literally
-                # "Differential number of interactions" over eleven cell-state bars - not one bar
+                # "Differential number of interactions" over one bar per cell state - not one bar
                 # per arm; that description belongs to `compareInteractions` a few entries below,
                 # and reads as though it had been copied from there. Corrected to what the
                 # function actually draws, and the axis/title now say which arm was subtracted
@@ -1374,7 +1374,7 @@ _MEAN_TYPES = {"triMean": 0.25, "truncatedMean": None, "thresholdedMean": None}
 #:
 #: *A pair was a COLUMN until the panel was transposed, and the reason it had to be is the reason
 #: this constant is small: a pair of annotation paths is the longest label on the page, and as a
-#: rotated column label fifteen of them took half the height of the figure.*
+#: rotated column label a full roster of them took half the height of the figure.*
 _DOT_PAIRS = 15
 
 # THE DRAWING PROTOCOL AND THE PLAN ARE GENERATED, NOT WRITTEN HERE. `kernels/cellchat.draw.R`
@@ -1445,11 +1445,11 @@ cat("database:", nrow(d), "interactions,",
 #: `future::plan()` DID NOT NEED TO CHANGE, AND CHANGING IT BROKE EVERY LARGER UNIT. Setting it
 #: to `multisession` was meant to bound something CellChat might parallelise; instead it switched
 #: CellChat itself from its default SEQUENTIAL plan to worker processes, and `computeCommunProb`
-#: then shipped the whole object to each worker - measured on the rerun, 12 of 18 instances
-#: refused past `future`'s own 500 MiB global-export limit, the six smallest fit under it and the
-#: twelve larger did not, and every one of the finished instances carried a new "UNRELIABLE
+#: then shipped the whole object to each worker - on the rerun, every instance whose object was
+#: larger than `future`'s own 500 MiB global-export limit refused past it, only the smallest fit
+#: under it, and every one of the finished instances carried a new "UNRELIABLE
 #: VALUE" warning about the random number stream that was not there before. Before this plugin
-#: touched the plan, every one of the 18 ran. The plan is now set BACK to sequential, explicitly,
+#: touched the plan, every instance ran. The plan is now set BACK to sequential, explicitly,
 #: rather than left to whatever a future call elsewhere in the session may have set - "restored"
 #: and "asserted" read the same on the page and are not the same claim.
 #:
@@ -1539,8 +1539,8 @@ profile_plots <- if (length(args) >= 13 && nzchar(args[13]))
 # WHAT HAPPENED BEFORE THE FIRST MARK IS STILL COST. The clock started at the top of the script
 # and the first phase recorded was the matrix read, so interpreter start-up and loading CellChat
 # and its dependencies were charged to nothing - and a cohort's cput then exceeded the sum of its
-# phases by an amount nobody could attribute. It is not a large share per unit; it is eighteen
-# units of it, and an unattributed remainder is indistinguishable from a phase that is lying.
+# phases by an amount nobody could attribute. It is not a large share per unit; it is paid
+# once per unit, and an unattributed remainder is indistinguishable from a phase that is lying.
 mark("start up and load the library")
 X <- as(Matrix::readMM(mtx), "CsparseMatrix")
 mark("read the matrix")
@@ -1551,9 +1551,9 @@ colnames(X) <- rownames(meta)
 # ---------------------------------------------------------------------------------------------
 # THE INFERENCE IS EXPENSIVE AND WAS THROWN AWAY EVERY TIME. This script computed the CellChat
 # object, wrote a table out of it and exited, so the object itself never survived - and every
-# change to a FIGURE cost a full re-inference: measured at 2 minutes 41 seconds and a 7.5 GB peak
-# per unit, on an expression matrix of 173 MB written to disk to feed it, times fourteen units.
-# Roughly forty minutes of compute discarded to redraw a plot.
+# change to a FIGURE cost a full re-inference of every unit, each with its expression matrix
+# written to disk to feed it: the inference's whole cost, discarded to redraw a plot. What that
+# cost on a real run is in that run's own record, not here.
 #
 # So the object is saved, and reused when the INFERENCE inputs are unchanged. The guard is a
 # digest of the things that actually determine the object - the expression matrix, the metadata,
@@ -1636,7 +1636,7 @@ if (is.null(cc)) {
 # --- RECIPE START --- everything between these two markers determines the SAVED OBJECT, and the
 # cache stamp hashes exactly this span. Hashing the whole script instead was correct and far too
 # blunt: a figure title, a legend, a colour - none of which the object has ever heard of -
-# invalidated eighteen fitted objects and bought a two-and-a-half hour re-inference. Under-
+# invalidated every fitted object and bought a full re-inference. Under-
 # invalidating is a wrong answer; over-invalidating is a workflow that stops being used, and the
 # reuse this cache exists for is spent on edits that cannot change what it holds. Move a line
 # that alters the object INSIDE these markers, or the stamp will not see it.
@@ -1726,8 +1726,8 @@ if (.from_cache) {
 }
 
 # EVICT ONLY WHAT NOTHING HOLDS. The store keeps one generation per stamp and dropped none, so
-# it grew by a full set of objects on every change of version, parameter or input - measured at
-# 3.07 GB over 54 objects for eighteen units, three generations deep.
+# it grew by a full set of objects on every change of version, parameter or input: one object
+# per unit for every generation it kept.
 #
 # The safe rule needs no registry, because the filesystem already knows who holds what: a run
 # keeps a HARD LINK to the object it read, so an entry whose object has ONE link is referenced by
@@ -1837,7 +1837,7 @@ if (!is.na(pw)) {
   # current device, which is what this script already provides. Going through `netVisual` was
   # the mistake: that function opens and closes its OWN device, sized from the pathway's
   # ligand-receptor count, and failed with "unable to start device 'png'" depending on which
-  # pathway led a given unit - 11 of 18 units - while writing its files into the
+  # pathway led a given unit, while writing its files into the
   # working directory. These two are the functions the accounting names, so calling them
   # directly is also the more honest route.
 
@@ -1853,7 +1853,7 @@ if (!is.na(pw)) {
   # it takes a Seurat object, and `plotGeneExpression` above is the CellChat entry point that
   # builds one and calls it - measured in CellChat's own source, `gg <- StackedVlnPlot(w10x, ...)`.
   # Calling it on a CellChat object fails with "no applicable method for 'Idents'", which is
-  # what it did on all eighteen units. Declared `duplicate_of` plotGeneExpression.
+  # what it did on every unit. Declared `duplicate_of` plotGeneExpression.
 }
 
 # COMMUNICATION PATTERNS. `k` IS FIXED AT 3 AND IS NOT CHOSEN FROM THE DATA. CellChat asks the
@@ -3690,7 +3690,7 @@ def _fig_similarity(ctx, pre):
     # looking. Radial offset is the one direction that stays free inside a cluster.
     # ONLY THE HIGHEST-FLOW PATHWAYS ARE LABELLED, and the caption says how many. Radial offset
     # alone was tried and looked at: it separates a round cluster and does nothing for the
-    # near-collinear chains this similarity produces, so twenty-four labels overprinted each
+    # near-collinear chains this similarity produces, so the labels overprinted each
     # other and ran off the axes. A panel that labels everything illegibly names nothing. Every
     # pathway keeps its coordinates in the source table, so nothing is lost but the clutter.
     # EIGHT, NOT TWELVE. The drawing audit named three label collisions here, each a pair of
@@ -3891,8 +3891,8 @@ def run(ctx):
 
     # ---------------------------------------------------------- the scoring
     # THE MATRIX IS CACHED TOO, and it is the larger cost of the two. MatrixMarket is a TEXT
-    # format: this unit's matrix is 1,382 MB of it, and writing it dominated a run that had
-    # already skipped the inference - a cache hit still took 386 seconds. What determines the
+    # format: a unit's matrix is large as text, and writing it dominated a run that had
+    # already skipped the inference: a cache hit still paid for the whole write. What determines the
     # file is the object, the unit and the label column, none of which a code change touches.
     import hashlib as _hl
     import os as _os
@@ -3909,8 +3909,8 @@ def run(ctx):
     # a stale label file would have been served. That is a wrong answer, not a slow one, and it
     # is the failure a cache has to be built against.
     #
-    # Hashing the sparse buffers costs about a second on this data and is far cheaper than
-    # rewriting 1.4 GB of text. `_MATRIX_FORMAT` is bumped whenever this function changes HOW it
+    # Hashing the sparse buffers is far cheaper than
+    # rewriting the matrix as text. `_MATRIX_FORMAT` is bumped whenever this function changes HOW it
     # writes the files, because otherwise a cache written by older code is served to newer code
     # that expects something else.
     _Xk = Xc.tocsr()
@@ -4702,7 +4702,7 @@ for (pw in paths) {
   .draw("nativecmp_aggregate_circle")
   # ONE CHORD PER FILE. circlize draws into a whole device and does not share one with
   # `par(mfrow)`; two in one device failed every time with "not enough space for cells at track
-  # index 2". Thirteen long labels also need the gaps and label size set rather than left at
+  # index 2". A roster of long labels also needs the gaps and label size set rather than left at
   # defaults tuned for short names.
   for (i in seq_along(object.list))
     .draw("nativecmp_chord_cell")
@@ -4900,8 +4900,8 @@ for (ms in c("count", "weight")) {
       # THE VALUE LABEL IS ADDED LAST, ON PURPOSE - a layer added later draws on top in ggplot2,
       # and this one was added right after the bars, before the per-sample points above. A
       # jittered point at a rounded value close to its own bar's total then sat over the digits
-      # and hid them - measured on a real run, both bars that rounded to '0.8' had their leading
-      # zero covered by a replicate circle. Moved here, after every point, so nothing drawn
+      # and hid them - on a real run, a bar's leading zero was covered by a
+      # replicate circle. Moved here, after every point, so nothing drawn
       # earlier can cover it; the label's own definition (position, size) is unchanged.
       # TWO DECIMAL PLACES, NOT ONE. Found on a real run: two arms whose per-1,000-cell values
       # were close but visibly different in bar height rounded to the identical printed "0.8" at
@@ -4948,8 +4948,8 @@ if (!is.null(inter) && nrow(inter)) {
   #
   # `rankNet` in comparison mode fails outright when the two objects carry different numbers of
   # cell groups - "number of items to replace is not a multiple of replacement length" - and the
-  # matrix subtraction below fails for the same reason. Measured: two of this design's four arms
-  # held 10 populations and two held 12, so the framing whose strata paired a 10 with a 12 failed
+  # matrix subtraction below fails for the same reason. Measured: two of a design's four arms
+  # held fewer populations than the other two, so the framing whose strata paired unequal arms failed
   # while the framing that paired like with like succeeded, and only half the interaction was
   # drawn. The heatmaps failed silently, which is worse than failing loudly.
   #
@@ -5139,7 +5139,7 @@ if (!is.null(inter) && nrow(inter)) {
     # THE INTERACTION MATRIX IS THE SAME MATRIX IN BOTH FRAMINGS, AND BOTH FRAMINGS DRAW IT.
     #
     # Measured, not assumed: the two orientations agreed to 1e-15 on every cell of every metric,
-    # and the interaction column of the ligand-receptor table was identical for all 18 pairs. The
+    # and the interaction column of the ligand-receptor table was identical for every pair. The
     # algebra says why - with the four arms fixed, (b1 - a1) - (b2 - a2) and (a2 - a1) - (b2 - b1)
     # are one expression rearranged, so a difference of differences has no orientation.
     #

@@ -234,9 +234,12 @@ else:
         ck("and the statement it answered is answered", not V.design_sites(k)["owes"])
         rec = json.loads(V.design_record_path(k).read_text(encoding="utf-8"))
         ans = rec["answers"][0] if rec["answers"] else {}
+        # the diff names every line by its digest, the lines it wrote too (W035 fix round 2)
         ck("the record carries the diff, the reason and the sites",
            ans.get("sites") == ["statement:13"] and ans.get("why") == "it is contrasted"
-           and "+        # the interaction is contrasted" in ans.get("diff", ""), ans)
+           and "+" + V.REDACTED + V._sha("        # the interaction is contrasted\n")
+           in ans.get("diff", "") and "the interaction is contrasted" not in ans.get("diff", ""),
+           ans)
         copy = Path(td) / "copy.py"
         copy.write_text(base, encoding="utf-8")
         ck("replayed onto the file it was made against, the record rebuilds the plugin exactly",

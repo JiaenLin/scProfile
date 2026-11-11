@@ -26,8 +26,16 @@ local clone of this repository:
      `design --answer`, and nothing is written; a design answer is made on a committed file too;
   7. a record keeps no text an edit took out and no copy of the declaration, and a declaration
      edit between two answers - `sch dev edit`'s - keeps the chain the record check walks;
-  8. a sentence saying what was measured on a sample, with a number, is refused by `validate` on
-     a plugin the maker owns (`sample_values`), and the shipped cellchat states none.
+  8. a sentence saying what was measured on a sample, with a number, is found by `validate`
+     (`sample_values`), and the shipped cellchat states none.
+
+W035's FIX ROUND 2 (the re-check's findings), each failing on 94aa7cf:
+  9. a record holds no text of the plugin - every row of a recorded diff, the lines an answer
+     wrote too, is a digest read back from git - so a value written, reworded and then taken out
+     is in no row; a removed line beginning `-- ` is a row; a record carrying text is refused;
+ 10. `sample_values` is a WARN that never refuses a run, and names only a sentence that states
+     its sample: five true sentences pass, one run's counts with their provenance are found;
+ 11. a version is ASCII digits, and an answer names its commit by its id, never by a ref.
 """
 import hashlib
 import io
@@ -186,10 +194,13 @@ with tempfile.TemporaryDirectory() as td:
     ck("the version is the maker's minor bump", '"version": "0.2.0"' in after1, after1[:200])
     rec = V._read_record(k)
     a = (rec.get("answers") or [{}])[-1]
+    # EVERY LINE BY ITS DIGEST, the lines it wrote too (fix round 2): the record check reads them
+    # back from the file that follows the answer.
     ck("recorded in the plugin's maker record, as prose, with its reason and digests",
        a.get("kind") == "prose" and a.get("why") == "a cohort's value and a job id out"
        and a.get("before") == V._sha(PLUG) and a.get("after") == V._sha(after1)
-       and "+# THE FIRST COMMENT, measured on a cohort" in a.get("diff", "")
+       and "+" + V.REDACTED + V._sha("# THE FIRST COMMENT, measured on a cohort\n")
+       in a.get("diff", "") and "measured on a cohort" not in a.get("diff", "")
        and len(a.get("made_on") or "") == 40, a)
     rc = V.prose_answer(k, [("# a comment on code", "# reworded")], "a second", root=td,
                         log=log.append)
@@ -216,9 +227,12 @@ with tempfile.TemporaryDirectory() as td:
     ok, said = V.design_record_check(k, root=td)
     ck("an edit the record does not hold - even a comment - fails the record check", not ok, said)
     k.path.write_text(shipped)
+    # the written row names its line by digest: the forger names the code line's digest instead
     d = raw["answers"][-1]["diff"]
-    raw["answers"][-1]["diff"] = d.replace("+    x = \"a plain string\"  # reworded",
-                                           "+    x = \"another\"  # reworded")
+    raw["answers"][-1]["diff"] = d.replace(
+        "+" + V.REDACTED + V._sha('    x = "a plain string"  # reworded\n'),
+        "+" + V.REDACTED + V._sha('    x = "another"  # reworded\n'))
+    ck("(the forger's row is in the record to replace)", raw["answers"][-1]["diff"] != d)
     V.design_record_path(k).write_text(json.dumps(raw))
     k.path.write_text(shipped.replace('x = "a plain string"', 'x = "another"'))
     raw["answers"][-1]["after"] = V._sha(k.path.read_text())
@@ -453,6 +467,137 @@ if HAVE8:
 r = cli("validate", "cellchat")
 ck("`scprofile validate cellchat` passes, naming no value measured on a sample",
    r.returncode == 0 and "measured on a sample" not in r.stdout, r.stdout[-600:])
+
+
+# W035's FIX ROUND 2: THE RE-CHECK'S FINDINGS, each failing on 94aa7cf.
+def rev_index(dst, commit):
+    """k with HEAD~k == commit in the clone, or None."""
+    revs = subprocess.run(["git", "-C", str(dst), "rev-list", "HEAD"], capture_output=True,
+                          text=True, env=GITENV).stdout.split()
+    return revs.index(commit) if commit in revs else None
+
+
+print("\n9. a record holds no text of the plugin: a value an answer wrote and a later answer "
+      "took out is in no row (fix round 2)")
+# Answer 3 reworded a line and kept a value, answer 4 removed it: the plugin had no copy left,
+# answer 3's written row still had one, and the record check said ok.
+VALUE = "4,242 cells"
+with tempfile.TemporaryDirectory() as td:
+    dst = clone_here(td)
+    ck("(a local clone of this repository, for the real CLI)", dst is not None)
+    if dst is not None:
+        src = (dst / "kernels" / "cellchat.py").read_text(encoding="utf-8")
+        line = next(x for x in src.split("\n") if x.strip().startswith("# ") and len(x) > 50
+                    and src.count(x) == 1)
+        steps = [(line, f"    # a value the test wrote: {VALUE}"),
+                 (f"    # a value the test wrote: {VALUE}", f"    # reworded, keeping {VALUE}"),
+                 (f"    # reworded, keeping {VALUE}", "    # reworded, without the value")]
+        rcs = []
+        for i, (old, new) in enumerate(steps):
+            r = cli("prose", "cellchat", "--replace", old, new, "--why", f"step {i + 1}",
+                    "--no-follow", cwd=dst)
+            rcs.append(r.returncode)
+            commit_all(dst, f"step {i + 1}")
+        rec = (dst / "kernels" / "cellchat.design.json").read_text(encoding="utf-8")
+        plug = (dst / "kernels" / "cellchat.py").read_text(encoding="utf-8")
+        ck("three prose answers: write a value, reword the line keeping it, take it out",
+           rcs == [0, 0, 0] and VALUE not in plug, (rcs, said(r)))
+        ck("the record holds no copy of the value (grep: 0)", rec.count("4,242") == 0,
+           rec.count("4,242"))
+        r = cli("design", "cellchat", cwd=dst)
+        ck("and the record meets the plugin (`scprofile design cellchat` exits 0)",
+           r.returncode == 0, said(r))
+        # A RECORD THAT CARRIES A LINE AS TEXT FAILS ITS CHECK: the maker never writes one.
+        import json
+        raw = json.loads(rec)
+        a1 = raw["answers"][-1]
+        a1["diff"] = a1["diff"].replace(
+            "+" + V.REDACTED + V._sha("    # reworded, without the value\n"),
+            "+    # reworded, without the value\n")
+        (dst / "kernels" / "cellchat.design.json").write_text(json.dumps(raw), encoding="utf-8")
+        r = cli("design", "cellchat", cwd=dst)
+        ck("a record whose diff carries a line as text is refused", r.returncode == 1
+           and "as text" in said(r), said(r))
+with tempfile.TemporaryDirectory() as td:
+    # A REMOVED LINE THAT BEGINS `-- ` IS A ROW, NOT A HEADER (a docstring line, here)
+    plug2 = PLUG.replace('"""The module\'s docstring."""\n',
+                         '"""The module\'s docstring.\n-- a dash line holding 4,242 cells\n"""\n')
+    k = repo(td, "demo", plug2)
+    log = []
+    rc = V.prose_answer(k, [("-- a dash line holding 4,242 cells\n", "")], "a dash line out",
+                        root=td, log=log.append)
+    rtext = V.design_record_path(k).read_text(encoding="utf-8") if rc == 0 else ""
+    ck("a removed line that begins `-- ` is named by its digest, not kept as a header",
+       rc == 0 and "4,242" not in rtext and "dash line" not in rtext, (log, rtext[-400:]))
+    ok, why = V.design_record_check(k, root=td)
+    ck("and the record check rebuilds it", ok, why)
+
+print("\n10. a value measured on a sample is a WARN, never a refused run, and the rule names only "
+      "a stated sample (fix round 2)")
+TRUE = {"a method rule":
+        "A gene counts as expressed when observed in at least 10% of the cells of a sample.",
+        "a published benchmark's numbers":
+        "In the published benchmark (Author et al., 2022), the method was measured on 16 "
+        "datasets and recovered 62% of the curated interactions.",
+        "the reference database's size":
+        "Observed in the shipped database, 1,280 of 3,379 mouse interactions are secreted.",
+        "a synthetic-fixture sentence":
+        "Measured on the synthetic fixture's two samples, the selftest recovers 100% of the "
+        "planted edges.",
+        "an FDR threshold":
+        "An edge is kept when its FDR, measured across samples, is below 0.05."}
+if hasattr(V, "sample_values"):
+    for what, s in TRUE.items():
+        ck(f"a true sentence passes - {what}",
+           not V.sample_values(f"# {s}\n") and not V.sample_values(f"x = {s!r}\n"))
+    ck("the form of one run's counts with its provenance is found: 'measured on the rerun, 5 "
+       "of 9 instances'", bool(V.sample_values(
+           "# then shipped the object to each worker - measured on the rerun, 5 of 9 "
+           "instances refused past the limit.\n")))
+with tempfile.TemporaryDirectory() as td:
+    dst = clone_here(td)
+    if dst is not None:
+        dsrc = (dst / "kernels" / "de.py").read_text(encoding="utf-8")
+        com = next(x for x in dsrc.split("\n") if x.strip().startswith("# ") and len(x) > 50
+                   and dsrc.count(x) == 1)
+        r = cli("prose", "de", "--replace", com, com + " " + TRUE["a method rule"], "--why",
+                "a method rule", "--no-follow", cwd=dst)
+        ck("`prose de` adds the method sentence", r.returncode == 0, said(r))
+        r = cli("validate", "de", cwd=dst)
+        ck("and `validate de` exits 0 with no ERROR (a run of de is not refused)",
+           r.returncode == 0 and "ERROR" not in r.stdout, r.stdout[-600:])
+        commit_all(dst, "a method rule")
+        com2 = TRUE["a method rule"]
+        r = cli("prose", "de", "--replace", com2, com2 + " Measured on the rerun, 5 of 9 "
+                "instances refused.", "--why", "a run's counts", "--no-follow", cwd=dst)
+        r2 = cli("validate", "de", cwd=dst)
+        ck("a sentence the rule finds is a WARN: `validate de` names it and exits 0",
+           r.returncode == 0 and r2.returncode == 0 and "measured on a sample" in r2.stdout
+           and "ERROR" not in r2.stdout, r2.stdout[-600:])
+
+print("\n11. a version is ASCII digits, and a record names a commit, never a ref (fix round 2)")
+with tempfile.TemporaryDirectory() as td:
+    dst = clone_here(td)
+    if dst is not None:
+        csrc = (dst / "kernels" / "cellchat.py").read_text(encoding="utf-8")
+        j = csrc.index('"""')
+        old, new = csrc[j:j + 12], csrc[j:j + 12] + " (reworded)"
+        r = cli("prose", "cellchat", "--replace", old, new, "--why", "t", "--as-version",
+                "١.٤٦.٠", "--no-follow", cwd=dst)
+        ck("prose: a version in Arabic-Indic digits is refused, and nothing is written",
+           r.returncode == 1 and not kernels_changed(dst), said(r))
+        import json
+        rp = dst / "kernels" / "cellchat.design.json"
+        raw = json.loads(rp.read_text(encoding="utf-8"))
+        last = raw["answers"][-1]
+        k_ = rev_index(dst, last.get("made_on"))
+        ck("(the last answer's commit is in the clone's history)", k_ is not None)
+        if k_ is not None:
+            last["made_on"] = f"HEAD~{k_}"
+            rp.write_text(json.dumps(raw), encoding="utf-8")
+            r = cli("design", "cellchat", cwd=dst)
+            ck(f"a record whose answer was made on 'HEAD~{k_}' (a ref, the same file today) is "
+               f"refused", r.returncode == 1 and "commit id" in said(r), said(r))
 
 print(f"\n{len(FAILS)} failure(s)" + (": " + "; ".join(FAILS) if FAILS else ""))
 sys.exit(1 if FAILS else 0)
