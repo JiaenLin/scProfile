@@ -145,8 +145,8 @@ def _lock(a):
     The group is resolved from its members' merged ranges under the host's constraints
     (`setup/locks/constraints.txt`), for ONE platform and ONE interpreter, and the answer is
     written to `setup/locks/<platform>/<members>.txt`. `install` then applies it with `pip
-    --no-deps`, and pip resolves nothing - the resolve PBS 720377 could not finish is answered here,
-    on a machine with uv, and never again on the cluster.
+    --no-deps`, and pip resolves nothing - the resolve that could not finish (harness ADR-0027) is
+    answered here, on a machine with uv, and never again on the cluster.
 
     THE PLATFORM IS THE BUILDING MACHINE'S, NOT THIS ONE'S. A lock written on a laptop for a linux
     cluster names the cluster's platform with --platform; the default, this machine, is right only
@@ -164,7 +164,7 @@ def _lock(a):
     uv = a.uv or _sh.which("uv")
     if not uv:
         print("scprofile lock: no `uv` on PATH, and no --uv given. The lock is resolved by uv "
-              "because pip could not finish this resolve (PBS 720377). Install it "
+              "because pip could not finish this resolve (harness ADR-0027). Install it "
               "(https://docs.astral.sh/uv/) or pass --uv PATH.", file=sys.stderr)
         return REFUSE
     platform = a.platform or LK.machine_platform()
@@ -1187,9 +1187,9 @@ def _run(a):
     #
     # `merged_slots` IS NOT THE TEST, and using it as one was the first version of this. A plugin
     # that ran and refused still gets an entry - {'obs': [], 'obsm': [], 'layers': []} - which is
-    # a truthy dict describing nothing. PBS 676944 wrote 3.21 GB on the strength of it: velocity
-    # recovered from its environment failure, then refused for want of spliced counts, and the
-    # run reported an object it had contributed nothing to. What matters is whether anything
+    # a truthy dict describing nothing. Cycle 2's repair job wrote 3.21 GB on the strength of it:
+    # velocity recovered from its environment failure, then refused for want of spliced counts, and
+    # the run reported an object it had contributed nothing to. What matters is whether anything
     # LANDED - cell-level data merged into it, or tables and side-car objects written beside it
     # that a reader will want the provenance for.
     op = None
@@ -1467,7 +1467,7 @@ def _run(a):
     # This is the one place that sees the finished output of a real run; a baseline recorded
     # only when someone remembers to type a command is a baseline nobody can be held to.
     _record_capacity(out)
-    # A RUN THAT RAN NOTHING IS NOT A RUN THAT RAN. PBS 711051 (harness blind 0006): every one
+    # A RUN THAT RAN NOTHING IS NOT A RUN THAT RAN. Harness blind 0006's run: every one
     # of 18 instances failed in a second for want of an environment, the report named it ("NO
     # OBJECT WRITTEN: no plugin ran"), and the seal said the opposite - SEALED, ok, exit 0,
     # "kernels ran, results merged, report written" - so whichever file a reader opened was the
@@ -2280,7 +2280,7 @@ def _plan(a):
         # one". `reference_organisms()` is empty for a plugin whose references carry no organism -
         # a prior fetched per-organism at run time, say - so gating on it skipped the check
         # entirely and the plan reported nothing about references the plugin had just declared.
-        # Measured on PBS 682089: decoupler's two runtime priors were invisible.
+        # Measured on a cohort run: decoupler's two runtime priors were invisible.
         if k.references():
             org = organism[0]
             if k.reference_organisms() and org \
@@ -4323,11 +4323,11 @@ def main(argv=None):
     # descriptor. Redirected to a file or a pipe, which is every batch job, python block-buffers
     # while the children do not, so the log reads in an order the run did not happen in.
     #
-    # Measured on PBS 676422: `--force: removing <prefix>` was still sitting in the buffer while
-    # conda's solve scrolled past it, so the only evidence that a 3 GB directory had been deleted
-    # arrived after the thing that followed it - and the first reading of that log was that the
-    # removal had not happened. Four call sites had already been patched with `flush=True` one at
-    # a time; this is the general form of the same fix.
+    # Measured on a cluster install: `--force: removing <prefix>` was still sitting in the buffer
+    # while conda's solve scrolled past it, so the only evidence that a 3 GB directory had been
+    # deleted arrived after the thing that followed it - and the first reading of that log was that
+    # the removal had not happened. Four call sites had already been patched with `flush=True` one
+    # at a time; this is the general form of the same fix.
     try:
         sys.stdout.reconfigure(line_buffering=True)
     except (AttributeError, ValueError):
@@ -4539,8 +4539,8 @@ def main(argv=None):
     pl.add_argument("--control", action="append", metavar="FACTOR=LEVEL")
     pl.add_argument("--covariate", action="append", default=None, metavar="COLUMN")
     # THE SAME DEFAULT AS `run`, AND IT HAS TO BE. A hard-coded 8 made `plan` describe a machine
-    # nobody was using: on PBS 679143 the plan printed `scenic[S1](8c)` and the run, given the
-    # allocation, did `scenic[S1](16c)`. The plan is the document a person reads BEFORE
+    # nobody was using: on cycle 6's closing run the plan printed `scenic[S1](8c)` and the run,
+    # given the allocation, did `scenic[S1](16c)`. The plan is the document a person reads BEFORE
     # committing a job, so a plan that understates the budget understates every share in it - and
     # two documents of one run disagreeing is how the last core-allocation bug was found.
     pl.add_argument("--cores", type=int, default=None, metavar="N",

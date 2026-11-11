@@ -63,9 +63,9 @@ with tempfile.TemporaryDirectory() as td:
 print("\nthe host gates a plugin-drawn panel by the entry's axis, and a marginal pool draws nothing")
 with tempfile.TemporaryDirectory() as td:
     lines = []
-    # A SAMPLE-AXIS PANEL ON A GROUP UNIT: found on the first run under the layout (PBS 711438),
-    # where the R companion held its entries to the unit's axis and the host's own emit path
-    # did not, so every arm drew the per-sample census and the group axis read 6 against 5.
+    # A SAMPLE-AXIS PANEL ON A GROUP UNIT: found on the first run under the layout (harness
+    # ADR-0024), where the R companion held its entries to the unit's axis and the host's own emit
+    # path did not, so every arm drew the per-sample census and the group axis read 6 against 5.
     ctx = Context(None, keys={}, out=Path(td), cores=1, unit="ARM", unit_axis="group",
                   figure_position={"F2_census": "appendix"}, plan_ids=("F2_census", "F3_roles"),
                   plan_axis={"F2_census": "sample", "F3_roles": "group"}, log=lines.append)

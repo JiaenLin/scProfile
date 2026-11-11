@@ -98,7 +98,7 @@ ck("and pass it to the design", src.count("factors=getattr(a, \"factor\"") >= 4,
    str(src.count("factors=getattr(a, \"factor\"")))
 
 print("\n'not ready in this installation' is the environment's sentence, and bundled references need no directory")
-# THE SECOND JOB'S SHAPE B (PBS 712313): `plan`, given no --references, marked cellchat's
+# THE SECOND JOB'S SHAPE B (harness ADR-0026): `plan`, given no --references, marked cellchat's
 # reference data UNRESOLVED - CellChatDB ships inside the package - and printed 'PREPARATION:
 # 1 plugin(s) are not ready in this installation' over a verdict that had refused for the
 # DATA (no sample key was passed to the fixture's plan); the tier accepted the phrase and the
@@ -128,7 +128,7 @@ ck("the installation's sentence is keyed on the installation's kinds",
 ck("references not checked have their own sentence", "reference data was not checked" in src)
 
 print("\na promise on an axis the design has no occurrence of is not a promise of that run")
-# THE SECOND JOB'S SHAPE A (PBS 712313): cellchat ran on the fixture's one-factor design, drew
+# THE SECOND JOB'S SHAPE A (harness ADR-0026): cellchat ran on the fixture's one-factor design, drew
 # the units and the one contrast, and `--promised` failed the tier on `compareInteractions` -
 # a plate on the `interaction` axis, the cross of two factors, which a one-factor design
 # never launches. The native accounting promised it whatever the design; the run's own

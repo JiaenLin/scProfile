@@ -216,7 +216,7 @@ def read_input(path):
 def layer_names(adata):
     """The layer names an object actually HAS. Not `list(adata.layers)`, and here is why.
 
-    Measured on anndata 0.13.2 (PBS 672521), and the last line settles it:
+    Measured on anndata 0.13.2, and the last line settles it:
 
         bare AnnData, no layers assigned     list(adata.layers) == [None]
         adata.layers[None]                   -> the X matrix itself, (n_obs, n_vars)

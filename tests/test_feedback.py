@@ -44,10 +44,11 @@ ck("and it says the selftest should have caught it",
    "selftest" in FB.diagnose("k", "got multiple values for keyword argument 'x'").why)
 
 print("\na singular design is a METHOD outcome and is named as one")
-# PBS 677677: `~ a + b + c + d` on a cohort where one technical factor took one value for every
-# sample in one arm of a biological factor and another value for the rest. pydeseq2's IRLS inverted the model matrix and
-# raised `numpy.linalg.LinAlgError: Singular matrix`, which the loop could only report as "no
-# known failure signature matched". True, and it tells a user nothing about their experiment.
+# Cycle 6's first run (docs/DEVLOG.md): `~ a + b + c + d` on a cohort where one technical factor
+# took one value for every sample in one arm of a biological factor and another value for the rest.
+# pydeseq2's IRLS inverted the model matrix and raised `numpy.linalg.LinAlgError: Singular matrix`,
+# which the loop could only report as "no known failure signature matched". True, and it tells a
+# user nothing about their experiment.
 d = FB.diagnose("de", "numpy.linalg.LinAlgError: Singular matrix")
 ck("-> method", d.layer == FB.METHOD, d.layer)
 ck("not repairable by rebuilding", not d.repairable)
@@ -192,7 +193,7 @@ ck("findings reach report.json", '"diagnoses"' in src)
 ck("and which plugins were repaired", '"repaired"' in src)
 
 print("\na tool that moved mid-run is neither the plugin nor its environment")
-# Measured on PBS 683096: six instances refused because the tool directory moved mid-run, and
+# Measured on a cohort run: six instances refused because the tool directory moved mid-run, and
 # every one was classified `[method] ... the plugin is the place to start`. The plugin was
 # untouched. A diagnosis that names the wrong layer is worse than none, because it is acted on.
 _d = FB.diagnose("cellchat",
@@ -314,21 +315,21 @@ def _tree(proc_text, files, total=1007.4):
     return _E._cgroup_peak_gb(root=d / "cg", procfile=d / "proc", total=total)
 
 
-_job = _tree("0::/pbspro.service/jobs/698875\n",
-             {"pbspro.service/jobs/698875/memory.peak": 42.7})
+_job = _tree("0::/pbspro.service/jobs/12345\n",
+             {"pbspro.service/jobs/12345/memory.peak": 42.7})
 ck("a job-scoped cgroup v2 peak is read", _job is not None and abs(_job - 42.7) < 0.01, str(_job))
 
 _root = _tree("0::/\n", {"memory.peak": 1000.5})
 ck("THE ROOT CGROUP IS NOT READ - this is the node-wide ~1 TB, and it must not come back",
    _root is None, str(_root))
 
-_nodewide = _tree("0::/pbspro.service/jobs/698875\n",
-                  {"pbspro.service/jobs/698875/memory.peak": 1000.5})
+_nodewide = _tree("0::/pbspro.service/jobs/12345\n",
+                  {"pbspro.service/jobs/12345/memory.peak": 1000.5})
 ck("and a job-scoped value indistinguishable from the whole machine is refused too",
    _nodewide is None, f"{_nodewide} - a counter that might be the node is not evidence")
 
-_v1 = _tree("7:memory:/pbspro/698875\n",
-            {"memory/pbspro/698875/memory.max_usage_in_bytes": 12.5})
+_v1 = _tree("7:memory:/pbspro/12345\n",
+            {"memory/pbspro/12345/memory.max_usage_in_bytes": 12.5})
 ck("cgroup v1 still works, at its own controller path", _v1 is not None and abs(_v1 - 12.5) < 0.01,
    str(_v1))
 
@@ -381,7 +382,7 @@ ck("a panel the unit's gate skipped by design is not a promise broken",
 # AND BY THE PLAN'S OWN FILE RULE, IN BOTH DIRECTIONS. A per-item family's records are its files -
 # `native_river_outgoing`, `native_chord_gene__LAMININ` - and its entry is the family's id; matched
 # by the id alone, eleven families were charged as never emitted on every unit and 432 of their
-# files reported as undeclared, on a run that had drawn every one of them (PBS 710982, R15). A
+# files reported as undeclared, on a run that had drawn every one of them (ADR-0016, R15). A
 # file the tool writes as a side effect (`generated: False`) carries no caption and no record;
 # `capacity --promised` holds the run to it from disk, and the feedback charges nobody for it.
 print("\na per-item family is drawn by its files, and its files are declared by their family")

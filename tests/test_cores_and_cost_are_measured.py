@@ -74,9 +74,9 @@ ck("trivial is a few seconds, high is many minutes", K.cost_band(5.0) == "trivia
    f"{K.cost_band(5.0)} {K.cost_band(10_000.0)}")
 
 print("\na burst far above the share is the plugin exceeding its share, not a number to declare")
-# MEASURED ON THE FIRST RUN THAT MEASURED (PBS 711115): instances given 4 cores showed one-second
-# peaks of 49 to 61 with a mean of 2.4 - CellChat's own forks or threads for a moment, on a
-# node eighteen instances shared. A wave sized on 61 would run one instance at a time; the
+# MEASURED ON THE FIRST RUN THAT MEASURED (harness ADR-0020): instances given 4 cores showed
+# one-second peaks of 49 to 61 with a mean of 2.4 - CellChat's own forks or threads for a moment, on
+# a node eighteen instances shared. A wave sized on 61 would run one instance at a time; the
 # sustained use is what the share means, and the burst is the plugin's to cap.
 m2 = K.fit_cores_model([{"n_cells": 10000, "wall_s": 60.0, "cpu_s": 150.0, "cores_peak": 49.3, "cores_given": 4}])
 ck("the model carries the share the instances were given and the burst", m2 and m2.get("given") == 4

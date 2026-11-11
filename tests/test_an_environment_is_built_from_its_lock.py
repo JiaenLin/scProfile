@@ -1,6 +1,6 @@
 """An environment is built from its LOCK and named for it; a lock that no longer matches is refused.
 
-THE DEFECT, MEASURED (harness ADR-0027, PBS 720377). The group seven plugins share could not be
+THE DEFECT, MEASURED (harness ADR-0027). The group seven plugins share could not be
 built from `main`. Its requirement was fifteen RANGES; pip backtracked through pertpy's arviz 1.x
 split until it stopped with `resolution-too-deep`; nothing recorded what those ranges had ever
 resolved to; and the environment's name hashed the ranges. So a fresh prefix had nothing to build

@@ -168,9 +168,10 @@ ck("the output directory is created by the function, not by one of its branches"
 
 # A PLUGIN THAT RAN AND REFUSED STILL GETS A MERGE ENTRY - {'obs': [], 'obsm': [], 'layers': []} -
 # and that dict is truthy. Testing `if merged_slots:` therefore answered "did anything attempt a
-# merge", not "did anything land", and PBS 676944 wrote 3.21 GB on the strength of it: velocity
-# recovered from a broken environment, refused for want of spliced counts, and the run announced
-# an object it had contributed nothing to. The emptiness has to be looked INTO.
+# merge", not "did anything land", and cycle 2's repair job (docs/DEVLOG.md) wrote 3.21 GB on the
+# strength of it: velocity recovered from a broken environment, refused for want of spliced counts,
+# and the run announced an object it had contributed nothing to. The emptiness has to be looked
+# INTO.
 _empty_entry = {"velocity": {"obs": [], "obsm": [], "layers": []}}
 _landed = {"velocity": {"obs": ["velocity_length"], "obsm": [], "layers": []}}
 ck("a merge entry that merged nothing is not evidence of an object",
@@ -268,7 +269,7 @@ ck("uns does not say ok", pv["kernels"]["liana"]["status"] == "partial")
 # A PLUGIN SKIPPED BEFORE ANY INSTANCE HAS NO UNIT. `unmet` skips a plugin whose required
 # capability the object lacks - {"kernel": name, "why": [...]} and nothing else - and the run
 # then built its failed map with `x["unit"]` over every skip: KeyError, after every other plugin
-# had run, on the first plugin the host ever ran on the fixture (ADR-0016 step 7a, PBS 710974).
+# had run, on the first plugin the host ever ran on the fixture (ADR-0016 step 7a).
 _sk = [{"kernel": "enrichment", "why": ["needs lognorm; the object has none"]},
        {"kernel": "liana", "unit": "s3", "why": ["timed out"]},
        {"kernel": "liana", "unit": None, "why": ["merge refused"]}]
@@ -349,8 +350,8 @@ ck("the budget is redivided over what launches",
    "_budget([i for i, _k, _c in staged], budget)" in src)
 
 # PLAN AND RUN MUST ANSWER THE SAME QUESTION ABOUT THE SAME MACHINE. `plan` hard-coded
-# `--cores 8` while `run` defaulted to the scheduler's allocation, so on PBS 679143 the plan
-# printed `scenic[S1](8c)` and the run did `scenic[S1](16c)`. The plan is what a person
+# `--cores 8` while `run` defaulted to the scheduler's allocation, so on cycle 6's closing run the
+# plan printed `scenic[S1](8c)` and the run did `scenic[S1](16c)`. The plan is what a person
 # reads BEFORE committing a job; one that understates the budget understates every share in it.
 _parser = cli._parser() if hasattr(cli, "_parser") else None
 _plansrc = inspect.getsource(cli._plan)
@@ -599,8 +600,8 @@ ck("an instance wanting more than the budget is capped, not deadlocked",
    CorePool(8).acquire(64) == 8)
 
 print("\nand the pool admits on MEMORY as well as cores — the dimension that kills jobs")
-# PBS 677891 died at 260 GB against a 200 GB request while each of its ten instances correctly
-# held one core. The core budget was satisfied throughout and could not have prevented it:
+# Cycle 6's third run died at 260 GB against a 200 GB request while each of its ten instances
+# correctly held one core. The core budget was satisfied throughout and could not have prevented it:
 # cores bound how fast a wave runs, memory bounds whether it runs at all.
 from scprofile.kernels import ResourcePool, demand, UNDECLARED_GB_PER_100K   # noqa: E402
 _rp = ResourcePool(cores=50, memory_gb=200)

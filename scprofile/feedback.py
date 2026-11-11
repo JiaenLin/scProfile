@@ -40,8 +40,8 @@ ENVIRONMENT, DECLARATION, METHOD, HOST = "environment", "declaration", "method",
 #: to do - never a guess, and never a traceback handed back to the user.
 SIGNATURES = (
     # FIRST, because it is the one failure that is NOBODY'S plugin and NOBODY'S environment, and
-    # the default classification sends the reader to exactly the wrong place. Measured on PBS
-    # 683096: six instances refused because the tool directory moved mid-run, and every one was
+    # the default classification sends the reader to exactly the wrong place. Measured on a
+    # cohort run: six instances refused because the tool directory moved mid-run, and every one was
     # reported as `[method] ... the plugin is the place to start`. The plugin was untouched; a
     # `git pull` was not.
     (r"THE TOOL CHANGED WHILE THIS RUN WAS IN PROGRESS", HOST, False,
@@ -228,7 +228,7 @@ def figure_drift(kernel, payload):
     # family's records are its files - the family's id and then the item's name - and its
     # entry is the family's id alone; matched by the id alone, eleven families were charged
     # as never emitted on every unit and 432 of their files reported as undeclared, on a run
-    # that had drawn every one of them (PBS 710982). `native.names_file` is the one rule for
+    # that had drawn every one of them (harness ADR-0016). `native.names_file` is the one rule for
     # which files an entry claims; it is what `promised` and the paper's index read too.
     from pathlib import Path as _Path
     from .native import names_file, per_item_entry

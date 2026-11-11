@@ -283,7 +283,8 @@ def load(source, log=print, names=DEFAULT_LAYERS):
         # `len(genes)` IS NOT THE GENE COUNT any more - `genes` is one list per field of
         # features.tsv - and using it here compared the gene count against 2, refused every
         # source as "matches neither N barcodes nor 2 genes", and turned a fix into a total failure to
-        # source anything. Measured on PBS 677757, on the run that was meant to prove the fix.
+        # source anything. Measured on cycle 6's second run, the run that was meant to prove the
+        # fix.
         n_genes = len(genes[0])
         if mats[0].shape[0] == n_genes and mats[0].shape[1] == len(bcs):
             mats = [m.T.tocsr() for m in mats]

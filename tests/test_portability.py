@@ -525,7 +525,7 @@ print("\nthe id survives the round trip a real run makes")
 # a fresh mapping from a fixed key list written before `report.figures` existed, so nine panels
 # emitted with their ids arrived at the host as nine `null`s - and the drift check that exists to
 # catch exactly that reported clean, because it was reading ids that were no longer there.
-# Measured on PBS 688878. A check whose input has been silently emptied is worse than no check.
+# Measured on a cohort run. A check whose input has been silently emptied is worse than no check.
 import json as _json                                                           # noqa: E402
 import tempfile as _tf                                                         # noqa: E402
 from scprofile import manifest as _mf                                          # noqa: E402
@@ -1306,7 +1306,7 @@ if _have('de'):
 # AN INTERACTION IN THE MODEL AND NOT IN THE OUTPUT. The results loop iterates the MAIN EFFECTS,
 # so `age:diet` entered the design, moved every coefficient in it, and produced no row. The
 # study's primary readout was fitted and never reported, and the caveat said it had been ADDED -
-# true, and read as though it had been tested. Measured on the real table of run 693758: terms
+# true, and read as though it had been tested. Measured on the real table of a cohort run: terms
 # were `age` and `diet`, and nothing else.
 if _have('de'):
     ck("an interaction that is added is also CONTRASTED",

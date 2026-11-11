@@ -86,7 +86,7 @@ afterwards.
 > downloaded would be worse than none, because everything downstream would then verify against it
 > and pass.
 
-**All six are declared, and were verified three ways** (PBS 676454): every digest reproduced by
+**All six are declared, and were verified three ways** in the built environment: every digest reproduced by
 `sha256sum`, a second implementation reading the same bytes; both rankings carry the Arrow magic
 at **both** ends, so neither is a truncated file wearing a finished name; and 93% of the mouse TF
 list are columns of the mouse ranking — the cross-check that matters, because a mouse ranking
@@ -110,7 +110,7 @@ the *software* — the database is pinned as a side effect.
 **Source:** <https://github.com/jinworks/CellChat> · **Cite:** Jin *et al.*, *Nature
 Communications* 2021.
 
-Measured in the built environment (PBS 676454), since nothing else records it:
+Measured in the built environment, since nothing else records it:
 
 | | interactions | columns | pathways |
 |---|---|---|---|
@@ -133,7 +133,7 @@ caveats and by nothing else.
 **Source:** <https://github.com/saezlab/liana-py> · **Cite:** Dimitrov *et al.*, *Nature
 Communications* 2022 (LIANA); Türei *et al.*, *Molecular Systems Biology* 2021 (OmniPath).
 
-Measured in the built environment (PBS 676454): `consensus` 4,624 interactions, `mouseconsensus`
+Measured in the built environment: `consensus` 4,624 interactions, `mouseconsensus`
 3,989. Both load with no network access, which is what lets this plugin run in a batch job.
 
 The plugin's selftest loads both offline and measures their symbol casing, because *"the default

@@ -145,9 +145,10 @@ print("\nthe CONTRACT'S own dependency is declared, not assumed")
 # `_entry.py` reads the object with `anndata.read_h5ad` BEFORE a plugin is called, so a python
 # plugin whose environment has no anndata cannot run at all - and the failure arrives as "this
 # kernel's interpreter cannot read the object", which reads as a problem with the OBJECT.
-# Measured on PBS 677677: ten instances of scenic reported exactly that, and the cause was
-# `No module named 'anndata'`. Two more plugins - abundance and de - had the same gap and worked
-# only because they SHARE an environment with plugins that name it, which is accidental.
+# Measured on cycle 6's first run (docs/DEVLOG.md): ten instances of scenic reported exactly that,
+# and the cause was `No module named 'anndata'`. Two more plugins - abundance and de - had the same
+# gap and worked only because they SHARE an environment with plugins that name it, which is
+# accidental.
 ck("the entrypoint reads with anndata, not scanpy",
    "import anndata as ad" in (Path(__file__).resolve().parents[1]
                               / "scprofile" / "_entry.py").read_text())
@@ -651,7 +652,7 @@ ck("and the two kinds are told apart by one reader, not by two lists of field na
 # entry is a panel the TOOL's own Python function drew and the plugin emitted - gseapy's
 # gseaplot, through the host's emit path - and it names no `fn` because nothing asked it to.
 # The rule "drawn by the tool and names no fn" refused such a plugin at validation on its
-# first real run (ADR-0016 step 7a, PBS 710972); the rule is the plan's, and applies to an
+# first real run (ADR-0016 step 7a); the rule is the plan's, and applies to an
 # entry that is ON the plan.
 _LEGACY_TOOL = {**GOOD, "report": {"figures": [
     {"id": "F2_leading_edge", "drawn_by": "tool", "shows": "result", "required": False,
@@ -678,7 +679,7 @@ ck("a kind outside the registry is refused",
 # THE STANDARD READS THE PLAN FROM THE PAYLOAD, WHICH RECORDS THE WHOLE DECLARATION. `kinds_beside`
 # handed the recorded spec to the accessor that reads a report BLOCK, found no figures, and
 # reported n/a on every page of the reproduction - so the criterion passed without measuring a
-# thing (ADR-0016 step 4e, PBS 710973, R10).
+# thing (ADR-0016 step 4e, R10).
 print("\nthe standard binds a page's figures to kinds from the recorded declaration")
 import json as _json2
 import tempfile as _tf2
@@ -710,7 +711,7 @@ for _n, _k in sorted(discover().items()):
 # A PANEL THE PLUGIN DRAWS ITSELF OFF THE UNIT AXIS IS REACHED BY A ROUTE, or it is drawn on every
 # run and placed in no document. After the migration wrote cellchat's eleven cohort-level
 # interaction panels honestly, as `drawn_by: plugin`, no `native:` route could claim them and
-# three answered needs read as gaps on the panel page (PBS 710973, R6). A plugin that declares
+# three answered needs read as gaps on the panel page (ADR-0016, R6). A plugin that declares
 # routes at all owes one to each such panel: `plan:<id>` under the need it answers.
 print("\nevery panel a plugin draws itself, off the unit axis, is reached by a route")
 for _n, _k in sorted(discover().items()):

@@ -1014,8 +1014,8 @@ def check(spec, name="<plugin>", signatures=None):
             # `_entry.py` reads the object with `anndata.read_h5ad` before a plugin sees
             # anything, so a python plugin whose environment has no anndata cannot run - and the
             # failure arrives as "this kernel's interpreter cannot read the object", which reads
-            # as a problem with the OBJECT. Measured on PBS 677677: ten instances of one plugin
-            # reported exactly that, and the cause was `No module named 'anndata'`.
+            # as a problem with the OBJECT. Measured on cycle 6's first run: ten instances of one
+            # plugin reported exactly that, and the cause was `No module named 'anndata'`.
             #
             # Only for a plugin that brings python packages. A requirement that is entirely
             # conda or entirely another language is not run through the python entrypoint.

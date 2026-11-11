@@ -226,7 +226,7 @@ the way the pool behaves.
 assumed a wave runs all at once, when only the resident subset does, so it charged every instance
 for the presence of instances that had not started. On any wave larger than the budget the
 arithmetic collapsed to one core each: 37 instances declaring 313 cores against a budget of 12 gave
-`scenic` `int(16 x 12 / 313)` = 0, floored to 1. Measured on PBS 677891 — ten GRNBoost2 fits, each
+`scenic` `int(16 x 12 / 313)` = 0, floored to 1. Measured on cycle 6's third run (DEVLOG.md) — ten GRNBoost2 fits, each
 declaring 16 cores, each running on one, still unfinished after 4h23m of a 12h timeout while the
 plan printed `scenic[S1](1c)` and nothing printed the 16. **A declaration read and then
 discarded is worse than one never read**, because the plan prints its consequence and never prints
@@ -373,7 +373,7 @@ and, until 2026-08-21, nothing else. That is enough for every python plugin here
 enough for one plugin, which is worth writing down because the gap is not obvious until a method
 falls into it.
 
-**CellChat is distributed only from GitHub.** Measured rather than assumed — on PBS 676350
+**CellChat is distributed only from GitHub.** Measured rather than assumed — in a cluster job,
 `conda search` over conda-forge and bioconda returned "No match found" for both `r-cellchat` and
 `bioconductor-cellchat`. The two personal channels that carry it are
 a two-year-old linux-64 build and a macOS-arm64 one; pinning a tool to a personal channel with one

@@ -5,7 +5,7 @@ The migration to the figure plan (harness ADR-0016) wrote the plugin's own R pan
 had been filed under in `native_plots`. Every `native:` route then resolved past them: on the
 first reproduction eleven cohort-level interaction panels were drawn, described, and placed in no
 document - the panel page showed "no plate" for three needs the run had answered, and the paper
-numbered eleven figures fewer (PBS 710973, R6).
+numbered eleven figures fewer (harness ADR-0016, R6).
 
 A route may now name the entry itself: `plan:<id>`. The plate is the file that entry claims,
 matched through `native.entry_for` - the id-based inversion `function_for` already applies - and

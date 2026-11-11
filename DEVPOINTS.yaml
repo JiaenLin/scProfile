@@ -9,7 +9,7 @@ devpoints: 1
 tests:
   # `--jobs {jobs}` is filled from the scheduler's allocation, or the CPU count off a
   # scheduler. One subprocess per suite either way; only the waiting is removed. Measured
-  # IDENTICAL to the serial report on this suite set (PBS 707231) before being turned on.
+  # IDENTICAL to the serial report on this suite set, in a cluster job, before being turned on.
   command: ["{python}", "tests/run_all.py", "--jobs", "{jobs}"]
 
 # `plan` runs nothing and resolves everything: the kernel's manifest, what it injects, what it
@@ -21,9 +21,9 @@ fixture:
     # --prefix is where a kernel's environment WOULD go. Without it `plan` plans everything
     # correctly and then exits 2 saying the plugin is not prepared in this installation, which
     # is the tool being right and the declaration being incomplete.
-    # THE PLAN IS TOLD THE ROLES AS THE RUN IS (found by PBS 712313, shape b): without them the
-    # plan guessed the sample column, could not key shape b's design on `library_id`, refused
-    # for the DATA, and the tier accepted the words that followed. Shape b is the test that
+    # THE PLAN IS TOLD THE ROLES AS THE RUN IS (harness ADR-0026's second job, shape b): without
+    # them the plan guessed the sample column, could not key shape b's design on `library_id`,
+    # refused for the DATA, and the tier accepted the words that followed. Shape b is the test that
     # nothing knows a column by heart - the plan included.
     - ["{python}", "-m", "scprofile.cli", "plan", "--h5ad", "{observations}",
        "--kernel", "{name}", "--design", "{design}", "--prefix", "{prefix}",
@@ -499,7 +499,7 @@ points:
             # A FILE THE TOOL WRITES AS A SIDE EFFECT OF A CALL THE METHOD MAKES (`generated:
             # False`): an accounting entry, not a plate. The layout neither counts nor drops it
             # - the first trim dropped one, the call still ran, and the run was refused on 24
-            # files accounted for by nothing (harness ADR-0024, PBS 711438).
+            # files accounted for by nothing (harness ADR-0024).
             side_effect: generated
             # WHERE THE PLAN'S PANELS ARE ROUTED TO THE NEEDS THEY ANSWER: `native:<fn>` reaches
             # the entries drawn by the tool with that fn, `plan:<id>` reaches the entry itself,

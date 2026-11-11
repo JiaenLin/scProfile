@@ -1,6 +1,6 @@
 """The resolved versions of one environment group, recorded once and applied by pip unresolved.
 
-WHAT THIS FIXES, MEASURED (harness ADR-0027, PBS 720377)
+WHAT THIS FIXES, MEASURED (harness ADR-0027)
 
 The seven plugins that share one environment declare RANGES - `pertpy >=0.9,<2`, `numpy >=1.24,<2`,
 fifteen of them merged - and nothing recorded what those ranges had ever resolved to. The

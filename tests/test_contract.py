@@ -203,11 +203,12 @@ def test_velocity_declaration():
 def test_a_selftest_is_bounded_and_visible():
     """A captured selftest with no timeout is indistinguishable from a hang, and blocks the build.
 
-    Measured on PBS 677555: decoupler's selftest fetches a published prior over the network. With
-    `capture_output=True` nothing is written until the process exits, and with no timeout there is
-    nothing to exit - so `install` sat with no output, having proved nothing and reported nothing,
-    and would have done so until the job's sixteen-hour walltime. `run` learned this when a plugin
-    that takes an hour and prints nothing looked like one that had stopped; `selftest` had not.
+    Measured on a cycle 6 build (docs/DEVLOG.md): decoupler's selftest fetches a published prior
+    over the network. With `capture_output=True` nothing is written until the process exits, and
+    with no timeout there is nothing to exit - so `install` sat with no output, having proved
+    nothing and reported nothing, and would have done so until the job's sixteen-hour walltime.
+    `run` learned this when a plugin that takes an hour and prints nothing looked like one that had
+    stopped; `selftest` had not.
     """
     print("\na selftest is bounded, and can be watched while it runs")
     from scprofile import runner
@@ -418,9 +419,9 @@ def test_a_reference_can_be_asked_for_by_role():
     declarations from the beginning and NOTHING EVER PASSED THEM, because `in.json` carried only
     `{name: path}`.
 
-    Measured on PBS 677757: scenic refused on all ten units of a real cohort with "the cisTarget
-    references are not available", while its own `in.json` listed all three of them, verified, by
-    absolute path.
+    Measured on cycle 6's second run (docs/DEVLOG.md): scenic refused on all ten units of a real
+    cohort with "the cisTarget references are not available", while its own `in.json` listed all
+    three of them, verified, by absolute path.
     """
     print("\na reference can be asked for by ROLE, which is the point of roles")
     from scprofile.plugin import Context
@@ -1218,8 +1219,8 @@ def test_every_lock_is_validated_whatever_the_status():
 def test_a_half_built_environment_is_not_a_built_one():
     """`install` used to ask only whether the DIRECTORY exists. Two ways that is wrong.
 
-    Both were live on PBS 676357, where a conda step built 306 packages, the `r:` step failed, and
-    the directory left behind looked finished from the outside.
+    Both were live on a cellchat environment build, where a conda step built 306 packages, the `r:`
+    step failed, and the directory left behind looked finished from the outside.
     """
     print("\nan environment that exists is not one that was finished")
     from scprofile import runner
@@ -1703,7 +1704,7 @@ def test_the_host_answers_the_sentinel_question_once():
     the raw column, and using it correctly means remembering, unprompted, that some of its values
     are the annotator DECLINING to call a cell type - and a mean activity or a silhouette for
     `UNRESOLVED` reads in a table exactly like a cell type that scored badly. Measured twice on
-    real cohorts: PBS 676943 (silhouette) and PBS 677295 (decoupler).
+    real cohorts: cycle 2's fast job (silhouette) and cycle 4's run (decoupler), docs/DEVLOG.md.
 
     `ctx.populations()` is the host answering it once, with the caveat attached so a plugin
     cannot mask correctly and then forget to say it did.

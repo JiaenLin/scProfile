@@ -521,7 +521,7 @@ print("\na reference with no organism is still a reference the plan must see")
 # `reference_organisms()` is EMPTY for a plugin whose references carry no organism - a prior
 # fetched per-organism at run time. Gating the reference check on that set skipped the whole
 # check, so a plugin's freshly declared references were invisible to the plan that was supposed
-# to report them. Measured on PBS 682089.
+# to report them. Measured on a cohort run.
 from scprofile import kernels as _K                                            # noqa: E402
 _ks = _K.discover(str(Path(__file__).resolve().parents[1] / "kernels"))
 _orgless = [n for n, k in _ks.items() if k.references() and not k.reference_organisms()]

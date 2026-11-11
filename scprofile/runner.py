@@ -36,9 +36,9 @@ def with_env_bin(exe, base=None):
     plugin found the system's Rscript, or none, and the failure reads as "R is not installed"
     about an environment that contains R and a complete CellChat.
 
-    `_install_r` learned this at PBS 676357 and fixed it for the one subprocess it launches. The
-    RUNNER, which launches every plugin and every selftest, did not - the same door, one room
-    over.
+    `_install_r` learned this on a cellchat environment build and fixed it for the one subprocess it
+    launches. The RUNNER, which launches every plugin and every selftest, did not - the same door,
+    one room over.
     """
     e = dict(os.environ if base is None else base)
     d = str(Path(exe).resolve().parent)
@@ -134,8 +134,9 @@ def build_spec(group, log=None):
 
     A LOCKED GROUP HANDS PIP ITS LOCK. The pip items are then every package of the closure at one
     exact version and the interpreter is the one the lock was resolved for, so pip has nothing to
-    decide - which is the point: the resolve that PBS 720377 could not finish is not asked again
-    on the cluster, it was answered once on the machine that wrote the lock (`scprofile.lock`).
+    decide - which is the point: the resolve that could not finish (harness ADR-0027) is not asked
+    again on the cluster, it was answered once on the machine that wrote the lock
+    (`scprofile.lock`).
     """
     from . import resolve as RS
     lk = getattr(group, "lock", None)
@@ -550,7 +551,7 @@ def lock_spec(kernel):
     A conda environment YAML expresses conda packages and pip packages, and nothing else. It has no
     way to say "install this R package from a git commit" - so an R plugin whose method is
     distributed only on GitHub could not be locked at all. CellChat is exactly that, measured
-    rather than assumed: PBS 676350 asked the channels - `conda search r-cellchat` and
+    rather than assumed: a cluster job asked the channels - `conda search r-cellchat` and
     `bioconductor-cellchat` over conda-forge and bioconda both returned "No match found" - so it
     is on neither conda-forge nor
     bioconda. The two personal channels carrying it are a two-year-old linux-64 build and a
@@ -640,11 +641,12 @@ R_INSTALL_SCRIPT = r'''
 
 # INSTALL INTO THIS ENVIRONMENT, EXPLICITLY. `.Library` is the environment's own library whatever
 # its layout, and it is named here rather than left to `.libPaths()[1]` because that is whatever
-# R_LIBS_USER happens to say. Measured on PBS 676357: with R_LIBS_USER set, NMF and CellChat were
-# installed into a scratch directory OUTSIDE the environment, `install_github` reported a warning
-# rather than an error, and the environment `doctor` would then have called installed contained
-# neither package. The caller also scrubs R_LIBS* from this process's environment; this is the
-# second lock on the same door, because the failure is silent on both sides.
+# R_LIBS_USER happens to say. Measured on a cellchat environment build: with R_LIBS_USER set, NMF
+# and CellChat were installed into a scratch directory OUTSIDE the environment, `install_github`
+# reported a warning rather than an error, and the environment `doctor` would then have called
+# installed contained neither package. The caller also scrubs R_LIBS* from this process's
+# environment; this is the second lock on the same door, because the failure is silent on both
+# sides.
 lib <- .Library
 .libPaths(lib)
 
@@ -726,7 +728,8 @@ def _install_r(p, entries, log=print):
     CRAN before git      - see the script; the git package's install-time version checks are what
                            the CRAN entries exist to satisfy.
 
-    TWO THINGS ABOUT THE SUBPROCESS ENVIRONMENT, both measured on PBS 676357 and both silent.
+    TWO THINGS ABOUT THE SUBPROCESS ENVIRONMENT, both measured on one cellchat environment build and
+    both silent.
 
     `<prefix>/bin` MUST BE ON PATH. A conda R's `Makeconf` names its compilers by bare name -
     `CC = x86_64-conda-linux-gnu-cc` - and those binaries live in the environment's own `bin`.
@@ -921,7 +924,7 @@ def _conda_list(mgr, p):
 def write_receipt(p, group, mgr, *, complete, log=print):
     """Write what the environment HOLDS, read from it after the build. Never raises.
 
-    NOTHING RECORDED WHAT A GROUP RESOLVED TO (harness ADR-0027, PBS 720377), so a build that
+    NOTHING RECORDED WHAT A GROUP RESOLVED TO (harness ADR-0027), so a build that
     worked could not be repeated and one that failed could not be compared with one that had not.
     A lock answers that for pip; this answers it for everything the build put there - the conda
     half included, which no lock here covers - and for unlocked builds, whose ranges resolved to
@@ -1005,8 +1008,8 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
         # A STALE LOCK STOPS A BUILD HERE, BEFORE ANYTHING IS TOUCHED. A lock for this platform
         # that no longer matches the group's requirement means a range moved or a member came or
         # went since the group was last resolved on purpose. Building anyway would mean resolving
-        # the ranges at install time - PBS 720377's resolve, the one this lock replaced - and an
-        # environment that exists and matches its stamp is not refused: it needs no resolve.
+        # the ranges at install time - harness ADR-0027's resolve, the one this lock replaced - and
+        # an environment that exists and matches its stamp is not refused: it needs no resolve.
         if lst[0] == "stale" and (force or not p.exists()):
             raise RuntimeError(
                 f"{grp.name}: the lock for this group is STALE, so it is not built from it and "
@@ -1049,12 +1052,12 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
         # the way and stopped - conda succeeded, the pip or r: step did not - and the directory
         # left behind looks exactly like a complete one from the outside.
         #
-        # Measured on PBS 676357: the conda step built 306 packages, the r: step failed, no stamp
-        # was written, and `doctor` reported `stale - built from lock unknown`. `install` did not
-        # ask. Re-running it without --force would have printed "exists" and gone straight to a
-        # selftest against an environment with none of the plugin's own packages in it - and that
-        # selftest failure reads as a broken package rather than as a build that never finished.
-        # env_state knew and install did not; they now read the same stamp.
+        # Measured on a cellchat environment build: the conda step built 306 packages, the r: step
+        # failed, no stamp was written, and `doctor` reported `stale - built from lock unknown`.
+        # `install` did not ask. Re-running it without --force would have printed "exists" and gone
+        # straight to a selftest against an environment with none of the plugin's own packages in it
+        # - and that selftest failure reads as a broken package rather than as a build that never
+        # finished. env_state knew and install did not; they now read the same stamp.
         state, detail, fix = state_at(p, kernel, grp, prefix)
         if state != "installed":
             raise RuntimeError(

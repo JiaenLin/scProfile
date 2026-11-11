@@ -977,9 +977,9 @@ def _budget(wave, budget):
     # single-threaded while eleven other single-core instances sat beside it.
     #
     # A DECLARATION READ AND THEN DISCARDED IS WORSE THAN ONE NEVER READ, because the plan prints
-    # the discarded number's consequence and nothing prints the declaration. Measured on PBS
-    # 677891: ten GRNBoost2 fits, every gene of the object a target in each, at one core apiece,
-    # still unfinished after 4h23m of a 12h timeout.
+    # the discarded number's consequence and nothing prints the declaration. Measured on cycle
+    # 6's third run: ten GRNBoost2 fits, every gene of the object a target in each, at one core
+    # apiece, still unfinished after 4h23m of a 12h timeout.
     for i in wave:
         i["cores"] = max(1, min(int(i["declared"] or 1), int(budget)))
     return wave
@@ -1025,9 +1025,9 @@ def concurrency(instances, budget):
 #: THE TWO ERRORS ARE NOT SYMMETRIC AND THIS NUMBER IS SET ACCORDINGLY. Over-estimating costs
 #: idle memory and a slightly narrower wave - recoverable, and visible in the measured figures
 #: afterwards. Under-estimating gets the job KILLED, typically at the end of its longest step,
-#: with no partial result and an error that names the plugin rather than the allocator. PBS 677891
-#: is the worked example: 260 GB against a 200 GB request, four and a half hours spent, nothing
-#: kept. So when this number is a guess, it guesses HIGH.
+#: with no partial result and an error that names the plugin rather than the allocator. Cycle 6's
+#: third run is the worked example: 260 GB against a 200 GB request, four and a half hours spent,
+#: nothing kept. So when this number is a guess, it guesses HIGH.
 #:
 #: 24 is double the only measured declaration in the tree (velocity, 12). It is deliberately not
 #: an estimate of the typical plugin: it is the figure that makes a wave narrow rather than dead.
@@ -1300,8 +1300,8 @@ def fit_memory_model(points):
 class ResourcePool:
     """Admission on EVERY resource an instance needs, not just cores.
 
-    A cores-only pool is blind in the dimension that actually kills jobs. PBS 677891 died at
-    260 GB against a 200 GB request while its ten instances were each correctly holding one core;
+    A cores-only pool is blind in the dimension that actually kills jobs. Cycle 6's third run died
+    at 260 GB against a 200 GB request while its ten instances were each correctly holding one core;
     the core budget was satisfied throughout and could not have prevented it. Cores bound how fast
     a wave runs, memory bounds whether it runs at all, and a scheduler that models one of them
     reports success for the case it cannot see.

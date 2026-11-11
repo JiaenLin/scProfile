@@ -9,7 +9,7 @@ The seven plugins that share one environment (abundance, cellchat, cellcycle, de
 liana, pseudotime) declare ranges. Nothing recorded what those ranges had resolved to, and the
 environment's name hashed the ranges. So a fresh prefix had to resolve the ranges, and on the
 cluster pip could not: `resolution-too-deep`, backtracking through pertpy's arviz 1.x split
-(harness ADR-0027, PBS 720377).
+(harness ADR-0027).
 
 Measured on the workstation: uv solves the same ranges in 25 s. The group can only hold pertpy
 1.0.x, because pertpy 1.1-1.4 need numpy 2 through arviz-base and four members cap numpy below 2,
@@ -92,11 +92,11 @@ being printed over eight required keys no stage mentioned.
 
 ## The test loop is blocked at station 6b — OPEN, measured 2026-09-10
 
-`setup/loop.pbs`, PBS 710090: **43 `text_overlap` across five panels** — F1_database_coverage 18,
+`setup/loop.pbs`, measured that day: **43 `text_overlap` across five panels** — F1_database_coverage 18,
 F2_population_power 14, F10_pathway_similarity 9, F9_patterns 1, F6_signaling_roles 1. Stations 7
 (eye, 0 of 149), 8 (paper) and 9 (required outputs) are blocked behind it.
 
-PRE-EXISTING AND MEASURED AS SUCH: runs 710076, 710080 and 710085 carry the identical 43 audits and
+PRE-EXISTING AND MEASURED AS SUCH: three earlier runs carry the identical 43 audits and
 180 audit keys, so the round that moved cellchat's drawing protocol into a generated companion
 neither caused these nor cleared them. They are mechanical defects `emit_figure` records on every
 panel of every run and they need no eye to fix.

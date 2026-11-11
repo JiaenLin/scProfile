@@ -10,7 +10,7 @@ only faults teaches the next reader that every failure is somebody's fault.
 
 ---
 
-## 2026-08-22 — cycle 1 (PBS 676908)
+## 2026-08-22 — cycle 1
 
 tested: validate / doctor / selftest / plan --audit --report / run(cellcycle, silhouette) /
         deliberate environment breakage and the repair loop
@@ -44,7 +44,7 @@ format: nothing in the format needed changing to accommodate the third-party plu
 
 ---
 
-## 2026-08-22 — cycle 2 (PBS 676943 fast, 676944 repair-loop)
+## 2026-08-22 — cycle 2 (a fast job, and a repair-loop job)
 
 Split in two so the repair loop's rebuild could not eat the walltime of everything else.
 
@@ -56,7 +56,7 @@ confirmed: the third-party plugin RAN — 51 s, 14 populations, obs + table merg
         `lognorm`; `cellcycle` changed from "Scored from X" to "Scored from `layers['lognorm']`";
         the constraint printed whole, including the "must NOT" clause cycle 1 cut.
 
-**REPAIR LOOP OBSERVED END TO END** (676944): `FAILED velocity (3s)` →
+**REPAIR LOOP OBSERVED END TO END** (the repair-loop job): `FAILED velocity (3s)` →
         `ModuleNotFoundError: No module named 'scvelo'` → `[environment] a package the plugin
         imports is not in its environment` → `REPAIRING: rebuilding velocity's environment and
         retrying once` → conda rebuild + 16 pinned pip packages → install-time `selftest ok` →
@@ -66,7 +66,7 @@ confirmed: the third-party plugin RAN — 51 s, 14 populations, obs + table merg
 
 found:  [host] `objects/` was the only mkdir creating the run's output directory; making it
               conditional killed `report.json` on a run where everything refused → b3bbf4e
-        [host] `merged_slots` is truthy for a plugin that ran and REFUSED, so 676944 still wrote
+        [host] `merged_slots` is truthy for a plugin that ran and REFUSED, so the repair-loop job still wrote
               3.21 GB for a velocity run that contributed nothing → 79e12b4
         [host] the sentinel guarantee was asserted and unenforceable. Every plugin's caveats said
               sentinels "are not treated as a population" beside a table whose worst population
@@ -75,13 +75,13 @@ found:  [host] `objects/` was the only mkdir creating the run's output directory
         [method] velocity refused for want of spliced counts. NOT a defect — `plan` had already
               said `[data] velocity --search <project>` and the flag was not passed.
 
-harness: 676943 and 676944 shared `--prefix` concurrently, so the repair job's `--force` rebuild
+harness: the fast and the repair-loop job shared `--prefix` concurrently, so the repair job's `--force` rebuild
         deleted `scprofile-velocity` while the other job's selftest read it. That is the two jobs
         colliding, not the tool. One prefix, one job, from cycle 3 on.
 
 clean:  6 suites, validate 0 errors.
 
-## 2026-08-22 — cycle 3 (PBS 676969)
+## 2026-08-22 — cycle 3
 
 tested: the three cycle-2 fixes, each against the exact log line that had shown the defect
 
@@ -100,7 +100,7 @@ open:   a run that produces nothing still leaves its 3.14 GB compatibility copy
 
 clean:  6 suites, validate 0 errors.
 
-## 2026-08-22 — cycle 4 (PBS 677258 build, 677295 run, 677296 repair)
+## 2026-08-22 — cycle 4 (a build, a run and a repair)
 
 Split into phases as separate jobs, one at a time against one `--prefix`. `setup/dev_cycle.pbs`
 runs them and names no project.
@@ -108,17 +108,17 @@ runs them and names no project.
 tested: resolve + install of a SHARED environment / selftest of all 8 / plan --audit --report over
         every plugin and over a restricted one / run(decoupler, silhouette) merging into one object
 
-**SHARED ENVIRONMENT BUILT AND USED, for the first time** (677258): `shared by: decoupler, liana,
+**SHARED ENVIRONMENT BUILT AND USED, for the first time** (the build): `shared by: decoupler, liana,
         pseudotime, velocity` -> one conda create + one pip resolve of 24 pins ->
         `proved for 4 of 4 member(s)` -> `installed at .../scprofile-env-3cd799b82e`. 11m38s.
-        Afterwards `doctor` reports all four as `installed ... shared with ...`, and 677295's
+        Afterwards `doctor` reports all four as `installed ... shared with ...`, and the run's
         selftest ran each of them out of that one directory.
 
-**A ONE-FILE PLUGIN WITH ITS OWN ENVIRONMENT RAN THROUGH `_entry.py`** (677295): `decoupler ok
+**A ONE-FILE PLUGIN WITH ITS OWN ENVIRONMENT RAN THROUGH `_entry.py`** (the run): `decoupler ok
         281s  674 regulators scored per cell`, `prior: <E> edges, <R> regulators for <organism>`,
         `merged obsm: X_tf_activity`. Two plugins into one 3.48 GB object, one report, one README.
 
-**THE REPAIR LOOP CLOSED ON A SHARED ENVIRONMENT** (677296): `scvelo` removed from the resolved
+**THE REPAIR LOOP CLOSED ON A SHARED ENVIRONMENT** (the repair): `scvelo` removed from the resolved
         environment by hand -> `FAILED velocity (2s)` -> `ModuleNotFoundError: No module named
         'scvelo'` -> `[environment] a package the plugin imports is not in its environment` ->
         `REPAIRING: rebuilding velocity's environment and retrying once` + `that environment is
@@ -175,7 +175,7 @@ format: nothing in the plugin format had to change to accommodate anything. The 
         plugin ran unchanged (`silhouette ok 161s`); decoupler needed a builder that could read
         the format's own `requires` block, which is a host defect and not a format one.
 
-## 2026-08-22 — cycle 5 (PBS 677332)
+## 2026-08-22 — cycle 5
 
 A confirmation cycle at the final commit, `fb0e7b4`, against the exact log lines that had shown
 cycle 4's last two defects.
@@ -201,7 +201,7 @@ found:  nothing.
 
 clean:  7 suites, validate 0 errors, on `fb0e7b4`.
 
-## 2026-08-22 — cycle 6 (PBS 677509 build, 677510 build, 677555 build, ...)
+## 2026-08-22 — cycle 6 (three builds, a test job, then three runs)
 
 The cycle that converted the last two plugins, and the one that found the most. Nothing here was
 looked for: every finding is something the conversion, or the first attempt to build all nine
@@ -286,10 +286,10 @@ found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two wa
               - so the plugin searched the system's PATH and the failure read as
               `no Rscript on PATH - this plugin's environment did not provide R`, about an
               environment containing R 4.3 and a complete CellChat. `_install_r` learned exactly
-              this at PBS 676357 and fixed it for the one subprocess IT launches; the runner,
+              this on a cellchat environment build and fixed it for the one subprocess IT launches; the runner,
               which launches every plugin and every selftest, did not → 9e20155
         [host] **A SELFTEST WITH A CAPTURED PIPE AND NO TIMEOUT IS A BUILD THAT HANGS.** Watched
-              live on PBS 677555: decoupler's fetches a published prior over the network,
+              live on the third build: decoupler's fetches a published prior over the network,
               `capture_output=True` held every byte until exit, and there was no limit - so
               `install` sat with no output, having proved nothing, and would have until the job's
               sixteen-hour walltime. `run` learned this already and streams to a named log;
@@ -322,7 +322,7 @@ found:  [host] **THE PLAN PROMISED A DIRECTORY THE RUN COULD NOT REACH.** Two wa
               `is_sentinel` column and sorted last. Both use `ctx.populations()` now → 5182ec6
 
 **AND THEN THE SELFTESTS RAN — for the first time, all eight members of one environment, only
-because a failed build now runs them anyway** (PBS 677555, `proved for 4 of 8 member(s): de,
+because a failed build now runs them anyway** (the third build, `proved for 4 of 8 member(s): de,
 liana, pseudotime, velocity`). Four failures, in three layers, none of which would have been seen
 this cycle: the previous attempt's R step failed and `install` raised before any selftest ran.
 
@@ -349,7 +349,7 @@ this cycle: the previous attempt's R step failed and `install` raised before any
         forty-four R packages behind CellChat. All three surfaced in a selftest rather than in
         somebody's run, which is what the selftest is for.
 
-**AND THEN THE RUN** (PBS 677677, all ten plugins, `--all`, the whole cohort, 12-core budget).
+**AND THEN THE RUN** (all ten plugins, `--all`, the whole cohort, 12-core budget).
 
         `plan --audit --report` over every plugin: `checked: all 10 known plugin(s) appear exactly
         once`, `0 error(s), 0 warning(s)`, `wrote .../out/run_plan.html`. Every plugin `runnable`.
@@ -408,7 +408,7 @@ harness: **three of my own, all in the job script or the suites, and all of the 
 
         `$PY "$t" | tail -25 | sed ...` in a failing branch is a PIPELINE, and under
         `set -o pipefail` its status is the failing python's - so the `if` returned non-zero and
-        `set -e` ended PBS 677608 on the first failing suite instead of reporting all seven. The
+        `set -e` ended the test job on the first failing suite instead of reporting all seven. The
         exact trap this file's own header warns about, reintroduced by the block added to report
         suite failures → 0e5f951.
 
@@ -428,7 +428,7 @@ harness: **three of my own, all in the job script or the suites, and all of the 
         the job when X is unset - before the live log is opened, so it looks exactly like a job
         that produced nothing → b27ed62.
 
-**THE SECOND RUN** (PBS 677757, after scenic was given anndata and de learned to check its
+**THE SECOND RUN** (after scenic was given anndata and de learned to check its
 design). `ran: ['abundance', 'cellchat', 'cellcycle', 'de', 'decoupler', 'liana', 'pseudotime',
 'scenic', 'silhouette', 'velocity']` - all ten, one merged object. `de ok 531s  779
 gene-population-term results below padj 0.05 across 10 population(s), formula ~ age + batch +
@@ -449,7 +449,7 @@ diet`: chemistry dropped as aliased with age, and NAMED. Two refusals left, both
               genes`. A fix that turned partial sourcing into none, found on the run that was
               meant to prove it → a5314fa
 
-**THE THIRD RUN** (PBS 677891). velocity produces a real result on the real cohort for the first
+**THE THIRD RUN**. velocity produces a real result on the real cohort for the first
 time in this project's history: `partial - velocity fitted on 2,000 genes (stochastic); median
 confidence 0.42; unspliced <p>% of counts`, `wrote velocity.h5ad (N-n x 2,000, velocity graph
 included)`, `transitions: 11 directed label transition(s)`. `partial` is the DECLARED behaviour
@@ -489,7 +489,7 @@ clean:  7 suites and `validate` green on the workstation AND on the cluster, at 
         this cycle. `plan --audit --report` over all ten plugins: `checked: all 10 known plugin(s)
         appear exactly once`, `0 error(s), 0 warning(s)`, `wrote .../run_plan.html`.
 
-## 2026-08-23 — cycle 6 closed by PBS 679143: ten of ten, every one with a result
+## 2026-08-23 — cycle 6 closed: ten of ten, every one with a result
 
 The run the whole cycle was for, at `bc4a356`, over the whole cohort and ten samples:
 
@@ -625,7 +625,7 @@ every reader was re-checked.** The others were the core budget, the reference sp
 constraint. It is worth naming, because the fix is never local — changing what a value means is a
 change to every place that reads it, and the compiler will not say so.
 
-clean:  PBS 683117 — all ten plugins, 38/38 instances, 0 failures, 0 merge refusals, 0 tool-drift
+clean:  a whole-cohort run — all ten plugins, 38/38 instances, 0 failures, 0 merge refusals, 0 tool-drift
         refusals, Exit_status 0. The fitted memory figures reproduced the previous run's to within
         a rounding step, which is the measurement being repeated rather than carried forward.
 
@@ -678,7 +678,7 @@ The first probe of the fixed check reported SILENT on the real payload. It was r
 `$RUNDIR/out2/.tool`. Two trees, one name apart, and the stale one answers every question
 plausibly. That is the drift this tool snapshots to prevent, arriving in the check of the check.
 
-clean:  PBS 689055 — velocity and cellcycle on the whole cohort's object. velocity: 9 declared, 9
+clean:  a whole-cohort run — velocity and cellcycle on the whole cohort's object. velocity: 9 declared, 9
         drawn, 0 findings; its page carries five diagnostic panels under their questions, then
         four results. cellcycle declares no block and renders as it always did, which is the
         path a plugin written outside this repository takes. Proven live on the real payload,
@@ -687,7 +687,7 @@ clean:  PBS 689055 — velocity and cellcycle on the whole cohort's object. velo
 
 ---
 
-## 2026-08-27 — cycle: the exit standard, and the checks that could not fail (PBS 695570, 696390)
+## 2026-08-27 — cycle: the exit standard, and the checks that could not fail
 
 tested: every plugin driven to a rendered-report standard, one plugin per job; then the standard
         itself, adversarially, against its own criteria.
@@ -698,8 +698,8 @@ for a file dropped in from outside the repository. It meeting the same standard 
 worth more than a tenth method would be; counting it as one is simply wrong, and this entry said
 "ten plugins" until the review that followed it.
 
-`scenic` was the last (PBS 695570, exit 0, 5 h 31 m, 56 GB); the rest were already measured.
-`cellcycle` was re-run once (PBS 696390, exit 0, **5 m 58 s**, 30 GB) for one reason: to make the
+`scenic` was the last (exit 0, 5 h 31 m, 56 GB); the rest were already measured.
+`cellcycle` was re-run once (exit 0, **5 m 58 s**, 30 GB) for one reason: to make the
 tenth criterion a real check rather than a claim about one.
 
 found:  [host] FIVE of the standard's own criteria had at some point measured something other
@@ -757,7 +757,7 @@ found:  [host] FIVE of the standard's own criteria had at some point measured so
 
 clean:  nine of nine shipped plugins meet the standard on rendered reports, and the
         outside-the-repository fixture meets it too. `contradiction` is a real check on
-        `cellcycle` (PBS 696390) and `n/a` elsewhere, which is the honest reading rather than a
+        `cellcycle` (its re-run) and `n/a` elsewhere, which is the honest reading rather than a
         tick. Seven suites green; the leak scan is proved able to fire, on one line and across a
         wrap.
 
@@ -769,7 +769,7 @@ many hats, and the last one was written while fixing the one before it.
 
 ---
 
-## 2026-08-28/29 — reuse across runs, and the group becomes a unit (PBS 698996, 699250–699319)
+## 2026-08-28/29 — reuse across runs, and the group becomes a unit
 
 tested: eight jobs on 2026-08-28 and seven on 2026-08-29, every one against the same real
         ten-sample cohort, one cellchat run per commit. This entry was written on 2026-08-29
@@ -778,13 +778,13 @@ tested: eight jobs on 2026-08-28 and seven on 2026-08-29, every one against the 
 
 **The group became a unit, and it is the change that matters.** Until 6d52b0b a unit was a
 sample and the four arms of a 2×2 design were something the reporter pooled after the fact.
-`units.resolve()` now reads the axis from the design, so PBS 699276 onward scheduled **fourteen
+`units.resolve()` now reads the axis from the design, so the runs from then on scheduled **fourteen
 instances — the ten samples and the four arms** — and a plugin invoked on an arm sees that arm's
 pooled cells. It is the correct unit of single-cell inference and it had never been one here.
 
-**Reuse across runs works, on real output, by hardlink.** Not a fixture: PBS 699282 adopted
-**eight instances, 13 files each, from 699276**, and 699301 adopted six from 699295. The
-refusals are as informative as the adoptions — 699295 declined every candidate with *"grade None
+**Reuse across runs works, on real output, by hardlink.** Not a fixture: a second run adopted
+**eight instances, 13 files each, from the first**, and a fourth adopted six from a third. The
+refusals are as informative as the adoptions — the third declined every candidate with *"grade None
 is below the minimum this adoption accepts ('provisional')"*, which is the licence layer doing
 its job on a run whose figures nobody had looked at.
 
@@ -797,7 +797,7 @@ liana declares the same key and inherits them; it has not yet been run.
               words against a cap of 800 — while every other criterion passed and the pages
               themselves were getting better. A fixed cap on the one section that must stay
               visible penalises a page for covering more ground; it now scales with what the
-              page covers → c414c4f. MET again on 699319.
+              page covers → c414c4f. MET again on the closing run (below).
 
         [host] `run` recomputed everything a licensed earlier run already held, because the
               landscape could approve a candidate on its card while `adopt` demanded a licence.
@@ -830,11 +830,11 @@ liana declares the same key and inherits them; it has not yet been run.
               twelve standing errors → d64cb00.
 
         [method] `[0]PETSC ERROR: Caught signal number 13 Broken Pipe` in the install log of
-              699276, after the selftest it belongs to had computed its terminal states and
+              the first fourteen-instance run, after the selftest it belongs to had computed its terminal states and
               reported 100%. SIGPIPE at interpreter teardown in the GPCCA solver, not a failure
               of anything. Said here because a PETSc banner in a log reads like a crash.
 
-clean:  PBS 699319 at `621d439` — fourteen instances, all `ok`, 181 figures, 196 tables, exit
+clean:  the closing run, at `621d439` — fourteen instances, all `ok`, 181 figures, 196 tables, exit
         standard MET, 7 m 30 s wall, no criterion outstanding. Eight suites green; four new
         guards each broken deliberately and watched go red.
 
@@ -846,7 +846,7 @@ carry a recorded look, so no licence in this stage can reach `full`; every adopt
 
 ---
 
-## 2026-08-29 — the checkers that were wrong, the panels that were owed (PBS 699374)
+## 2026-08-29 — the checkers that were wrong, the panels that were owed
 
 tested: one job, on the same real ten-sample cohort, at `67499d2`. It is the first run of this
         stage to reuse EVERYTHING, so it measures reuse rather than compute.

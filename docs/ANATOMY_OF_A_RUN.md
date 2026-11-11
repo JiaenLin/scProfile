@@ -1,6 +1,6 @@
 # Anatomy of a scProfile Run
 
-*Every layer of one whole run, every step and every element, as the code does it — read from scProfile d933b13 and harness 4658b1a on 2026-09-16 (harness ADR-0026, the open items). Figures in italics are measured on PBS 712314 (the run for review); everything else is read from the source. Written for a cold agent or maintainer who has to read a run without having built it. Nothing simplified away; where a step is a judgement, a limit or a debt, it is said as such. When the code moves, this file is the one to move with it.*
+*Every layer of one whole run, every step and every element, as the code does it — read from scProfile d933b13 and harness 4658b1a on 2026-09-16 (harness ADR-0026, the open items). Figures in italics are measured on the run for review (harness ADR-0026's third job); everything else is read from the source. Written for a cold agent or maintainer who has to read a run without having built it. Nothing simplified away; where a step is a judgement, a limit or a debt, it is said as such. When the code moves, this file is the one to move with it.*
 
 ## 1. The map: one run directory
 
@@ -98,7 +98,7 @@ Written by `sch dev job --ref <reference run> --redraw --plugin cellchat --predi
 
 - **F2** — Per shape, in parallel, the tool's `fixture.command`: `validate cellchat` → `plan` (told the shape's role names, `--factor` the one factor, organism human) → `run` (the same flags) → `capacity --promised` on that run. A declared refusal ("are not ready in this installation") is accepted and ends the command list, with the refusal's own lines kept in the log; a crash is not.
 
-- **F3** — *Measured on 712314:* both shapes ok in 147 s. Eight units each (6 samples, 2 arms): seven inferred with status `partial` — 80 of 3,233 database interactions (2.5%) testable on the synthetic genes, below `min_coverage 0.5`, and the caveat says so; one sample (S12) `refused`, CellChat's own error in `computeCommunProb` recorded verbatim under `absent`. 23 unit plates and 10 contrast plates per shape; `promised` done with `compareInteractions` waived by name — an interaction-axis plate the one-factor design never launches.
+- **F3** — *Measured on the run for review:* both shapes ok in 147 s. Eight units each (6 samples, 2 arms): seven inferred with status `partial` — 80 of 3,233 database interactions (2.5%) testable on the synthetic genes, below `min_coverage 0.5`, and the caveat says so; one sample (S12) `refused`, CellChat's own error in `computeCommunProb` recorded verbatim under `absent`. 23 unit plates and 10 contrast plates per shape; `promised` done with `compareInteractions` waived by name — an interaction-axis plate the one-factor design never launches.
 
 > What this gate proves and does not: the plugin runs end to end on a cohort it was not fitted to, in both column vocabularies, and draws every plate it promised there. It cannot exercise the interaction axis (one factor) — `sch dev fixture --crossed` exists for that and is not in the job yet — and it says nothing about biology.
 
@@ -176,7 +176,7 @@ Everything below runs inside the status contract: `STATUS.json` is written at th
 
 - **U1** — the core share is capped before `library(CellChat)` can start anything (`_R_CAP`); reticulate is pointed at the environment's own Python; the drawing protocol (the companion, prepended) is configured once
 
-- **U2** — the store: `cellchat.rds` and its stamp `cellchat.inference.txt` = md5(matrix) | md5(meta) | database | the six parameters | the CellChat version | md5(the recipe span). Stamp equal → `reusing the saved CellChat object; inference skipped` (*every unit, on 712314*); else the recipe
+- **U2** — the store: `cellchat.rds` and its stamp `cellchat.inference.txt` = md5(matrix) | md5(meta) | database | the six parameters | the CellChat version | md5(the recipe span). Stamp equal → `reusing the saved CellChat object; inference skipped` (*every unit, on the run for review*); else the recipe
 
 - **U3** — **the recipe** (between `# --- RECIPE START ---` and `END`): `createCellChat → subsetData → identifyOverExpressedGenes → identifyOverExpressedInteractions → computeCommunProb(type, trim, population.size, nboot) → filterCommunication(min.cells) → computeCommunProbPathway → aggregateNet → netAnalysis_computeCentrality`; between the last two, the four side tables the tool's own downstream quantities give (pathway probability, centrality, rank-net, network embedding), each wrapped so one failing costs its table and not the instance
 
@@ -210,7 +210,7 @@ Everything below runs inside the status contract: `STATUS.json` is written at th
 
 ## 9. Layer 4 — the readers after the run
 
-| reader | what it reads and decides | *on 712314* |
+| reader | what it reads and decides | *on the run for review* |
 |---|---|---|
 | `scprofile status --out` | the run's own status files; owing stations | exit 0 |
 | `capacity --promised` | the plan's promise (each entry's files per axis occurrence) and the native accounting's promise (each used export produced a file somewhere); a promise on an axis the run's directories show no occurrence of is waived by name; the other way: files under `kernels/` accounted for by nothing (the host's panels excepted) | done: 35 declared upstream plots, every one a file |
@@ -232,7 +232,7 @@ No job or verb spawns an agent: each station prints the command for the next, an
 
 | station | who | the command, what it does, what it writes |
 |---|---|---|
-| 7 `looked_at` | lookers (cold agents, 3 in ADR-0025) | `scprofile review --out RUN --plugin cellchat --shards N` lists the scan set — every figure the paper numbers plus the largest instance of every kind it does not show (*80 on 712314*) — split N ways, siblings together, only the outstanding; each look is `review --figure F --note "…" [--defect] --reviewer <name>`, appended to `<run>/kernels/cellchat/FIGURE_REVIEW.jsonl` with the plate's sha256; a look carries to any sibling run whose plate has the same bytes (`--adopt` appends what a run relies on to its own ledger); `--defect` is a verdict the audit counts |
+| 7 `looked_at` | lookers (cold agents, 3 in ADR-0025) | `scprofile review --out RUN --plugin cellchat --shards N` lists the scan set — every figure the paper numbers plus the largest instance of every kind it does not show (*80 on the run for review*) — split N ways, siblings together, only the outstanding; each look is `review --figure F --note "…" [--defect] --reviewer <name>`, appended to `<run>/kernels/cellchat/FIGURE_REVIEW.jsonl` with the plate's sha256; a look carries to any sibling run whose plate has the same bytes (`--adopt` appends what a run relies on to its own ledger); `--defect` is a verdict the audit counts |
 | 6b `audited` | machine, then the author | station 6b reads `panels.json` audits and repairs, the eye's defects, the stated disclosures (a disclosure closes a finding only while the entry's legend in this tree carries its words); the worksheet `review --worksheet` groups open findings by kind, names the owner (host panel / tool plate / plugin drawing), quotes the eye and prints the two answers |
 | the author's pass | a cold author | edits through the maker's verb — `sch dev edit --set / --legend / --remove / --add …`, one command per change, the followers run — or `review --figure F --answer "why" --reviewer <author>` for a plate that should stay (settled by a looker's fresh look), or `--answer … --stated` once the sentence is in the legend; `capacity --declare` for a measured term |
 | the rerun | the job | `sch dev job --ref RUN --redraw --plugin cellchat --predict "…"` → validate → submit (§3); the second look lists only what was redrawn or answered |
@@ -245,21 +245,21 @@ No job or verb spawns an agent: each station prints the command for the next, an
 
 | piece | time | basis |
 |---|---|---|
-| queue wait on the pinned node | ~1 min when idle, not guaranteed | 712312 submitted 15:08:52, started 15:09:38 |
-| fixture gate, both shapes in parallel | 2 min 28 s | 712314 |
-| cohort, objects reused | ~11 min (units ~3, compare 2:45, report once) | 712314: 14 min 9 s total |
-| cohort, every object re-inferred | ~22 min | 712312: 24 min 49 s total |
+| queue wait on the pinned node | ~1 min when idle, not guaranteed | ADR-0026's first job: submitted 15:08:52, started 15:09:38 |
+| fixture gate, both shapes in parallel | 2 min 28 s | the run for review |
+| cohort, objects reused | ~11 min (units ~3, compare 2:45, report once) | the run for review: 14 min 9 s total |
+| cohort, every object re-inferred | ~22 min | ADR-0026's first job: 24 min 49 s total |
 | the loop with the writing, one clean pass | 2½–3½ h wall clock (estimate) | ADR-0025: lookers 36 min, author 71 min over three exchanges, writer 21, reviewer 17, three reruns and three seals in ~6 h |
 
 ## 13. What is not automatic, and the open limits
 
 - **The agentic layer is session-started.** By design since ADR-0017/0019: every station prints its command; nothing spawns the lookers, the author, the writer or the reviewer.
-- **Looks carry by bytes.** A re-inferred object changes the permutation-dependent plates, so after a re-inference every plate is new to the eye (712314: 80 figures to look at, nothing carried).
+- **Looks carry by bytes.** A re-inferred object changes the permutation-dependent plates, so after a re-inference every plate is new to the eye (the run for review: 80 figures to look at, nothing carried).
 - **The forecast is relative to the run named**, not to the store; a cleared store makes a HIT wrong.
 - **A literal fitted to the cohort** has no static gate; the fixture run is it, and the fixture has one factor — the interaction axis is never exercised by the gate.
 - **The store keeps one object per parameter key per span**; a change to a keyed parameter or the recipe re-infers once (~22 min).
 - **The disclosure binding is mechanical**: a rewrite of the legend in other words unbinds a stated disclosure until it is re-stated (the worksheet says which).
 - **Two commit gates.** scProfile's runs under `.venv` and counts its SKIPs; the harness's `unittest discover` prints `skipped=N`. A green with skips is a weaker statement, and both now say so.
-- **The run's own record lists only its own trees** since d933b13; runs made before it (712312, 712313) carry the fixture's files in their `STATUS.json` products.
+- **The run's own record lists only its own trees** since d933b13; runs made before it (ADR-0026's first and second jobs) carry the fixture's files in their `STATUS.json` products.
 - **The cluster's per-class trees** `~/tools/scProfile-cconly-{A..G}` and the mutant branches `attack-0026-*` stay as the campaign's record.
 
