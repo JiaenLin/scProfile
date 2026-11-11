@@ -26,7 +26,7 @@ which genes left the answer before it was computed. The result comes after them.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.5.0",
+    "version": "0.6.0",
     "state_version": 2,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "which genes change, per cell type, across the design",
     "when_to_use": "you have a design table with replicates and want differential expression",
@@ -196,7 +196,7 @@ PLUGIN = {
 
     "cost": "medium", "cores": 4,
 
-    # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
+    # Measured, not estimated: fitted from this plugin's own instances in one run on a real cohort. ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
     # Fitted from one instance; the split is indeterminate.
     "memory_gb_per_100k": 7.3,
 
@@ -311,7 +311,7 @@ DISPERSION_GENES = 4000
 BAR_ROWS = 30
 
 #: Bins for the p-value histogram. Twenty is the conventional resolution: enough to see a spike
-#: at zero separately from the body, coarse enough that twenty thousand genes do not draw as
+#: at zero separately from the body, coarse enough that a whole transcriptome's genes do not draw as
 #: noise.
 PVALUE_BINS = 20
 
@@ -334,8 +334,8 @@ GRID = "#D6D6D6"
 
 #: The quantile of |log2 fold change| the shared MA scale is cut at, with everything beyond it
 #: drawn as a triangle ON the boundary rather than dropped. Unshrunken fold changes at low counts
-#: are unbounded - a handful of genes at |lfc| 20 flattens every panel of the grid to a line
-#: through zero, which is the panel saying nothing about the 20,000 genes it was drawn for.
+#: are unbounded - a handful of extreme genes flattens every panel of the grid to a line
+#: through zero, which is the panel saying nothing about the thousands of genes it was drawn for.
 MA_CLIP_Q = 0.998
 
 #: How much longer than that quantile the union of the panels has to be before the cap is applied
@@ -352,7 +352,7 @@ UNTESTED_REASONS = ("tested", "independent filtering", "Cook's outlier", "no cou
                     "below min_counts")
 
 #: The order F4 STACKS them in, left to right, which is the reverse of the order above and is a
-#: different question. Ordering on the accounting puts `tested` - two thirds of every bar - at the
+#: different question. Ordering on the accounting puts `tested` - most of every bar - at the
 #: left, so all four removal routes start at a different x in every row and none of them can be
 #: compared between rows by eye. Stacking the routes OUT of the test first anchors each of them at
 #: zero, and the answer becomes the remainder, which is what it is.
@@ -536,7 +536,7 @@ def _grid(ctx, n, panel_h=1.5, ncol=3, share=True):
 def _outer_labels(axes, ncol, xlabel, ylabel):
     """One x label under the grid's bottom edge, one y label down its left, and ticks on both.
 
-    TWO BUGS, AND THE SECOND IS THE ONE THAT BITES. Labelling every panel spent a third of a
+    TWO BUGS, AND THE SECOND IS THE ONE THAT BITES. Labelling every panel spent much of a
     nine-panel grid printing `log10(baseMean + 1)` eight more times than a reader needs it. And
     matplotlib, asked to share an axis, strips the tick labels from every row but the LAST - which
     is right for a full grid and wrong for seven panels in a three-wide one, where two columns end
@@ -569,7 +569,7 @@ def _decade_label(v, _pos=None):
     The axis holds log10 of a count, and it printed log10 of a count: `0 1 2 3 4 5`, which every
     reader has to exponentiate in their head before the panel answers the question it was drawn
     for. The transform is kept - it is what folds the sub-one dust into one decade instead of
-    spending five of eight decades on it - and only the label is changed.
+    spending most of the axis's decades on it - and only the label is changed.
     """
     e = int(round(float(v)))
     if abs(float(v) - e) > 1e-6:
@@ -580,7 +580,7 @@ def _decade_label(v, _pos=None):
 def _quiet_minor_ticks(ax):
     """Minor ticks visible as ticks rather than as a black band along the axis.
 
-    A log axis over six decades draws about fifty minor ticks, and at 58 mm of panel width
+    A log axis over several decades draws dozens of minor ticks, and at 58 mm of panel width
     matplotlib's default 2 pt tick at 0.6 pt wide merges into a solid rule under the data - which
     reads as a heavy spine and hides where the decades actually are.
     """
@@ -591,7 +591,7 @@ def _contrast_label(term, contrast):
     """`term: HI vs LO` for a level contrast, `term: interaction coefficient` for the other kind.
 
     The interaction is contrasted on a DESIGN-MATRIX COLUMN, whose name is the two factors and
-    both their levels in the encoder's own notation - fifty characters that truncate to the first
+    both their levels in the encoder's own notation - a name long enough to truncate to the first
     factor and tell a reader nothing. It is one thing, so it is named as one thing; the column is
     in the `contrast` column of the result table for anyone who needs it.
     """
@@ -661,7 +661,7 @@ def _fig_replicates(ctx, units, term):
     for ax, col, xlab in (
             (axs[0][0], "n_cells", "cells summed into the pseudobulk sample"),
             (axs[0][1], "total_counts", "counts in the pseudobulk sample")):
-        # BANDED ROWS. Twelve populations across 174 mm, twice, with a jitter that deliberately
+        # BANDED ROWS. Every population across 174 mm, twice, with a jitter that deliberately
         # blurs the row boundary: without a band a reader tracking one point back to its tick
         # label lands a row out, and the two panels are read as different populations.
         for i in range(len(pops)):
@@ -675,9 +675,9 @@ def _fig_replicates(ctx, units, term):
                    zorder=3)
         _quiet_minor_ticks(ax)
         F.rasterize_points(ax)
-        # THE VALUE, NOT ITS LOGARITHM. Both axes span four to seven decades and have to be
-        # logarithmic; printing `log10(x + 1)` on the ticks made a reader convert 3.4 back into
-        # 2,500 in their head to answer the question the panel was drawn to answer.
+        # THE VALUE, NOT ITS LOGARITHM. Both axes span several decades and have to be
+        # logarithmic; printing `log10(x + 1)` on the ticks made a reader convert each value back
+        # into a count in their head to answer the question the panel was drawn to answer.
         ax.set_xlabel(xlab + "  (log scale)")
         ax.spines["left"].set_visible(False)
         ax.tick_params(axis="y", length=0)
@@ -743,7 +743,7 @@ def _fig_dispersion(ctx, disp, drawn, omitted):
         ok = np.isfinite(v) & (v > 0) & np.isfinite(x) & (x > 0)
         order = np.argsort(x[ok])
         # A HALO, because the trend runs through the densest part of its own scatter. A 0.9 pt
-        # line on twelve thousand points is a line a reader has to be told is there.
+        # line on thousands of points is a line a reader has to be told is there.
         ax.plot(x[ok][order], v[ok][order], color="#FFFFFF", lw=2.4, solid_capstyle="round",
                 zorder=4)
         ax.plot(x[ok][order], v[ok][order], color="#D55E00", lw=1.1, zorder=5)
@@ -820,7 +820,7 @@ def _fig_pvalues(ctx, hist, drawn, omitted):
                     transform=ax.transAxes, ha="right", va="top", fontsize=5.5, color=F.INK)
     # ONE HEIGHT ACROSS THE GRID, and it is the point of the panel. Every histogram scaled itself,
     # so a population with a large excess of small p-values and one with none drew spikes of the
-    # same height on axes that ran to 1,750 and to 1,000 - and the grid, whose only purpose is to
+    # same height on axes of different heights - and the grid, whose only purpose is to
     # compare populations, reported them as identical.
     axes[0].set_ylim(0.0, (tallest or 1.0) * 1.10)
     _outer_labels(axes, ncol, "raw p-value", "genes")
@@ -938,8 +938,8 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
     # THE CAP THE SHARED SCALE IS ALLOWED, measured before anything is drawn because the panels
     # need it and the union below has to be tested against it. It is a high quantile of |log2
     # fold change| over every panel drawn: unshrunken values at low counts are unbounded, and the
-    # union of nine autoscaled panels is therefore set by a dozen genes rather than by twenty
-    # thousand. Whether it is USED is decided after the union is known - see MA_CLIP_TRIGGER.
+    # union of nine autoscaled panels is therefore set by a few genes rather than by the
+    # thousands. Whether it is USED is decided after the union is known - see MA_CLIP_TRIGGER.
     pieces = [np.asarray(res[(res["population"] == p) & (res["term"] == t)]["log2FoldChange"],
                          dtype=float) for p, t in drawn]
     allv = np.concatenate(pieces) if pieces else np.zeros(1)
@@ -949,7 +949,7 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
 
     n_sig = 0
     panels = []                # (ax, x, lfc, sig, ok) - the second pass needs them, and slicing
-                               # a 20,000-gene frame once per panel twice is a second slice of
+                               # a genome-wide frame once per panel twice is a second slice of
                                # every population for a set of arrays already in hand
     for ax, (pop, term) in zip(axes, drawn):
         s = res[(res["population"] == pop) & (res["term"] == term)]
@@ -986,7 +986,7 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
 
     # ONE SCALE ACROSS THE GRID. Every panel scaled itself, so a fold change of 2 was a different
     # height in each - and the only reason to draw nine panels together is to compare them. On
-    # the report this was found in, the y-axes ran -10..5, -5..5 and -2.5..2.5 side by side, and
+    # the report this was found in, the y-axes ran over different ranges side by side, and
     # the panel with the LARGEST effects looked flattest.
     #
     # The limits are the union of what the panels hold, symmetric about zero on the fold-change
@@ -996,8 +996,8 @@ def _fig_ma(ctx, res, table_path, drawn, omitted):
     _r = max(abs(_lo), abs(_hi)) or 1.0
     _xhi = max((float(a.get_xlim()[1]) for a in axes[:len(drawn)]), default=1.0)
     # AND THEN CAPPED, WHICH THE UNION ON ITS OWN COULD NOT BE. Unshrunken fold changes at low
-    # counts are unbounded: a dozen genes at |lfc| 12 set the union, and every panel then drew
-    # twenty thousand genes inside the middle fifth of its own axis - one scale, shared, and
+    # counts are unbounded: a few genes at extreme |lfc| set the union, and every panel then drew
+    # every other gene inside a narrow middle band of its own axis - one scale, shared, and
     # useless. The cap is a high quantile of |lfc| over the panels drawn, and what falls outside
     # it is not dropped: the loop below draws each one as a triangle ON the boundary, at its own
     # expression level, so the reader sees that there are more and where they sit.
@@ -1141,7 +1141,7 @@ def _fig_hits(ctx, hits):
     ax.axvline(0.0, color=F.INK, lw=0.6, zorder=4)
     span = float(max(up.max() if up.size else 0.0, down.max() if down.size else 0.0, 1.0))
     ax.set_xlim(-span * 1.16, span * 1.16)
-    # THE COUNT, ON THE BAR. A bar chart of gene counts spanning three orders of magnitude down
+    # THE COUNT, ON THE BAR. A bar chart of gene counts spanning orders of magnitude down
     # the rows leaves everything below the top few as a stub a reader cannot measure against a
     # tick - and the number is the finding.
     for i in range(len(d)):
@@ -1173,7 +1173,7 @@ def _fig_hits(ctx, hits):
     ax.set_yticks(y)
     ax.set_yticklabels(rows)
     ax.set_ylim(len(d) - 0.5, -0.5)
-    # ABSOLUTE ON BOTH SIDES. The axis counts genes, and half of it was labelled -200, -150, -100
+    # ABSOLUTE ON BOTH SIDES. The axis counts genes, and half of it was labelled with negative ticks
     # - numbers that exist nowhere in the data and read as negative counts. The side carries the
     # direction; the tick carries the count.
     from matplotlib.ticker import FuncFormatter
@@ -1464,8 +1464,8 @@ def run(ctx):
 
 
         # THE INTERACTION, CONTRASTED. It was added to the formula and never tested: the loop
-        # above iterates the MAIN EFFECTS, so `age:diet` entered the design, changed every
-        # coefficient in it, and produced no row of its own. The study's primary readout was in
+        # above iterates the MAIN EFFECTS, so `a:b` entered the design, changed every
+        # coefficient in it, and produced no row of its own. The interaction asked for was in
         # the model and absent from the output, and the caveat said it had been added - which
         # was true, and read as though it had been tested.
         #
