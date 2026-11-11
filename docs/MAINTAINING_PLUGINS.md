@@ -149,8 +149,9 @@ de's, made in W013 on files that were never committed, so they keep their full d
 declaration they left; they carry no cohort or site string. The limit of this: a line an answer
 wrote that a declaration edit then changes before the next answer is made - a trailing comment
 on a value's line, its value then edited - is in no file that follows the answer, so the check
-fails closed, naming the line, and no verb can repair it. Change such a line's value before a
-prose answer rewords its comment, never after. Then the `plan.after_edit`
+fails closed, naming the line, and the prose verb refuses. Undoing the declaration edit (the old
+value back) passes the check again, and once a later answer is recorded the value can be edited
+again. Change such a line's value before a prose answer rewords its comment, never after. Then the `plan.after_edit`
 followers run, the
 same list `sch dev edit` runs (`--no-follow` prints them instead). The record needs an anchor in
 DEVPOINTS (`rules.held_out.spent` for a spent plugin, `rules.end_to_end.anchor` for cellchat), so
