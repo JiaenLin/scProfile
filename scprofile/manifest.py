@@ -31,7 +31,7 @@ from pathlib import Path
 #: MAJOR is compared, so a
 #: kernel written against 1.0 still runs - it simply does not read the new fields.
 # 1.4 adds the optional `contradictions` key: the claims a plugin made AGAINST ITS OWN RESULT.
-# They were recorded only into `caveats`, where they are one sentence among ten and nothing
+# They were recorded only into `caveats`, where they are one sentence among many and nothing
 # downstream can tell them apart - so the reporter could not show a refutation where the claim
 # is, and the exit standard could not check that it had. A field of its own is what makes the
 # absence of one detectable.
@@ -96,7 +96,7 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
     before it, and a re-run of one kernel would no longer reproduce.
 
     A PER-UNIT UPSTREAM HAS NO SINGLE out_dir, and pretending otherwise is how this went wrong: it
-    was written once per instance under the plugin's name, so a ten-unit upstream left ONE
+    was written once per instance under the plugin's name, so a per-unit upstream left ONE
     directory - the last that succeeded, which changes between runs as different units fail - and
     the downstream read one sample as the cohort's result with nothing recording which. So:
 
@@ -129,7 +129,7 @@ def write_input(path, *, h5ad, out_dir, keys, organism=None, assay=None, design=
         # A DIRECTORY THAT SURVIVES THE RUN, for a plugin to keep an expensive intermediate in.
         # The instance directory does not survive: a plugin that saved its fitted object there
         # found an empty directory on every new run, so a change to a PLOT paid for the whole
-        # inference again - measured at 2m41s and 7.5 GB per unit, eighteen units, to redraw a
+        # inference again - on every unit, to redraw a
         # figure. The host only says WHERE; what to keep and under what key is the plugin's, and
         # a plugin that needs none ignores it.
         "cache_dir": str(Path(cache_dir).resolve()) if cache_dir else None,
@@ -293,7 +293,7 @@ def declared_tables(out_dir, produces, registered):
     FOUR TABLES A RUN COULD NOT SEE (harness ADR-0026). cellchat's R writes its side tables
     (centrality, pathway probability, rank-net, embedding) straight into `tables/` and never
     hands them to `emit_table`, so the manifest carried the two tables the Python side
-    re-registered and nothing else: 72 files a run that no stage could vouch for and the writer
+    re-registered and nothing else: the rest, files no stage could vouch for and the writer
     could not cite, declared in `produces` all along. A declared table that is on disk when the
     plugin returns IS an output of that plugin; the host registers it here, so the declaration
     and the manifest agree without every plugin re-registering what its own tool wrote.
@@ -408,8 +408,8 @@ def _figure(v, rel):
     THE ID IS CARRIED, and it was not. This function builds a fresh mapping from a fixed list of
     keys, written before `report.figures` existed, so every panel arrived at the host with its id
     stripped - the join between what a plugin DECLARED and what it DREW, severed at serialisation
-    with nothing at either end to notice. Measured on the first real run: nine panels emitted with
-    their ids, nine recorded as `null`, and the drift check that exists to catch exactly that
+    with nothing at either end to notice. Measured on the first real run: panels emitted with
+    their ids, every one recorded as `null`, and the drift check that exists to catch exactly that
     reported clean.
 
     For the bare-path form the id is the file's stem, which is what `emit_figure` names it after
@@ -426,7 +426,7 @@ def _figure(v, rel):
         # SECOND TIME. The paragraph above records the id being stripped here for the same
         # reason: this builds a fresh mapping from a fixed list of keys, so anything
         # `emit_figure` learns about a panel and is not on that list is dropped between the
-        # plugin and the run. The audit ran on all 223 panels of a real run, found what it found,
+        # plugin and the run. The audit ran on every panel of a real run, found what it found,
         # and none of it arrived.
         #
         # The whitelist is right - a plugin must not be able to inject arbitrary keys into the
@@ -559,8 +559,8 @@ def env_for_kernel(inp, cores=None):
     missing. The contract says a plugin must use its allocated share and never the machine's, and
     a plugin can honour that for the work it schedules itself - `n_jobs`, a dask client, a
     thread pool. It cannot honour it for numpy: the BLAS behind it sizes its pool from
-    `OMP_NUM_THREADS` at IMPORT time, before any plugin code runs. So an eight-instance wave on a
-    sixteen-core allocation started sixteen BLAS threads per instance, 128 on 16 cores - the exact
+    `OMP_NUM_THREADS` at IMPORT time, before any plugin code runs. So a wave of N instances on a
+    C-core allocation started C BLAS threads per instance, N x C on C cores - the exact
     oversubscription the share exists to prevent, arriving through the one door a plugin cannot
     close. Worse, it is inherited: a job script exporting `OMP_NUM_THREADS=$NCPUS` for its own
     sake hands the node's count to every plugin it launches.

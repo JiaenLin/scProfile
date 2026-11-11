@@ -5,18 +5,17 @@ written and the PNG files it actually references, in the directory a run actuall
 standard measured on a synthetic page proves the checker runs; it proves nothing about the
 report a reader will open.
 
-WHY EACH ONE EXISTS. Measured on a real multi-sample, two-factor cohort whose report had
-191 figures:
+WHY EACH ONE EXISTS. Measured on a real multi-sample cohort's report:
 
-  overview      No page said what the cohort was. A reader met "1,654 significant edges" with
+  overview      No page said what the cohort was. A reader met a count of significant edges with
                 no statement anywhere of how many samples, how many arms, or what was compared.
-  arms          NOT ONE figure of 191 split anything by a design factor. The study was a
-                two-factor design; every panel was per-population or per-cell.
-  repeats       140 of the 191 were fifteen plots redrawn once per sample. Three plugins
+  arms          NOT ONE figure split anything by a design factor. The study had design
+                factors; every panel was per-population or per-cell.
+  repeats       Most of its figures were a few plots redrawn once per sample. Three plugins
                 infer per sample, so those panels are not even comparable with each other.
-  count         57 figures on one page. A page a reader cannot finish is a page that hides its
-                own result.
-  captions      Captions were 65% of all words - 13,172 of 20,545 on the worst page.
+  count         More figures on one page than anyone reads. A page a reader cannot finish
+                is a page that hides its own result.
+  captions      Captions were most of the words on the worst page.
   caveats       Counted apart from narration and capped generously. A caveat is the most
                 load-bearing prose on a page, and charging it against a narration cap made the
                 way to pass "say less about the limits of the result".
@@ -24,9 +23,9 @@ WHY EACH ONE EXISTS. Measured on a real multi-sample, two-factor cohort whose re
                 grow without limit.
   identifiers   The strongest signal in every population of one page was `A0A079HLR9`, an
                 unmapped UniProt accession presented as a regulator.
-  contradiction Two pages carried headlines their own diagnostics refute: 45.5% of nuclei
-                "cycling" in post-mitotic tissue, and "3 terminal states" over cells whose fate
-                entropy was at the maximum the three states allow. THE ONLY CRITERION NOT
+  contradiction Two pages carried headlines their own diagnostics refute: a large share of cells
+                "cycling" in post-mitotic tissue, and a count of "terminal states" over cells
+                whose fate entropy was at the maximum those states allow. THE ONLY CRITERION NOT
                 MEASURABLE FROM THE PAGE: an omitted refutation leaves no mark, so what the
                 plugin recorded is read from the payload and looked for on the page.
   authored      The tool composes a result section from the run's own tables so that a run
@@ -35,8 +34,8 @@ WHY EACH ONE EXISTS. Measured on a real multi-sample, two-factor cohort whose re
                 and was reviewed as one, repeatedly. A page is not finished while it is the
                 skeleton: nothing in it decided what mattered, and no figure in it was looked at
                 before being cited.
-  cited         A page rendered ninety numbered plates and its prose referred to thirty of them.
-                The other sixty were drawn, numbered and captioned, and no sentence pointed at
+  cited         A page rendered numbered plates and its prose referred to few of them.
+                The rest were drawn, numbered and captioned, and no sentence pointed at
                 any of them - so a reader could not tell which had been considered and which had
                 merely been produced, and whole comparisons the design supports had no sentence
                 about them at all. Shipping an uncited plate is allowed; doing it silently is not,
@@ -44,13 +43,13 @@ WHY EACH ONE EXISTS. Measured on a real multi-sample, two-factor cohort whose re
   kinds         The plan binds every figure to a panel kind, and a kind carries rules; two of
                 them have a mechanical form. R3, a cut names what it removed, and R4, the
                 denominator is declared, both mean the caption states a count or a fraction -
-                "8 of 49 pathways", "at most 8", "the strongest of 31". A chord drawn for eight
-                pathways out of forty-nine whose caption said "one per arm" was a cut nobody
+                "8 of N pathways", "at most 8", "the strongest of N". A chord drawn for eight
+                pathways out of many whose caption said "one per arm" was a cut nobody
                 could see (harness ADR-0016, step 6). Read from the plan beside the page; a page
                 with no plan is n/a, said so.
   sections      A section of prose citing no figure asserts something a reader cannot check on
                 the page it is made on. It caught a document whose section on the study's own
-                headline question - the interaction - ran to ninety words of arithmetic and
+                headline question - the interaction - ran to a paragraph of arithmetic and
                 pointed at nothing, while every panel drawn for that question was cited by the
                 OTHER sections. No figure count and no word count can see that: the panels
                 existed, were numbered, and were on the page.
@@ -108,7 +107,7 @@ MAX_CAPTION_WORDS = 45
 #: It was 900 words, and it was wrong in principle rather than badly calibrated. The written
 #: result section of a 2x2 design walks six comparisons through three levels each, states the
 #: reference of every contrast, says which scale each claim is made on, and ends in limitations.
-#: That is four thousand words when it is done properly, and a standard that FAILED it for being
+#: That runs to thousands of words when it is done properly, and a standard that FAILED it for being
 #: complete was telling an author to say less about the experiment. The way to pass was to cover
 #: less, which is the opposite of what every other criterion here asks for.
 #:
@@ -127,10 +126,10 @@ MAX_HIDDEN_WORDS = 2500
 #: Caveats are the page's most load-bearing prose and must stay visible; they are capped
 #: generously rather than charged against narration.
 #:
-#: THE CAP SCALES WITH WHAT THE PAGE COVERS. A fixed 800 was set when a page described ten
-#: units. A page that describes fourteen - the ten samples plus four design arms - carries
-#: more caveat text for the same reason it carries more figures, and failed at 876 words on
-#: caveats that were already FOLDED ("all 14 units") with no duplication left to squeeze.
+#: THE CAP SCALES WITH WHAT THE PAGE COVERS. A fixed 800 was set when a page described fewer
+#: units. A page that also describes the design's arms carries
+#: more caveat text for the same reason it carries more figures, and failed the fixed cap on
+#: caveats that were already FOLDED ("all N units") with no duplication left to squeeze.
 #:
 #: This is a change to a standard's constant, so what was rejected is worth recording: trimming
 #: the plugin's caveats would have removed real content, and leaving the page failing would have
@@ -219,7 +218,7 @@ def _text(html):
 
     Stripping tags alone leaves what is BETWEEN them, and `<style>` is a tag with 74 words of
     CSS inside it on every page in this tool. Every prose count was inflated by the same
-    stylesheet, on all ten pages, which is a defect in the ruler rather than in the thing it
+    stylesheet, on every page, which is a defect in the ruler rather than in the thing it
     measured - and the kind that makes a page look worse the more carefully it is styled.
     """
     html = re.sub(r"<(style|script)\b[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
@@ -333,12 +332,12 @@ def check_page(path, *, exempt=(), recorded=(), kinds=None):
     figs = re.findall(r"<figure", html)
     # THE PANEL A FIGURE IS, taken from the FILE it shows. Keying this on a `data-fig-id`
     # attribute the reporter does not emit made the criterion pass on a page carrying the
-    # same five plots ten times over. A check that CANNOT fail is worse than no check: it
+    # same plots once per sample. A check that CANNOT fail is worse than no check: it
     # reports the very defect it was written for as absent.
     # THE PATH, NOT THE BASENAME. Keying on the filename alone made every per-unit page a page
-    # of "repeats": eighteen units each draw a panel under the same file name, and those are
-    # eighteen DIFFERENT figures of eighteen different units. The defect this criterion exists
-    # to catch - one plot shown ten times - is a repeated PATH, and keying on the path still
+    # of "repeats": every unit draws a panel under the same file name, and those are
+    # DIFFERENT figures of different units. The defect this criterion exists
+    # to catch - one plot shown once per sample - is a repeated PATH, and keying on the path still
     # catches it exactly while no longer reporting distinct figures as duplicates.
     ids = re.findall(r'src="([^"]+\.png)"', html)
     out = []
@@ -419,10 +418,10 @@ def check_page(path, *, exempt=(), recorded=(), kinds=None):
     # EVERY PLATE THE PAGE SHIPS MUST BE CITED BY THE PROSE.
     #
     # `sections` catches a section that cites nothing. It cannot catch the other half: a page that
-    # renders ninety numbered plates and refers to thirty of them. Sixty figures then sit under
+    # renders numbered plates and refers to few of them. The rest then sit under
     # the text as decoration - each one drawn, numbered and captioned, and none of them pointed at
     # by a sentence - and a reader has no way to tell which were considered and which were merely
-    # produced. Measured on a real page: 90 plates, and whole contrasts of the design with no
+    # produced. Measured on a real page: whole contrasts of the design with no
     # sentence about them at all, because the section had been written from the contrasts the
     # author found interesting rather than from the ones the design supports.
     #
@@ -456,7 +455,7 @@ def check_page(path, *, exempt=(), recorded=(), kinds=None):
     # but it is not in anybody's way.
     hidden_all = sum(len(_text(h).split())
                      for h in re.findall(r"<details[^>]*>(.*?)</details>", html, re.S))
-    # CAVEATS ARE NOT NARRATION, and the cap was written against narration - the ten-thousand-word
+    # CAVEATS ARE NOT NARRATION, and the cap was written against narration - the overlong
     # pages of repeated explanation. A caveat is the most load-bearing prose on a page and the
     # one thing that must not be collapsed, so charging it against a narration cap pushed in
     # exactly the wrong direction: the way to pass would have been to say less about the limits
@@ -493,7 +492,7 @@ def check_page(path, *, exempt=(), recorded=(), kinds=None):
        f"e.g. {acc[:4]}")
     # WHAT THE PLUGIN SAID AGAINST ITSELF, ON THE PAGE, IN PLAIN SIGHT. Two pages carried a
     # headline their own figures refute; the refutation existed, was recorded, and reached a
-    # `caveats` list indistinguishable from nine other sentences. This is the only criterion
+    # `caveats` list indistinguishable from the other sentences. This is the only criterion
     # that is not measurable from the page alone, and that is exactly why it is here: an
     # omission leaves no mark, so a page that dropped it and a page with nothing to drop are
     # the same document. VISIBLE, not behind a disclosure - the claim it refutes is not.
@@ -572,7 +571,7 @@ def check_report(report_dir, *, exempt=None):
     # THE SUFFIX IS NAMING; THE LINK IS THE GUARD. This tested one suffix, so a second kind of
     # appendix - the per-ARM panels, which are the comparison figures a factorial design exists
     # for - was measured as though it were a page a reader reads, and failed on being what it
-    # is: forty panels, no cohort overview, and a "compares the arms" check that scans for
+    # is: a list of panels, no cohort overview, and a "compares the arms" check that scans for
     # vocabulary the per-contrast captions carry in a different form. Adding the suffix changes
     # nothing about what stops this hiding a page: the parent must EXIST and LINK to it.
     appendix = set()

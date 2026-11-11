@@ -359,7 +359,7 @@ def undrawn(declared, filenames):
     environment silently depended on two packages it never declared - one of them reached only
     from inside an upstream function, so no import in this repository names it and no difference
     of declarations can predict it. Unplugged, three of its declared plots drew nothing across
-    every unit of a full run, and the run still sealed: 657 panels where the reference had 711,
+    every unit of a full run, and the run still sealed with fewer panels than the reference had,
     and nothing in the tool said which promise had been broken.
 
     ACROSS THE WHOLE RUN, NOT PER UNIT, and that is the difference between a check and a nuisance.
@@ -383,8 +383,8 @@ def undrawn(declared, filenames):
         # table rather than a figure - cellchat's `netAnalysis_computeCentrality` says
         # "tables/cellchat_centrality.csv (numbers only; its plot is not drawn)" - and asking a
         # figure question of it reports the declaration's own honesty as a defect. That was the
-        # single false row this check produced on its first real run, and one false row in twelve
-        # is the rate at which a check stops being read.
+        # single false row this check produced on its first real run, and one false row in a
+        # short list is the rate at which a check stops being read.
         if ".png" not in use:
             continue
         # PER ENTRY WHERE THE PLAN SAYS SO (harness ADR-0025): one function drew a per-unit
@@ -412,7 +412,7 @@ def undeclared(declared, filenames, ids=()):
     the same declaration with the same matcher, and until this existed a plugin could litter a run
     with files it had never mentioned and every gate in the tool would report the run as clean.
 
-    MEASURED. One cohort of 1187 figures carried 24 PDFs of a rank-estimation plate written by the
+    MEASURED. One real cohort's figures carried PDFs of a rank-estimation plate written by the
     NMF rank estimation inside an upstream function - not by any call this plugin makes, not named
     by any entry in `native_plots`, linked from no page, and cited by no sentence. They are the
     wrapped tool writing into the working directory, which is a thing wrapped tools do. The point
@@ -439,7 +439,7 @@ def undeclared(declared, filenames, ids=()):
         stem = name.rsplit(".", 1)[0]
         if any(stem.startswith(k) for k in known):
             continue
-        # THE UNIT OR CONTRAST IS STRIPPED so the same litter from eighteen units is one row.
+        # THE UNIT OR CONTRAST IS STRIPPED so the same litter from every unit is one row.
         seen[stem.split("__", 1)[0]] += 1
     return sorted(seen.items())
 

@@ -37,7 +37,7 @@ CAPABILITIES = {
     "batch":        {"resolve": "data",   "why": "a technical grouping"},
     # TWO CAPABILITIES, BECAUSE THEY ARE TWO THINGS. The wording here was always right - "to
     # compute neighbours on" - and two consumers read it as "to draw on" anyway, which put a
-    # 30-dimensional scANVI latent on the x and y axes of four panels. A representation is a
+    # scANVI latent's first dimensions on the x and y axes of four panels. A representation is a
     # space where distances mean something; a layout is two coordinates made to be looked at.
     # For a variational latent they are not even close: its dimensions carry no variance
     # ordering, so the first two are two arbitrary coordinates and draw as a featureless ball.
@@ -338,7 +338,7 @@ def _check_plan_entry(f, at, out) -> None:
     if f.get("items") is not None and f.get("at_most") is None:
         out.append(("ERROR", f"{at} draws one panel per item of `{f.get('items')}` and declares "
                              f"no `at_most`. A per-item family with no ceiling draws without "
-                             f"bound: 240 panels on a cohort of forty populations."))
+                             f"bound: one panel per item, however many items a cohort has."))
     if f.get("at_most") is not None:
         try:
             if int(f["at_most"]) < 1:
@@ -649,7 +649,7 @@ def _check_signatures(spec, name, out, signatures=None):
     """Every plan entry's call against the recorded signatures of the wrapped tool (harness
     ADR-0026): `kernels/<name>.signatures.json`, written by the maker's inventory verb where
     the tool is installed. An argument the function has not got was learned from a
-    thirty-minute run; here it is refused before any job, naming the function's own
+    full run; here it is refused before any job, naming the function's own
     parameters. A function taking `...` cannot be refused by name and is not; a function the
     record does not carry is a warning to re-record."""
     from pathlib import Path as _P
@@ -813,7 +813,7 @@ def check(spec, name="<plugin>", signatures=None):
         # imports and the object are paid once whatever n is, so a rate alone predicts almost
         # nothing at small n and the job is sized to be killed. Six of the nine shipped plugins
         # declared a rate and no base, clustered at 7.2-7.5, while the two plugins that have
-        # measured both agree on a fixed cost of 3.1 GB - which is where those clustered rates
+        # measured both agree on a large fixed cost - which is where those clustered rates
         # came from: one fixed cost, divided by whatever n it happened to be measured at.
         #
         # WARN and not ERROR, for the same reason the missing-rate case is a WARN: a plugin that
@@ -838,7 +838,7 @@ def check(spec, name="<plugin>", signatures=None):
     # `design_aware` IS A CLAIM, AND IT IS CHECKED AGAINST THE OUTPUT THAT WOULD MAKE IT TRUE.
     #
     # It means "reports per arm without testing across the design". Two plugins declared it and
-    # between them had fourteen panels, none of them about an arm - the flag was a sentence in a
+    # between them had many panels, none of them about an arm - the flag was a sentence in a
     # declaration and nothing anywhere compared it with what the plugin produced. The host now
     # renders the per-arm view from any per-cell column a plugin writes, so the claim is
     # structurally possible exactly when there is such a column to split.
@@ -898,7 +898,7 @@ def check(spec, name="<plugin>", signatures=None):
     # It runs separately on every unit and its page is that many single-unit reports in
     # sequence. Each panel is true and the question a cohort study asks - do the units agree? -
     # is answered nowhere, because the numbers never share an axis. Measured on a real cohort:
-    # one plugin's per-unit count ran 8,194 to 38,895, a 4.7-fold range across the units of a
+    # one plugin's per-unit count ran over a several-fold range across the units of a
     # single tissue, and its page put every one of those numbers in a figure of its own.
     #
     # The host draws the comparison itself for any plugin that records the number, so this
@@ -1014,7 +1014,7 @@ def check(spec, name="<plugin>", signatures=None):
             # `_entry.py` reads the object with `anndata.read_h5ad` before a plugin sees
             # anything, so a python plugin whose environment has no anndata cannot run - and the
             # failure arrives as "this kernel's interpreter cannot read the object", which reads
-            # as a problem with the OBJECT. Measured on cycle 6's first run: ten instances of one
+            # as a problem with the OBJECT. Measured on cycle 6's first run: every instance of one
             # plugin reported exactly that, and the cause was `No module named 'anndata'`.
             #
             # Only for a plugin that brings python packages. A requirement that is entirely
@@ -1071,8 +1071,8 @@ def check(spec, name="<plugin>", signatures=None):
     # `ctx.plot()` imports it inside the plugin's own interpreter, so a plugin that declares
     # panels and does not name it either fails at the first figure or works by accident because
     # it SHARES an environment with a plugin that does - which is how anndata went unnoticed on
-    # three plugins until ten instances failed at once. Five of the nine declared it and four did
-    # not, on the run that added figures to all of them.
+    # three plugins until a whole wave of instances failed at once. Five of the nine declared it
+    # and four did not, on the run that added figures to all of them.
     if report_figures(spec) and (spec.get("requires") or {}).get("packages"):
         if "matplotlib" not in spec["requires"]["packages"]:
             out.append(("ERROR", "declares figures in `report.figures` and does not require "

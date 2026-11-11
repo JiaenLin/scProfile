@@ -346,7 +346,7 @@ points:
         # its whole life in a seven-member environment and depended on Seurat and umap-learn
         # while declaring neither. Its selftest passed - neither is imported at module scope -
         # and `build: 7 of 7 complete` was printed over it. Unplugged, two drawing paths died
-        # forty minutes into a cohort run, 54 panels of 711.
+        # deep into a cohort run, most of its panels undrawn.
         - name: environment
           phase: build
           fills: [requires]
@@ -517,7 +517,7 @@ points:
               named_by: use
               # A PLACEHOLDER MEANS ONE PANEL PER DATA ITEM. `nativecmp_chord_cell__<pathway>`
               # draws once per pathway and `nativecmp_signalingChanges__<population>` once per
-              # shared population - 72 and 62 panels on this cohort, and 240 on one with forty
+              # shared population - as many panels as a cohort has pathways and
               # populations. The count is not knowable until a cohort arrives, which is exactly
               # why the ceiling belongs in the declaration.
               per_item: "<"
@@ -564,7 +564,7 @@ points:
             # says it here in two seconds, and says it was skipped where there is no R.
             - ["{python}", "tests/test_an_expr_names_only_what_the_script_binds.py"]
             # AND THE PLUGIN'S OWN PYTHON (harness ADR-0026, K-s): one line naming `Path`, never
-            # imported, cost eighteen units five minutes of inference each before the NameError.
+            # imported, cost every unit a full inference before the NameError.
             - ["{python}", "tests/test_a_plugin_names_only_what_it_binds.py"]
             # AND THE SHIPPED LOCK IS STILL CURRENT, LAST (autodev W002). An edit of `requires`
             # makes its group's lock stale, and `install` then refuses that group. This CHECKS and
@@ -593,8 +593,8 @@ points:
         - name: layout
           phase: build
           fills: [report.figures]
-          # THE FIGURE PLAN UNDER A LAYOUT (harness ADR-0024). 945 figures a run was the floor of
-          # a plan with no budget: every entry drawn for every unit, contrast and the cohort. The
+          # THE FIGURE PLAN UNDER A LAYOUT (harness ADR-0024). A plan with no budget had no
+          # ceiling on its figures: every entry drawn for every unit, contrast and the cohort. The
           # budgets are FILES per occurrence of the axis; a per-item family takes a ceiling inside
           # the budget. `sample` and `group` are the two unit axes (`unit` on an entry means both);
           # `interaction` is the cross of the design's factors, one budget per direction; `cohort`
@@ -652,8 +652,8 @@ points:
           why: >
             HOW MANY FIGURES A READER IS HANDED, PER SAMPLE, PER GROUP, PER CONTRAST AND FOR THE
             INTERACTION, decided once for every plugin. Without it the plan had a ceiling per
-            family and no total, and one plugin drew 945 plates a run of which a paper numbered
-            105 and a reader could open none
+            family and no total, and one plugin drew plates by the hundred of which a paper numbered
+            a fraction and a reader could open none
         - name: measure
           phase: test
           fills: [memory_gb_base, memory_gb_per_100k]

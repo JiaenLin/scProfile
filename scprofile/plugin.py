@@ -388,7 +388,7 @@ class Context(FigureContextReader):
         #: machine. `cores` was added after a plugin built a pool from `cpu_count()` and ran the
         #: node's worth of workers PER SAMPLE; the memory half was not, so the same plugin then
         #: passed no memory limit at all and its framework divided the machine by the worker
-        #: count - 86% of CPU in garbage collection, and most of the job's allocation unused.
+        #: count - most of its CPU in garbage collection, and most of the job's allocation unused.
         #:
         #: `None` means the host has no figure, and a plugin must then let its framework default
         #: rather than invent one. It is a SHARE, not a ceiling the host enforces: several
@@ -397,7 +397,7 @@ class Context(FigureContextReader):
         self.unit = unit
         #: The samples this unit covers. A SAMPLE unit has one; a GROUP unit - a design arm -
         #: has its members. Carried so a panel can say ON ITS FACE what it was drawn from: a
-        #: pooled three-animal arm and a single animal render identically otherwise, and a
+        #: pooled arm of several animals and a single animal render identically otherwise, and a
         #: qualification that lives only in a caption does not travel with the image into a
         #: slide, a grant or a referee's PDF.
         self.unit_members = tuple(str(m) for m in (unit_members or ()))
@@ -411,7 +411,7 @@ class Context(FigureContextReader):
         #: THE AXIS EACH PLAN ENTRY IS DRAWN ON, `{id: sample|group|unit|...}`: a panel declared
         #: for one kind of unit is not drawn for the other kind. The generated R companion held
         #: its entries to this from the first run under the layout and this emit path did not,
-        #: so every arm drew the per-sample census and the group axis read six against five.
+        #: so every arm drew the per-sample census as well.
         self.plan_axis = {str(k): str(v) for k, v in (plan_axis or {}).items()}
         #: Which unit axes this RUN wants per-unit figures for. Empty means all of them, which
         #: is the default and what every run did before the setting existed. It is NOT a plugin
@@ -484,9 +484,9 @@ class Context(FigureContextReader):
         #: ONE NUMBER PER INSTANCE, so a per-unit plugin's units can be put on one axis.
         #: A per-unit plugin delivers N single-sample reports; without a scalar the host can
         #: compare, the page is those N reports stapled together and the cohort statement is
-        #: left to the reader's arithmetic. Measured on a ten-animal cohort: one plugin's
-        #: interaction count ran 8,194 to 38,895 across the ten, and nothing on its page put
-        #: the ten numbers on the same axis.
+        #: left to the reader's arithmetic. Measured on a real cohort: one plugin's
+        #: interaction count ran over a wide range across its animals, and nothing on its page put
+        #: those numbers on the same axis.
         self._metrics = {}
         #: Claims this plugin's own diagnostics refute. See `contradiction`.
         self._contradictions = []
@@ -515,8 +515,8 @@ class Context(FigureContextReader):
         """Whether THIS unit's per-unit figures are wanted in this run. Default: yes.
 
         A RUN THAT DRAWS EVERY PANEL FOR EVERY UNIT SPENDS MOST OF ITSELF DRAWING. Measured on a
-        cohort of eighteen units, ten of them single samples: the per-sample panels were 340 of
-        the run's figures and about half its wall clock, and they answer a different question
+        real cohort: the per-sample panels were most of the run's figures and much of its wall
+        clock, and they answer a different question
         from the group panels - they are the consistency check, not the result.
 
         So which axes get figures is a RUN-LEVEL setting (`--figures-for`), not a decision any
@@ -1128,8 +1128,8 @@ class Context(FigureContextReader):
         A CAPTION DOES NOT TRAVEL WITH THE IMAGE. Lift a PNG into a slide, a grant or a
         referee's PDF and every qualification that lived beside it is gone - so a panel drawn on
         one sample and a panel drawn on a whole arm's pooled cells arrive looking identical and
-        equally cohort-shaped. Measured on a real report: ten single-animal panels and four
-        pooled-arm panels of the SAME family, in one appendix, and not one of the fourteen said
+        equally cohort-shaped. Measured on a real report: single-animal panels and
+        pooled-arm panels of the SAME family, in one appendix, and not one of them said
         which it was anywhere on the image.
 
         It is added before `bbox_inches="tight"` saves, so the canvas GROWS to include it rather
@@ -1148,7 +1148,7 @@ class Context(FigureContextReader):
             t = fig.text(0.0, -0.006, line, ha="left", va="top", fontsize=5.2,
                          color="#5A5A5A", transform=fig.transFigure)
             t._scprofile_provenance = True
-            # BELOW THE LOWEST ARTIST, NOT AT A FIXED y (harness ADR-0018). Six panels of one
+            # BELOW THE LOWEST ARTIST, NOT AT A FIXED y (harness ADR-0018). Panels of one real
             # run carried a bottom tick label through the stamp: the canvas had been shrunk to
             # the column after the stamp was placed, and tick labels in points then reached
             # further below the box. Placed from the rendered box, after `fit_column`, the
@@ -1165,8 +1165,8 @@ class Context(FigureContextReader):
         disk, because a plugin whose figure is drawn from a table it emitted should be able to
         point at that table rather than write the same numbers twice.
 
-        THE FIGURE IS CLOSED. matplotlib keeps every unclosed figure alive: a plugin drawing a
-        dozen panels holds a dozen canvases of a 100,000-cell scatter in memory and gets a
+        THE FIGURE IS CLOSED. matplotlib keeps every unclosed figure alive: a plugin drawing many
+        panels holds as many canvases of a large scatter in memory and gets a
         RuntimeWarning at twenty, and the plugin that trips it is the one whose report has the
         most panels in it. `close=False` is there for the rare case of drawing on it again.
         """
@@ -1174,7 +1174,7 @@ class Context(FigureContextReader):
         #
         # The first version of `--figures-for` reached only the wrapped tool's own plots, because
         # that was where the drawing time obviously was. It left every panel a plugin draws
-        # ITSELF untouched - measured: ten per sample unit, a hundred images, and the per-sample
+        # ITSELF untouched - measured: one set per sample unit, and the per-sample
         # page still built and still linked. Half a setting is worse than none, because the run
         # reports the saving and the page it was supposed to remove is still there.
         #
@@ -1204,7 +1204,7 @@ class Context(FigureContextReader):
             return None
         # THE CEILING IS ENFORCED WHERE THE FIGURE IS WRITTEN, not only where the plan is read.
         # `at_most` was consulted by the planner and by nothing else, so a plugin could declare
-        # six and draw twelve and only a later comparison of two numbers would notice. Here the
+        # a ceiling, draw past it, and only a later comparison of two numbers would notice. Here the
         # host can refuse, and it does; where the wrapped tool writes into its own device the
         # host cannot, and `capacity --promised` catches that after the fact instead.
         _fam = _ceiling_for(self.figure_ceiling, name)
@@ -1300,8 +1300,8 @@ class Context(FigureContextReader):
         fig.savefig(png, dpi=dpi, bbox_inches="tight")
         # THE VECTOR COPY IS FOR THE FIGURES A RESULT IS WRITTEN FROM. It is offered on the page
         # as a "vector (PDF)" download, so it is not redundant - it is just not needed for every
-        # panel. MEASURED: one cohort wrote 360 files for 180 diagnostic plates, ten per unit
-        # across eighteen units, in two formats, and the section cites none of them. Which kinds
+        # panel. MEASURED: a real cohort wrote every diagnostic plate of every unit
+        # in two formats, and the section cites none of them. Which kinds
         # those are is not the host's to know; the plugin says so by placing them `appendix`,
         # the same declaration that keeps them out of the paper's numbering.
         vector = _wants_vector(self.figure_position, name)
@@ -1451,10 +1451,10 @@ class Context(FigureContextReader):
         """This plugin's OWN diagnostic refutes its own headline. Say it in the headline.
 
         Two pages measured on a real cohort carried a headline their own figures contradict:
-        "45.5% of cells score S or G2M" in post-mitotic tissue, on a panel whose genes are
+        a large share of cells scored S or G2M in post-mitotic tissue, on a panel whose genes are
         detected in almost no cell and whose called fraction FALLS as sequencing depth rises;
-        and "3 terminal states" over cells whose fate entropy sits at the maximum three states
-        allow, which is what a uniform fate probability looks like.
+        and a count of "terminal states" over cells whose fate entropy sits at the maximum those
+        states allow, which is what a uniform fate probability looks like.
 
         Neither page was wrong - the evidence against each was plotted, honestly, further down.
         But a reader takes the headline, and a limit that is only reachable by reading every
