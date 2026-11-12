@@ -233,7 +233,9 @@ organism human because its symbols are, then `capacity --promised` on that run).
 entry promised and did not draw on the fixture fails the tier and the cohort is not run: that is
 where a `when` or a count fitted to the cohort shows, and nothing static can see it. On a
 workstation without the plugin's environment, `run` refuses at its door in `plan`'s words and
-the tier accepts the refusal.
+the tier FAILS: a refusal is not a pass (harness ROUTE R46, autodev W055). It is green only where
+the plugin ran on both shapes and ended `ok`: give it its environment (`SCPROFILE_<PLUGIN>_PYTHON`,
+or the site's prefix through `SCH_DEV_PREFIX`), or read the cluster job's ladder.
 
 ---
 

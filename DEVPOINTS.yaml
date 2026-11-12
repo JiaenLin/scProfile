@@ -59,12 +59,14 @@ fixture:
     - ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{out}/run", "--promised"]
   products: []
   timeout: 1800
-  # `plan` computes the whole plan against the data and then exits 2 where the kernel's own
-  # environment has not been built in this installation. That is the tool being right - the
-  # kernel point already declares it cannot prove the environment installs - so the refusal is
-  # accepted, and `refusal_says` is what makes it a refusal rather than a crash.
-  accepts_refusal: true
-  refusal_says: "are not ready in this installation"
+  # A REFUSAL IS NOT A PASS (harness ROUTE R46, GAP-054; autodev W055). This accepted `plan`'s
+  # "not ready in this installation" and any run that ended `refused`, and abundance's blind record
+  # showed what that bought: a ladder with fixture_a and fixture_b green on a plugin that had never
+  # run, and the plugin, once its environment was given, reversing every effect's sign on shape b.
+  # The tier now passes only a plugin that RAN on the fixture and ended `ok`: where its environment
+  # is not built (no SCH_DEV_PREFIX, no SCPROFILE_<PLUGIN>_PYTHON), the tier is red and says so,
+  # and the cluster's job, whose prefix is the site's, is where it goes green.
+  accepts_refusal: false
   # WHAT A RUN RECORDS OF ITS OWN EXECUTION (harness autodev W019): `agree` and the baseline
   # report these and never judge them; every other field is judged, whatever it is called. Each
   # is a fact about the machine and the moment, never a result of the method:
