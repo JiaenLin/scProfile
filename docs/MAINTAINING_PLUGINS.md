@@ -153,8 +153,20 @@ keys the maker writes, each in the form the maker writes it: a copy, or any key 
 writes, fails the check by name whatever it carries, and so does a value in a key it does write
 but in another form - an answer's `n` that is not its position, a prose answer's `sites` that is
 not empty, a `version` or `diff` other than the maker's from the rebuilt files, a statement no
-file of the chain has, or one at another line (W047 fix round). A reason (`why`) is the author's
-words, held only to being text: what it says is read as any text of the repository is. A record
+file of the chain has, or one at another line (W047 fix round). The record is read as the file,
+not as a lenient parse of it: its bytes must be exactly what the maker's writer makes of its
+parse, or it is unreadable - a repeated key at any depth (a JSON parse keeps the last and hides
+the first), content after the document, a byte-order mark, a byte that is not UTF-8, a NaN or
+Infinity literal, a spacing, key order or escape the writer never writes - and the check, and
+every verb that writes the record (`--confirm` included, which now checks it first), refuse it
+by name, nothing written; and every file the check rebuilds for an answer declares a version
+N.N.N (W047 last fix). Three things are held to their form and no further. A reason (`why`) is
+the author's words, held only to being text: what it says is read as any text of the
+repository is. A trace's `commit` can be any commit the repository holds whose VERSION reads the
+stated version, not only the one the rewrite ran on. And the version declared by the file de's
+first answer was made on, which only that answer's diff rebuilds, can carry any digits of the
+form N.N.N: one literal, in de's record only, and no verb records an answer that would add
+another. A record
 an older maker wrote is rewritten through the maker, never by hand: `scprofile design <plugin>
 --rewrite-record --why "..."` drops each copy of a declaration only once it is, byte for byte,
 the declaration of the file its answer made as the check rebuilds it from git and the record,

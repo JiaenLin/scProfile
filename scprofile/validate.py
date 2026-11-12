@@ -1174,6 +1174,11 @@ def _declaration(src):
 #: REWRITE_KEYS (W047 fix round: a rewrite that left no trace made the record say nothing of
 #: what had been taken out of it). EACH FIELD IS HELD TO THE FORM THE MAKER WRITES IT IN as well
 #: (`_form_before_chain`, `_form_after_chain`): an allowed key nothing reads carried any value.
+#: AND EACH KEY ONCE, IN A FILE THAT IS BYTE FOR BYTE WHAT THE WRITER WRITES (`_record_form`, W047
+#: last fix): a parse keeps the last of a repeated key, so the checks of the parse never saw the
+#: first. Held to its form and to nothing more: a reason's text (any text); the trace's commit (any
+#: commit the repository holds whose VERSION reads the stated version); and the digits of one
+#: version literal, in de's record only (the file its first answer was made on).
 RECORD_KEYS = frozenset({"plugin", "answers", "statements", "rewrites"})
 ANSWER_KEYS = frozenset({"n", "kind", "why", "sites", "version", "before", "after", "diff",
                          "made_on"})
@@ -1424,6 +1429,11 @@ def design_record_check(kernel, root=None, rec=None, files=None):
 
     THE RECORD VERIFIES ITSELF WHEREVER IT IS READ (W013's verifier, fix-ups 4 and 5), from the
     repository alone:
+      0. THE FILE IS READ, NOT A LENIENT PARSE OF IT (W047 last fix; `_record_form`): its bytes
+         are exactly what the maker's writer makes of its parse, or the record is unreadable and
+         fails here by name - a repeated key at any depth (a parse keeps the last and hides the
+         first), content after the document, a byte-order mark, a byte that is not UTF-8, a NaN
+         or Infinity literal, and any spacing, key order or escape the writer never writes;
       1. the declaration is a pure literal - `ast.literal_eval` - so no run-time code hides in it;
       2. the shipped file is, outside its declaration, the file the last answer made, and each
          answer's file before is, outside its declaration, the file the answer before it made.
@@ -1441,16 +1451,22 @@ def design_record_check(kernel, root=None, rec=None, files=None):
          the form the maker writes it (W047 fix round: `n` its position, a prose answer's
          `sites` empty, `version` and `diff` exactly what the maker writes from the rebuilt
          files, a statement one the worksheet names in a file of the chain, at its line, and so
-         on - `_form_before_chain`, `_form_after_chain`). What that cannot hold is a reason:
-         each `why` is the author's words, held only to being text, so a value written into a
-         reason passes here and is read as any text of the repository is. Each answer is
-         admitted again by its rule: the prose rule, or at the sites it records;
+         on - `_form_before_chain`, `_form_after_chain`), and every file rebuilt for an answer
+         declares a version N.N.N (W047 last fix). What that cannot hold, and so the limits of
+         the claim: a reason - each `why` is the author's words, held only to being text, so a
+         value written into a reason passes here and is read as any text of the repository is;
+         and the digits of one version literal, that of the file de's first answer was made on,
+         which only that answer's diff rebuilds and the admission sets aside (in de's record
+         only: no answer is recorded now without a committed file, so there is no second one).
+         Each answer is admitted again by its rule: the prose rule, or at the sites it records;
       2b. A COPY DROPPED IS ACCOUNTED FOR (W047 fix round): every answer recorded before W035's
          fix round 1 was written with a copy of its declaration, and a record without it names,
          in exactly one entry of `rewrites`, the rewrite that dropped it: the tool's version,
          the commit it ran on (git holds it, and its VERSION file reads that version), a reason,
          and the copy's digest - which must be the digest of the declaration of the file the
-         answer made, as rebuilt here (`_rewrite_form`);
+         answer made, as rebuilt here (`_rewrite_form`). The commit is held to that and no
+         more: any commit the repository holds whose VERSION reads the stated version passes,
+         not only the one the rewrite ran on (the file has read one version at every commit);
       3. THE CHAIN'S END IS ANCHORED: the first answer's `before` - or, with no answer yet, the
          shipped file - is, outside its declaration, the plugin at the commit its blind record was
          taken at, as DEVPOINTS `rules.held_out.spent` declares it and git keeps it. A record
@@ -2084,11 +2100,11 @@ def design_rewrite_record(kernel, why="", log=print, root=None):
     if not rp.is_file():
         log(f"  nothing to rewrite: kernels/{rp.name} does not exist")
         return 0
-    rec_before = rp.read_text(encoding="utf-8")
     old = _read_record(kernel)
     if old.get("unreadable"):
         log(f"  refused: the record is unreadable - {old['unreadable']}; nothing written")
         return 1
+    rec_before = rp.read_text(encoding="utf-8")
     copies = {a.get("n"): a["after_declaration"] for a in old.get("answers") or []
               if isinstance(a, dict) and "after_declaration" in a}
     bad = [n for n, c in copies.items() if not isinstance(c, str) or type(n) is not int]

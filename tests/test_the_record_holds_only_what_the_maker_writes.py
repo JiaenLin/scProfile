@@ -33,8 +33,19 @@ AND, FOUND BY THE BATCH'S VERIFICATION (W047 fix round), each failing on `945549
      reason, each dropped copy's digest - so a trace forged in any field, or removed, fails;
   9. a value planted in any field the maker writes (`n`, a prose answer's `sites`, a statement
      no file of the chain has, `version`, `diff`, ...) is refused by name, not only a new key.
-A reason (`why`) is the author's words and is held only to being text: a value written into one
-passes the check, and is read as any text of the repository is.
+AND, FOUND BY THE BATCH'S LEAN RE-CHECK (W047 last fix), each failing on `95ed6bd`:
+ 10. the record is read as the file, not as a lenient parse of it: a repeated key (before an
+     answer's `n`, the record's `plugin`, a statement's `how`, the trace's `commit`), a second
+     document, trailing space, a byte-order mark, a NaN or Infinity literal, a byte that is not
+     UTF-8, a character the writer escapes written raw, a merge-conflict marker - each is refused
+     by name by `design`, by `check` and by every verb that writes (`--answer`, `prose`,
+     `--confirm`, `--rewrite-record`, `--replay-into`), nothing written; and text in place of the
+     version of the file de's first answer was made on is refused by name.
+Held to their form and no further, and so the limits of these checks: a reason (`why`) is the
+author's words, held only to being text - a value written into one passes, and is read as any
+text of the repository is; a trace's `commit` can be any commit the repository holds whose
+VERSION reads the stated version; and the digits of that one version literal, in de's record
+only, pass.
 """
 import json
 import os
@@ -379,6 +390,103 @@ try:
          .__setitem__("0" * 16, {"site": "x", "how": P, "why": "y"}),
          "no statement the worksheet names"),
     ), CC, "cellchat", cc)
+
+    print("\n10. the record is read as the file the maker writes, never as a lenient parse of it")
+    # THE BATCH'S LEAN RE-CHECK (W047 last fix, R1; ATTACKS 38): a JSON parse keeps the last of a
+    # repeated key, and the check read only the parse. A text written before answer 1's own `n`
+    # passed `design` and `check`; `--rewrite-record` then erased it with a trace that dropped
+    # nothing, and `--confirm` with none - and `--confirm` over a record that did not parse wrote
+    # a stub with no answers, exit 0. Each form below is refused by name by the stage, by `check`
+    # and by every verb that writes, and nothing is written.
+    text = before.decode("utf-8")
+
+    def first(key, value):
+        """`text` with `"key": value,` written once more, before the first line of `key`."""
+        m = re.search(rf'\n( *)"{key}": ', text)
+        return (text[:m.start()] + f'\n{m.group(1)}"{key}": {json.dumps(value)},'
+                + text[m.start():]).encode("utf-8")
+    forms = [
+        ("a repeated key before answer 1's `n`", first("n", P), "repeats the key 'n'"),
+        ("a repeated key before the record's `plugin`", first("plugin", P),
+         "repeats the key 'plugin'"),
+        ("a repeated key before a statement's `how`", first("how", P), "repeats the key 'how'"),
+        ("a repeated key before the trace's `commit`", first("commit", P),
+         "repeats the key 'commit'"),
+        ("a second document after the record", before + json.dumps({"plugin": P}).encode(),
+         "content after the document"),
+        ("trailing space after the record", before + b" \n", "byte for byte"),
+        ("a byte-order mark", b"\xef\xbb\xbf" + before, "byte-order mark"),
+        ("a NaN literal", before.replace(b'"n": 1,', b'"n": NaN,', 1), "the literal NaN"),
+        ("an Infinity literal", before.replace(b'"n": 1,', b'"n": Infinity,', 1),
+         "the literal Infinity"),
+        ("a byte that is not UTF-8", before.replace(b'"why": "', b'"why": "\xff', 1),
+         "is not UTF-8"),
+        ("a character the writer escapes, written raw", before.replace(
+            b'"why": "', '"why": "\u00e9'.encode("utf-8"), 1), "byte for byte"),
+        ("a merge-conflict marker", b"<<<<<<< HEAD\n" + before, "does not parse"),
+    ]
+    ck("(each form is planted: a JSON parse reads the first four as the record itself)",
+       all(f != before for _w, f, _s in forms)
+       and all(json.loads(f) == json.loads(before) for _w, f, _s in forms[:4]))
+    sl = V._scan(SHIPPED.decode("utf-8"))[1][0]["line"]
+    comment = next(x for x in SHIPPED.decode("utf-8").splitlines()
+                   if x.strip().startswith("# ") and SHIPPED.decode("utf-8").count(x) == 1)
+    proposal, target = td / "proposal.py", td / "replay.py"
+    proposal.write_bytes(SHIPPED)
+    verbs = [
+        ("design de", ("design", "de")),
+        ("check", ("check",)),
+        ("--answer", ("design", "de", "--answer", str(proposal), "--why", WHY)),
+        ("prose", ("prose", "de", "--replace", comment, comment + " (a test edit)", "--why", WHY)),
+        ("--confirm", ("design", "de", "--confirm", str(sl), "--why", WHY)),
+        ("--rewrite-record", ("design", "de", "--rewrite-record", "--why", WHY)),
+        ("--replay-into", ("design", "de", "--replay-into", str(target))),
+    ]
+    for where, form, says in forms:
+        for label, args in verbs:
+            REC.write_bytes(form)
+            target.write_bytes(SHIPPED)
+            rc, out = cli(*args)
+            unwritten = (REC.read_bytes() == form and DE.read_bytes() == SHIPPED
+                         and target.read_bytes() == SHIPPED)
+            green = label == "check" and record_row(out).startswith("GREEN")
+            ck(f"{where}: `{label}` refuses it by name, nothing written",
+               rc != 0 and says in out and unwritten and not green, out[-400:])
+    REC.write_bytes(before)
+    DE.write_bytes(SHIPPED)
+
+    # R2: ONE LITERAL PINNED BY NOTHING BUT ITS FORM. de's first answer was recorded before W035's
+    # fix round 1: the file it was made on is rebuilt only from that answer's diff, and the
+    # admission sets a version aside, so text in place of that file's version, with the answer's
+    # `before` and `diff` re-made by the check's own helpers, passed. Every file rebuilt for an
+    # answer now declares N.N.N; the digits of that one literal stay free (the stated limit).
+    TAMPER = (
+        "import json, sys\n"
+        "from scprofile.kernels import discover\n"
+        "from scprofile import validate as V\n"
+        "f = {}; ok, w = V.design_record_check(discover()['de'], files=f); assert ok, w\n"
+        "prev, made = f[1]; ln, old = V._version_node(prev); L = prev.split('\\n')\n"
+        "L[ln - 1] = L[ln - 1].replace(json.dumps(old), json.dumps(sys.argv[1]), 1)\n"
+        "p2 = '\\n'.join(L); r = json.loads(open('kernels/de.design.json').read())\n"
+        "r['answers'][0]['before'] = V._sha(p2)\n"
+        "r['answers'][0]['diff'] = V._maker_diff(p2, made, 'de.py', None)\n"
+        "open('kernels/de.design.json', 'w').write(json.dumps(r, indent=1, sort_keys=True) + '\\n')\n")
+    for value, refused in ((P, True), ("not a version", True), ("9.9.9", False)):
+        REC.write_bytes(before)
+        t = subprocess.run([sys.executable, "-c", TAMPER, value], cwd=str(clone), env=ENV,
+                           capture_output=True, text=True, timeout=600)
+        rc, out = cli("design", "de")
+        rc2, out2 = cli("check")
+        if refused:
+            ck(f"the version of the file answer 1 was made on, {value!r}: refused by name by "
+               f"`design de` and `check`", t.returncode == 0 and rc == 1
+               and "answer 1 was made on declares the version" in out
+               and not record_row(out2).startswith("GREEN"), (t.stderr + out)[-400:])
+        else:
+            ck("(the stated limit: other digits there, N.N.N, pass - that one literal, in de's "
+               "record only)", t.returncode == 0 and rc == 0
+               and record_row(out2).startswith("GREEN"), (t.stderr + out)[-400:])
+    REC.write_bytes(before)
 finally:
     shutil.rmtree(td, ignore_errors=True)
 
@@ -386,5 +494,5 @@ print()
 if FAILS:
     print(f"{len(FAILS)} FAILED")
     raise SystemExit(1)
-print("a design record holds only what the maker writes, each field in the form it writes it (a "
+print("a design record is read as the file the maker writes, each field in the form it writes it (a "
       "reason only as text), and an older one is rewritten through it, with a trace")
