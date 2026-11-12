@@ -160,7 +160,11 @@ the first), content after the document, a byte-order mark, a byte that is not UT
 Infinity literal, a spacing, key order or escape the writer never writes - and the check, and
 every verb that writes the record (`--confirm` included, which now checks it first), refuse it
 by name, nothing written; and every file the check rebuilds for an answer declares a version
-N.N.N (W047 last fix). Three things are held to their form and no further. A reason (`why`) is
+N.N.N (W047 last fix). A record an editor, a formatter, a hand-resolved merge or git's
+`core.autocrlf` wrote again (another indent, key order, line end or final newline) is refused
+the same way, and no verb rewrites it: restore the maker's file from git
+(`git checkout -- kernels/<plugin>.design.json`), then make the change again through the
+maker. Three things are held to their form and no further. A reason (`why`) is
 the author's words, held only to being text: what it says is read as any text of the
 repository is. A trace's `commit` can be any commit the repository holds whose VERSION reads the
 stated version, not only the one the rewrite ran on. And the version declared by the file de's
