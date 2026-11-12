@@ -37,7 +37,7 @@ every share depend on how often they declined; they stay in the object and are n
 
 PLUGIN = {
     "api": 1,
-    "version": "0.5.0",
+    "version": "0.6.0",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "whether a population's share shifts across the design",
     "when_to_use": "you have a design table and want to know whether composition changed",
@@ -1465,8 +1465,9 @@ def run(ctx):
     ctx.plot()
 
     design = ctx.design_table()
-    terms = list((ctx.params.get("contrast") or {}).get("terms")
-                 or ctx.testable_factors(min_replicates=C["min_samples_per_level"]))
+    terms = [t for t in ((ctx.params.get("contrast") or {}).get("terms")
+                         or ctx.testable_factors(min_replicates=C["min_samples_per_level"]))
+             if t in ctx.testable_factors(min_replicates=C["min_samples_per_level"])]
     if not terms:
         return ctx.refuse("compositional test",
                           f"no factor has two levels with at least "
@@ -1525,7 +1526,11 @@ def run(ctx):
                            var=pd.DataFrame(index=pd.Index(pops, name="population")))
         mdata = (sccoda.load(adata, type="sample_level", covariate_obs=[term])
                  if hasattr(sccoda, "load") else adata)
-        model = sccoda.prepare(mdata, formula=term, reference_cell_type=ref)
+        # THE BASE LEVEL IS THE HOST'S CONTROL (`ctx.levels`), named to patsy as the Treatment
+        # reference: left to the formula library, the level that sorts first was the base.
+        model = sccoda.prepare(mdata, formula=f"C(Q({term!r}), Treatment("
+                                              f"reference={ctx.levels(term, tab[term])[0]!r}))",
+                               reference_cell_type=ref)
         sccoda.run_nuts(model, num_samples=int(C["num_samples"]),
                         num_warmup=int(C["num_warmup"]), rng_key=int(C["seed"]))
         # THE FDR IS SET BEFORE ANYTHING IS READ BACK. `credible_effects(est_fdr=x)` recomputes
@@ -1626,7 +1631,18 @@ def run(ctx):
                f"plugin does not run; F2_reference shows what can be checked without refitting.")
     ctx.caveat(f"Sample counts per level: {sizes}. The model is fitted on "
                f"{len(tab.index)} rows - one per sample, not one per cell - and with few samples "
-               f"per arm the posterior leans on the prior.")
+               f"per arm the posterior leans on the prior."
+               + "".join(f" Factor {t!r}, named by the plan, is NOT TESTED: a level of it has "
+                         f"fewer than {C['min_samples_per_level']} samples "
+                         f"(min_samples_per_level)."
+                         for t in sorted(set(map(str, (ctx.params.get("contrast") or {})
+                                                 .get("terms") or [])) - set(terms)))
+               + (f" THE INTERACTION OF {terms[0]!r} AND {terms[1]!r} IS NOT FITTED: the plan "
+                  f"asked for it, but this plugin fits scCODA on one factor at a time, each in "
+                  f"its own model, so an effect is that factor's shift averaged over the other "
+                  f"factor, and no population was tested for an interaction either way."
+                  if (ctx.params.get("contrast") or {}).get("kind") == "interaction"
+                  and len(terms) >= 2 else ""))
     ctx.caveat(f"Chain: {C['num_samples']:,} draws after {C['num_warmup']:,} warmup, seed "
                f"{C['seed']}, at fdr {C['fdr']}. The inclusion probability every call is made on "
                f"is a share OF those draws, so the chain length is part of the answer.")

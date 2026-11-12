@@ -21,8 +21,27 @@
    "sites": [],
    "version": "0.5.0",
    "why": "a comment named the scheduler job a measurement ran in, a site's value; the measurement's fact stays (autodev W055, rule 1)"
+  },
+  {
+   "after": "0c03ee9b855b41db",
+   "before": "4f9306833fe149aa",
+   "diff": "--- a/kernels/abundance.py\n+++ b/kernels/abundance.py\n@@ -37,7 +37,7 @@\n \u2063sha256:01ba4719c80b6fe9\n \u2063sha256:c0bc317d89b550fa\n \u2063sha256:ed0177a053131fce\n-\u2063sha256:cc16e06cb738452b\n+\u2063sha256:a9f71811ec41707d\n \u2063sha256:4b8b787a891e1daa\n \u2063sha256:7b79b3f95fa7824c\n \u2063sha256:69282a83e912d7e6\n@@ -1465,8 +1465,9 @@\n \u2063sha256:51dddc2c94234ad3\n \u2063sha256:01ba4719c80b6fe9\n \u2063sha256:fbc2173dade26e51\n-\u2063sha256:2f80c8752954f683\n-\u2063sha256:3edbadf716c54c8d\n+\u2063sha256:bb50124d8ce5dccd\n+\u2063sha256:9b1c2cd5220fbe3f\n+\u2063sha256:52bdbd1a2bf692a2\n \u2063sha256:669bdaca3c28dcbe\n \u2063sha256:efabbee9843dc9df\n \u2063sha256:af0a5a7d300a220d\n@@ -1525,7 +1526,11 @@\n \u2063sha256:a51a3f4a23d3dc93\n \u2063sha256:cfd330c7e9864b32\n \u2063sha256:b0b53b71a6e9664a\n-\u2063sha256:8444a8832aca1b12\n+\u2063sha256:28a12c043b86176e\n+\u2063sha256:5f944730aae3e79e\n+\u2063sha256:9f0f58430f18d11d\n+\u2063sha256:cc1bad69e2f9847b\n+\u2063sha256:8dde5a961a19a339\n \u2063sha256:1ed4ada0cb83f61c\n \u2063sha256:72eab492e3ede580\n \u2063sha256:5a7593a8dd05b4cd\n@@ -1626,7 +1631,18 @@\n \u2063sha256:edcf072e4e0fa000\n \u2063sha256:760907f724007193\n \u2063sha256:131f3dc3327932e1\n-\u2063sha256:bc8a2778f78cfadc\n+\u2063sha256:d92aca28429d1fba\n+\u2063sha256:a8261388b2aca027\n+\u2063sha256:62c47b6883693dd0\n+\u2063sha256:5abe152a7212f719\n+\u2063sha256:3c6727721b989072\n+\u2063sha256:92959e0ec80df96d\n+\u2063sha256:68836e135eb72a3e\n+\u2063sha256:e5e5007d3c973d28\n+\u2063sha256:824603376a6ac636\n+\u2063sha256:a51cac48ed0ff662\n+\u2063sha256:73bbca713ee20e72\n+\u2063sha256:50d33e60f99f895e\n \u2063sha256:b31c2a79d332d152\n \u2063sha256:daeb37f2393ff121\n \u2063sha256:64faab79206925f5\n",
+   "made_on": "2b2e9f8fd815ec2405d0e5a705bb812262d2e4cf",
+   "n": 3,
+   "sites": [
+    "fit:1528",
+    "statement:1627"
+   ],
+   "version": "0.6.0",
+   "why": "the reference level is the host's: the fit's formula names the declared control (ctx.levels) as patsy's Treatment reference, where the formula library's alphabetical base reversed every effect on a design whose control sorts last (GAP-039); the plan's terms are held to the plugin's own min_samples_per_level, and the model's caveat names a term it drops and an interaction the plan asks for and this plugin does not fit, with the reason"
   }
  ],
  "plugin": "abundance",
- "statements": {}
+ "statements": {
+  "67d50ba1c9922211": {
+   "how": "answer 3",
+   "site": "statement:1632",
+   "why": "the reference level is the host's: the fit's formula names the declared control (ctx.levels) as patsy's Treatment reference, where the formula library's alphabetical base reversed every effect on a design whose control sorts last (GAP-039); the plan's terms are held to the plugin's own min_samples_per_level, and the model's caveat names a term it drops and an interaction the plan asks for and this plugin does not fit, with the reason"
+  }
+ }
 }
