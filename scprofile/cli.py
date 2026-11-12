@@ -1759,7 +1759,9 @@ def _prose(a):
         if a.no_follow:
             print("  next: " + " ".join(argv[1:] if argv[0] == sys.executable else argv))
             continue
-        r = subprocess.run(argv, cwd=str(root), capture_output=True, text=True)
+        from . import manifest
+        r = subprocess.run(argv, cwd=str(root), capture_output=True, text=True,
+                           env=manifest.env_for_kernel(cores=manifest.UNALLOCATED_CORES))
         tail = (r.stdout + r.stderr).strip().splitlines()
         print(f"  after: exit {r.returncode} - {' '.join(argv[1:])}"
               + (f"  ({tail[-1][:120]})" if tail else ""))

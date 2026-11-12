@@ -1589,8 +1589,9 @@ def guard_verdict(kernel, *, describe, constraint, params, log=print):
     payload = json.dumps({"describe": describe, "constraint": constraint,
                           "params": dict(params or {})})
     try:
+        from . import manifest
         r = subprocess.run(argv, input=payload, capture_output=True, text=True,
-                           timeout=GUARD_TIMEOUT_S)
+                           timeout=GUARD_TIMEOUT_S, env=manifest.env_for_kernel(cores=manifest.UNALLOCATED_CORES))
     except subprocess.TimeoutExpired:
         # THE OTHER WAY A CHECK RETURNS NO VERDICT. There was no timeout here at all, so a guard
         # that hung stopped the run with no message - and a guard is host-side code running

@@ -959,12 +959,11 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         # AND THE SAME SENTENCE FOR THE OTHER LIMIT, WHICH FAILS SILENTLY AND WORSE. The two
         # limits are not symmetric in their consequences: a missing timeout only removes a
         # ceiling, while a missing core share removes THE THREAD CAPS THEMSELVES.
-        # `manifest.env_for_kernel` sets the core-share variables under `if cores:` - it must, because
-        # "the caller passed nothing" and "the caller asked for zero" have to mean leave the
-        # environment alone - so `cores=None` here sets NONE of them, and absent means
-        # INHERITED. That is not a degraded core share; it is exactly the state this phase was
-        # in before it had one, with a job script's `OMP_NUM_THREADS=$NCPUS` reaching every
-        # launch. It was the only way back to that state, and it was the one that said nothing.
+        # Until W065's second builder `manifest.env_for_kernel` set the core-share variables
+        # only `if cores:`, so `cores=None` here set NONE of them and every launch INHERITED the
+        # shell's (a job script's `OMP_NUM_THREADS=$NCPUS`, a node's count). Now a launch that
+        # names no share gets `manifest.UNALLOCATED_CORES` on every channel: never the machine,
+        # and not the run's share either, so the phase is slower than its run and says why.
         #
         # A LIVE RUN CANNOT REACH HERE: `cli` writes `"cores": budget` into report.json on every
         # run, and `write_all` reads it back. A `scprofile report` REBUILD can - from a
@@ -972,10 +971,11 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         # precisely the case where nobody is watching a queue and the oversubscription would go
         # unnoticed until the node did. So this is printed, not raised: the phase's figures are
         # still worth drawing, and the reader is told what they were drawn under.
+        from . import manifest as _M
         print(f"  native compare {name}: NO core share on this phase - this report.json records "
-              f"no `cores`, so the core-share variables are UNSET and each launch INHERITS whatever "
-              f"the shell exports (a job script's OMP_NUM_THREADS=$NCPUS reaches it). Rebuild "
-              f"from a report.json that records `cores`, or cap the threads in the environment.")
+              f"no `cores`, so each launch runs at the stated allocation of a launch with none "
+              f"({_M.UNALLOCATED_CORES} core, manifest.UNALLOCATED_CORES), not at the run's share. "
+              f"Rebuild from a report.json that records `cores` to run it at its share.")
     udir = {str(u.get("unit")): u.get("dir") for u in (units or []) if u.get("unit")}
     # THE SHARE EACH LAUNCH RUNS UNDER, AND HOW MANY RUN AT ONCE (harness ADR-0026). The
     # launches ran one after another on a many-core node, each handed the whole budget and

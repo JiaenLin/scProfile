@@ -83,7 +83,8 @@ def can_read(python_exe, h5ad, timeout=300):
     """
     try:
         r = subprocess.run([str(python_exe), "-c", _PROBE, str(h5ad)],
-                           capture_output=True, text=True, timeout=timeout)
+                           capture_output=True, text=True, timeout=timeout,
+                           env=manifest.env_for_kernel(cores=manifest.UNALLOCATED_CORES))
     except (OSError, subprocess.TimeoutExpired) as e:
         return False, f"could not probe {python_exe}: {e}"
     if r.returncode == 0:

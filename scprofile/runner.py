@@ -46,6 +46,18 @@ def with_env_bin(exe, base=None):
     return e
 
 
+def unallocated_env(exe):
+    """The environment of a launch that has no allocation of its own, `exe`'s `bin` on PATH.
+
+    A selftest at install and a probe of an environment are given cores by no plan. They get
+    `manifest.UNALLOCATED_CORES` on every channel, from `manifest.env_for_kernel` (the one function
+    every plugin launch takes), never what the caller exports. Until W065's second builder the
+    selftest took `with_env_bin(exe)` alone: de's selftest, which passes pydeseq2 no worker count,
+    would have started a worker for each of a node's cores at install, as the fixture run did.
+    """
+    return with_env_bin(exe, manifest.env_for_kernel(cores=manifest.UNALLOCATED_CORES))
+
+
 def env_prefix(kernel_name, prefix):
     """The PER-PLUGIN environment path. Kept, and kept at this signature.
 
@@ -756,7 +768,7 @@ def _install_r(p, entries, log=print):
     specs = "c(" + ", ".join(f'"{e}"' for e in entries) + ")"
     f = p / ".scprofile_r_install.R"
     f.write_text(R_INSTALL_SCRIPT.replace("SPECS", specs), encoding="utf-8")
-    env = dict(os.environ)
+    env = manifest.env_for_kernel(cores=manifest.UNALLOCATED_CORES)
     env["PATH"] = f"{p / 'bin'}{os.pathsep}{env.get('PATH', '')}"
     for var in ("R_LIBS_USER", "R_LIBS_SITE", "R_LIBS"):
         env.pop(var, None)
@@ -901,7 +913,7 @@ def installed_versions(p):
     if not exe.exists():
         return {}
     r = subprocess.run([str(exe), "-c", _INSTALLED_PROBE], capture_output=True, text=True,
-                       timeout=600, env=with_env_bin(exe))
+                       timeout=600, env=unallocated_env(exe))
     out = {}
     for line in (r.stdout or "").splitlines():
         if "==" in line:
@@ -1164,7 +1176,8 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False, platform=N
             _conda_solve(cmd, mgr, len(spec["conda"]), log=log)
         elif venv_py:
             log(f"  interpreter: {venv_py} (venv; this lock needs no conda packages)")
-            subprocess.run([venv_py, "-m", "venv", str(p)], check=True)
+            subprocess.run([venv_py, "-m", "venv", str(p)], check=True,
+                           env=manifest.env_for_kernel(cores=manifest.UNALLOCATED_CORES))
         else:
             want = f"python{spec['python']}"
             raise RuntimeError(
@@ -1201,13 +1214,15 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False, platform=N
                 log(f"  applying {len(spec['pip'])} locked package(s) with --no-deps - nothing "
                     f"is resolved here: {locked.where()}")
                 subprocess.run([str(pip), "install", "--no-input", "--no-deps", "-r",
-                                str(pinfile)], check=True)
+                                str(pinfile)], check=True,
+                               env=manifest.env_for_kernel(cores=manifest.UNALLOCATED_CORES))
             elif spec["pip"]:
                 # ONE resolve, all pins together. Installing them in sequence lets a later
                 # package quietly downgrade an earlier pin, and the environment then does not
                 # match the lock that the fingerprint says it was built from.
                 log(f"  applying {len(spec['pip'])} pinned package(s) in one resolve")
-                subprocess.run([str(pip), "install", "--no-input"] + spec["pip"], check=True)
+                subprocess.run([str(pip), "install", "--no-input"] + spec["pip"], check=True,
+                               env=manifest.env_for_kernel(cores=manifest.UNALLOCATED_CORES))
             if spec["r"]:
                 _install_r(p, spec["r"], log=log)
             if locked is not None:
@@ -1422,7 +1437,7 @@ def selftest(kernel, *, prefix=None, log=print, timeout=None):
     try:
         with open(logf, "w", encoding="utf-8") as fh:
             r = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, timeout=limit,
-                               env=with_env_bin(exe))
+                               env=unallocated_env(exe))
     except subprocess.TimeoutExpired:
         tail = "".join(logf.read_text(encoding="utf-8", errors="replace").splitlines(True)[-15:])
         record_proof(kernel, prefix, verdict="failed",

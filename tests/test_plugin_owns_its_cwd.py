@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 FAILURES = []
 
 #: (file, the call that launches a plugin, what it must be given)
-LAUNCHES = [("scprofile/runner.py", "manifest.env_for_kernel"),
+LAUNCHES = [("scprofile/runner.py", "manifest.env_for_kernel(inp, cores=_cores)"),
             ("scprofile/report.py", '"--compare"')]
 
 for rel, marker in LAUNCHES:

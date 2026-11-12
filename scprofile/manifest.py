@@ -568,6 +568,47 @@ _THREAD_VARS = (
     "R_DATATABLE_NUM_THREADS",  # data.table, at load
 )
 
+#: THE ALLOCATION OF A LAUNCH THAT HAS NONE OF ITS OWN (autodev W065, builder 2). A selftest at
+#: install, a plugin's guard before the plan, a probe of an environment (what it holds, whether it
+#: reads the object), an install step run by an environment's own pip or R, a validation the
+#: maker's edit verb starts, a report rebuild from a report.json that records no share: no plan
+#: gives any of them cores. Each used to name no share and so INHERIT every channel, which on a
+#: cluster node is the node's count: de's selftest passes pydeseq2 no worker count, the fixture
+#: run's defect by another route. ONE core, the smallest that lets each of them run: each is
+#: seconds of work on tiny or no data, and every parallel library here runs serially at one
+#: (joblib's `n_jobs=1` starts no worker, numba's pool is one thread, BLAS is single-threaded, R's
+#: `mclapply` with `mc.cores=1` is `lapply`). It is the same on every machine, so a selftest's
+#: verdict does not depend on the node it ran on. `env_for_kernel` applies it to every launch that
+#: names no share; docs/EXECUTION.md states it for a reader.
+UNALLOCATED_CORES = 1
+
+#: EVERY PROCESS START IN THE HOST THAT RUNS NEITHER A PLUGIN'S CODE NOR A PLUGIN ENVIRONMENT'S
+#: INTERPRETER OR R, by `file:function`, with what it runs. Every other start takes its environment
+#: from `env_for_kernel`. tests/test_a_plugin_takes_its_allocation.py walks the package's syntax
+#: tree and fails on a start that does neither, by file, line and function, and on a name here that
+#: starts nothing. A literal: the test reads it without importing.
+HOST_ONLY_LAUNCHES = {
+    "scprofile/gate.py:configured":
+        "git config, asked which hooks path the repository uses; no plugin runs there",
+    "scprofile/landscape.py:cache_forecast":
+        "git show, reading a plugin file and landscape.py at a commit as text; nothing is run",
+    "scprofile/lock.py:compile_lock":
+        "uv, the host's resolver, writing a lock and asked its version; no environment exists yet",
+    "scprofile/runner.py:_accepts_solver_flag":
+        "the environment manager's own `create --help`, read for one flag; no environment is used",
+    "scprofile/runner.py:_conda_solve._timed":
+        "the environment manager (conda or mamba) solving and creating an environment: the "
+        "manager's own program, and what it starts inside its link step is the manager's",
+    "scprofile/runner.py:_conda_list":
+        "the environment manager listing what an environment holds; nothing in it is run",
+    "scprofile/validate.py:_git_show":
+        "git show, reading a spent plugin's file at its commit as text; nothing is run",
+    "scprofile/validate.py:_git_head":
+        "git rev-parse HEAD, naming the commit a check ran at; no plugin runs there",
+    "scprofile/watch.py:_scheduler":
+        "the scheduler's own client (qstat or scontrol) reporting a job's state; no plugin runs",
+}
+
 
 def honour_cpu_count(environ=None):
     """`os.cpu_count()` reads `PYTHON_CPU_COUNT` on an interpreter older than 3.13, as 3.13 does.
@@ -586,7 +627,7 @@ def honour_cpu_count(environ=None):
     return n
 
 
-def env_for_kernel(inp, cores=None):
+def env_for_kernel(inp=None, cores=None):
     """The environment a kernel entry point is run with. Kept here so host and kernel agree.
 
     `SCPROFILE_IN` is how a kernel in any language finds its manifest without argument parsing -
@@ -603,13 +644,21 @@ def env_for_kernel(inp, cores=None):
     sake hands the node's count to every plugin it launches.
 
     The share is authoritative here, for every channel in `_THREAD_VARS`: a plugin that passes
-    no worker count to its library gets the share, never the machine (autodev W065). A caller
-    passing None leaves the variables alone.
+    no worker count to its library gets the share, never the machine (autodev W065). A launch
+    that names no share (a selftest, a guard, a probe, an install step) gets `UNALLOCATED_CORES`
+    on every channel, never what its caller exports: until W065's second builder such a call left
+    the channels alone, so they were inherited, and on a node that is the node's count. EVERY
+    process start in the package takes its environment from here, or is named in
+    `HOST_ONLY_LAUNCHES`. `inp` is None for a launch with no manifest; `SCPROFILE_IN` is then
+    removed, not inherited.
     """
     e = dict(os.environ)
-    e["SCPROFILE_IN"] = str(inp)
+    if inp is None:
+        e.pop("SCPROFILE_IN", None)
+    else:
+        e["SCPROFILE_IN"] = str(inp)
     e["SCPROFILE_CONTRACT"] = CONTRACT_VERSION
-    if cores:
-        for var in _THREAD_VARS:
-            e[var] = str(int(cores))
+    n = int(cores) if cores else 0
+    for var in _THREAD_VARS:
+        e[var] = str(n if n >= 1 else UNALLOCATED_CORES)
     return e

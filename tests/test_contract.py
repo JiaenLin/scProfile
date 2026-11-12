@@ -265,7 +265,12 @@ def test_a_plugin_gets_its_own_environments_bin_on_path():
     check("and the rest of PATH survives", e["PATH"].endswith("/usr/bin"), e["PATH"])
     src = inspect.getsource(runner)
     check("the runner uses it when running a plugin", "with_env_bin(exe, manifest.env_for" in src)
-    check("and when running a selftest", "env=with_env_bin(exe))" in src)
+    # The selftest takes `unallocated_env` since autodev W065's second builder: `with_env_bin`
+    # over the stated allocation of a launch with none. Its own bin must still come first.
+    u = runner.unallocated_env("/some/env/bin/python")
+    check("and when running a selftest",
+          "env=unallocated_env(exe))" in inspect.getsource(runner.selftest)
+          and u["PATH"].startswith("/some/env/bin" + _os_env.pathsep), u["PATH"][:60])
 
 
 def test_a_failed_build_still_proves_what_it_can():
@@ -474,9 +479,11 @@ def test_the_core_share_reaches_the_thread_pools():
         for var in manifest._THREAD_VARS:
             check(f"{var} is the share", e.get(var) == "3", f"{var}={e.get(var)}")
         check("and the manifest still arrives", e["SCPROFILE_IN"].endswith("in.json"))
-        untouched = manifest.env_for_kernel(tmp / "in.json")
-        check("a caller that names no share leaves them alone",
-              untouched.get("OMP_NUM_THREADS") == "64", untouched.get("OMP_NUM_THREADS"))
+        unshared = manifest.env_for_kernel(tmp / "in.json")
+        check(f"a caller that names no share gets the stated {manifest.UNALLOCATED_CORES}, not the "
+              f"job's 64 (autodev W065: the selftest named none)",
+              unshared.get("OMP_NUM_THREADS") == str(manifest.UNALLOCATED_CORES),
+              unshared.get("OMP_NUM_THREADS"))
         _os.environ.pop("OMP_NUM_THREADS", None)
     src = (Path(__file__).resolve().parents[1] / "scprofile" / "runner.py").read_text()
     check("the runner reads the share from the manifest it just wrote",

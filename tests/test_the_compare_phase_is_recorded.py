@@ -599,8 +599,8 @@ check(_seen_kw.get("timeout") == 900,
       f"the forward is dropped somewhere in write_all -> write_kernel -> _arm_content")
 check(_seen_kw.get("cores") == 8,
       f"the run declared `cores: 8` and the phase was handed {_seen_kw.get('cores')!r}. None is "
-      f"not a small share - env_for_kernel sets the core-share variables only `if cores:`, so None "
-      f"sets none of them and the child inherits the node's count")
+      f"not the share - env_for_kernel gives a launch that names none the stated "
+      f"{_RN.manifest.UNALLOCATED_CORES} core, not the run's 8")
 _rec5 = k5 / _RS.COMPARE_DIRNAME / _RS.PHASE_RECORD
 check(_rec5.is_file(), "a page built by write_all wrote no phase record")
 if _rec5.is_file():
@@ -712,14 +712,17 @@ finally:
         os.environ.pop("OMP_NUM_THREADS", None)
     else:
         os.environ["OMP_NUM_THREADS"] = _saved
-check(_env8.get("OMP_NUM_THREADS") == "64",
-      f"the premise, and the reason the sentence is needed: with no core share the six caps are "
-      f"unset and the child INHERITED the job's 64, got {_env8.get('OMP_NUM_THREADS')!r}. If "
-      f"this changed, env_for_kernel now has a default and this section should be remeasured")
-check(_probe8.get("OMP_NUM_THREADS") == "64",
-      f"the PROBE inherited {_probe8.get('OMP_NUM_THREADS')!r} rather than the job's 64. The "
-      f"probe goes through the same door as the launch and must fail the same way when there is "
-      f"no share to close it - if it does not, section 10's opposite measurement is testing "
+# REMEASURED (autodev W065, builder 2): env_for_kernel now has the default this section foresaw. A
+# launch that names no share gets manifest.UNALLOCATED_CORES on every channel, never the job's 64,
+# and the phase still says it ran without its share.
+_one8 = str(_RN.manifest.UNALLOCATED_CORES)
+check(_env8.get("OMP_NUM_THREADS") == _one8,
+      f"with no core share the launch must run at the stated {_one8} core, never the job's 64 it "
+      f"used to inherit; got {_env8.get('OMP_NUM_THREADS')!r}")
+check(_probe8.get("OMP_NUM_THREADS") == _one8,
+      f"the PROBE read {_probe8.get('OMP_NUM_THREADS')!r} rather than the stated {_one8}. The "
+      f"probe goes through the same door as the launch and must read the same when there is "
+      f"no share - if it does not, section 10's opposite measurement is testing "
       f"something other than the share")
 check("NO core share" in _said8,
       f"a rebuild running the phase with NO core share said nothing about it, so the page's "

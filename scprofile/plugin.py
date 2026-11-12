@@ -264,8 +264,14 @@ class FigureContextReader:
         script = out / f"{name}.R"
         script.write_text(str(self.r_companion or "") + str(body), encoding="utf-8")
         rs = (getattr(self, "params", None) or {}).get("rscript") or "Rscript"
+        import os as _os
+        from . import manifest as _M
+        # THE R CHILD TAKES THIS INSTANCE'S SHARE ON EVERY CHANNEL from the one function, rather
+        # than whatever the process holds by now (autodev W065, builder 2); no share: the stated one.
         proc = _sp.run([rs, str(script)] + [str(a) for a in args],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True,
+                       env=_M.env_for_kernel(_os.environ.get("SCPROFILE_IN"),
+                                             cores=getattr(self, "cores", None)))
         text = (proc.stdout or "")
         err = (proc.stderr or "")
         log_path = out / f"{name}.log"
