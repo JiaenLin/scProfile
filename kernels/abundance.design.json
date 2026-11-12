@@ -10,6 +10,17 @@
    "sites": [],
    "version": "0.4.0",
    "why": "two comments carried one cohort's design: its size, species, assay and cell count, and two of its factor levels; the method's facts stay (one run, one machine, re-fitted every run; numpy 2's scalar repr in a caveat), the cohort's words go (autodev W055, harness RULES rule 1)"
+  },
+  {
+   "after": "4f9306833fe149aa",
+   "before": "29d5706a007b81d0",
+   "diff": "--- a/kernels/abundance.py\n+++ b/kernels/abundance.py\n@@ -37,7 +37,7 @@\n \u2063sha256:01ba4719c80b6fe9\n \u2063sha256:c0bc317d89b550fa\n \u2063sha256:ed0177a053131fce\n-\u2063sha256:e3d3a64753710bc2\n+\u2063sha256:cc16e06cb738452b\n \u2063sha256:4b8b787a891e1daa\n \u2063sha256:7b79b3f95fa7824c\n \u2063sha256:69282a83e912d7e6\n@@ -257,7 +257,7 @@\n \u2063sha256:bac2f050fb629c3f\n \u2063sha256:1add9c75caf5141e\n \u2063sha256:9908a17e9c6624d9\n-\u2063sha256:268f94270dcbcb80\n+\u2063sha256:5a8a3c3cc53e9266\n \u2063sha256:5ccf77f461604b79\n \u2063sha256:21af730b9a36aa9f\n \u2063sha256:35eb04a1a2409316\n",
+   "kind": "prose",
+   "made_on": "1aa7f35c2d80a0dc3231b95de8531cbf460c8b37",
+   "n": 2,
+   "sites": [],
+   "version": "0.5.0",
+   "why": "a comment named the scheduler job a measurement ran in, a site's value; the measurement's fact stays (autodev W055, rule 1)"
   }
  ],
  "plugin": "abundance",

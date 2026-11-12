@@ -37,7 +37,7 @@ every share depend on how often they declined; they stay in the object and are n
 
 PLUGIN = {
     "api": 1,
-    "version": "0.4.0",
+    "version": "0.5.0",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "whether a population's share shifts across the design",
     "when_to_use": "you have a design table and want to know whether composition changed",
@@ -257,7 +257,7 @@ PLUGIN = {
             # PERTPY IMPORTS THIS AND DOES NOT DECLARE IT. `pertpy/data/_dataloader.py` does
             # `from filelock import FileLock` at module scope, and `pertpy/__init__.py` imports
             # `data`, so `import pertpy` raises ModuleNotFoundError in an environment resolved
-            # from pertpy's own metadata. Measured on PBS 677555. A dependency a wrapped tool
+            # from pertpy's own metadata. Measured on a cluster build of the environment. A dependency a wrapped tool
             # forgot is still a dependency this plugin needs, and naming it here is the only
             # place it can be said.
             "filelock": ">=3",
