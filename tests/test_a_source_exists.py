@@ -35,8 +35,13 @@ REGISTRY = {
         "title": "CellChat for systematic analysis of cell–cell communication from "
                  "single-cell transcriptomics",
         "issued": {"date-parts": [[2024, 9, 16]]}},
+    # decoupler (autodev W068): resolved at doi.org 2026-11-13, CSL JSON as it answered.
+    "10.1093/bioadv/vbac016": {
+        "title": "decoupleR: ensemble of computational methods to infer biological activities "
+                 "from omics data",
+        "issued": {"date-parts": [[2022, 1, 1]]}},
 }
-CONVERTED = ("abundance", "de", "cellchat")
+CONVERTED = ("abundance", "de", "cellchat", "decoupler")
 FAILS = []
 
 

@@ -43,12 +43,15 @@ _ACCESSION_PATTERN = r"^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0
 
 PLUGIN = {
     "api": 1,
-    "version": "0.3.0",
+    "version": "0.4.0",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "regulatory activity per cell, from a curated prior",
     "when_to_use": "you want transcription-factor or pathway activity without inferring a "
                    "network from your own data",
     "wraps": {"tool": "decoupler",
+              "doi": "10.1093/bioadv/vbac016",
+              "doi_record": {'10.1093/bioadv/vbac016': {'title': 'decoupleR: ensemble of computational methods to infer biological activities from omics data', 'year': 2022}},
+              "version": "1.8.0",
               # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
               # `native_plots` or this; see native.unreviewed.
               "plots_unreviewed": "nobody has been through decoupler's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
