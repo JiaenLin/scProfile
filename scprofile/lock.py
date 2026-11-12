@@ -163,6 +163,93 @@ def accepts(lock_platform, machine=None):
     return True, ""
 
 
+# ------------------------------------------------------------------- the platforms, and THE SET
+
+#: The platforms this tool says it installs on, one tag per line, beside the locks. With the
+#: groups the plugins' requirements form, it is THE SET every lock answers to (`pairs`).
+PLATFORMS_NAME = "platforms.txt"
+
+
+def _rel(path):
+    try:
+        return str(Path(path).resolve().relative_to(Path(__file__).resolve().parent.parent))
+    except (ValueError, OSError):
+        return str(path)
+
+
+def declared_platforms(dirpath=None):
+    """The platform tags `platforms.txt` declares, in file order; [] when there is no such file.
+
+    Read from the lock directory and not from code, because the two are one decision: a site that
+    replaces the shipped locks (`$SCPROFILE_LOCKS`) declares its own platforms beside its own
+    locks, and a directory with no declaration promises no platform. A tag this module cannot
+    compare (`_parts`) RAISES: a declaration that no machine can match is a promise nothing keeps.
+    """
+    f = Path(dirpath or lock_dir()) / PLATFORMS_NAME
+    try:
+        text = f.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    out = []
+    for raw in text.splitlines():
+        tag = raw.split("#", 1)[0].strip()
+        if not tag:
+            continue
+        if _parts(tag) is None:
+            raise ValueError(f"{f}: {raw.strip()!r} is not a platform tag this tool can compare "
+                             f"(as uv names one: `x86_64-manylinux_2_17`, `aarch64-apple-darwin`)")
+        if tag not in out:
+            out.append(tag)
+    return out
+
+
+def declared_for(machine=None, dirpath=None):
+    """The declared platform whose locks this machine installs (the most specific floor), or None
+    when the machine is on no declared platform: outside the set, it resolves as it always did."""
+    mach = machine or machine_platform()
+    ok = [p for p in declared_platforms(dirpath) if accepts(p, mach)[0]]
+    ok.sort(key=lambda p: ((_parts(p) or ("", "", (0, 0)))[2] or (0, 0)), reverse=True)
+    return ok[0] if ok else None
+
+
+def lock_command(group, platform):
+    """The exact command that writes this group's lock for `platform`, as a shell must type it.
+
+    The site's isolation list and lock directory are part of it when they are set. Without them
+    `scprofile lock` groups the plugins the tool's own way and writes ANOTHER group's lock: with
+    `abundance` isolated, `scprofile lock cellchat` alone re-locks the seven-member group, and the
+    six-member group that was refused stays stale.
+    """
+    from . import resolve as RS
+    mine = sorted(getattr(group, "members", []) or [])
+    pre = ""
+    site = sorted(RS.isolated_by_site())
+    if site:
+        pre += f"{RS.ISOLATE_VAR}={','.join(site)} "
+    if os.environ.get(ENV_VAR):
+        pre += f"{ENV_VAR}={os.environ[ENV_VAR]} "
+    return f"{pre}scprofile lock {mine[0] if mine else '<plugin>'} --platform {platform}"
+
+
+def pairs(kernels=None, dirpath=None):
+    """THE SET: every (group, platform) this tool promises a lock for, as [(Group, tag)].
+
+    The groups are the tool's own - `resolve.group_by_compatibility` over every plugin's
+    `requires` - with the SITE's isolation list left out: a site that isolates a member makes
+    groups the tool never declared, and writes their locks itself (`lock_command` names the
+    command, list included). The platforms are `platforms.txt`. Nothing else enumerates either,
+    so a new group or a new platform joins the set, and the test that walks it
+    (`tests/test_every_group_has_a_lock_for_every_platform.py`), with no line added anywhere.
+    """
+    from . import resolve as RS
+    if kernels is None:
+        from .kernels import discover
+        kernels = discover()
+    ks = list(kernels.values()) if isinstance(kernels, dict) else list(kernels)
+    plats = declared_platforms(dirpath)
+    return [(g, p) for g in RS.group_by_compatibility(ks, isolate=()) for p in plats]
+
+
 # ------------------------------------------------------------------------------- the requirement
 
 def read_constraints(dirpath=None):
@@ -381,15 +468,34 @@ def state(group, locks=None, machine=None):
         stale     a lock for this platform names a member of this group and does not match it.
                   The build REFUSES, because the alternative is resolving the ranges, which is
                   what the lock was written to stop.
-        unlocked  no lock for this platform names any member. The build resolves the ranges as it
-                  always did, and says that nothing records what they resolved to.
+        absent    no lock for this group on a platform this tool DECLARES (`platforms.txt`) and
+                  this machine installs. The build REFUSES, as for a stale lock: a pair of the
+                  set with no lock is a lock nobody wrote, not permission to resolve the ranges.
+        unlocked  no lock for this platform names any member, and the machine is on no declared
+                  platform. The build resolves the ranges as it always did, and says that nothing
+                  records what they resolved to.
     """
     mach = machine or machine_platform()
     found = all_locks() if locks is None else list(locks)
     mine = set(getattr(group, "members", []) or [])
-    first = sorted(mine)[0] if mine else "<plugin>"
-    fix = f"scprofile lock {first} --platform {mach}"
+    try:
+        decl = declared_for(mach)
+    except ValueError as e:
+        return ("stale", None, f"the declared platforms cannot be read, so no lock can be "
+                               f"checked: {e}", f"correct {lock_dir() / PLATFORMS_NAME}")
+    fix = lock_command(group, decl or mach)
+
+    def absent():
+        # A PAIR OF THE SET WITH NO LOCK. Before platforms were declared this read `unlocked` and
+        # the cluster resolved the ranges of the two groups no lock had ever named.
+        return ("absent", None,
+                f"no lock for {', '.join(sorted(mine))} on {decl}, a platform this tool declares "
+                f"({_rel(Path(lock_dir()) / PLATFORMS_NAME)}), and resolving the ranges in its "
+                f"place is what a lock exists to prevent", fix)
+
     if not any(set(lk.members) & mine for lk in found):
+        if decl:
+            return absent()
         # NEVER LOCKED, decided before anything else is read: a group no lock names builds from
         # its ranges as it always did, and nothing about the lock directory can stop that.
         return ("unlocked", None,
@@ -421,9 +527,11 @@ def state(group, locks=None, machine=None):
         named.sort(key=lambda lk: (set(lk.members) != mine, str(lk.path)))
         lk = named[0]
         return ("stale", None,
-                _why_stale(lk, group, want) + ". A lock that no longer matches is not applied, "
-                "and resolving the ranges in its place is what it exists to prevent",
-                f"scprofile lock {first} --platform {lk.platform}")
+                f"on {lk.platform}, " + _why_stale(lk, group, want) + ". A lock that no longer "
+                "matches is not applied, and resolving the ranges in its place is what it exists "
+                "to prevent", lock_command(group, lk.platform))
+    if decl:
+        return absent()
     other = sorted({lk.platform for lk in found if set(lk.members) & mine})
     return ("unlocked", None,
             f"UNLOCKED on this machine ({mach}): locks exist for {', '.join(other)} only, so "

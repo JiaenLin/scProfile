@@ -1,0 +1,71 @@
+# scProfile environment lock: every package of one group, at one exact version, for one platform.
+# Written by `scprofile lock`. Change a plugin's `requires`, or constraints.txt, and re-run it; never edit this file.
+# members: velocity
+# platform: x86_64-manylinux_2_17
+# python: 3.11
+# resolver: uv 0.12.5
+# written: 2026-11-12
+# requirement-digest: fef05e669885
+# requirement: python ==3.11
+# requirement: requires anndata ==0.10.9
+# requirement: requires h5py ==3.12.1
+# requirement: requires igraph ==0.11.8
+# requirement: requires leidenalg ==0.10.2
+# requirement: requires llvmlite ==0.43.0
+# requirement: requires loompy ==3.0.7
+# requirement: requires matplotlib ==3.9.2
+# requirement: requires numba ==0.60.0
+# requirement: requires numpy ==1.26.4
+# requirement: requires pandas ==2.2.3
+# requirement: requires pynndescent ==0.5.13
+# requirement: requires scanpy ==1.10.4
+# requirement: requires scikit-learn ==1.5.2
+# requirement: requires scipy ==1.13.1
+# requirement: requires scvelo ==0.3.4
+# requirement: requires umap-learn ==0.5.7
+# requirement: constraint numpyro<0.22
+# requirement: constraint pertpy<1.0.5
+# requirement: constraint statsmodels<0.15
+anndata==0.10.9           # via scanpy, scvelo, -r requirements.in
+array-api-compat==1.16.0  # via anndata
+click==8.5.1              # via loompy
+cloudpickle==3.1.2        # via joblib
+contourpy==1.3.3          # via matplotlib
+cycler==0.12.1            # via matplotlib
+fonttools==4.68.0         # via matplotlib
+h5py==3.12.1              # via anndata, loompy, scanpy, -r requirements.in
+igraph==0.11.8            # via leidenalg, -r requirements.in
+joblib==1.6.0             # via pynndescent, scanpy, scikit-learn
+kiwisolver==1.5.1         # via matplotlib
+legacy-api-wrap==1.5      # via scanpy
+leidenalg==0.10.2         # via -r requirements.in
+llvmlite==0.43.0          # via numba, pynndescent, -r requirements.in
+loompy==3.0.7             # via scvelo, -r requirements.in
+matplotlib==3.9.2         # via scanpy, scvelo, seaborn, -r requirements.in
+natsort==8.4.0            # via anndata, scanpy
+networkx==3.6.1           # via scanpy
+numba==0.60.0             # via loompy, pynndescent, scanpy, scvelo, umap-learn, -r requirements.in
+numpy==1.26.4             # via anndata, contourpy, h5py, loompy, matplotlib, numba, numpy-groupies, pandas, patsy, scanpy, scikit-learn, scipy, scvelo, seaborn, statsmodels, umap-learn, -r requirements.in
+numpy-groupies==0.16.5    # via loompy
+packaging==26.3           # via anndata, matplotlib, patsy, scanpy, statsmodels
+pandas==2.2.3             # via anndata, scanpy, scvelo, seaborn, statsmodels, -r requirements.in
+patsy==1.0.3              # via scanpy, statsmodels
+pillow==13.0.0            # via matplotlib
+pynndescent==0.5.13       # via scanpy, umap-learn, -r requirements.in
+pyparsing==3.3.3          # via matplotlib
+python-dateutil==4.0.0    # via matplotlib, pandas
+pytz==2026.6              # via pandas
+scanpy==1.10.4            # via scvelo, -r requirements.in
+scikit-learn==1.5.2       # via pynndescent, scanpy, scvelo, umap-learn, -r requirements.in
+scipy==1.13.1             # via anndata, loompy, pynndescent, scanpy, scikit-learn, scvelo, statsmodels, umap-learn, -r requirements.in
+scvelo==0.3.4             # via -r requirements.in
+seaborn==0.13.2           # via scanpy
+session-info==1.0.1       # via scanpy
+setuptools==84.2.1        # via loompy
+statsmodels==0.14.6       # via scanpy, -c constraints.txt
+stdlib-list==0.12.0       # via session-info
+texttable==1.7.2          # via igraph
+threadpoolctl==3.8.0      # via scikit-learn
+tqdm==4.70.1              # via scanpy, umap-learn
+tzdata==2026.6            # via pandas, python-dateutil
+umap-learn==0.5.7         # via scanpy, scvelo, -r requirements.in

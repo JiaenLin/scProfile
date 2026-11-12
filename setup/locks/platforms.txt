@@ -1,0 +1,15 @@
+# The platforms scProfile says it installs on: one tag per line, as uv names it
+# (`uv pip compile --python-platform`). With the plugin groups the plugins' own `requires` form,
+# this file is THE SET every lock answers to (`scprofile.lock.pairs`): each group has a lock here,
+# under setup/locks/<tag>/, for each tag below, written by `scprofile lock <member> --platform <tag>`
+# and never by hand. tests/test_every_group_has_a_lock_for_every_platform.py walks the set from
+# here, so a new tag, or a new group, needs no new test - only its locks.
+#
+# On a machine whose platform installs a declared tag (`lock.accepts`: a linux tag is a glibc
+# FLOOR), a group with no lock, or a stale one, is REFUSED by `install`, naming the command that
+# writes it. A machine on no declared platform builds from ranges, as it always did, and says so.
+#
+# Measured for the tag below on 2026-11-09: the main group built from its lock on a fresh prefix,
+# 161 versions installed exactly, every member's selftest passed (harness autodev W002). Its wheels'
+# real glibc floor is 2.28, not 2.17 (KNOWN_ISSUES).
+x86_64-manylinux_2_17

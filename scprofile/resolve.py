@@ -363,16 +363,19 @@ def _exact(pins):
     return out
 
 
-def group_by_compatibility(kernels, log=None):
+def group_by_compatibility(kernels, log=None, isolate=None):
     """Resolve every requirement into as few environments as will satisfy them all.
 
     Greedy and ORDER-INDEPENDENT: kernels are considered in sorted order, and a plugin joins the
     first group it is provably compatible with. Deterministic, because a resolver that gives a
     different answer on a different day gives a different environment on a different day.
+
+    `isolate` is the list of plugins built alone; None reads the site's (`$SCPROFILE_ISOLATE`).
+    `lock.pairs` passes an empty one: the groups the TOOL declares, whatever the site isolates.
     """
     say = log or (lambda *_a: None)
     groups = []
-    alone = isolated_by_site()
+    alone = isolated_by_site() if isolate is None else set(isolate)
     for k in sorted(kernels, key=lambda x: x.name):
         req = requirement(k)
         if req is None:
@@ -530,4 +533,5 @@ def report(groups, log=print):
             log(f"      ALONE because {g.why_alone}")
         st = getattr(g, "lock_state", None)
         if st:
-            log(f"      lock: {st[0]} - {st[1]}" + (f"  (fix: {st[2]})" if st[0] == "stale" else ""))
+            log(f"      lock: {st[0]} - {st[1]}"
+                + (f"  (fix: {st[2]})" if st[0] in ("stale", "absent") else ""))
