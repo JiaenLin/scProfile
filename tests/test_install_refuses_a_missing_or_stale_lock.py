@@ -111,6 +111,15 @@ try:
     ck("the isolated member is refused too, by its own name",
        rc == 1 and "the group abundance (" in out
        and "SCPROFILE_ISOLATE=abundance scprofile lock abundance" in out, out[-500:])
+    # THE SAME FACT THROUGH ANOTHER FIELD: a site kernel root changes the groups as well, so the
+    # command that writes the lock carries it too (a verb run without it groups the shipped tree).
+    roots = str(TMP / "site-kernels")
+    os.environ["SCPROFILE_KERNELS"] = roots
+    got = LK.lock_command(main, "x86_64-manylinux_2_17")
+    os.environ.pop("SCPROFILE_KERNELS", None)
+    ck("a site's kernel roots are part of the command as well",
+       got == f"SCPROFILE_KERNELS={roots} scprofile lock {main.members[0]} "
+              f"--platform x86_64-manylinux_2_17", got)
 
     # ============================================================== 4. outside the set
     print("\noutside the set nothing changed")

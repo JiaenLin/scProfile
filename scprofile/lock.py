@@ -215,10 +215,11 @@ def declared_for(machine=None, dirpath=None):
 def lock_command(group, platform):
     """The exact command that writes this group's lock for `platform`, as a shell must type it.
 
-    The site's isolation list and lock directory are part of it when they are set. Without them
-    `scprofile lock` groups the plugins the tool's own way and writes ANOTHER group's lock: with
-    `abundance` isolated, `scprofile lock cellchat` alone re-locks the seven-member group, and the
-    six-member group that was refused stays stale.
+    Everything the site sets that changes the groups or where locks are written is part of it:
+    its isolation list, its kernel roots and its lock directory. Without them `scprofile lock`
+    groups the plugins the tool's own way and writes ANOTHER group's lock: with `abundance`
+    isolated, `scprofile lock cellchat` alone re-locks the seven-member group, and the six-member
+    group that was refused stays stale; a site kernel shadowing a shipped one is the same case.
     """
     from . import resolve as RS
     mine = sorted(getattr(group, "members", []) or [])
@@ -226,8 +227,9 @@ def lock_command(group, platform):
     site = sorted(RS.isolated_by_site())
     if site:
         pre += f"{RS.ISOLATE_VAR}={','.join(site)} "
-    if os.environ.get(ENV_VAR):
-        pre += f"{ENV_VAR}={os.environ[ENV_VAR]} "
+    for var in ("SCPROFILE_KERNELS", ENV_VAR):
+        if os.environ.get(var):
+            pre += f"{var}={os.environ[var]} "
     return f"{pre}scprofile lock {mine[0] if mine else '<plugin>'} --platform {platform}"
 
 
