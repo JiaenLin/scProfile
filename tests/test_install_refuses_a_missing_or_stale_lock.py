@@ -91,6 +91,22 @@ try:
                   "--platform", "x86_64-manylinux_2_28", env={"SCPROFILE_LOCKS": str(COPY)})
     ck("a newer glibc installs the declared floor, so it is refused for the declared tag",
        rc == 1 and f"--platform {plat}" in out, out[-400:])
+    # AND WHERE THE STATE IS READ, not only where it is built: `doctor` and `plan` read
+    # `env_state`, which must call a pair with no lock absent - not stale.
+    here = LK.machine_platform()
+    if LK._parts(here) is not None:
+        (COPY / LK.PLATFORMS_NAME).write_text(f"{here}\n", encoding="utf-8")
+        os.environ["SCPROFILE_LOCKS"] = str(COPY)
+        from scprofile import runner as RN                                # noqa: E402
+        from scprofile.kernels import discover                            # noqa: E402
+        st = RN.env_state(discover()["scenic"], str(PFX))
+        os.environ.pop("SCPROFILE_LOCKS", None)
+        ck("doctor and plan read a declared pair with no lock as absent, with the command",
+           st[0] == "missing" and "its lock is absent: no lock for scenic" in st[1]
+           and f"scprofile lock scenic --platform {here}" in st[2], str(st))
+        (COPY / LK.PLATFORMS_NAME).write_text(
+            (ROOT / "setup" / "locks" / LK.PLATFORMS_NAME).read_text(encoding="utf-8"),
+            encoding="utf-8")
 
     # ======================================= 3. a stale lock: the site isolates a member
     print("\na lock made stale by the site's isolation list is refused, with the list in the command")

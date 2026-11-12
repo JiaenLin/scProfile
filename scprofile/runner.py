@@ -266,7 +266,8 @@ def state_at(p, kernel, group, prefix):
         if st and st[0] in REFUSED_LOCKS:
             # THE FIX IS THE LOCK, NOT THE INSTALL: an install would refuse this group, so naming
             # it here sends the reader to a command that cannot help.
-            return ("missing", f"nothing at {p}, and its lock is stale: {st[1]}", st[2])
+            return ("missing", f"nothing at {p}, and its lock is "
+                               f"{'stale' if st[0] == 'stale' else 'absent'}: {st[1]}", st[2])
         return ("missing", f"nothing at {p}",
                 f"scprofile install {kernel.name} --prefix {prefix}")
     want = env_fingerprint(kernel, group)
