@@ -206,3 +206,30 @@ handed to it); a two-factor fit with an interaction, or a refusal of one by name
 source that exists (DOI, title, year) and an exact pin; a fixture tier that refuses a plugin that never ran; an
 inventory that sees class methods behind an empty plotting submodule; column names that do not carry the user's
 vocabulary.
+
+### What the maker lacked, and the fixes (autodev W055; each with a suite that fails at `2e5b95a` or before)
+
+- **A source that exists** (`cd3d895`, `1c9b978`): the build stage `source` and `scprofile source <plugin>
+  --resolve`; abundance, de and cellchat declare a DOI with its record's title and year, and an exact pin, through
+  `sch dev edit --set` (`tests/test_a_source_exists.py`).
+- **The fixture accepts no refusal** (`2e5b95a`), and **a refusal inside `run()` fails it** (`2db432b`): the run's
+  STATUS.json reads `ok` and `run` exits 0 when a plugin refuses inside `run()`, so the fixture command's last step is
+  `capacity --all-ok`, which reads every instance's `out.json` (`tests/test_a_refusal_inside_run_fails_the_fixture.py`).
+- **The record check names a planted `version`** (`2b2e9f8`): once `sch dev edit` raised the version past an answer,
+  that answer's version row was matched only from the record's `version`, and a planted value was refused as a line
+  changed by hand.
+- **The base level is the host's** (`2cb5472`, abundance's design answer 3): the fit's formula names `ctx.levels`'
+  control as patsy's Treatment reference; the plan's terms meet `min_samples_per_level`; the model caveat names a
+  dropped term and an interaction asked for and not fitted (`tests/test_abundance_reads_the_hosts_control.py`). On the
+  fixture the effect table now agrees between the shapes.
+
+### What the maker still cannot reach (the next plugin should test, blind)
+
+- **A level order the plugin takes itself, outside a fit.** abundance's figure sources F1/F2 sort a factor's levels
+  alphabetically, so on shape b their columns come in another order and F2's reference ratio is inverted (1.070 against
+  0.935); `agree` fails on exactly these three lines. The worksheet names fit calls and statements, not a `sorted()` of a
+  design term's levels, so no answer can change them.
+- **The frame a positional data object carries.** pertpy reads its formula against the AnnData passed first to
+  `prepare`, built outside every site: `ctx.model_frame` and covariates cannot be answered, so abundance declares no
+  `covariates` and the plan names each NOT MODELLED by it, with the reason. An answer cannot add a statement either (an
+  added `ctx.` call binds `ctx`), so a new sentence goes into an existing statement.
