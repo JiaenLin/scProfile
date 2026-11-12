@@ -510,15 +510,73 @@ def design_record_path(kernel):
     return p.with_name(p.stem + ".design.json")
 
 
-def _read_record(kernel):
+class _NotWritten(ValueError):
+    """What the parse of a record met that the maker never writes (`_record_form`)."""
+
+
+def _record_form(raw):
+    """(the record, None), or (None, the first thing in `raw` the maker never writes, named).
+
+    THE RECORD IS READ AS THE FILE, NOT AS WHAT A LENIENT PARSE MAKES OF IT (W047 last fix;
+    ATTACKS 38). A JSON parse keeps the last of a repeated key and hides the first, and every
+    check read only the parse: a text written before answer 1's own `n`, the record's `plugin`,
+    a statement's `how` or the trace's `commit` stayed in the file past `design` and `check`, and
+    the next verb to write the record erased it. So a record is read only when its bytes are
+    EXACTLY what the maker's writer (`_write_record`: sorted keys, a one-space indent, ASCII
+    escapes, one final newline) makes of its parse - true of both shipped records and of every
+    version git keeps of either. That one rule refuses a repeated key at any depth, content after
+    the document, a byte-order mark, a byte that is not UTF-8, and any spacing, key order, escape
+    or line end the writer never writes. A NaN or Infinity literal survives the writer (it writes
+    them back), so the parse refuses that itself."""
     import json
+    if raw.startswith(b"\xef\xbb\xbf"):
+        return None, "it starts with a byte-order mark, which the maker never writes"
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        return None, f"its byte {e.start} is not UTF-8 (the maker writes ASCII)"
+
+    def pairs(kv):
+        d = {}
+        for k, v in kv:
+            if k in d:
+                raise _NotWritten(f"it repeats the key {k[:40]!r} in one mapping: a JSON parse "
+                                  f"keeps the last and hides the first, and the maker writes "
+                                  f"each key once")
+            d[k] = v
+        return d
+
+    def constant(c):
+        raise _NotWritten(f"it holds the literal {c}, which is not JSON and which the maker "
+                          f"never writes")
+    try:
+        rec = json.loads(text, object_pairs_hook=pairs, parse_constant=constant)
+    except _NotWritten as e:
+        return None, str(e)
+    except ValueError as e:
+        if getattr(e, "msg", "") == "Extra data":
+            return None, f"it carries content after the document (line {e.lineno})"
+        return None, f"it does not parse ({e})"
+    if not isinstance(rec, dict):
+        return None, "it is not a mapping"
+    written = json.dumps(rec, indent=1, sort_keys=True) + "\n"
+    if written != text:
+        a, b = text.splitlines(True), written.splitlines(True)
+        line = next((i for i, (x, y) in enumerate(zip(a, b), 1) if x != y),
+                    min(len(a), len(b)) + 1)
+        return None, (f"it is not, byte for byte, what the maker's writer makes of its parse "
+                      f"(from line {line}: a spacing, key order, escape, line end or trailing "
+                      f"content the maker never writes)")
+    return rec, None
+
+
+def _read_record(kernel):
     p = design_record_path(kernel)
     rec = {}
     if p.is_file():
-        try:
-            rec = json.loads(p.read_text(encoding="utf-8"))
-        except ValueError:
-            rec = {"unreadable": str(p)}
+        rec, why = _record_form(p.read_bytes())
+        if why:
+            rec = {"unreadable": f"kernels/{p.name}: {why}"}
     rec.setdefault("plugin", kernel.name)
     rec.setdefault("answers", [])
     rec.setdefault("statements", {})
@@ -1210,6 +1268,18 @@ def _form_after_chain(rec, answers, built, shipped, base, root, fname):
     text, and that answer's own for `answer N`; and each rewrite's trace (`_rewrite_form`)."""
     for pos, a in enumerate(answers, 1):
         prev, made = built[pos]
+        # EACH FILE REBUILT FOR AN ANSWER DECLARES A VERSION N.N.N (W047 last fix): the file de's
+        # first answer was made on is rebuilt only from that answer's diff, and the admission sets
+        # a version aside, so its version took any text. Its digits are still free - that one
+        # literal, in de's record only, since no answer is recorded now without a committed file.
+        for which, f in (("was made on", prev), ("made", made)):
+            try:
+                v = _version_node(f)[1]
+            except SyntaxError:
+                v = None
+            if not VERSION_FORM.match(str(v or "")):
+                return (f"the file answer {pos} {which} declares the version {str(v)[:60]!r}, "
+                        f"not N.N.N - {FORM}")
         try:
             v_made = _version_node(made)[1]
         except SyntaxError:
@@ -1419,7 +1489,8 @@ def _design_record_check(kernel, root, rec=None, files=None):
         return False, f"kernels/{path.name}: {bad}"
     rec = _read_record(kernel) if rec is None else rec
     if rec.get("unreadable"):
-        return False, f"the record {rec['unreadable']} does not parse"
+        return False, (f"the record is unreadable - {rec['unreadable']}; it is read as the file "
+                       f"the maker writes, never as what a lenient parse makes of it")
     answers = rec.get("answers") or []
     if not isinstance(answers, list) or not all(isinstance(a, dict) for a in answers):
         return False, (f"the record {design_record_path(kernel).name}'s answers are not a list "
@@ -1963,6 +2034,15 @@ def design_confirm(kernel, line, why, log=print):
         log(f"  refused: no statement the worksheet names starts at line {line} "
             f"(it names {', '.join(str(x['line']) for x in stmts) or 'none'})")
         return 1
+    # THE RECORD IS CHECKED BEFORE A CONFIRMATION WRITES IT, AS BEFORE AN ANSWER (W047 last fix):
+    # a confirmation over a record that did not parse - a merge-conflict marker in it - wrote a
+    # stub with no answers and exited 0, and one over a record holding what the maker never
+    # writes (a repeated key) erased that with no trace.
+    ok, why_not = design_record_check(kernel, rec=_as_written(kernel))
+    if not ok:
+        log(f"  refused: the record does not meet kernels/{Path(kernel.path).name} as it stands - "
+            f"{why_not}; nothing written")
+        return 1
     rec = _read_record(kernel)
     rec["statements"][s["digest"]] = {"site": f"statement:{s['line']}", "how": "confirmed",
                                       "why": str(why)}
@@ -2007,7 +2087,7 @@ def design_rewrite_record(kernel, why="", log=print, root=None):
     rec_before = rp.read_text(encoding="utf-8")
     old = _read_record(kernel)
     if old.get("unreadable"):
-        log(f"  refused: the record {old['unreadable']} does not parse")
+        log(f"  refused: the record is unreadable - {old['unreadable']}; nothing written")
         return 1
     copies = {a.get("n"): a["after_declaration"] for a in old.get("answers") or []
               if isinstance(a, dict) and "after_declaration" in a}
@@ -2121,6 +2201,9 @@ def design_replay(kernel, target, log=print):
     rec = _read_record(kernel)
     t = Path(target)
     text = t.read_text(encoding="utf-8")
+    if rec.get("unreadable"):
+        log(f"  refused: the record is unreadable - {rec['unreadable']}; nothing replayed")
+        return 1
     if not rec["answers"]:
         log(f"  nothing to replay: kernels/{design_record_path(kernel).name} records no answer")
         return 1
