@@ -174,8 +174,9 @@ rules:
   # broken). The maker's output on the unchanged plugin is recorded in docs/MIGRATIONS.md BEFORE
   # the maker changes, and the plugin leaves this list in the commit after that record.
   #   de         spent 2026-11-09 (autodev W013); blind record at f5175ea, docs/MIGRATIONS.md 1
+  #   abundance  spent 2026-11-12 (autodev W055); blind record at b5f646a, docs/MIGRATIONS.md 2
   held_out:
-    names: [abundance, cellcycle, decoupler, liana, pseudotime, scenic, velocity]
+    names: [cellcycle, decoupler, liana, pseudotime, scenic, velocity]
     # THE COMMIT EACH SPENT PLUGIN'S BLIND RECORD WAS TAKEN AT - the anchor of its design record
     # (`scprofile design`, W013 fix-up 5). The record's first answer must have been made on this
     # commit's file, outside its declaration, read from git and never from the record, so the
@@ -184,6 +185,7 @@ rules:
     # The whole hash, so the name cannot become ambiguous as the history grows.
     spent:
       de: f5175ea13752f58257df20407dcb6f4c6faab861
+      abundance: b5f646a0238264cd96ffcd8dbfb2dd8b733cdd92
     means: >
       the held-out set is the maker's test set. A repair to one of these fits the maker to it, and
       the next unseen tool is then the first real test with the evidence already spent

@@ -279,7 +279,14 @@ if r_comment and r_code:
     r = cli("prose", "cellchat", "--replace", r_code, r_code + " + 0", "--why", "code", "--dry")
     ck("an edit of cellchat's R code is refused, naming the line", r.returncode == 1
        and "line " in (r.stdout + r.stderr) and sha(cc) == before, (r.stdout + r.stderr)[-600:])
-for held in ("abundance", "velocity"):
+# THE HELD-OUT LIST AS DEVPOINTS HOLDS IT, not a copy of it: a plugin leaves the list when its own
+# migration starts (abundance, autodev W055), and from then on it has an anchor and is not refused.
+import re as _re
+_held = _re.search(r"^  held_out:\n(?:    #.*\n)*    names: \[([^\]]*)\]",
+                   (ROOT / "DEVPOINTS.yaml").read_text(encoding="utf-8"), _re.M)
+HELD = [n.strip() for n in (_held.group(1) if _held else "").split(",") if n.strip()]
+ck("DEVPOINTS names the held-out plugins this test refuses", len(HELD) >= 2, str(HELD))
+for held in HELD[:2]:
     hp = ROOT / "kernels" / f"{held}.py"
     if hp.is_file():
         before = sha(hp)
