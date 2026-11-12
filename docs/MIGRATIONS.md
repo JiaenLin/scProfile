@@ -176,3 +176,33 @@ verb calls on `f5175ea` plus `--replay-into` still rebuild the shipped file byte
   covariate or be named as not modelling it, and the plan must say which.
 - whether a plugin whose own guard refuses the fixture's covariate is told apart from one whose
   model ignores it.
+
+---
+
+## 2. `abundance` (pertpy / scCODA) - blind record taken at `b5f646a`
+
+**Venue.** The workstation; the harness's maker; the plugin's interpreter a private virtual environment built from
+this repository's shipped lock's exact pins (pertpy 1.0.4, statsmodels 0.14.6, numpyro 0.21.0, jax 0.7.0, anndata
+0.12.19, mudata 0.3.10; Python 3.12); both cohort projects' generated word lists for the leak tier, one at a time.
+
+### The blind record
+
+| what was run | what the maker said |
+|---|---|
+| `sch dev convert status --name abundance` | HELD OUT banner. **build 5 of 10**: environment, contract, defaults, references, judgement done; **freshness STALE** (`version` 0.2.0, 14 commits since it moved); **design OWES**; inventory PART and plan PART (`wraps.plots_unreviewed`); layout todo. **test 0 of 9** |
+| `inventory` | exit 0, **0 functions** in `pertpy.pl`. Measured in the same environment: `pertpy.pl` is an empty module in 1.0.4 and the tool's plots are seven `pertpy.tl.Sccoda.plot_*` methods. An empty plotting submodule ends the extractor's search, so seven plots read as none, with exit 0 (the harness's extractor) |
+| `plan`, `plan --migrate` | 5 entries, each lacking an axis, a position and a legend; `--migrate` asks the axis (it no longer defaults to `unit`) and still defaults `position: contrast` |
+| `layout` | exit 2: 5 entries on no axis; `report.host_panels` owed |
+| `references` | `references: {}` declared, "nothing to do". The method's paper is only free text in `wraps.cite`: no stage asks for a DOI, its title and year, or an exact pin of the wrapped tool (`pertpy>=0.9,<2` is a range) |
+| `defaults` | reads only the constructor `Sccoda()`; `prepare`, `run_nuts` and `set_fdr`, which carry the method's defaults, are not read |
+| `contract`, `scaffold`, `validate` | produces 2 of 2 and figures 5 of 5 matched; writes nothing (one file); 0 errors, 1 warning (`memory_gb_per_100k` without `memory_gb_base`) |
+| `scprofile design abundance` | **OWES**: 2 fit sites (`prepare(formula=...)` in `run` and in the selftest) and 12 statements; owes `ctx.model_frame`, `ctx.levels` and `inject` `covariates`. Five of the twelve are not about the design: scCODA's reference is a POPULATION, so `reference` matched three sentences about it, `design` a palette sentence, `term` the sampler's sentences |
+| `sch dev rules` | 3 held, 0 broken |
+| `sch dev check --name abundance` (no plugin environment) | exit 2: contract and leak FAIL (comments carrying a cohort's levels and its measured size); unit green, 123 suites; fixture_a and fixture_b ok **only as accepted refusals**, so the plugin never ran; the plan named the fixture's covariate as NOT MODELLED (`inject` declares no `covariates`) and the design as main effects only |
+| the same ladder with the plugin's interpreter given | **the plugin ran on both shapes; `agree` FAILED.** Shape a's effect column sums +3.462 (log2 fold change +4.548); shape b's sums -3.413 (-4.477): **the sign is reversed**, because shape b's control sorts last and the formula library's alphabetical default made the other level the base - GAP-039 by its second route, which section 1 asked this migration to look for. The figure sources F1 and F2 name columns by the factor and its levels, so the shapes' columns differ by construction; the sampled quantities differ between the shapes in the second or third decimal (one seeded chain on a relabelled table is not the same chain) |
+
+**Missing, in short:** the contrast's direction (the formula library chose the base level); covariates (none can be
+handed to it); a two-factor fit with an interaction, or a refusal of one by name (each factor is fitted alone); a
+source that exists (DOI, title, year) and an exact pin; a fixture tier that refuses a plugin that never ran; an
+inventory that sees class methods behind an empty plotting submodule; column names that do not carry the user's
+vocabulary.
