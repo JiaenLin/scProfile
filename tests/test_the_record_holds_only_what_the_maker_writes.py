@@ -454,6 +454,19 @@ try:
                rc != 0 and says in out and unwritten and not green, out[-400:])
     REC.write_bytes(before)
     DE.write_bytes(SHIPPED)
+    # A COPY PUT BACK IS KEPT FOR THE CHECK, NEVER TIDIED BY A VERB: the mutant "any verb drops a
+    # copy again" was caught only by a confirmation over the record an older maker wrote, which
+    # `--confirm` now refuses before it writes. Here the copy put back is the true declaration and
+    # the trace stands, so a verb that dropped it would pass its own check and erase it.
+    r = json.loads(before)
+    r["answers"][0]["after_declaration"] = copies[1]
+    put_back = (json.dumps(r, indent=1, sort_keys=True) + "\n").encode("utf-8")
+    REC.write_bytes(put_back)
+    rc, out = cli("design", "de", "--confirm", str(sl), "--why", WHY)
+    ck("a copy put back after its rewrite: `--confirm` refuses it by name and keeps it, nothing "
+       "written", rc == 1 and "after_declaration" in out and REC.read_bytes() == put_back,
+       out[-400:])
+    REC.write_bytes(before)
 
     # R2: ONE LITERAL PINNED BY NOTHING BUT ITS FORM. de's first answer was recorded before W035's
     # fix round 1: the file it was made on is rebuilt only from that answer's diff, and the

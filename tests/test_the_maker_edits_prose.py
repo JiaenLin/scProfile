@@ -233,10 +233,10 @@ with tempfile.TemporaryDirectory() as td:
         "+" + V.REDACTED + V._sha('    x = "a plain string"  # reworded\n'),
         "+" + V.REDACTED + V._sha('    x = "another"  # reworded\n'))
     ck("(the forger's row is in the record to replace)", raw["answers"][-1]["diff"] != d)
-    V.design_record_path(k).write_text(json.dumps(raw))
+    V.design_record_path(k).write_text(json.dumps(raw, indent=1, sort_keys=True) + "\n")
     k.path.write_text(shipped.replace('x = "a plain string"', 'x = "another"'))
     raw["answers"][-1]["after"] = V._sha(k.path.read_text())
-    V.design_record_path(k).write_text(json.dumps(raw))
+    V.design_record_path(k).write_text(json.dumps(raw, indent=1, sort_keys=True) + "\n")
     ok, said = V.design_record_check(k, root=td)
     ck("a record doctored to carry a code change is refused", not ok and "prose" in said, said)
 
@@ -514,7 +514,7 @@ with tempfile.TemporaryDirectory() as td:
         a1["diff"] = a1["diff"].replace(
             "+" + V.REDACTED + V._sha("    # reworded, without the value\n"),
             "+    # reworded, without the value\n")
-        (dst / "kernels" / "cellchat.design.json").write_text(json.dumps(raw), encoding="utf-8")
+        (dst / "kernels" / "cellchat.design.json").write_text(json.dumps(raw, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         r = cli("design", "cellchat", cwd=dst)
         ck("a record whose diff carries a line as text is refused", r.returncode == 1
            and "as text" in said(r), said(r))
@@ -594,7 +594,7 @@ with tempfile.TemporaryDirectory() as td:
         ck("(the last answer's commit is in the clone's history)", k_ is not None)
         if k_ is not None:
             last["made_on"] = f"HEAD~{k_}"
-            rp.write_text(json.dumps(raw), encoding="utf-8")
+            rp.write_text(json.dumps(raw, indent=1, sort_keys=True) + "\n", encoding="utf-8")
             r = cli("design", "cellchat", cwd=dst)
             ck(f"a record whose answer was made on 'HEAD~{k_}' (a ref, the same file today) is "
                f"refused", r.returncode == 1 and "commit id" in said(r), said(r))

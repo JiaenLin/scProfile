@@ -175,7 +175,7 @@ def doctored(repo):
     return last, json.dumps(forged, indent=1, sort_keys=True) + "\n"
 
 
-EMPTY = json.dumps({"plugin": "de", "answers": [], "statements": {}})
+EMPTY = json.dumps({"plugin": "de", "answers": [], "statements": {}}, indent=1, sort_keys=True) + "\n"
 A, B = span(SHIPPED)
 
 # (tag, what, de.py as text or bytes, the record (None: deleted), what the refusal must say)

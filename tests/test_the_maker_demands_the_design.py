@@ -329,7 +329,7 @@ else:
             "before": V._sha(before), "after": V._sha(after),
             "diff": "".join(difflib.unified_diff(before.splitlines(keepends=True),
                                                  after.splitlines(keepends=True), "a", "b"))}]}
-        V.design_record_path(k).write_text(json.dumps(tampered), encoding="utf-8")
+        V.design_record_path(k).write_text(json.dumps(tampered, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         copy = Path(td) / "copy.py"
         copy.write_text(before, encoding="utf-8")
         out = []
@@ -441,7 +441,7 @@ if hasattr(V, "design_answer"):
             "diff": "".join(difflib.unified_diff(V._lines(shipped), V._lines(edited), "a", "b"))})
         # (no copy of the declaration: no record keeps one since W047, and the check refuses a
         # key the maker never writes before it reaches the sites - this entry is refused at them)
-        V.design_record_path(kd).write_text(json.dumps(rec), encoding="utf-8")
+        V.design_record_path(kd).write_text(json.dumps(rec, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         d = rooted(V.design_sites, kd)
         ck("the same edit with a forged entry claiming a site: the design stage owes",
            d["owes"] and any(m == "record" for m, _w in d["missing"]), d["missing"][-1:])
@@ -550,7 +550,7 @@ if hasattr(V, "design_answer"):
             ans.pop("after_declaration", None)    # each file is its answer's own
             last = nxt
         (repo / "kernels" / "de.py").write_text(last, encoding="utf-8")
-        (repo / "kernels" / "de.design.json").write_text(json.dumps(forged), encoding="utf-8")
+        (repo / "kernels" / "de.design.json").write_text(json.dumps(forged, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         kf = Stub(repo / "kernels" / "de.py", _de.spec)
         r = V.design_record_check(kf, root=repo)
         ck("a record rewritten to start from a doctored base, its made-on answers re-made on "
@@ -565,7 +565,7 @@ if hasattr(V, "design_answer"):
         ck("(the blind-record commit can be read here)", base_text is not None, g.stderr[-200:])
         if base_text is not None:
             ck("(the probe's line is in the plugin as it was blind)", UP in base_text)
-            empty = json.dumps({"plugin": "de", "answers": [], "statements": {}})
+            empty = json.dumps({"plugin": "de", "answers": [], "statements": {}}, indent=1, sort_keys=True) + "\n"
             de_copy.write_text(base_text.replace(UP, UP2, 1), encoding="utf-8")
             rp.write_text(empty, encoding="utf-8")
             r = check_of(kd)
@@ -596,7 +596,7 @@ if hasattr(V, "design_answer"):
         de_copy.write_text(shipped.replace(
             '    "api": 1,\n', '    "api": (globals().__setitem__("PVALUE_BINS", 5), 1)[1],\n', 1),
             encoding="utf-8")
-        rp.write_text(json.dumps(record), encoding="utf-8")
+        rp.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         r = check_of(kd)
         ck("a declaration that is not a pure literal fails the record's check",
            r is not None and not r[0] and "literal" in r[1], r)
@@ -622,7 +622,7 @@ if hasattr(V, "design_answer"):
         ck("(the edit is to the declaration, and only to it)", verb != shipped
            and V._swap_declaration(verb, V._declaration_text(shipped)) == shipped)
         de_copy.write_text(verb, encoding="utf-8")
-        rp.write_text(json.dumps(record), encoding="utf-8")
+        rp.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n", encoding="utf-8")
         d = sites_of(kd)
         ck("a verb's edit of the declaration after the answers still meets the record",
            not d["owes"], d["missing"][:2])
