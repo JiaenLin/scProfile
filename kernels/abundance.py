@@ -37,7 +37,7 @@ every share depend on how often they declined; they stay in the object and are n
 
 PLUGIN = {
     "api": 1,
-    "version": "0.3.0",
+    "version": "0.4.0",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "whether a population's share shifts across the design",
     "when_to_use": "you have a design table and want to know whether composition changed",
@@ -266,7 +266,7 @@ PLUGIN = {
 
     "cost": "medium", "cores": 4,
 
-    # Measured, not estimated: fitted from this plugin's own instances in one run on a 10-sample mouse single-nucleus cohort (~99k cells). ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
+    # Measured, not estimated: fitted from this plugin's own instances in one run on one cohort's data. ONE dataset on ONE machine - a starting point that is right for scheduling, not a universal constant. Every run re-fits and prints its own.
     # Fitted from one instance; the split is indeterminate.
     "memory_gb_per_100k": 7.2,
 
@@ -1580,7 +1580,7 @@ def run(ctx):
                         len(res)).sum())
     # `int(v)`, NOT the numpy scalar. Under numpy 2 `repr(np.int64(5))` is "np.int64(5)", so
     # `dict(value_counts())` interpolated into a caveat reads
-    # "{'aged': np.int64(5), 'young': np.int64(5)}" - a sentence about the study design with the
+    # "{'a': np.int64(5), 'b': np.int64(5)}" - a sentence about the study design with the
     # host language's type names in it, printed to the person deciding whether to believe the
     # result. Measured on numpy 2.0.2.
     sizes = {t: {str(k): int(v) for k, v in tab[t].value_counts().items()} for t in terms}

@@ -1,0 +1,17 @@
+{
+ "answers": [
+  {
+   "after": "29d5706a007b81d0",
+   "before": "894916440329b381",
+   "diff": "--- a/kernels/abundance.py\n+++ b/kernels/abundance.py\n@@ -37,7 +37,7 @@\n \u2063sha256:01ba4719c80b6fe9\n \u2063sha256:c0bc317d89b550fa\n \u2063sha256:ed0177a053131fce\n-\u2063sha256:a025abeda829bf46\n+\u2063sha256:e3d3a64753710bc2\n \u2063sha256:4b8b787a891e1daa\n \u2063sha256:7b79b3f95fa7824c\n \u2063sha256:69282a83e912d7e6\n@@ -266,7 +266,7 @@\n \u2063sha256:01ba4719c80b6fe9\n \u2063sha256:ce4d9cbd412b6dc4\n \u2063sha256:01ba4719c80b6fe9\n-\u2063sha256:66a945b384d34a65\n+\u2063sha256:e439e75429ac6936\n \u2063sha256:c69a89bba41bb539\n \u2063sha256:a48066e40c4ce2b2\n \u2063sha256:01ba4719c80b6fe9\n@@ -1580,7 +1580,7 @@\n \u2063sha256:a917bdb1bc889e8f\n \u2063sha256:2e16d3cd5d86c10b\n \u2063sha256:0c9e793cfa804385\n-\u2063sha256:926989dbf9b8f724\n+\u2063sha256:46a1f0e32463488d\n \u2063sha256:973aedbb362f54bf\n \u2063sha256:094c9cde5959a53c\n \u2063sha256:602cfc5e49f86143\n",
+   "kind": "prose",
+   "made_on": "1c9b9786a965c3ec752b7cd96cef2e9c043ad5a4",
+   "n": 1,
+   "sites": [],
+   "version": "0.4.0",
+   "why": "two comments carried one cohort's design: its size, species, assay and cell count, and two of its factor levels; the method's facts stay (one run, one machine, re-fitted every run; numpy 2's scalar repr in a caveat), the cohort's words go (autodev W055, harness RULES rule 1)"
+  }
+ ],
+ "plugin": "abundance",
+ "statements": {}
+}
