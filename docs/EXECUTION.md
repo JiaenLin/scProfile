@@ -223,6 +223,26 @@ count, started a loky worker for each of a 256-core node's cores inside a job al
 W065).* Outside, counted: XLA's CPU pool under jax has no count variable, a process's CPU affinity
 is not set, and a plugin that asks its library for more than its share by hand is not stopped.
 
+**A launch that has no share of its own runs at one core, stated, never the machine's**
+(`manifest.UNALLOCATED_CORES`): a plugin's selftest (at install, or `scprofile selftest`), its guard
+before the plan, a probe of an environment (what it holds, whether it reads the object), the
+environment's own venv, pip and R install steps, the validation the maker's edit verb starts, and a
+report rebuild from a report.json that records no `cores`. One is the smallest that lets each of them
+run: each is seconds of work on tiny or no data, and every parallel library here runs serially at
+one (joblib's `n_jobs=1` starts no worker, R's `mclapply` with `mc.cores=1` is `lapply`). It is the
+same on every machine, so a selftest's verdict does not depend on the node it ran on. `env_for_kernel`
+gives it to every launch that names no share. *Until W065's second builder such a launch named no
+share and inherited every channel: de's selftest, which passes pydeseq2 no worker count, read the
+machine's count and started a worker for each (measured on a machine made to report 16: 4 started
+and the fifth refused by the stand-in's cap; now none).* No route is exempt. EVERY process the host
+starts takes its environment from `manifest.env_for_kernel`, except those that run no plugin's code and no
+plugin environment's interpreter or R (git, uv, the environment manager, the scheduler's client),
+each named by function, with what it runs, in `manifest.HOST_ONLY_LAUNCHES`.
+`tests/test_a_plugin_takes_its_allocation.py` walks every process start in the package's syntax
+tree and fails on one that is neither. Outside, counted: a start the walk cannot name (through a
+multiprocessing context object, a `functools.partial` or `getattr`; none today), and a new start
+inside a function already named there, which that name excuses.
+
 **Admission is by CORES, not by count.** Every instance is given the cores it DECLARED, capped at
 the budget, and `kernels.CorePool` admits it when that many are free. A plugin declaring more cores
 than the whole budget runs alone, at the budget, rather than being refused.
