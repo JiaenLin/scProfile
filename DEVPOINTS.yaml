@@ -56,7 +56,11 @@ fixture:
        # ladder's value for the shape. The covariate is the fixture's own covariate column, so
        # every design-aware plugin is asked to model it or refuse it by name (GAP-040).
        "--control", "{role_condition}={control}", "--covariate", "{role_covariate}"]
-    - ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{out}/run", "--promised"]
+    # `--all-ok` FIRST (harness ROUTE R46, autodev W055, pool D): a plugin's own refusal inside
+    # run() leaves the run's STATUS.json `ok` and `run` exits 0, and the ladder reads its status
+    # in {out}, a folder above the run's; the step now exits 1 unless every instance ended `ok`.
+    - ["{python}", "-m", "scprofile.cli", "capacity", "--out", "{out}/run", "--all-ok",
+       "--promised"]
   products: []
   timeout: 1800
   # A REFUSAL IS NOT A PASS (harness ROUTE R46, GAP-054; autodev W055). This accepted `plan`'s

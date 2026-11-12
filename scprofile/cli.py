@@ -4230,6 +4230,29 @@ def _capacity(a):
     from . import capacity as _C
 
     run = Path(a.out).resolve()
+    # EVERY INSTANCE ENDED OK, OR THE STEP FAILS (harness ROUTE R46, autodev W055, pool D). A
+    # plugin's own refusal inside run() leaves the run's STATUS.json `ok` ("kernels ran, results
+    # merged") and `run` exits 0, so a fixture tier reading either read a refused plugin as a
+    # pass. The instance's own out.json is where the refusal is: read every one, name each that
+    # is not `ok` with its headline, and exit 1 - before any other reading of the run.
+    if getattr(a, "all_ok", False):
+        outs = sorted((run / "kernels").glob("**/out.json")) if (run / "kernels").is_dir() else []
+        bad = []
+        for o in outs:
+            try:
+                d = json.loads(o.read_text(encoding="utf-8"))
+            except (OSError, ValueError) as e:
+                d = {"status": "unreadable", "headline": f"{type(e).__name__}: {e}"}
+            if not isinstance(d, dict) or d.get("status") != "ok":
+                d = d if isinstance(d, dict) else {"status": "unreadable", "headline": "not a record"}
+                bad.append((o.relative_to(run).as_posix(), d.get("status"), d.get("headline")))
+        for rel, st, why in bad:
+            print(f"  NOT OK   {rel}: {st} - {str(why)[:200]}")
+        if not outs or bad:
+            print(f"capacity --all-ok: {len(bad)} of {len(outs)} instance(s) did not end ok"
+                  if outs else f"capacity --all-ok: no instance under {run / 'kernels'} ran")
+            return 1
+        print(f"capacity --all-ok: every one of {len(outs)} instance(s) ended ok")
     if getattr(a, "promised", False):
         return _promised(run)
     if getattr(a, "drift", False):
@@ -4735,6 +4758,10 @@ def main(argv=None):
                           "measured. Which run measured it is printed, for the cohort's record, and "
                           "never written into the plugin (rule 1). The stage's apply; nothing is "
                           "pasted by hand")
+    cp_.add_argument("--all-ok", action="store_true",
+                     help="first: exit 1 unless every kernel instance in the run ended `ok`, each "
+                          "one that did not named with its status and headline - a plugin's own "
+                          "refusal leaves the run's STATUS.json `ok` (the fixture's last step)")
     cp_.add_argument("--promised", action="store_true",
                      help="instead: which upstream plots this run's plugins DECLARE they draw and "
                           "produced no file for, anywhere in the run")
