@@ -337,7 +337,7 @@ four states:
 |---|---|---|
 | locked | a lock exists for exactly these members and today's requirement | Applies it with `pip install --no-deps`, so pip resolves nothing; conda still solves the conda packages. Then checks that every installed version is the locked one; a difference is a failed build with no stamp. |
 | stale | a lock names a member of this group, but its members or its requirement changed | Refuses before anything is built. The refusal names what changed and the `scprofile lock` command. A stale lock is never bypassed by resolving the ranges instead. |
-| absent | this machine installs a declared platform and no lock for that platform names the group | Refuses before anything is built, like a stale lock, naming the group, the platform and the exact `scprofile lock` command (with `$SCPROFILE_ISOLATE` and `$SCPROFILE_LOCKS` when they are set). |
+| absent | this machine installs a declared platform and no lock for that platform names the group | Refuses before anything is built, like a stale lock, naming the group, the platform and the exact `scprofile lock` command (with `$SCPROFILE_ISOLATE`, `$SCPROFILE_KERNELS` and `$SCPROFILE_LOCKS` when they are set). |
 | unlocked | no lock for this platform names any member, and the machine is on no declared platform | Resolves the ranges at install time, as before, and says so. |
 
 Every build writes `.scprofile_resolved.txt` beside the environment: the pip and conda versions it

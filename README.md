@@ -158,7 +158,7 @@ resolves the ranges, as before. If a range changes after a lock was written, `in
 lock until it is redone:
 
 ```
-scprofile install de --prefix ~/envs --dry-run
+scprofile install de --prefix ~/envs --dry-run --platform x86_64-manylinux_2_17
   environment scprofile-env-<digest of the lock>
       shared by: abundance, cellchat, cellcycle, de, decoupler, liana, pseudotime
   lock: locked - setup/locks/x86_64-manylinux_2_17/abundance+...+pseudotime.txt (161 packages, ...)
