@@ -2,7 +2,7 @@
 
     scprofile doctor  [--prefix DIR]
     scprofile lock    <kernel> [--platform TAG]       (a maintainer, on a machine with uv)
-    scprofile install <kernel> --prefix DIR [--force]
+    scprofile install <kernel> --prefix DIR [--force] [--dry-run [--platform TAG]]
     scprofile fetch   <kernel> --to DIR
     scprofile run --h5ad IN.h5ad --out DIR --kernel a,b,c  [--all]
     scprofile report  --out DIR
@@ -123,6 +123,12 @@ def _v():
 def _install(a):
     from . import runner
     ks = _kernels()
+    plat = getattr(a, "platform", None)
+    if plat and not getattr(a, "dry_run", False):
+        print(f"scprofile install: --platform {plat} is a dry run's question (what a machine of "
+              f"that platform would build); a build is for the machine it runs on. Add --dry-run.",
+              file=sys.stderr)
+        return REFUSE
     for name in _split(a.kernel):
         if name not in ks:
             print(f"scprofile: no kernel {name!r}. Known: {', '.join(sorted(ks))}",
@@ -131,7 +137,7 @@ def _install(a):
         print(f"{name}:", flush=True)
         try:
             p = runner.install(ks[name], a.prefix, force=a.force,
-                               dry_run=bool(getattr(a, "dry_run", False)))
+                               dry_run=bool(getattr(a, "dry_run", False)), platform=plat or None)
             print(f"  {'would install at' if getattr(a, 'dry_run', False) else 'installed at'} {p}")
         except Exception as e:                                            # noqa: BLE001
             print(f"  FAILED: {e}", file=sys.stderr)
@@ -4440,6 +4446,11 @@ def main(argv=None):
                         "it, and every package handed to the manager - and build nothing. The "
                         "resolver proves the DECLARED constraints do not contradict each other; "
                         "only a real resolve proves their transitive closure installs")
+    i.add_argument("--platform", default=None,
+                   help="with --dry-run only: answer as the building machine of this platform "
+                        "would (its lock, its environment's name, its refusal), as uv names it "
+                        "(e.g. x86_64-manylinux_2_17). The declared platforms are "
+                        "setup/locks/platforms.txt. Default: this machine")
     i.set_defaults(fn=_install)
 
     lo = sub.add_parser("lock", help="[maintainer] resolve a plugin's environment group once, "

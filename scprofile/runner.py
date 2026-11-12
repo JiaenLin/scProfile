@@ -263,7 +263,7 @@ def state_at(p, kernel, group, prefix):
     exe = p / "bin" / ("Rscript" if kernel.language == "r" else "python")
     if not exe.exists():
         st = getattr(group, "lock_state", None) if group is not None else None
-        if st and st[0] == "stale":
+        if st and st[0] in REFUSED_LOCKS:
             # THE FIX IS THE LOCK, NOT THE INSTALL: an install would refuse this group, so naming
             # it here sends the reader to a command that cannot help.
             return ("missing", f"nothing at {p}, and its lock is stale: {st[1]}", st[2])
@@ -953,7 +953,11 @@ def write_receipt(p, group, mgr, *, complete, log=print):
         return None
 
 
-def install(kernel, prefix, *, force=False, log=print, dry_run=False):
+#: The lock states a build refuses: a lock that no longer matches, and a pair of the set with none.
+REFUSED_LOCKS = ("stale", "absent")
+
+
+def install(kernel, prefix, *, force=False, log=print, dry_run=False, platform=None):
     """Build the environment this plugin RESOLVES TO, then prove it with every member's selftest.
 
     A selftest that runs at INSTALL time is the difference between finding out now and finding out
@@ -975,7 +979,15 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
     Two kinds of plugin have nothing to install and are refused HERE rather than allowed to fall
     through to a message about a missing file. "no lock.yml" is true of both and explains neither,
     and a user reading it cannot tell "I should write one" from "there is nothing to write".
+
+    `platform` (a dry run only) asks what the BUILDING machine of that platform would do: its
+    lock, its environment's name, its refusal. So every pair of the set (`lock.pairs`) can be
+    asked from one workstation, before a job is spent on the answer.
     """
+    if platform is not None and not dry_run:
+        raise RuntimeError(f"--platform {platform} asks what a machine of that platform would "
+                           f"build, which only a --dry-run can answer here; a build is always "
+                           f"for the machine it runs on")
     if not kernel.needs_env:
         raise RuntimeError(
             f"{kernel.name} declares `needs_env: false`: it runs in the HOST interpreter, so "
@@ -986,6 +998,10 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
             f"  If it should have its own pinned environment, set `needs_env: true` in "
             f"{kernel.path / 'kernel.yml'} and write {kernel.path / 'lock.yml'}.")
     grp, _gp = env_for(kernel, prefix)
+    if grp is not None and platform is not None:
+        from . import lock as _LKP
+        _LKP.attach([grp], machine=platform)
+        log(f"  --platform {platform}: as that platform's building machine reads this group")
     if grp is None and not (kernel.path / "lock.yml").exists():
         raise FileNotFoundError(
             f"{kernel.name} needs an environment and has no {kernel.path / 'lock.yml'}, so there "
@@ -1010,10 +1026,18 @@ def install(kernel, prefix, *, force=False, log=print, dry_run=False):
         # went since the group was last resolved on purpose. Building anyway would mean resolving
         # the ranges at install time - harness ADR-0027's resolve, the one this lock replaced - and
         # an environment that exists and matches its stamp is not refused: it needs no resolve.
-        if lst[0] == "stale" and (force or not p.exists()):
+        #
+        # AND A PAIR OF THE SET WITH NO LOCK IS REFUSED THE SAME WAY (`absent`): on a platform the
+        # tool declares, building from ranges is not a fallback, it is the resolve no lock
+        # recorded. Before autodev W058 that read `unlocked` and the two groups isolated by their
+        # own pins resolved at install time on the cluster.
+        if lst[0] in REFUSED_LOCKS and (force or not p.exists()):
             raise RuntimeError(
-                f"{grp.name}: the lock for this group is STALE, so it is not built from it and "
-                f"not resolved from ranges in its place.\n  {lst[1]}.\n  Fix: {lst[2]}   (on a "
+                f"the group {', '.join(members)} ({grp.name}) is REFUSED: "
+                + ("its lock is STALE, so it is not built from it and not resolved from ranges "
+                   "in its place" if lst[0] == "stale" else
+                   "it has NO LOCK, so it is not built")
+                + f".\n  {lst[1]}.\n  Fix, the command that writes its lock: {lst[2]}   (on a "
                 f"machine with uv; then commit the lock and install again)")
         spec = build_spec(grp, log=log)
     else:
