@@ -26,11 +26,14 @@ which genes left the answer before it was computed. The result comes after them.
 
 PLUGIN = {
     "api": 1,
-    "version": "0.6.0",
+    "version": "0.7.0",
     "state_version": 2,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "which genes change, per cell type, across the design",
     "when_to_use": "you have a design table with replicates and want differential expression",
     "wraps": {"tool": "pydeseq2",
+              "version": "0.5.2",
+              "doi_record": {'10.1093/bioinformatics/btad547': {'title': 'PyDESeq2: a python package for bulk RNA-seq differential expression analysis', 'year': 2023}, '10.1186/s13059-014-0550-8': {'title': 'Moderated estimation of fold change and dispersion for RNA-seq data with DESeq2', 'year': 2014}},
+              "doi": ['10.1093/bioinformatics/btad547', '10.1186/s13059-014-0550-8'],
               # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
               # `native_plots` or this; see native.unreviewed.
               "plots_unreviewed": "nobody has been through pydeseq2's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",

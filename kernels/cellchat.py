@@ -185,7 +185,7 @@ PLUGIN = {
     # coloured below the first tick, off the labelled scale, naming which colour is which
     # direction. The roster sentence from 0.38.0 is kept on both. `--stated` records close
     # every instance of both kinds the worksheet carried; no kind is left needing a redraw.
-    "version": "0.48.0",
+    "version": "0.49.0",
     # UNCHANGED, AND THAT IS THE MEASUREMENT AND NOT AN OMISSION. This versions the NUMBERS: it
     # rises when the same inputs would give different output. Its reproduction job gave every
     # numeric table byte-identical, and a direct compare against the run before the change put
@@ -195,6 +195,8 @@ PLUGIN = {
     "summary": "cell-cell communication, CellChat's own database and scoring",
     "when_to_use": "you want a second communication method to hold beside the first",
     "wraps": {"tool": "CellChat", "homepage": "https://github.com/jinworks/CellChat",
+              "doi_record": {'10.1038/s41467-021-21246-9': {'title': 'Inference and analysis of cell-cell communication using CellChat', 'year': 2021}, '10.1038/s41596-024-01045-4': {'title': 'CellChat for systematic analysis of cell–cell communication from single-cell transcriptomics', 'year': 2024}},
+              "doi": ['10.1038/s41467-021-21246-9', '10.1038/s41596-024-01045-4'],
               "license": "GPL-3.0",
               "cite": "Jin et al., Nat Commun 2021 (CellChat); "
                       "Jin et al., Nat Protoc 2024 (CellChat v2 protocol)"},

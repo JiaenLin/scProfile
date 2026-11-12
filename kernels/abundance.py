@@ -37,11 +37,14 @@ every share depend on how often they declined; they stay in the object and are n
 
 PLUGIN = {
     "api": 1,
-    "version": "0.2.0",
+    "version": "0.3.0",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "whether a population's share shifts across the design",
     "when_to_use": "you have a design table and want to know whether composition changed",
     "wraps": {"tool": "pertpy",
+              "version": "1.0.4",
+              "doi_record": {'10.1038/s41467-021-27150-6': {'title': 'scCODA is a Bayesian model for compositional single-cell data analysis', 'year': 2021}},
+              "doi": "10.1038/s41467-021-27150-6",
               # THE DEBT, IN THE FILE THAT OWES IT. A wrapper must declare either
               # `native_plots` or this; see native.unreviewed.
               "plots_unreviewed": "nobody has been through pertpy's own figures yet, so this wrapper draws only what it invented and may be re-inventing something better that already ships",
