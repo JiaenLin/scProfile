@@ -129,6 +129,14 @@ def sample_values(src):
     return out
 
 
+def _source_findings(kernel):
+    """The source and the pin (harness RULES item 18): `scprofile/source.py` says what is held."""
+    from . import source
+    root = Path(__file__).resolve().parent.parent
+    return [Finding(lvl, msg.split(":")[0][:70], msg)
+            for lvl, msg in source.findings(kernel.spec, kernel.name, root)]
+
+
 def validate_plugin(kernel):
     """Static checks on one plugin. Returns [Finding]."""
     f, d, spec = [], Path(kernel.path), kernel.spec
@@ -192,6 +200,7 @@ def validate_plugin(kernel):
             f.append(Finding("ERROR", "declares no limits",
                              "almost every method here rests on an assumption a reader must be "
                              "told about"))
+        f.extend(_source_findings(kernel))
         return f
 
 
@@ -324,6 +333,7 @@ def validate_plugin(kernel):
         for k in ("license", "cite"):
             if not wraps.get(k):
                 f.append(Finding("WARN", f"wraps.{k} not recorded"))
+        f.extend(_source_findings(kernel))
     elif built and spec.get("plans_to_wrap"):
         f.append(Finding("WARN", "built, but still declares plans_to_wrap",
                          "promote it to `wraps:` so the UPSTREAM.md requirement takes effect"))

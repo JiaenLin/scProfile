@@ -445,6 +445,26 @@ points:
           why: >
             every resource consulted that did not come from the user's object, with its tier - a
             reference nobody declared is one the plan cannot warn about
+        # A SOURCE THAT EXISTS (harness RULES item 18, ROUTE R45; autodev W055). abundance's blind
+        # record: `references: {}` read as "nothing to do", while the method's paper was free text
+        # in `wraps.cite` and the wrapped tool a range - no stage asked for either.
+        - name: source
+          phase: build
+          fills: []
+          command: ["{python}", "-m", "scprofile.cli", "source", "{name}", "--resolve"]
+          finished_by: >
+            the maker's verb, one field at a time: `sch dev edit --root . --point kernel --name
+            <plugin> --add wraps.doi="<the bare DOI>"`, then `--add wraps.doi_record=...` with the
+            title and the year the DOI's own record gives (resolve it; never from memory), then
+            `--add wraps.version="<the exact version the shipped lock builds>"` (an R tool
+            installed from a remote at a commit is pinned by it). `scprofile source <plugin>
+            --resolve` resolves each DOI at doi.org and compares; `scprofile validate` checks the
+            form and that the pin is the lock's. Then read one claim the plugin cites against the
+            paper - no resolver can
+          why: >
+            a reference that was never published, or a version that was never built, reads
+            exactly like one that was; a DOI resolves to its own title and year, and a pin is
+            the version the lock gives the environment
         - name: inventory
           phase: build
           # READ FROM THE PLAN (harness ADR-0016, step 3): an entry's `fn` is an export used and

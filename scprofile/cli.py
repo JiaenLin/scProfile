@@ -1685,6 +1685,46 @@ def _design(a):
     return V.design_report(ks[names[0]])
 
 
+def _source(a):
+    """A plugin's source and pin (harness RULES item 18): the form offline, and with `--resolve`
+    each DOI resolved and its record's title and year compared with what the plugin records.
+    `--registry FILE` answers from a JSON {doi: CSL record} instead of the network (the offline
+    test). Exits 0 when everything holds, 1 naming each failure."""
+    from . import source as SRC
+    from .kernels import discover
+    ks = discover()
+    if a.name not in ks:
+        print(f"scprofile: unknown plugin {a.name!r}", file=sys.stderr)
+        return 2
+    k = ks[a.name]
+    root = Path(__file__).resolve().parent.parent
+    w = k.spec.get("wraps") if isinstance(k.spec.get("wraps"), dict) else {}
+    print(f"{a.name}: wraps {w.get('tool')}")
+    for d in SRC.dois(k.spec):
+        e = ((w.get("doi_record") or {}) if isinstance(w.get("doi_record"), dict) else {}).get(d)
+        print(f"  doi      {d}  {e!r}")
+    pin = w.get("version") or SRC.r_pin(k.spec, w.get("tool") or "")
+    print(f"  pin      {pin!r}")
+    bad = 0
+    for lvl, msg in SRC.findings(k.spec, a.name, root):
+        print(f"  {lvl:<8} {msg}")
+        bad += lvl in ("ERROR", "WARN")
+    if a.resolve:
+        fetch = None
+        if a.registry:
+            reg = json.loads(Path(a.registry).read_text(encoding="utf-8"))
+
+            def fetch(doi):
+                if doi not in reg:
+                    raise LookupError("not in the registry file")
+                return reg[doi]
+        for ok, _d, msg in SRC.resolve(k.spec, fetch=fetch):
+            print(f"  {'ok' if ok else 'FAIL':<8} {msg}")
+            bad += not ok
+    print(f"{a.name}: {'the source and the pin hold' if not bad else f'{bad} thing(s) owed'}")
+    return 1 if bad else 0
+
+
 def _prose(a):
     """The maker's verb for a plugin's prose (W035, GAP-C80): a comment, a docstring, a comment
     of its embedded R. Admitted only where the edit changes no code; recorded in the plugin's
@@ -4608,6 +4648,14 @@ def main(argv=None):
                          "file its answer made, or unless the rewritten record passes its "
                          "check; the plugin is not touched")
     dz.set_defaults(fn=_design)
+    sz = sub.add_parser("source", help="[maintainer] a plugin's source (DOI, the title and year its "
+                                       "record gives) and its exact pin; --resolve checks the DOI")
+    sz.add_argument("name")
+    sz.add_argument("--resolve", action="store_true",
+                    help="resolve each DOI at doi.org and compare its record's title and year")
+    sz.add_argument("--registry", default=None,
+                    help="with --resolve: a JSON {doi: CSL record} answering instead of doi.org")
+    sz.set_defaults(fn=_source)
     pz = sub.add_parser("prose", help="[maintainer] edit a plugin's prose through the maker - a "
                                       "comment, a docstring, a comment of its embedded R - "
                                       "recorded, its followers run; an edit of code is refused")
