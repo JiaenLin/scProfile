@@ -88,11 +88,12 @@ python version going out of support — and prove it.
    otherwise have happened inside a user's run. `scprofile install <name> --prefix <dir>
    --dry-run` shows which environment you land in and who is in it, without building anything.
 
-   **If your group is locked, re-lock it.** A changed range makes the group's lock in
+   **Re-lock your group, for every declared platform.** Every group has a lock for each platform
+   in `setup/locks/platforms.txt`, and a changed range makes the group's locks in
    `setup/locks/<platform>/` stale. `install` then refuses to build that group rather than resolve
-   the ranges, and `tests/test_an_environment_is_built_from_its_lock.py` fails until the shipped
-   lock matches again. Re-lock on a machine with uv, for the platform that builds, and commit the
-   lock with the change:
+   the ranges, and `tests/test_every_group_has_a_lock_for_every_platform.py` fails until the
+   shipped locks match again. A new plugin that forms a group of its own needs its locks too.
+   Re-lock on a machine with uv, once per declared platform, and commit the locks with the change:
    `scprofile lock <name> --platform x86_64-manylinux_2_17`. A version an upstream's metadata
    allows but that does not work goes in `setup/locks/constraints.txt`, with the measurement beside
    it. It never goes in your plugin's ranges, unless it is a fact about your plugin.
@@ -329,7 +330,7 @@ moves, that file moves with it.
 
 ```
 scprofile validate <name>                          # the declaration
-scprofile lock <name> --platform <building machine> # after a range changed, if the group is locked
+scprofile lock <name> --platform <tag>          # after a range changed: each tag in setup/locks/platforms.txt
 scprofile install <name> --prefix <dir> --dry-run  # which environment, shared with whom, and its lock
 scprofile install <name> --prefix <dir>            # builds it, and runs every member's selftest
 python tests/test_contract.py                      # the rules above

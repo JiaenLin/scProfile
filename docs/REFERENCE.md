@@ -28,8 +28,8 @@ Every element of scProfile, defined once. Each entry says what the element **is*
 | command | what it does |
 |---|---|
 | `scprofile plan` | Reads the object, reports what would run and why the rest would not. Writes nothing and computes nothing. |
-| `scprofile install` | Groups the selected plugins' requirements into as few environments as satisfy them, and builds the group the plugin belongs to. A group that has a current lock for this machine is built from that lock with `pip --no-deps`, so pip resolves nothing (conda still solves the conda packages), and the result is checked against the lock. A lock that no longer matches is refused. Then each member's selftest runs, and its verdict is recorded per member. |
-| `scprofile lock` | Resolves a plugin's whole environment group once, with uv, under `setup/locks/constraints.txt`, for one platform (`--platform`, the building machine's) and one interpreter. It writes every version to `setup/locks/<platform>/<members>.txt`. A maintainer runs it after changing a plugin's `requires`. |
+| `scprofile install` | Groups the selected plugins' requirements into as few environments as satisfy them, and builds the group the plugin belongs to. A group that has a current lock for this machine is built from that lock with `pip --no-deps`, so pip resolves nothing (conda still solves the conda packages), and the result is checked against the lock. A lock that no longer matches is refused, and so is a group with no lock on a platform the tool declares (`setup/locks/platforms.txt`): each refusal names the group, the platform and the exact command that writes the lock. `--dry-run --platform TAG` answers as that platform's building machine would. Then each member's selftest runs, and its verdict is recorded per member. |
+| `scprofile lock` | Resolves a plugin's whole environment group once, with uv, under `setup/locks/constraints.txt`, for one platform (`--platform`, the building machine's) and one interpreter. It writes every version to `setup/locks/<platform>/<members>.txt`. A maintainer runs it after changing a plugin's `requires`, once for each platform `setup/locks/platforms.txt` declares: every group the plugins form has a lock for every declared platform (`lock.pairs`, walked by `tests/test_every_group_has_a_lock_for_every_platform.py`). |
 | `scprofile doctor` | Reports which environments exist, which plugins resolve to them, whether each group is locked, and what is missing. |
 | `scprofile run` | Plans, runs the plugins, merges results into one object, writes the report and the run card. |
 | `scprofile report` | Re-renders the documents from an existing run's `report.json`. Draws no new analysis. |
@@ -323,19 +323,22 @@ once, by `scprofile lock`, in `setup/locks/<platform>/<members>.txt`. Each lock 
 - the platform it was resolved for, as uv names it (for example `x86_64-manylinux_2_17`: linux
   x86_64). The tag is the resolver's target, not the floor of what installs. uv accepts a version for
   that target when it ships a source distribution, even if its wheels need a newer glibc. The shipped
-  lock pins nine packages whose cp312 wheels need glibc 2.24 to 2.28, so its real wheel floor is
-  **glibc 2.28** (KNOWN_ISSUES);
+  locks pin packages whose wheels need glibc 2.24 to 2.28 (the main group's nine, scenic's five,
+  velocity's two), so their real wheel floor is **glibc 2.28** (KNOWN_ISSUES);
 - the interpreter version;
 - the resolver;
 - the ranges and host constraints (`setup/locks/constraints.txt`) it was resolved from.
 
-On a machine whose platform a lock covers, a group is in one of three states:
+The platforms the tool installs on are declared in `setup/locks/platforms.txt` (today one:
+`x86_64-manylinux_2_17`), and every group has a lock for each. On a machine, a group is in one of
+four states:
 
 | state | when | what `install` does |
 |---|---|---|
 | locked | a lock exists for exactly these members and today's requirement | Applies it with `pip install --no-deps`, so pip resolves nothing; conda still solves the conda packages. Then checks that every installed version is the locked one; a difference is a failed build with no stamp. |
 | stale | a lock names a member of this group, but its members or its requirement changed | Refuses before anything is built. The refusal names what changed and the `scprofile lock` command. A stale lock is never bypassed by resolving the ranges instead. |
-| unlocked | no lock for this platform names any member | Resolves the ranges at install time, as before, and says so. |
+| absent | this machine installs a declared platform and no lock for that platform names the group | Refuses before anything is built, like a stale lock, naming the group, the platform and the exact `scprofile lock` command (with `$SCPROFILE_ISOLATE` and `$SCPROFILE_LOCKS` when they are set). |
+| unlocked | no lock for this platform names any member, and the machine is on no declared platform | Resolves the ranges at install time, as before, and says so. |
 
 Every build writes `.scprofile_resolved.txt` beside the environment: the pip and conda versions it
 actually holds. Locks cover the pip half; the conda half (`requires.conda`, e.g. `r-base=4.3`) and

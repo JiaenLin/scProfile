@@ -44,6 +44,10 @@ cp312 linux wheels only for a newer glibc (measured from PyPI, 2026-11-09):
 On a machine with glibc 2.17 to 2.27, `lock.accepts` reads the tag as the floor and accepts the
 lock. pip then tries to compile those nine packages from source. The real floor is glibc 2.28. The
 three pins with no wheel at all (docrep, blitzgsea, loompy) are pure Python and build anywhere.
+The two locks written on 2026-11-12 (autodev W058) carry the same (measured from PyPI that day):
+scenic's (cp310) h5py 3.16.0 at glibc 2.28, and llvmlite 0.50.0, numba 0.68.1, numexpr 2.14.1 and
+pillow 12.3.0 at 2.27; velocity's (cp311) contourpy 1.3.3 and pillow 13.0.0 at 2.27. interlap,
+loompy and multiprocessing-on-dill have no wheel; whether they compile was not measured.
 Closing it: re-lock for `x86_64-manylinux_2_28`, or resolve wheels only for the target, once the
 cluster's glibc is on record (harness gap GAP-C27).
 

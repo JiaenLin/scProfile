@@ -152,8 +152,10 @@ What a group's ranges resolve to is recorded once, as a **lock**: every package 
 version, for one platform, in `setup/locks/<platform>/<members>.txt`. Where this machine has a
 current lock, `install` applies it with `pip --no-deps` and checks the result, so pip resolves
 nothing at install time. Conda still solves the group's conda packages, which no lock covers.
-Without a lock, pip resolves the ranges, as before. If a range changes after a lock was written,
-`install` refuses that lock until it is redone:
+On a platform the tool declares (`setup/locks/platforms.txt`) every group has a lock, and a group
+without one is refused, naming the command that writes it; on a platform it does not declare, pip
+resolves the ranges, as before. If a range changes after a lock was written, `install` refuses that
+lock until it is redone:
 
 ```
 scprofile install de --prefix ~/envs --dry-run

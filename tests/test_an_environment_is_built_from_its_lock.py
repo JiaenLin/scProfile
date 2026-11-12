@@ -199,8 +199,11 @@ if LK is not None and g0 is not None:
     ck("a moved range makes the lock stale", st[0] == "stale", str(st))
     ck("and the sentence names the range that moved", "numpy" in (st[1] if len(st) > 1 else ""),
        str(st))
-    ck("and the fix is the command that re-locks it",
-       (st[2] if len(st) > 2 else "").startswith("scprofile lock "), str(st))
+    # INTO THE DIRECTORY THIS GROUP READS (autodev W058): $SCPROFILE_LOCKS is set here, and a
+    # `scprofile lock` without it writes into the shipped directory and leaves this lock stale.
+    ck("and the fix is the command that re-locks it, into the directory the build reads",
+       (st[2] if len(st) > 2 else "").startswith(f"SCPROFILE_LOCKS={LOCKS} scprofile lock "),
+       str(st))
     ck("a stale group is not named for the lock it no longer matches", gm.name != locked_name)
     write_lock(["a", "b"], here, PINS, LK.requirement_lines(gm))
     ck("re-locked to the same pins, it is the same environment - nothing to rebuild",
