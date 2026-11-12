@@ -84,12 +84,24 @@ fixture:
   #     .executor.*                  rewrites from measurements, not what the method computes
   #   schedule[*][*].cores         the share each instance was scheduled with
   # A DE number - a fold change, a p-value, a contrast's name - is in none of them.
+  # OUT.JSON's `measured` IS THE HOST MONITOR'S (`_entry.py`, `ctx.measured`), and every field it
+  # writes is declared here except `n_cells`, a count of the data, which is judged (autodev W065).
+  # This named four fields, as the monitor had them at W019; the monitor has since written the
+  # process tree's peak, its sample count, the job's cgroup peak and the peak process count, which
+  # only Linux's /proc gives, so the workstation never saw them, and on the cluster's first run
+  # `agree` judged `samples` (41 against 42) and `tree_peak_gb`. The rule is by what each field
+  # measures - seconds `*_s`, gigabytes `*_gb`, the cores and processes the execution used, and
+  # the monitor's own bookkeeping - and tests/test_the_record_covers_the_monitor.py walks the
+  # monitor's own dict against it, so a field the monitor adds is declared or that test fails.
   execution_record:
     - "run/kernels/*/in.json::resources.*"
     - "run/kernels/*/out.json::measured.cores_*"
-    - "run/kernels/*/out.json::measured.cpu_s"
-    - "run/kernels/*/out.json::measured.wall_s"
-    - "run/kernels/*/out.json::measured.peak_rss_gb"
+    - "run/kernels/*/out.json::measured.procs_*"
+    - "run/kernels/*/out.json::measured.*_s"
+    - "run/kernels/*/out.json::measured.*_gb"
+    - "run/kernels/*/out.json::measured.tree_*"
+    - "run/kernels/*/out.json::measured.samples"
+    - "run/kernels/*/out.json::measured.rss_covers"
     - "run/report.json::cores"
     - "run/report.json::cores_model.*"
     - "run/report.json::cost_model.*"
