@@ -455,10 +455,11 @@ points:
           fills: []
           command: ["{python}", "-m", "scprofile.cli", "source", "{name}", "--resolve"]
           finished_by: >
-            the maker's verb, one field at a time: `sch dev edit --root . --point kernel --name
-            <plugin> --add wraps.doi="<the bare DOI>"`, then `--add wraps.doi_record=...` with the
-            title and the year the DOI's own record gives (resolve it; never from memory), then
-            `--add wraps.version="<the exact version the shipped lock builds>"` (an R tool
+            the maker's verb, in one call and one version bump: `sch dev edit --root . --point
+            kernel --name <plugin> --set "wraps.doi='<the bare DOI>'"` (a list for several
+            papers), with `--set "wraps.doi_record={'<DOI>': {'title': '...', 'year': N}}"`, the
+            title and the year the DOI's own record gives (resolve it; never from memory), and
+            `--set "wraps.version='<the exact version the shipped lock builds>'"` (an R tool
             installed from a remote at a commit is pinned by it). `scprofile source <plugin>
             --resolve` resolves each DOI at doi.org and compares; `scprofile validate` checks the
             form and that the pin is the lock's. Then read one claim the plugin cites against the

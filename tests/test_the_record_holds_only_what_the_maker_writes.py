@@ -376,6 +376,25 @@ try:
         ("a confirmation's `why` emptied", lambda r: r["statements"][conf].__setitem__(
             "why", " "), "`why`"),
     ), REC, "de", before)
+    # THE VERSION'S ROW IS NAMED ONLY WHEN IT IS THE ROW THAT DID NOT APPLY (autodev W055): since
+    # `sch dev edit` raised de's version past its last answer, that answer's version row is made
+    # from the record's `version` alone, and a planted one was refused as a line changed by hand.
+    # Another written row gone from the plugin keeps its own words, and names no `version`.
+    _r3 = json.loads(before)["answers"][2]
+    _plus = {x[1:].strip() for x in V._lines(_r3["diff"])
+             if x.startswith("+") and not x.startswith("+++")}
+    _L = V._lines(SHIPPED.decode("utf-8"))
+    _i = next((j for j, x in enumerate(_L)
+               if V.REDACTED + V._sha(x) in _plus and '"version"' not in x), None)
+    ck("(answer 3 wrote a line outside the version's)", _i is not None)
+    if _i is not None:
+        _L[_i] = _L[_i].rstrip("\n") + "  # a hand edit\n"
+        DE.write_text("".join(_L), encoding="utf-8")
+        rc, out = cli("design", "de")
+        ck("a line answer 3 wrote, edited by hand: refused as the line, naming no `version`",
+           rc == 1 and "it wrote is in no file that follows it" in out
+           and "`version` is" not in out, out[-400:])
+        DE.write_bytes(SHIPPED)
     rc2, out2 = cli("check")
     ck("(and with the record as written, check's design-record row is green)",
        record_row(out2).startswith("GREEN"), record_row(out2))

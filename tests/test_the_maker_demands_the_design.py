@@ -269,12 +269,30 @@ if hasattr(V, "design_record_path"):
     # OUTSIDE THE DECLARATION (fix-up 5): the declaration is the maker's verb's to edit after an
     # answer, and a whole-file comparison failed exactly that; the record's self-check below
     # covers the rest.
+    # THE DECLARATION THE LAST ANSWER'S FILE CARRIED, FROM GIT (autodev W055): no record keeps a
+    # copy of it since W047, and the whole-file comparison this fell back to then fails exactly
+    # the case named above - de's declaration edited by `sch dev edit --set` after its last
+    # answer (its source and pin). So the file the answer made is read from the history, the
+    # commit whose de.py has the answer's `after` digest, independently of the record's diff.
     _ship = (ROOT / "kernels" / "de.py").read_text(encoding="utf-8")
     _last = rec["answers"][-1] if rec["answers"] else {}
     _swap = getattr(V, "_swap_declaration", None)
+    _made = None
+    for _c in subprocess.run(["git", "-C", str(ROOT), "--no-replace-objects", "log",
+                              "--format=%H", "--", "kernels/de.py"], capture_output=True,
+                             text=True, env=GITENV).stdout.split() if _last else []:
+        _t = V._git_show(ROOT, _c, "kernels/de.py")[0]
+        if _t is not None and V._sha(_t) == _last.get("after"):
+            _made = _t
+            break
+    ck("(git holds the file the last answer made, by its digest)", _made is not None)
     ck("the last answer made the file that ships, outside its declaration", bool(_last)
-       and _last["after"] == V._sha(_swap(_ship, _last.get("after_declaration", ""))
-                                    if _swap and _last.get("after_declaration") else _ship))
+       and _made is not None and _swap is not None
+       and _last["after"] == V._sha(_swap(_ship, V._declaration_text(_made))))
+    ck("(and the comparison sees a line changed outside the declaration)", _made is not None
+       and _swap is not None
+       and _last["after"] != V._sha(_swap(_ship + "_W055_PLANTED = 1\n",
+                                          V._declaration_text(_made))))
     _chk = getattr(V, "design_record_check", None)
     ck("the record undoes from the shipped file, and every answer is admitted again at the "
        "sites it records", _chk is not None and _chk(_de)[0], _chk(_de) if _chk else None)

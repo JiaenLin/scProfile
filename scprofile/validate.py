@@ -1602,6 +1602,12 @@ def _design_record_check(kernel, root, rec=None, files=None):
                 made = _apply_unified(prev, str(ans.get("diff") or ""),
                                       written=_written(cur, prev, ans.get("version")))
             except ValueError as e:
+                if _version_row_missed(prev, str(ans.get("diff") or ""), ans.get("version")):
+                    return False, (f"answer {ans.get('n')} ({what}): its `version` is "
+                                   f"{str(ans.get('version'))[:60]!r}, and the version line its "
+                                   f"diff wrote is not that version's line - the record's "
+                                   f"`version` and its diff disagree on the version of the file "
+                                   f"it made - {FORM}")
                 return False, f"answer {ans.get('n')} ({what}): its diff does not apply ({e})"
             if _sha(made) != ans.get("after"):
                 return False, (f"answer {ans.get('n')} ({what}): its diff does not make the file "
@@ -2623,6 +2629,41 @@ def _written(follows, before, version):
                 line = _lines(_set_version(text, str(version)))[vl - 1]
                 pool.setdefault(_sha(line), line)
     return pool
+
+
+def _version_row_missed(before, diff, version):
+    """True when the row an answer's diff wrote in place of `before`'s version line is not the line
+    its recorded `version` makes. Once `sch dev edit` has raised the version past an answer, the
+    line that answer wrote there is in no later file, and `_written` makes it from the record's
+    `version` alone; a value planted there then left the row unmatched, refused as a line
+    "changed since, outside the maker's verbs" - the wrong field named (autodev W055: de's source
+    and pin, given by the verb after its last answer). Asked only of a diff that did not apply."""
+    try:
+        vl, _old = _version_node(before)
+    except SyntaxError:
+        return False
+    if not vl or not VERSION_FORM.match(str(version or "")):
+        return False
+    old = REDACTED + _sha(_lines(before)[vl - 1])
+    want = REDACTED + _sha(_lines(_set_version(before, str(version)))[vl - 1])
+    rows = _lines(diff)
+    for j, row in enumerate(rows):
+        if not (row.startswith("-") and row[1:].strip() == old):
+            continue
+        # THE ROW PAIRED WITH IT: a replaced block is its removed rows, then its written rows, in
+        # order, so the version's row is the written row at the removed row's index in its block
+        k = j
+        while k > 0 and rows[k - 1].startswith("-") and not rows[k - 1].startswith("---"):
+            k -= 1
+        at, m = j - k, j
+        while m < len(rows) and rows[m].startswith("-"):
+            m += 1
+        plus = []
+        while m < len(rows) and rows[m].startswith("+"):
+            plus.append(rows[m][1:].strip())
+            m += 1
+        return at < len(plus) and plus[at] != want
+    return False
 
 
 def _git_head(root):
