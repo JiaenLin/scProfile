@@ -226,9 +226,11 @@ And a few things the host will *do for* a plugin that asks, so that no plugin wr
 | `ctx.effect()` | acquire and release, on every exit path including a raise |
 
 **The environment's own `bin` is on `PATH`**, so a plugin whose method is in another language
-reaches its interpreter by name. And **the core share is set as `OMP_NUM_THREADS` and its five
-siblings**, because numpy's BLAS sizes its pool at import, before any plugin code runs — that is
-the one thread pool a plugin cannot honour for itself.
+reaches its interpreter by name. And **the core share is set on every channel a library reads
+its worker or thread count from** (`manifest._THREAD_VARS`: the thread pools, numba's, joblib's,
+Python's own count, an R child's), because numpy's BLAS sizes its pool at import, before any plugin
+code runs, and a library called with no worker count asks the machine — those are the doors a
+plugin cannot close for itself.
 
 ---
 

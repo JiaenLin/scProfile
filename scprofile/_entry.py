@@ -35,6 +35,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scprofile import declare, manifest                                   # noqa: E402
+# THE SHARE IS THE MACHINE'S COUNT IN HERE (autodev W065): `env_for_kernel` set
+# `PYTHON_CPU_COUNT` to it, and on an interpreter older than 3.13 nothing reads that but this -
+# before the plugin, or a library it imports, can ask `multiprocessing.cpu_count()`.
+manifest.honour_cpu_count()
 from scprofile.plugin import CompareContext, Context, Guard                # noqa: E402
 # ABSOLUTE, LIKE EVERY IMPORT IN THIS FILE. `_entry.py` is executed as a SCRIPT in the
 # plugin's own environment, so it has no parent package and `from . import planner` raises

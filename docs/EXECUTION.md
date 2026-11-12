@@ -209,11 +209,19 @@ it reports the node, not the share, and four plugins each reading it will each s
 **And the host sets the thread-pool variables to the same number**, because there is one thread
 pool a plugin cannot control: the BLAS behind numpy sizes itself from `OMP_NUM_THREADS` when numpy
 is imported, before any plugin code runs, and inherits whatever the job script exported for its own
-sake. `manifest.env_for_kernel` therefore sets `OMP_NUM_THREADS`, `OPENBLAS_NUM_THREADS`,
-`MKL_NUM_THREADS`, `NUMEXPR_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS` and `BLIS_NUM_THREADS` from the
-share in the manifest it was just handed — one statement of the number, so the two cannot disagree.
+sake. `manifest.env_for_kernel` therefore sets every channel in `manifest._THREAD_VARS` from the
+share in the manifest it was just handed — one statement of the number, so the two cannot disagree:
+the thread pools (`OMP_NUM_THREADS`, `OMP_THREAD_LIMIT`, `OPENBLAS_NUM_THREADS`, `MKL_NUM_THREADS`,
+`NUMEXPR_NUM_THREADS`, `VECLIB_MAXIMUM_THREADS`, `BLIS_NUM_THREADS`), numba's (`NUMBA_NUM_THREADS`),
+joblib's own count (`LOKY_MAX_CPU_COUNT`), Python's own count (`PYTHON_CPU_COUNT`, which the entry
+point makes `os.cpu_count()` and `multiprocessing.cpu_count()` read on Python 3.12, as 3.13 does
+itself), and an R child's (`MC_CORES`, `R_DATATABLE_NUM_THREADS`). A plugin that passes its
+library no worker count gets the share, never the machine.
 *Without it an eight-instance wave on a sixteen-core allocation runs 128 BLAS threads on 16 cores,
-with every instance correctly told `cores: 1`.*
+with every instance correctly told `cores: 1`; and de's `DeseqStats`, which passes pydeseq2 no
+count, started a loky worker for each of a 256-core node's cores inside a job allowed 8 (autodev
+W065).* Outside, counted: XLA's CPU pool under jax has no count variable, a process's CPU affinity
+is not set, and a plugin that asks its library for more than its share by hand is not stopped.
 
 **Admission is by CORES, not by count.** Every instance is given the cores it DECLARED, capped at
 the budget, and `kernels.CorePool` admits it when that many are free. A plugin declaring more cores

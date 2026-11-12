@@ -690,7 +690,7 @@ def _phase_env(exe, *, inp=None, cores=None):
     """The environment ONE plugin phase is launched in - the RUN PHASE'S, not a bare os.environ.
 
     WHY THIS IS NOT `with_env_bin(exe)` ALONE, which is what this phase used. That call puts the
-    plugin's own `bin` on PATH and stops there, so the six thread-pool variables
+    plugin's own `bin` on PATH and stops there, so the thread-pool variables
     `manifest.env_for_kernel` exists to set were absent for this entire phase - and absent means
     INHERITED. A job script exporting `OMP_NUM_THREADS=$NCPUS` for its own sake therefore handed
     the node's count to every compare launch, which is the exact oversubscription the core share
@@ -959,7 +959,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         # AND THE SAME SENTENCE FOR THE OTHER LIMIT, WHICH FAILS SILENTLY AND WORSE. The two
         # limits are not symmetric in their consequences: a missing timeout only removes a
         # ceiling, while a missing core share removes THE THREAD CAPS THEMSELVES.
-        # `manifest.env_for_kernel` sets the six variables under `if cores:` - it must, because
+        # `manifest.env_for_kernel` sets the core-share variables under `if cores:` - it must, because
         # "the caller passed nothing" and "the caller asked for zero" have to mean leave the
         # environment alone - so `cores=None` here sets NONE of them, and absent means
         # INHERITED. That is not a degraded core share; it is exactly the state this phase was
@@ -973,7 +973,7 @@ def _native_compare(name, spec, per, design, pairs, out_dir, units, controls=Non
         # unnoticed until the node did. So this is printed, not raised: the phase's figures are
         # still worth drawing, and the reader is told what they were drawn under.
         print(f"  native compare {name}: NO core share on this phase - this report.json records "
-              f"no `cores`, so the six thread caps are UNSET and each launch INHERITS whatever "
+              f"no `cores`, so the core-share variables are UNSET and each launch INHERITS whatever "
               f"the shell exports (a job script's OMP_NUM_THREADS=$NCPUS reaches it). Rebuild "
               f"from a report.json that records `cores`, or cap the threads in the environment.")
     udir = {str(u.get("unit")): u.get("dir") for u in (units or []) if u.get("unit")}

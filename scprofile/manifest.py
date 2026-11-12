@@ -544,9 +544,46 @@ def unknown_keys(payload):
     return sorted(set(payload) - known - set(OUTPUT_SLOTS))
 
 
-#: Thread-pool variables, every one read at IMPORT time by the library it controls.
-_THREAD_VARS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
-                "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "BLIS_NUM_THREADS")
+#: EVERY CHANNEL BY WHICH A LIBRARY IN A PLUGIN'S PROCESS DECIDES HOW MANY WORKERS OR THREADS IT
+#: STARTS (autodev W065, GAP-C133). `env_for_kernel` sets each from the share, before any plugin
+#: code runs; tests/test_a_plugin_takes_its_allocation.py walks this tuple through a probe plugin,
+#: so a channel added here is tested with no new test. It was six thread-pool variables, and the
+#: one that sank a shared node was not among them: on the cluster's first dev-suite run de's
+#: `DeseqStats` passed no worker count, pydeseq2 0.5.2 took `multiprocessing.cpu_count()` - the
+#: NODE's 256, inside a job allowed 8 - and joblib started a loky worker for each, until the
+#: node's open-file table was full. Python's own count, the parallel library's and a numerical
+#: compiler's are channels as much as BLAS's is; so are an R process's.
+_THREAD_VARS = (
+    "OMP_NUM_THREADS",          # OpenMP: scikit-learn, scipy, OpenBLAS's OpenMP builds, Arrow; R's
+    "OMP_THREAD_LIMIT",         # OpenMP's ceiling, nested regions included; Arrow's cap
+    "OPENBLAS_NUM_THREADS",     # OpenBLAS: the numpy and scipy wheels on Linux; R's BLAS
+    "MKL_NUM_THREADS",          # MKL, where a build carries it
+    "NUMEXPR_NUM_THREADS",      # numexpr
+    "VECLIB_MAXIMUM_THREADS",   # Accelerate: the numpy and scipy wheels on macOS
+    "BLIS_NUM_THREADS",         # BLIS
+    "NUMBA_NUM_THREADS",        # numba's parallel pool, sized when numba is imported
+    "LOKY_MAX_CPU_COUNT",       # joblib/loky's own cpu_count(): n_jobs=-1, loky's default workers
+    "PYTHON_CPU_COUNT",         # os.cpu_count(), multiprocessing.cpu_count(): `honour_cpu_count`
+    "MC_CORES",                 # R's parallel: option mc.cores at load, mclapply's default
+    "R_DATATABLE_NUM_THREADS",  # data.table, at load
+)
+
+
+def honour_cpu_count(environ=None):
+    """`os.cpu_count()` reads `PYTHON_CPU_COUNT` on an interpreter older than 3.13, as 3.13 does.
+
+    Python 3.13 reads the variable itself (`os.cpu_count()`, `os.process_cpu_count()`); 3.12, the
+    lock's interpreter, does not, and nothing else in the environment moves the count a library
+    reads with `multiprocessing.cpu_count()`. Called by the entry point, in the plugin's own
+    process, before the plugin or any library is imported. Returns the count it set, or None.
+    """
+    import sys
+    v = str((os.environ if environ is None else environ).get("PYTHON_CPU_COUNT") or "").strip()
+    if sys.version_info >= (3, 13) or not v.isdigit() or int(v) < 1:
+        return None
+    n = int(v)
+    os.cpu_count = lambda: n
+    return n
 
 
 def env_for_kernel(inp, cores=None):
@@ -565,7 +602,9 @@ def env_for_kernel(inp, cores=None):
     close. Worse, it is inherited: a job script exporting `OMP_NUM_THREADS=$NCPUS` for its own
     sake hands the node's count to every plugin it launches.
 
-    The share is authoritative here. A caller passing None leaves the variables alone.
+    The share is authoritative here, for every channel in `_THREAD_VARS`: a plugin that passes
+    no worker count to its library gets the share, never the machine (autodev W065). A caller
+    passing None leaves the variables alone.
     """
     e = dict(os.environ)
     e["SCPROFILE_IN"] = str(inp)

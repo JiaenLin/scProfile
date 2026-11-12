@@ -257,7 +257,11 @@ works on exactly one project.
 > is that library's API surface and is fine.
 
 **Never use `os.cpu_count()`.** `ctx.cores` is the allocated share. Four plugins each reading the
-machine start four times the node's worth of threads.
+machine start four times the node's worth of threads. Pass `ctx.cores` wherever a library takes a
+worker count; where a call passes none, the host has already set every channel a library falls
+back to — the thread-pool variables, numba's, joblib's, Python's own `os.cpu_count()`, an R child's
+— to the share (`manifest._THREAD_VARS`, docs/EXECUTION.md), so the fallback is the share, never
+the node.
 
 **Group with `ctx.populations()`, never with the raw label column.** It returns
 `(mask, groups)` with the annotator's sentinels already out of the grouping, and it adds the

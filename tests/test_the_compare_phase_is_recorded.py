@@ -599,7 +599,7 @@ check(_seen_kw.get("timeout") == 900,
       f"the forward is dropped somewhere in write_all -> write_kernel -> _arm_content")
 check(_seen_kw.get("cores") == 8,
       f"the run declared `cores: 8` and the phase was handed {_seen_kw.get('cores')!r}. None is "
-      f"not a small share - env_for_kernel sets the six thread caps only `if cores:`, so None "
+      f"not a small share - env_for_kernel sets the core-share variables only `if cores:`, so None "
       f"sets none of them and the child inherits the node's count")
 _rec5 = k5 / _RS.COMPARE_DIRNAME / _RS.PHASE_RECORD
 check(_rec5.is_file(), "a page built by write_all wrote no phase record")
