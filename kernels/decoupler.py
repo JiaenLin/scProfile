@@ -43,7 +43,7 @@ _ACCESSION_PATTERN = r"^(?:[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9](?:[A-Z][A-Z0
 
 PLUGIN = {
     "api": 1,
-    "version": "0.2.0",
+    "version": "0.3.0",
     "state_version": 1,           # the NUMBERS, versioned: bump when the same inputs would give different output
     "summary": "regulatory activity per cell, from a curated prior",
     "when_to_use": "you want transcription-factor or pathway activity without inferring a "
@@ -158,7 +158,7 @@ PLUGIN = {
             # `_omnipath_check_version`, which does `import omnipath` - lazily, inside the
             # function, so nothing about installing decoupler asks for it and nothing about
             # importing decoupler notices. It surfaces on the first call to the one function this
-            # plugin exists to make. Measured on PBS 677555:
+            # plugin exists to make. Measured on a cluster run:
             # `ModuleNotFoundError: No module named 'omnipath'` from inside `get_collectri`.
             "omnipath": ">=1.0",
             # NEEDED SINCE THIS PLUGIN DREW ANYTHING, and declared for exactly the reason
@@ -1250,8 +1250,8 @@ def run(ctx):
     #
     # A SENTINEL IS NOT A POPULATION. `UNRESOLVED` is the annotator declining to call a cell
     # type; a mean activity computed for it lands in the table beside the real populations and
-    # reads as a cell type with that activity. Measured on a real cohort: PBS 677295 delivered
-    # `activity_by_label.csv` with an `UNRESOLVED` row over 2,139 cells, and the host's own check
+    # reads as a cell type with that activity. Measured on a real cohort: one run delivered
+    # `activity_by_label.csv` with an `UNRESOLVED` row of its own, and the host's own check
     # reported it as a declaration defect. `ctx.populations()` is the host's answer to the
     # question, so every plugin gives the same one and the caveat cannot be forgotten.
     by_label, no_pop_why, pop_n = None, "", None

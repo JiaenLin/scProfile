@@ -1,0 +1,17 @@
+{
+ "answers": [
+  {
+   "after": "00831bfee0ff2ac3",
+   "before": "3ee2cd7a139a453b",
+   "diff": "--- a/kernels/decoupler.py\n+++ b/kernels/decoupler.py\n@@ -43,7 +43,7 @@\n \u2063sha256:01ba4719c80b6fe9\n \u2063sha256:c0bc317d89b550fa\n \u2063sha256:ed0177a053131fce\n-\u2063sha256:cd001e14be3404d5\n+\u2063sha256:a025abeda829bf46\n \u2063sha256:4b8b787a891e1daa\n \u2063sha256:a69e7240f844dcdd\n \u2063sha256:3212364592e8b7b7\n@@ -158,7 +158,7 @@\n \u2063sha256:acfbb641dbdba433\n \u2063sha256:76b9e5a723f6e872\n \u2063sha256:c184f292615120f8\n-\u2063sha256:24413c2eecc63dda\n+\u2063sha256:d75468c384570619\n \u2063sha256:0111323a80d44388\n \u2063sha256:70e865253eb48475\n \u2063sha256:70b7bf1de903d0d3\n@@ -1250,8 +1250,8 @@\n \u2063sha256:b94fbb7d40469678\n \u2063sha256:1fbbd71805f4cbe2\n \u2063sha256:666620be0b6159da\n-\u2063sha256:38d775fca44060f7\n-\u2063sha256:3a785939ab317c8d\n+\u2063sha256:f282f3db15968ed6\n+\u2063sha256:62b5cf2d3e39058e\n \u2063sha256:88608ec1f318b435\n \u2063sha256:d561777f5dd39e5b\n \u2063sha256:849e420d8bea1783\n",
+   "kind": "prose",
+   "made_on": "ec25d605f29d05fe749ae82b4fc4caca218ecd79",
+   "n": 1,
+   "sites": [],
+   "version": "0.3.0",
+   "why": "three comments that named two scheduler jobs and one cohort's cell count (the leak scan's hits; W068's blind grade, P4), reworded; the method's facts stay"
+  }
+ ],
+ "plugin": "decoupler",
+ "statements": {}
+}
